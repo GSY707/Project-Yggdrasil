@@ -1,1 +1,25 @@
 note.md
+
+# Node / frontend
+node_modules/
+.next/
+dist/
+coverage/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local env / tooling
+.env
+.env.*
+.DS_Store
+
+# Infra data
+*.local
+
+# Local runtime state
+.yggdrasil/state/

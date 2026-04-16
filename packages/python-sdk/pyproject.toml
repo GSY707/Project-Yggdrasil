@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-sdk"
+version = "0.1.0"
+description = "Shared contracts and module interfaces for Project Yggdrasil."
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.16.0",
+  "nats-py>=2.10.0",
+  "psycopg[binary]>=3.2.9",
+  "pydantic>=2.10.0",
+  "PyYAML>=6.0.2",
+  "redis>=6.1.0",
+  "SQLAlchemy>=2.0.40"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_sdk"]

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-core-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "pydantic-settings>=2.6.1",
+  "uvicorn>=0.34.0",
+  "yggdrasil-sdk"
+]
+
+[project.scripts]
+yggdrasil-core-api = "yggdrasil_core_api.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_core_api"]

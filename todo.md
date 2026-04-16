@@ -1,198 +1,167 @@
 
-# 世界树计划开发 TODO（长期版）
+# 世界树计划开发 TODO（执行版）
 
-## 当前共识
-- MVP 已在 TRPG 场景验证核心思路可行：动态加载记忆、上下文修剪、场景化提示词是有效方向。
-- 下一阶段目标不是继续证明“能不能做”，而是把它做成可长期运行、可恢复、可评测、可扩展的 Agent 系统。
-- 开发顺序必须遵守：单 Agent 闭环优先，记忆检索优先于花哨能力，重启恢复优先于自我进化，多 Agent 协作优先于训练微调。
+## 当前阶段
+- M1 已完成正式实现与验证，当前仓库已经不再处于“骨架占位”阶段。
+- M2 已完成正式实现与验证，当前仓库已经具备 PostgreSQL/Alembic/repository/service/Redis 协调的持久化底座。
+- M3 已完成正式实现与验证，当前仓库已经具备数据库驱动的模块生命周期、hook/订阅注册表、健康上报、outbox/NATS 事件总线与 module-host 控制面。
+- M4 已完成正式实现与验证，当前仓库已经具备 text-memory 的导入、建树计划、落库 materialize、检索 API 与回归样本闭环。
+- 当前主问题已经从“在主 Agent 闭环跑通后，继续推进 Sub-Agent、PR 生命周期与跨链路持续回归”切换到“在 M6 闭环完成后，推进 Web 工作台与持续回归/运维底座”。
+- 当前第一优先级：进入 M7，把任务列表、节点详情、版本历史、来源信息与 PR 列表切到正式 API 工作台。
 
-## 第一阶段产品边界
-- 第一版只做文本记忆，不把图片、音频、视频当作必须项。
-- 第一版先做单用户、单项目、多任务，不一开始做复杂多租户。
-- 第一版必须支持三个根分支：我是谁、我在哪、我要干什么。
-- 第一版必须支持节点增删改查、节点历史、关联边、来源标注、任务断点恢复。
-- 第一版必须支持主 Agent 调起 Sub-Agent，但 Sub-Agent 对主记忆树的修改先走 PR 审核流，不直接落主分支。
-- 第一版必须有评测机制，不能只靠主观感觉判断“变好了”。
+## 规格入口
+- [docs/PRD-v0.1.md](docs/PRD-v0.1.md)
+- [docs/protocols/README.md](docs/protocols/README.md)
+- [docs/specs/README.md](docs/specs/README.md)
+- [docs/specs/agent-runtime-protocol-v0.1.md](docs/specs/agent-runtime-protocol-v0.1.md)
 
-## 长期技术选型
+## 代码盘点
 
-### 1. 总体架构
-- 选择：前后端分离的单仓多服务架构。
-- 结论：前端使用 TypeScript，Agent 与核心服务使用 Python，仓库采用 Monorepo 管理。
-- 原因：前端生态与可视化能力更适合 TypeScript，Agent、检索、模型编排、评测生态更适合 Python。单仓便于统一版本、接口、部署与文档。
+### 统计口径
+- 统计范围：仓库内 95 个代码/配置文件。
+- 文件类型：.py、.ts、.tsx、.json、.toml、.yaml、.yml、.css。
+- 不包含 markdown 文档，因此 docs 中的大量正式规格文档不计入下面的代码统计。
+- 不包含 `.yggdrasil/state/` 下 2 个运行时生成状态文件；它们属于本地状态产物，不计入正式代码分类。
 
-### 2. 前端
-- 选择：Next.js 15 + React 19 + TypeScript。
-- UI 状态与数据层：TanStack Query。
-- 图形可视化：React Flow 负责树编辑，Cytoscape.js 负责关联图探索。
-- 样式层：Tailwind CSS 4。
-- 原因：后续一定会有记忆树浏览、任务时间线、PR 审核、评测面板，Web 端需要成熟的交互与图可视化能力。
+### 分类标准
+- 占位代码：接口形状已经固定，但返回的是占位值、空集合、假数据或演示结果，不能承载正式业务。
+- 临时代码：仅用于一次性演示、本地过渡或短期调试，后续会被正式实现替换，不应长期保留。
+- 正式工程代码：后续应继续沿用的工程边界、包配置、manifest、schema、SDK、服务入口、测试和稳定结构代码。
+- 运行时产物：由程序自动生成的本地缓存、快照和状态文件，不纳入正式代码盘点。
 
-### 3. 后端核心服务
-- 选择：Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0 + Alembic。
-- 原因：类型清晰、生态稳定，适合构建领域模型、工具路由、检索服务与 API 层。
-- 约束：业务核心不能绑死在某个 Agent 框架上，框架只能作为适配层或工具层。
+### 统计结果
+- 占位代码：0 个文件。
+- 临时代码：0 个文件。
+- 正式工程代码：95 个文件。
+- 运行时产物：2 个文件。
 
-### 4. Agent 运行时
-- 选择：自研任务状态机 + Temporal 负责任务编排。
-- 适用范围：长任务、异步写入、上下文重启、节点整理、Sub-Agent 批处理、PR 审核流。
-- 原因：项目天然是长生命周期系统，必须有可恢复、可回放、可追踪的工作流引擎，不能靠进程内状态硬扛。
+### 占位代码清单
+- 当前无。
 
-### 5. 模型接入与路由
-- 选择：LiteLLM 作为统一模型网关，外加自定义模型路由器。
-- 必做能力：模型能力标签、成本统计、预算控制、失败回退、不同任务自动选模。
-- 原因：设计里明确存在多模型能力分析、自动任务分配、预算约束，这一层必须从一开始抽象干净。
+### 临时代码清单
+- 当前无。
 
-### 6. 主数据存储
-- 选择：PostgreSQL 17 作为一号数据库。
-- 必开扩展：pgvector、ltree、pg_trgm。
-- 数据建模：
-- 节点表承载树结构、路径、权重参数、来源、可见性。
-- 关联边表承载节点之间的有向关联。
-- 节点版本表承载历史状态与回溯能力。
-- 任务表承载工作树状态、留言、重启断点。
-- 原因：这个项目不只是图查询，还需要事务、版本、权限、全文检索、审计与复杂筛选，PostgreSQL 的综合能力更稳。
+### 正式工程代码分布
+- 正式工作区与基础配置：根目录 package.json、pyproject.toml、pnpm-workspace.yaml、tsconfig.base.json、pytest.ini、[infra/docker-compose.yml](infra/docker-compose.yml)。
+- 正式共享层：packages/contracts、packages/python-sdk、packages/frontend-sdk；其中 python-sdk 已补齐 domain records、ORM、repository、bootstrap、Redis 协调能力。
+- 正式服务层：core-api、agent-runtime、module-host、worker 的 app/main/config/router/registry/runtime 代码；其中 core-api 已具备 nodes/tasks/runtime/outbox 正式接口。
+- 正式模块层：text-memory、context-pruning、subagent-pr 的 manifest、pyproject、插件逻辑与 hook 导出。
+- 正式适配器层：model-providers、media-providers 的路由/处理管线实现。
+- 正式前端层：web 的 layout、globals、首页工作台、workspace dashboard 组装、Next/ESLint/TypeScript 配置。
+- 正式验证层：tests 下的 contract tests、持久化 API/runtime/worker 验证，以及根脚本里的 web typecheck/lint/build、Python pytest 验证入口。
+- 正式迁移层：alembic.ini、migrations/env.py、migrations/versions 初始迁移。
 
-### 7. 检索层
-- 选择：PostgreSQL 全文检索 + pgvector 向量召回 + 重排模型。
-- 中文与多语种嵌入优先：bge-m3。
-- 重排模型优先：bge-reranker-v2-m3。
-- 检索策略：树路径展开、关联边扩展、向量召回、规则过滤、重排融合。
-- 原因：系统概念里的“父子 + 关联 + 精度 + 来源”本质上是混合检索问题，不能只靠向量库。
+### 运行时产物
+- [.yggdrasil/state/module-install-records.json](.yggdrasil/state/module-install-records.json)：本地模块安装与启用记录快照。
+- [.yggdrasil/state/module-catalog-snapshot.json](.yggdrasil/state/module-catalog-snapshot.json)：本地模块目录聚合快照。
+- 处理原则：允许本地生成，不作为提交内容；后续以数据库记录和可重建快照替代当前文件状态源。
 
-### 8. 缓存与对象存储
-- 缓存与分布式锁：Redis。
-- 对象存储：MinIO，兼容未来 S3。
-- 适用范围：多模态原始素材、快照、导入文件、长文本原件。
+## 已完成资产
+- [x] PRD、ADR、协议和数据规格已经形成第一版正式文档。
+- [x] Monorepo 骨架与前端/服务/模块/适配器/共享层工作区已经搭建完毕。
+- [x] shared contracts、catalog、spec catalog、support 工具层已经形成正式公共能力。
+- [x] module-host、core-api、agent-runtime、worker 已具备第一版正式目录/快照/装配逻辑。
+- [x] text-memory、context-pruning、subagent-pr、model router、media pipeline 已从占位实现升级为正式 M1 逻辑。
+- [x] Web 首页已经替换为正式运行工作台，而不是骨架落位页。
+- [x] PostgreSQL/Alembic/repository/service/Redis 协调的共享持久化底座已经落地。
+- [x] core-api、module-host、agent-runtime、worker 已接入正式持久化层。
+- [x] Python contract tests 与持久化验证已通过：13 passed。
+- [x] Alembic upgrade head 已对空 sqlite 库执行通过，初始迁移可运行。
+- [x] Web 验证已通过：install、typecheck、lint、build。
+- [x] 根目录前端脚本已改为显式走 corepack pnpm，不再依赖全局 pnpm。
 
-### 9. 认证、权限与审计
-- 认证协议：OIDC。
-- 自建认证服务优先：Authentik。
-- 权限模型：第一版用 PostgreSQL ACL 与审计日志，接口设计预留未来升级到 OpenFGA。
-- 原因：设计里已经出现共享记忆库、权限等级、PR 审核、多 Agent 协作，必须提前保留权限演进空间。
+## 未来工作重排
 
-### 10. 可观测性与评测
-- 调用链与日志：OpenTelemetry + Grafana + Loki。
-- LLM 追踪与成本分析：Langfuse。
-- 自动化评测：pytest + 自建基准任务集，必要时接入 Ragas 做检索/生成评测。
-- 原因：这个项目必须能回答“为什么这次检索错了”“为什么这次重启丢思路了”“为什么这次改树变差了”。
+### M1. 清理骨架债务（已完成）
+- [x] 去掉 8 个占位文件里的占位返回值，替换为正式对象、目录驱动逻辑或启发式实现。
+- [x] 替换 3 个临时代码文件，使其进入正式工程边界。
+- [x] 清理代码中的占位命名和描述，统一为正式术语。
+- [x] 为 manifest、hook、event envelope、shared contracts、runtime、pruning、module catalog、subagent/worker 增加 contract tests。
+- [x] 完成 Python pytest、Web typecheck、lint、build 验证。
+- 验收：占位代码 0 个，临时代码 0 个，当前仓库可作为 M2 到 M7 的正式起点。
 
-### 11. 部署与工程化
-- 本地开发：Docker Compose。
-- 生产长期目标：Kubernetes。
-- Python 依赖管理：uv。
-- 前端包管理：pnpm。
-- CI：GitHub Actions。
-- 原因：早期降低环境成本，长期保留多服务扩展与灰度部署空间。
+### M2. 持久化底座（已完成）
+- [x] 建立 PostgreSQL 基础表和 Alembic 迁移骨架。
+- [x] 首批落地对象：Node、Edge、NodeVersion、SourceAnnotation、Task、AgentRun、TaskSnapshot、ModuleInstallRecord、OutboxRecord、ModelRouteDecision。
+- [x] 为 core-api 建立 repository 层和 service 层，替代当前直接读文件/快照的实现。
+- [x] 补上 Redis 作为热点缓存、分布式锁和异步作业协调入口。
+- [x] module-host 改为数据库同步式注册表，worker 增加 Redis 队列协调入口。
+- [x] agent-runtime 的 RootMountPackage 与 pause snapshot 已可对真实 Task/AgentRun/Snapshot 落库。
+- 验收：已经可以持久化创建和读取节点、任务、模块安装记录、路由决策和快照；pytest 13 passed，Alembic upgrade head 可运行。
 
-## 明确不选或暂缓
-- 暂不把 Neo4j 作为主数据库。原因是版本、权限、事务、全文检索、审计和工程维护成本综合下来不如 PostgreSQL 稳。
-- 暂不把 LangChain 或 LangGraph 当作领域核心。可以借用组件，但任务协议、记忆协议、状态恢复必须掌握在自己手里。
-- 暂不一开始做模型微调。先把记忆系统、检索系统、任务状态机和评测闭环做扎实。
-- 暂不一开始做完整多模态记忆。先把文本流打透，再让图片等模态挂到对象存储与节点元数据上。
-- 暂不一开始实现完整 Linux 式权限系统。第一版把 ACL、审计、PR 审核打通即可。
+### M3. 模块宿主与事件总线（已完成）
+- [x] manifest 发现、模块目录聚合和安装记录快照已经具备第一版正式实现。
+- [x] 将当前文件快照升级为数据库驱动的模块注册表，并保留本地缓存层。
+- [x] 建立模块状态流转：discovered、validated、installed、disabled、active、degraded、quarantined。
+- [x] 接上 NATS JetStream 与 outbox 发布链路。
+- [x] 建立 hook 注册表、事件订阅注册表、模块配置绑定、健康上报。
+- 验收：module-host 能从正式注册表与事件总线驱动模块生命周期，文件快照仅作为本地重建缓存。
 
-## 建议仓库结构
-- apps/web：Web 控制台，负责树浏览、图谱、任务面板、评测面板、PR 审核。
-- services/core-api：核心 API，负责节点、关联、检索、版本、权限、任务状态。
-- services/agent-runtime：主 Agent 与 Sub-Agent 运行时。
-- services/mcp-gateway：对外暴露 MCP 能力与泛型工具分发器。
-- services/worker：后台任务，如建树、整理、重排、索引刷新、评测。
-- packages/contracts：OpenAPI、JSON Schema、事件协议。
-- docs：产品设计、ADR、评测报告、提示词设计。
-- infra：Docker Compose、Kubernetes、监控、对象存储、数据库初始化。
+### M4. text-memory 第一条纵向链路（已完成）
+- [x] 文本切分、候选父节点建议、候选关联建议、检索扩展已经具备第一版启发式实现。
+- [x] 实现 ImportJob、ImportFragment、TreePlan 的持久化链路。
+- [x] 将节点、边、版本和来源注解正式写入数据库。
+- [x] 完成 RetrievalRequest 到 RetrievalBundle 的 API 闭环。
+- [x] 建立导入/检索链路的评测样本和回归断言。
+- 验收：导入一份小型文本资料后，可以从数据库和 API 稳定检索到节点内容、关联和来源。
 
-## 核心数据对象先定稿
-- 节点 Node：id、tree_id、parent_id、path、title、content、detail_level、importance、stability、forget_rate、feedforward_score、access_score、source_type、source_ref、created_at、updated_at。
-- 关联 Edge：id、from_node_id、to_node_id、relation_type、weight、reason、created_by、created_at。
-- 节点版本 NodeVersion：node_id、version、content_snapshot、summary_snapshot、change_reason、created_by、created_at。
-- 任务 Task：id、goal、status、budget_tokens、budget_cost、current_focus、resume_message、owner_agent、started_at、updated_at。
-- AgentRun：id、task_id、agent_type、model_name、input_budget、output_budget、status、parent_run_id。
-- PR：id、source_branch、target_branch、summary、status、review_comment、created_by、reviewed_by。
+### M5. 主 Agent 第一条闭环（已完成）
+- [x] RootMountPackage 与 pause snapshot 的预览装配逻辑已经落地。
+- [x] 上下文修剪的 plan/execute 第一版已经落地。
+- [x] 实现任务预算、Token 预算、ModelRouteDecision 的持久化与真实执行约束。
+- [x] 实现异步写入、最小 safe-stop 语义和恢复点。
+- [x] 把当前预览逻辑接到真实任务执行链。
+- 验收：主 Agent 已能完成一次任务启动、写入、暂停、恢复的最小正式闭环；当前全量 pytest 为 19 passed。
 
-## 开发 TODO
+### M6. Sub-Agent 与 PR 最小闭环（已完成）
+- [x] PR 记录、评论记录、工具注册和 worker activity 描述已经具备正式对象与第一版逻辑。
+- [x] 实现分支模型与 Sub-Agent 创建。
+- [x] 实现预算继承、模型选择与只读上下文传递。
+- [x] 接入真实 Git/GitHub PR 生命周期。
+- [x] 验证共享空间预埋字段在分支和 PR 流中的传递。
+- 验收：Sub-Agent 能独立产出结果并以 PR 形式提交，由主 Agent 审核、评论和合并；当前全量 pytest 为 21 passed。
 
-### P0. 把概念冻结为工程规格
-- [ ] 把现有文档整理为产品需求文档 v0.1，统一术语，禁止同一概念多种叫法。
-- [ ] 产出 5 到 10 份 ADR，至少覆盖数据库、工作流引擎、模型网关、权限模型、评测框架。
-- [ ] 明确第一版验收边界，写出“必须有”和“绝不做”。
-- [ ] 定义节点、关联、版本、任务、PR、预算的数据结构与状态流转。
-- [ ] 定义外部信息来源标注规范，保证后续可追溯。
+### M7. Web 控制台从首页升级为工作台
+- [x] 首页已经替换为正式运行工作台，可读取 todo、规格目录、模块快照和服务面板。
+- [ ] 提供任务列表、节点详情、版本历史、来源信息、PR 列表基础页面。
+- [ ] 再补树浏览、图谱浏览、时间线、暂停/恢复入口。
+- [ ] 从直接读取仓库文件升级为读取正式 API。
+- 验收：Web 控制台可作为第一版日常操作入口，而不只是仓库级 dashboard。
 
-### P1. 记忆树存储内核
-- [ ] 建立 PostgreSQL 基础表结构与迁移脚本。
-- [ ] 完成节点增删改查、按路径读取、按深度读取、按广度读取。
-- [ ] 完成关联边读写与关联推荐接口。
-- [ ] 完成节点版本历史、回滚、对比视图需要的后端能力。
-- [ ] 完成节点来源标注与外部引用保存。
-- [ ] 完成 Redis 缓存、热点树读取缓存与并发锁。
+### M8. 评测与运维底座
+- [ ] 建立第一批基准任务集。
+- [ ] 建立无记忆、纯向量、记忆树检索的基线对照。
+- [ ] 接入 OpenTelemetry、Langfuse、日志与成本指标。
+- [ ] 建立本地 Compose 联调、备份策略、CI 骨架。
+- 验收：每次核心链路变更都能跑回归并看到成本与效果差异。
 
-### P2. 建树与检索
-- [ ] 完成导入管线：文本切分、初始摘要、候选父节点建议、候选关联建议。
-- [ ] 完成混合检索：树路径召回、关联扩展、向量召回、规则过滤、重排。
-- [ ] 实现读取参数：读深度、读广度、关联数量、叶子数量、精度级别。
-- [ ] 实现自然语言查询结果拼装，同时返回节点内容、子节点名、关联节点名。
-- [ ] 实现上下文预算器，支持按预算进行裁剪与压缩。
-- [ ] 建立“困难任务上下文修剪”辅助 Agent 流程。
+### M9. 第二阶段模块化能力
+- [ ] 多模态记忆模块。
+- [ ] 自动整理与软遗忘模块。
+- [ ] 主动关联发现模块。
+- [ ] 高级权限与共享记忆空间模块。
+- [ ] 训练与蒸馏实验模块。
+- [ ] 任务暂停与无感恢复的完整产品化交付。
+- 前提：M4 到 M8 完成前，不进入这些模块的正式开发，只允许保留字段、状态和接口预埋。
 
-### P3. 主 Agent 闭环
-- [ ] 实现启动流程：系统初始化、根节点挂载、任务恢复、留言读取。
-- [ ] 实现任务预算、Token 预算、失败回退、超预算强制总结。
-- [ ] 实现异步写入，支持边输出边标注待写记忆，再由后台统一落库。
-- [ ] 实现泛型工具分发器，统一工具发现、调用、鉴权、审计。
-- [ ] 实现上下文重启流程，保证任务可以安全收尾并恢复。
-- [ ] 实现信息来源标注链路，禁止无来源外部事实直接写入长期记忆。
+## 当前最该做的 10 件事
+1. 让 Web 控制台从读仓库文件切到读正式 API。
+2. 提供任务列表、节点详情、版本历史、来源信息、PR 列表基础页面。
+3. 建立覆盖 runtime、subagent 和 memory 三条链路的回归样本集与 CI 入口。
+4. 补齐可观测性、成本、任务和模块级指标的运维底座。
+5. 把 Docker Compose 联调从 PostgreSQL/Redis/NATS 扩展到 Temporal 与 MinIO 的完整工作流闭环。
+6. 为主 Agent 与 Sub-Agent 增加启动、暂停、恢复、审查、合并的 smoke tests。
+7. 为 Web 工作台再补树浏览、图谱浏览、时间线、暂停/恢复入口。
+8. 为 collaboration 路径接入更完整的 GitHub review/merge 状态同步和权限控制。
+9. 为共享空间/高级权限预埋字段补齐 API 与验证。
+10. 建立第一批评测任务集和成本/效果对照基线。
 
-### P4. Sub-Agent 与 PR 机制
-- [ ] 实现 Sub-Agent 创建、预算继承、模型选择、共享只读上下文。
-- [ ] 实现 Sub-Agent 分支记忆区，不允许直接写主分支。
-- [ ] 实现 PR 生成、差异展示、主 Agent 审核、合并与驳回。
-- [ ] 实现批量建树、批量整理、批量评测等后台子任务模式。
-- [ ] 实现不同模型的任务适配规则与自动选模策略。
-
-### P5. Web 控制台
-- [ ] 完成登录、项目选择、任务面板。
-- [ ] 完成记忆树浏览器，支持按层级展开、搜索、快速跳转。
-- [ ] 完成节点详情页，显示内容、历史、来源、关联、子节点。
-- [ ] 完成图谱视图，支持查看关联网络和推理路径。
-- [ ] 完成任务时间线，展示重启、写入、失败、恢复、PR 审核记录。
-- [ ] 完成评测面板，展示成本、召回、成功率、重启效果。
-
-### P6. 评测体系
-- [ ] 从 MVP 经验抽取第一批基准任务，至少覆盖 TRPG、代码开发、创意写作、科研调研四类场景。
-- [ ] 建立基线对照：无记忆、纯向量召回、记忆树检索、记忆树 + Sub-Agent。
-- [ ] 定义核心指标：任务完成率、恢复成功率、召回覆盖率、平均 Token 成本、平均响应时延、人工评分。
-- [ ] 建立版本回归机制，每次修改检索策略或建树策略都必须跑基准集。
-- [ ] 建立失败案例库，沉淀成持续改进输入。
-
-### P7. 运维与安全
-- [ ] 完成 Docker Compose 本地环境。
-- [ ] 完成数据库备份、对象存储备份、节点版本归档策略。
-- [ ] 完成日志脱敏、权限审计、操作留痕。
-- [ ] 完成监控告警：任务堆积、检索超时、写入失败、成本异常。
-- [ ] 完成生产部署模板，为后续 Kubernetes 化做准备。
-
-### P8. 第二阶段能力
-- [ ] 多模态记忆：图片、截图、图表、语音摘要挂接到节点。
-- [ ] 自动记忆整理与软遗忘。
-- [ ] 主动关联发现与关系重写。
-- [ ] 更复杂的权限模型与共享记忆空间。
-- [ ] 模型微调、自蒸馏、训练数据回灌。
-
-## 第一版验收标准
-- [ ] 主 Agent 能完成一次完整任务，并在上下文重启后继续执行。
-- [ ] 记忆检索结果同时带回节点内容、子节点名、关联节点名、来源信息。
-- [ ] Sub-Agent 能提交 PR，由主 Agent 或人工审核后合并。
-- [ ] 任意节点都可以查看历史版本，并回溯来源。
-- [ ] 基准任务上，记忆树方案相对无记忆基线有稳定提升。
-- [ ] 关键调用可追踪，能定位错误发生在检索、压缩、选模还是写入。
-
-## 建议优先级
-- 本周优先：P0 全部完成，P1 建表与 API 草图完成。
-- 第二周优先：P1 完成，P2 的混合检索打出第一条闭环。
-- 第三周优先：P3 的启动、写入、重启闭环完成。
-- 第四周优先：P4 的 Sub-Agent 分支与 PR 机制完成最小可用版本。
-- 之后再做 Web 控制台与评测平台。
+## 明确不该现在做的事
+- 不要在 M4 之前实现多模态、训练、共享空间的正式业务逻辑。
+- 不要让模块直接读写其他模块的内部实现。
+- 不要绕过 module-host 或 shared SDK 直接硬编码 hook 协议。
+- 不要把运行时生成状态文件重新纳入版本控制。
+- 不要再往 todo 里重复写已经冻结到 docs 的技术选型细节，todo 只保留执行计划和盘点结果。
 
 ## 一句话原则
-- 先把记忆系统做成基础设施，再把 Agent 做强，不要反过来。
+- M1 和 M2 已经把工程边界与持久化底座立住，接下来优先做真实事件链路、纵向业务闭环和持续回归能力，不再回到骨架式占位开发。

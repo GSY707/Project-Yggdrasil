@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yggdrasil.local/schemas/module-manifest.schema.json",
+  "title": "Yggdrasil Module Manifest",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "yggdrasil.io/v0.1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "ModuleManifest"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "displayName", "version"],
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "version": { "type": "string" },
+        "category": { "type": "string" },
+        "owner": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "spec": {
+      "type": "object",
+      "required": ["runtime", "compatibility", "capabilities", "configSchema"],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

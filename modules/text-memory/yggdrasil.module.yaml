@@ -1,0 +1,60 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: text-memory
+  displayName: Text Memory
+  version: 0.1.0
+  category: memory
+  owner: core
+  description: Text-first import planning, retrieval expansion, and source-aware node proposal module.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_text_memory.plugin:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules: []
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - memory.ingest.preprocess
+      - memory.ingest.plan-tree
+      - memory.retrieve.expand
+      - memory.write.validate
+    publishes:
+      - memory.tree.plan.proposed
+    subscribes:
+      - import.accepted
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      defaultDetailLevel:
+        type: integer
+        minimum: 0
+        maximum: 9
+      segmentTargetChars:
+        type: integer
+        minimum: 120
+        maximum: 1200
+    required:
+      - defaultDetailLevel
+      - segmentTargetChars
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested:
+      - node.read
+      - node.write
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

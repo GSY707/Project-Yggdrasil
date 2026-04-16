@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[project.scripts]
+yggdrasil-worker = "yggdrasil_worker.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_worker"]

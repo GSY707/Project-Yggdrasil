@@ -1,0 +1,26 @@
+[tool.uv.workspace]
+members = [
+  "packages/python-sdk",
+  "services/core-api",
+  "services/agent-runtime",
+  "services/module-host",
+  "services/worker",
+  "modules/text-memory",
+  "modules/context-pruning",
+  "modules/subagent-pr",
+  "adapters/model-providers",
+  "adapters/media-providers"
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=8.3.5"
+]
+
+[tool.uv.sources]
+yggdrasil-sdk = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

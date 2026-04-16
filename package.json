@@ -1,0 +1,11 @@
+{
+  "name": "project-yggdrasil",
+  "private": true,
+  "packageManager": "pnpm@10.8.1",
+  "scripts": {
+    "web:dev": "corepack pnpm --filter @yggdrasil/web dev",
+    "web:build": "corepack pnpm --filter @yggdrasil/web build",
+    "web:lint": "corepack pnpm --filter @yggdrasil/web lint",
+    "web:typecheck": "corepack pnpm --filter @yggdrasil/web typecheck"
+  }
+}

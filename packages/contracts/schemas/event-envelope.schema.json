@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yggdrasil.local/schemas/event-envelope.schema.json",
+  "title": "Yggdrasil Event Envelope",
+  "type": "object",
+  "required": [
+    "specversion",
+    "eventType",
+    "eventVersion",
+    "eventId",
+    "occurredAt",
+    "source",
+    "projectId",
+    "correlationId",
+    "payload"
+  ],
+  "properties": {
+    "specversion": { "type": "string" },
+    "eventType": { "type": "string" },
+    "eventVersion": { "type": "integer", "minimum": 1 },
+    "eventId": { "type": "string" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "source": { "type": "string" },
+    "projectId": { "type": "string" },
+    "spaceId": { "type": ["string", "null"] },
+    "branchId": { "type": ["string", "null"] },
+    "taskId": { "type": ["string", "null"] },
+    "agentRunId": { "type": ["string", "null"] },
+    "correlationId": { "type": "string" },
+    "causationId": { "type": ["string", "null"] },
+    "schemaRef": { "type": ["string", "null"] },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": true
+}

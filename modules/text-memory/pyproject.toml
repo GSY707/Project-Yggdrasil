@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-text-memory"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[project.entry-points."yggdrasil.modules"]
+text-memory = "yggdrasil_text_memory.plugin:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_text_memory"]

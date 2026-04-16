@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-media-providers"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_media_providers"]

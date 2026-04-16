@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-context-pruning"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[project.entry-points."yggdrasil.modules"]
+context-pruning = "yggdrasil_context_pruning.plugin:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_context_pruning"]
