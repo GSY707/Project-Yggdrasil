@@ -9,7 +9,10 @@ description = "Shared contracts and module interfaces for Project Yggdrasil."
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16.0",
+  "langfuse>=4.3.1",
   "nats-py>=2.10.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.36.0",
+  "opentelemetry-sdk>=1.36.0",
   "psycopg[binary]>=3.2.9",
   "pydantic>=2.10.0",
   "PyYAML>=6.0.2",
@@ -19,3 +22,6 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/yggdrasil_sdk"]
+
+[project.scripts]
+yggdrasil-ops = "yggdrasil_sdk.ops_cli:main"

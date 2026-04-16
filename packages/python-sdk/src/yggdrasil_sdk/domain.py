@@ -277,6 +277,33 @@ class AgentRunRecord(BaseModel):
     ended_at: datetime | None = Field(default=None, alias="endedAt")
 
 
+class ModelInvocationRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    task_id: str | None = Field(default=None, alias="taskId")
+    agent_run_id: str | None = Field(default=None, alias="agentRunId")
+    route_decision_id: str | None = Field(default=None, alias="routeDecisionId")
+    requested_model: str = Field(alias="requestedModel")
+    requested_provider: str | None = Field(default=None, alias="requestedProvider")
+    resolved_model: str = Field(alias="resolvedModel")
+    resolved_provider: str | None = Field(default=None, alias="resolvedProvider")
+    invocation_kind: Literal["chat-completion"] = Field(alias="invocationKind")
+    status: Literal["queued", "running", "completed", "failed", "fallback"]
+    trace_id: str | None = Field(default=None, alias="traceId")
+    request_ref: ExternalRef | None = Field(default=None, alias="requestRef")
+    response_ref: ExternalRef | None = Field(default=None, alias="responseRef")
+    input_tokens_used: int = Field(alias="inputTokensUsed")
+    output_tokens_used: int = Field(alias="outputTokensUsed")
+    cost_used: float = Field(alias="costUsed")
+    latency_ms: float | None = Field(default=None, alias="latencyMs")
+    error_summary: str | None = Field(default=None, alias="errorSummary")
+    started_at: datetime = Field(alias="startedAt")
+    ended_at: datetime | None = Field(default=None, alias="endedAt")
+    created_at: datetime = Field(alias="createdAt")
+
+
 class OutboxRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -292,4 +319,29 @@ class OutboxRecord(BaseModel):
     available_at: datetime = Field(alias="availableAt")
     published_at: datetime | None = Field(default=None, alias="publishedAt")
     last_error: str | None = Field(default=None, alias="lastError")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class EvaluationSuiteRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    name: str
+    domain: Literal["trpg", "coding", "writing", "research", "generic"]
+    metric_refs: list[str] = Field(default_factory=list, alias="metricRefs")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class EvaluationRunRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    suite_id: str = Field(alias="suiteId")
+    project_id: str = Field(alias="projectId")
+    subject_kind: Literal["module", "model", "retrieval-policy", "workflow"] = Field(alias="subjectKind")
+    subject_ref: str = Field(alias="subjectRef")
+    status: Literal["queued", "running", "completed", "failed"]
+    metrics_ref: ExternalRef | None = Field(default=None, alias="metricsRef")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    ended_at: datetime | None = Field(default=None, alias="endedAt")
     created_at: datetime = Field(alias="createdAt")

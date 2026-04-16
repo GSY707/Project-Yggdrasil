@@ -5,6 +5,7 @@ from .eventing import NatsJetStreamBus, OutboxPublisher
 from .module_platform import ModulePlatformService
 from .repositories import (
     CollaborationRepository,
+    EvaluationRepository,
     MemoryRepository,
     ModuleStateRepository,
     NodeRepository,
@@ -16,6 +17,7 @@ from .repositories import (
 
 __all__ = [
     "CollaborationRepository",
+    "EvaluationRepository",
     "ensure_workspace_bootstrap",
     "get_persistence_runtime",
     "initialize_schema",

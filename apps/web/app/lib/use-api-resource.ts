@@ -1,0 +1,67 @@
+"use client";
+
+import { startTransition, useEffect, useState } from "react";
+
+export function useApiResource<T>(path: string) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/core${path}`, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const payload = (await response.json()) as T;
+        if (!cancelled) {
+          setData(payload);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : String(loadError));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [path, reloadToken]);
+
+  return {
+    data,
+    error,
+    isLoading,
+    reload: () => {
+      startTransition(() => {
+        setReloadToken((value) => value + 1);
+      });
+    },
+  };
+}
+
+export async function postApiJson<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/core${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as T;
+}

@@ -3,17 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import sqlalchemy as sa
+
 from yggdrasil_sdk import (
     ActorRef,
     CollaborationRepository,
+    EvaluationRepository,
     EventEnvelope,
+    ensure_evaluation_suites,
     HookNames,
+    list_evaluation_suite_definitions,
     MemoryRepository,
     NodeRepository,
     OutboxRepository,
     RedisCoordinator,
     RetrievalBundle,
     RuntimeRepository,
+    run_evaluation_suite,
+    summarize_observability,
     TaskRepository,
     ensure_workspace_bootstrap,
     get_persistence_runtime,
@@ -24,7 +31,9 @@ from yggdrasil_sdk import (
 )
 from yggdrasil_sdk.collaboration_runtime import create_pull_request as create_collaboration_pull_request
 from yggdrasil_sdk.collaboration_runtime import launch_subagent_task, review_pull_request as review_collaboration_pull_request
+from yggdrasil_sdk.persistence.orm import ImportJobORM, MemoryBranchORM, ModelInvocationORM, NodeORM, OutboxRecordORM, PullRequestORM, RetrievalRequestORM, TaskORM
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
+from yggdrasil_sdk.support import read_json
 
 
 class WorkspaceService:
@@ -32,6 +41,27 @@ class WorkspaceService:
         self.workspace_root = workspace_root
         self.runtime = get_persistence_runtime()
         self.coordinator = RedisCoordinator(self.runtime.settings)
+
+    def _status_counts(self, session, orm_model, status_column) -> dict[str, int]:
+        statement = sa.select(status_column, sa.func.count()).group_by(status_column)
+        return {
+            str(status): int(count)
+            for status, count in session.execute(statement).all()
+            if status is not None
+        }
+
+    def _scalar_count(self, session, orm_model, where_clause=None) -> int:
+        statement = sa.select(sa.func.count()).select_from(orm_model)
+        if where_clause is not None:
+            statement = statement.where(where_clause)
+        value = session.execute(statement).scalar_one()
+        return int(value or 0)
+
+    def _load_metrics_payload(self, locator: str | None) -> dict[str, Any] | None:
+        if not locator:
+            return None
+        payload = read_json(Path(locator), None)
+        return payload if isinstance(payload, dict) else None
 
     def _load_module(self, module_id: str):
         snapshot = sync_module_catalog_snapshot(self.workspace_root)
@@ -178,6 +208,151 @@ class WorkspaceService:
             "service": "core-api",
             "database": self.runtime.ping_database(),
             "redis": self.coordinator.ping(),
+        }
+
+    def _llm_summary(self, session) -> dict[str, object]:
+        status_counts = self._status_counts(session, ModelInvocationORM, ModelInvocationORM.status)
+        total_invocations = sum(status_counts.values())
+        total_cost = session.execute(sa.select(sa.func.coalesce(sa.func.sum(ModelInvocationORM.cost_used), 0.0))).scalar_one()
+        total_input_tokens = session.execute(sa.select(sa.func.coalesce(sa.func.sum(ModelInvocationORM.input_tokens_used), 0))).scalar_one()
+        total_output_tokens = session.execute(sa.select(sa.func.coalesce(sa.func.sum(ModelInvocationORM.output_tokens_used), 0))).scalar_one()
+        provider_label = sa.func.coalesce(ModelInvocationORM.resolved_provider, ModelInvocationORM.requested_provider, "unknown")
+        provider_counts = {
+            str(provider or "unknown"): int(count)
+            for provider, count in session.execute(sa.select(provider_label, sa.func.count()).group_by(provider_label)).all()
+        }
+        return {
+            "totalInvocations": total_invocations,
+            "liveInvocations": int(status_counts.get("completed", 0)),
+            "fallbackInvocations": int(status_counts.get("fallback", 0)),
+            "failedInvocations": int(status_counts.get("failed", 0)),
+            "totalCostUsed": round(float(total_cost or 0.0), 6),
+            "totalInputTokens": int(total_input_tokens or 0),
+            "totalOutputTokens": int(total_output_tokens or 0),
+            "providerCounts": provider_counts,
+            "statusCounts": status_counts,
+        }
+
+    def get_observability_summary(self, *, limit: int = 60) -> dict[str, object]:
+        summary = summarize_observability(limit=limit, workspace_root=self.workspace_root)
+        summary["health"] = self.health_report()
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            runtime_repository = RuntimeRepository(session)
+            summary["llmSummary"] = self._llm_summary(session)
+            summary["recentModelInvocations"] = [
+                invocation.model_dump(by_alias=True, mode="json")
+                for invocation in runtime_repository.list_model_invocations(limit=min(limit, 20))
+            ]
+        return summary
+
+    def list_evaluation_suites(self) -> dict[str, object]:
+        definitions = {
+            str(definition.get("id")): definition
+            for definition in list_evaluation_suite_definitions(self.workspace_root)
+        }
+        ensure_evaluation_suites(self.workspace_root)
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            suites = EvaluationRepository(session).list_suites(limit=200)
+        return {
+            "evaluationSuites": [
+                {
+                    **suite.model_dump(by_alias=True, mode="json"),
+                    "caseCount": len(definitions.get(suite.id, {}).get("cases") or []),
+                    "cases": list(definitions.get(suite.id, {}).get("cases") or []),
+                    "subjectKind": definitions.get(suite.id, {}).get("subjectKind", "workflow"),
+                    "subjectRef": definitions.get(suite.id, {}).get("subjectRef", suite.id),
+                }
+                for suite in suites
+            ]
+        }
+
+    def list_evaluation_runs(
+        self,
+        *,
+        suite_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        ensure_evaluation_suites(self.workspace_root)
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            runs = EvaluationRepository(session).list_runs(suite_id=suite_id, status=status, limit=limit)
+        return {
+            "evaluationRuns": [
+                {
+                    **run.model_dump(by_alias=True, mode="json"),
+                    "metrics": self._load_metrics_payload(run.metrics_ref.locator if run.metrics_ref else None),
+                }
+                for run in runs
+            ]
+        }
+
+    def execute_evaluation_suite(self, suite_id: str) -> dict[str, object]:
+        return run_evaluation_suite(suite_id, self.workspace_root)
+
+    def get_workbench_overview(self) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            task_repository = TaskRepository(session)
+            collaboration_repository = CollaborationRepository(session)
+            memory_repository = MemoryRepository(session)
+            runtime_repository = RuntimeRepository(session)
+            recent_tasks = task_repository.list_tasks(limit=6)
+            recent_pull_requests = collaboration_repository.list_pull_requests(limit=6)
+            recent_import_jobs = memory_repository.list_import_jobs(limit=4)
+            recent_model_invocations = runtime_repository.list_model_invocations(limit=6)
+            task_status_counts = self._status_counts(session, TaskORM, TaskORM.status)
+            pull_request_status_counts = self._status_counts(session, PullRequestORM, PullRequestORM.status)
+            import_status_counts = self._status_counts(session, ImportJobORM, ImportJobORM.status)
+            outbox_status_counts = self._status_counts(session, OutboxRecordORM, OutboxRecordORM.publish_status)
+            total_nodes = self._scalar_count(session, NodeORM, NodeORM.node_type != "root")
+            total_branches = self._scalar_count(session, MemoryBranchORM)
+            total_retrievals = self._scalar_count(session, RetrievalRequestORM)
+            llm_summary = self._llm_summary(session)
+
+        module_snapshot = sync_module_catalog_snapshot(self.workspace_root)
+        module_summary = {
+            "total": len(module_snapshot.installs),
+            "active": len([record for record in module_snapshot.installs if record.lifecycle_state == "active"]),
+            "degraded": len([record for record in module_snapshot.installs if record.lifecycle_state == "degraded"]),
+            "disabled": len([record for record in module_snapshot.installs if record.desired_state == "disabled"]),
+        }
+        observability = self.get_observability_summary(limit=12)
+        evaluation_runs = self.list_evaluation_runs(limit=5)["evaluationRuns"]
+        evaluation_suites = self.list_evaluation_suites()["evaluationSuites"]
+
+        return {
+            "generatedAt": utc_now().isoformat(),
+            "health": self.health_report(),
+            "cards": {
+                "tasks": sum(task_status_counts.values()),
+                "nodes": total_nodes,
+                "branches": total_branches,
+                "pullRequests": sum(pull_request_status_counts.values()),
+                "imports": sum(import_status_counts.values()),
+                "retrievals": total_retrievals,
+                "outboxPending": outbox_status_counts.get("pending", 0),
+                "evaluationRuns": len(evaluation_runs),
+                "observabilityErrors": sum(item["errorCount"] for item in observability.get("serviceSummaries", [])),
+                "modelInvocations": int(llm_summary["totalInvocations"]),
+                "llmFallbacks": int(llm_summary["fallbackInvocations"]),
+                "llmCostUsed": float(llm_summary["totalCostUsed"]),
+            },
+            "moduleSummary": module_summary,
+            "llmSummary": llm_summary,
+            "taskStatusCounts": task_status_counts,
+            "pullRequestStatusCounts": pull_request_status_counts,
+            "importJobStatusCounts": import_status_counts,
+            "outboxStatusCounts": outbox_status_counts,
+            "recentTasks": [task.model_dump(by_alias=True, mode="json") for task in recent_tasks],
+            "recentPullRequests": [record.model_dump(by_alias=True, mode="json") for record in recent_pull_requests],
+            "recentImportJobs": [record.model_dump(by_alias=True, mode="json") for record in recent_import_jobs],
+            "recentModelInvocations": [record.model_dump(by_alias=True, mode="json") for record in recent_model_invocations],
+            "recentEvaluationRuns": evaluation_runs,
+            "evaluationSuites": evaluation_suites,
+            "observability": observability,
         }
 
     def list_modules(self) -> dict[str, object]:
@@ -359,11 +534,13 @@ class WorkspaceService:
             runs = task_repository.list_agent_runs(task_id)
             snapshots = task_repository.list_snapshots(task_id)
             decisions = runtime_repository.list_model_route_decisions(task_id=task_id)
+            invocations = runtime_repository.list_model_invocations(task_id=task_id, limit=50)
         return {
             "task": task.model_dump(by_alias=True, mode="json"),
             "agentRuns": [run.model_dump(by_alias=True, mode="json") for run in runs],
             "snapshots": [snapshot.model_dump(by_alias=True, mode="json") for snapshot in snapshots],
             "routeDecisions": [decision.model_dump(by_alias=True, mode="json") for decision in decisions],
+            "modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations],
         }
 
     def create_task(self, payload: dict[str, Any]) -> dict[str, object]:
@@ -421,6 +598,24 @@ class WorkspaceService:
             WorkspaceBootstrapRepository(session).ensure_default_workspace()
             decisions = RuntimeRepository(session).list_model_route_decisions(task_id=task_id, limit=limit)
         return {"routeDecisions": [decision.model_dump(by_alias=True, mode="json") for decision in decisions]}
+
+    def list_model_invocations(
+        self,
+        *,
+        task_id: str | None = None,
+        agent_run_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            invocations = RuntimeRepository(session).list_model_invocations(
+                task_id=task_id,
+                agent_run_id=agent_run_id,
+                status=status,
+                limit=limit,
+            )
+        return {"modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations]}
 
     def create_route_decision(self, payload: dict[str, Any]) -> dict[str, object]:
         with self.runtime.session_scope() as session:

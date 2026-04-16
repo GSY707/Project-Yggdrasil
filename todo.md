@@ -6,8 +6,8 @@
 - M2 已完成正式实现与验证，当前仓库已经具备 PostgreSQL/Alembic/repository/service/Redis 协调的持久化底座。
 - M3 已完成正式实现与验证，当前仓库已经具备数据库驱动的模块生命周期、hook/订阅注册表、健康上报、outbox/NATS 事件总线与 module-host 控制面。
 - M4 已完成正式实现与验证，当前仓库已经具备 text-memory 的导入、建树计划、落库 materialize、检索 API 与回归样本闭环。
-- 当前主问题已经从“在主 Agent 闭环跑通后，继续推进 Sub-Agent、PR 生命周期与跨链路持续回归”切换到“在 M6 闭环完成后，推进 Web 工作台与持续回归/运维底座”。
-- 当前第一优先级：进入 M7，把任务列表、节点详情、版本历史、来源信息与 PR 列表切到正式 API 工作台。
+- 当前主问题已经从“在 M8 中完成真实 LLM 接入后的评测、正式观测与长期运行底座补齐”推进到“在 M8 正式收口后，继续做 live smoke 固化、工作台增强与第二阶段前置准备”。
+- 当前第一优先级：把已经跑通的 benchmark、live suite、OTel collector、backup/restore 与 compose smoke 继续固化到长期回归与工作台视图。
 
 ## 规格入口
 - [docs/PRD-v0.1.md](docs/PRD-v0.1.md)
@@ -69,6 +69,14 @@
 - [x] Alembic upgrade head 已对空 sqlite 库执行通过，初始迁移可运行。
 - [x] Web 验证已通过：install、typecheck、lint、build。
 - [x] 根目录前端脚本已改为显式走 corepack pnpm，不再依赖全局 pnpm。
+- [x] Web 工作台已经切到正式 API 数据面，提供任务、节点、协作、评测、观测与 LLM 调用视图。
+- [x] M8 第一阶段已完成：真实模型网关、model invocation 持久化、请求/响应落盘、LLM 摘要与工作台展示均已落地。
+- [x] 已完成一次 LongCat-Flash-Lite 真实联调：task、route decision、model invocation、observability summary 和 web 代理链路全部验证通过。
+- [x] M8 benchmark 正式任务集已落地，并已完成一次真实 LongCat 基线对照运行。
+- [x] 无记忆、纯向量、记忆树三组基线对照已落地，benchmark 结果显示 memory-tree 稳定领先。
+- [x] JSONL + OpenTelemetry + Langfuse 增量观测出口已接线，exporter 状态已进入 API 与 Web 工作台展示。
+- [x] backup/restore CLI、compose smoke 与本地 infra 端口覆盖方案已完成，Windows 端口冲突场景已验证可恢复。
+- [x] M8 live suite 已真实命中 LongCat-Flash-Lite 并通过，最新运行已同时验证本地 OTel collector 收到 traces 与 metrics。
 
 ## 未来工作重排
 
@@ -121,19 +129,22 @@
 - [x] 验证共享空间预埋字段在分支和 PR 流中的传递。
 - 验收：Sub-Agent 能独立产出结果并以 PR 形式提交，由主 Agent 审核、评论和合并；当前全量 pytest 为 21 passed。
 
-### M7. Web 控制台从首页升级为工作台
-- [x] 首页已经替换为正式运行工作台，可读取 todo、规格目录、模块快照和服务面板。
-- [ ] 提供任务列表、节点详情、版本历史、来源信息、PR 列表基础页面。
-- [ ] 再补树浏览、图谱浏览、时间线、暂停/恢复入口。
-- [ ] 从直接读取仓库文件升级为读取正式 API。
-- 验收：Web 控制台可作为第一版日常操作入口，而不只是仓库级 dashboard。
+### M7. Web 控制台从首页升级为工作台（已完成）
+- [x] 首页已经替换为正式运行工作台，可读取任务、评测、观测、协作和 LLM 摘要。
+- [x] 已提供任务列表、节点详情、版本历史、来源信息、PR 列表基础页面。
+- [x] 已从直接读取仓库文件升级为读取正式 API，并通过 web typecheck、lint、build 验证。
+- [ ] 树浏览、图谱浏览、时间线、暂停/恢复入口仍可继续增强，但已不阻塞第一版正式工作台交付。
+- 验收：Web 控制台已经可以作为第一版日常操作入口，而不只是仓库级 dashboard。
 
 ### M8. 评测与运维底座
-- [ ] 建立第一批基准任务集。
-- [ ] 建立无记忆、纯向量、记忆树检索的基线对照。
-- [ ] 接入 OpenTelemetry、Langfuse、日志与成本指标。
-- [ ] 建立本地 Compose 联调、备份策略、CI 骨架。
-- 验收：每次核心链路变更都能跑回归并看到成本与效果差异。
+- [x] 接入真实模型网关，完成免费优先路由、model invocation 持久化与请求/响应落盘。
+- [x] 建立基础日志、trace、token、cost 指标，并接入 core-api 与 Web 工作台展示。
+- [x] 建立 CI 骨架、回归 suite 和本地 live 联调路径；LongCat-Flash-Lite 真实调用已验证通过。
+- [x] 建立第一批正式 benchmark 任务集。
+- [x] 建立无记忆、纯向量、记忆树检索的基线对照。
+- [x] 将当前 JSONL 观测出口升级为正式 OpenTelemetry / Langfuse 接线。
+- [x] 补完整的本地 Compose 长稳联调、数据库备份与恢复策略。
+- 验收：benchmark suite、live suite、backup/restore、compose smoke 与 OTel collector 均已验证通过；Langfuse 是否出现真实远端记录取决于运行环境是否提供有效密钥。
 
 ### M9. 第二阶段模块化能力
 - [ ] 多模态记忆模块。
@@ -145,16 +156,16 @@
 - 前提：M4 到 M8 完成前，不进入这些模块的正式开发，只允许保留字段、状态和接口预埋。
 
 ## 当前最该做的 10 件事
-1. 让 Web 控制台从读仓库文件切到读正式 API。
-2. 提供任务列表、节点详情、版本历史、来源信息、PR 列表基础页面。
-3. 建立覆盖 runtime、subagent 和 memory 三条链路的回归样本集与 CI 入口。
-4. 补齐可观测性、成本、任务和模块级指标的运维底座。
-5. 把 Docker Compose 联调从 PostgreSQL/Redis/NATS 扩展到 Temporal 与 MinIO 的完整工作流闭环。
-6. 为主 Agent 与 Sub-Agent 增加启动、暂停、恢复、审查、合并的 smoke tests。
-7. 为 Web 工作台再补树浏览、图谱浏览、时间线、暂停/恢复入口。
-8. 为 collaboration 路径接入更完整的 GitHub review/merge 状态同步和权限控制。
-9. 为共享空间/高级权限预埋字段补齐 API 与验证。
-10. 建立第一批评测任务集和成本/效果对照基线。
+1. 为主 Agent 与 Sub-Agent 增加 live 模式下的 smoke tests。
+2. 为 Web 工作台继续补树浏览、图谱浏览、时间线、暂停/恢复入口。
+3. 为 collaboration 路径接入更完整的 GitHub review/merge 状态同步和权限控制。
+4. 为共享空间/高级权限预埋字段补齐 API 与验证。
+5. 补充模型成本、失败率、fallback 率的长期趋势视图。
+6. 把评测结果与工作台、CI、观测信号进一步统一到同一套回归面板。
+7. 为 Langfuse 配置真实密钥并补一次云端 exporter 出站验证。
+8. 为 compose 端口覆盖补一组 Windows 常用环境模板与文档示例。
+9. 把 benchmark/live/ops 结果进一步沉淀为 CI 门禁与日报指标。
+10. 为第二阶段模块化能力继续只做字段和接口预埋，不提前下沉业务实现。
 
 ## 明确不该现在做的事
 - 不要在 M4 之前实现多模态、训练、共享空间的正式业务逻辑。
@@ -164,4 +175,4 @@
 - 不要再往 todo 里重复写已经冻结到 docs 的技术选型细节，todo 只保留执行计划和盘点结果。
 
 ## 一句话原则
-- M1 和 M2 已经把工程边界与持久化底座立住，接下来优先做真实事件链路、纵向业务闭环和持续回归能力，不再回到骨架式占位开发。
+- 当前已经完成 M8 的 benchmark、真实 LLM、正式观测出口与长期运行底座收口，接下来优先做 live smoke 固化、工作台增强和第二阶段前置预埋，不再回到骨架式占位开发。

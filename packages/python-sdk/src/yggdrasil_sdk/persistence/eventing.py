@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from ..contracts import EventEnvelope, ExternalRef
-from ..support import ensure_state_subdir, read_json, relative_workspace_path, utc_now, write_json
+from ..support import ensure_state_subdir, read_json, relative_workspace_path, resolve_workspace_root, utc_now, write_json
 from .database import PersistenceRuntime, get_persistence_runtime
 from .repositories import OutboxRepository
 from .settings import PersistenceSettings
@@ -48,11 +48,11 @@ def event_payload_ref(envelope: EventEnvelope, workspace_root: Path | None = Non
 def load_event_envelope(payload_ref: ExternalRef, workspace_root: Path | None = None) -> EventEnvelope | None:
     if payload_ref.type != "file":
         return None
-    workspace = Path(workspace_root).resolve() if workspace_root is not None else None
-    if workspace is None:
-        payload_path = Path(payload_ref.locator)
+    candidate = Path(payload_ref.locator).expanduser()
+    if candidate.is_absolute():
+        payload_path = candidate.resolve()
     else:
-        payload_path = workspace / payload_ref.locator
+        payload_path = (resolve_workspace_root(workspace_root) / candidate).resolve()
     if not payload_path.exists():
         return None
     payload = read_json(payload_path, {})

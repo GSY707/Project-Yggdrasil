@@ -19,6 +19,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+yggdrasil-model-providers = { workspace = true }
 yggdrasil-sdk = { workspace = true }
 
 [tool.ruff]

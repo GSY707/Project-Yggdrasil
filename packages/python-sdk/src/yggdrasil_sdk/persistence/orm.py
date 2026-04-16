@@ -300,6 +300,33 @@ class ModelRouteDecisionORM(Base):
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
 
 
+class ModelInvocationORM(Base):
+    __tablename__ = "model_invocations"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(sa.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    route_decision_id: Mapped[str | None] = mapped_column(sa.ForeignKey("model_route_decisions.id", ondelete="SET NULL"), nullable=True, index=True)
+    requested_model: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    requested_provider: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    resolved_model: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    resolved_provider: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    invocation_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    trace_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    request_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    response_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    input_tokens_used: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    output_tokens_used: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
+    cost_used: Mapped[float] = mapped_column(sa.Float(), nullable=False, default=0.0)
+    latency_ms: Mapped[float | None] = mapped_column(sa.Float(), nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    started_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
 class ModuleInstallORM(Base):
     __tablename__ = "module_installs"
 
@@ -416,3 +443,28 @@ class ReviewCommentORM(Base):
     status: Mapped[str] = mapped_column(sa.String(32), nullable=False)
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     resolved_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+
+
+class EvaluationSuiteORM(Base):
+    __tablename__ = "evaluation_suites"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    domain: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    metric_refs: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class EvaluationRunORM(Base):
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    suite_id: Mapped[str] = mapped_column(sa.ForeignKey("evaluation_suites.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    subject_ref: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    metrics_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    started_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)

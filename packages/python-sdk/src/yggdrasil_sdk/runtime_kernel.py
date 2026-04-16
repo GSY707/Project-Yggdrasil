@@ -5,6 +5,7 @@ from typing import Any
 from .catalog import load_in_process_plugin
 from .contracts import ActorRef, BudgetState, EntityRef, ExternalRef, RootMountPackage, TaskSnapshotSummary
 from .hooks import HookNames
+from .llm_runtime import invoke_runtime_completion, load_runtime_candidate_models
 from .model_routing import build_model_route_decision
 from .persistence import OutboxRepository, RedisCoordinator, RuntimeRepository, TaskRepository, get_persistence_runtime, sync_module_catalog_snapshot
 from .persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
@@ -523,17 +524,31 @@ def _build_execution_write_payload(
     task_type: str,
     root_mount: dict[str, Any],
     route_decision: dict[str, Any],
+    model_output: str,
+    model_invocation: dict[str, Any] | None,
     pruning_result: dict[str, Any] | None,
     resume_path: str | None,
 ) -> dict[str, str]:
-    lines = [
-        f"Task goal: {task.goal}",
-        f"Task objective: {task.current_objective or task.goal}",
-        f"Current focus: {task.current_focus or 'runtime execution'}",
-        f"Mounted summary: {root_mount['rootSummary']}",
-        f"Route decision: {route_decision['selectedModel']} via {route_decision.get('selectedProvider') or 'unknown'}.",
-        f"Task type: {task_type}",
-    ]
+    lines = [model_output.strip() or "Model output was empty.", "", "Execution metadata:"]
+    lines.extend(
+        [
+            f"Task goal: {task.goal}",
+            f"Task objective: {task.current_objective or task.goal}",
+            f"Current focus: {task.current_focus or 'runtime execution'}",
+            f"Mounted summary: {root_mount['rootSummary']}",
+            f"Route decision: {route_decision['selectedModel']} via {route_decision.get('selectedProvider') or 'unknown'}.",
+            f"Task type: {task_type}",
+        ]
+    )
+    if model_invocation is not None:
+        lines.extend(
+            [
+                f"Invocation status: {model_invocation.get('status')}",
+                f"Resolved model: {model_invocation.get('resolvedModel') or model_invocation.get('requestedModel')}",
+                f"Resolved provider: {model_invocation.get('resolvedProvider') or 'unknown'}",
+                f"Trace id: {model_invocation.get('traceId') or 'n/a'}",
+            ]
+        )
     if resume_path:
         lines.append(f"Resume path: {resume_path}")
     if pruning_result is not None:
@@ -619,10 +634,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             budget_limit = _remaining_cost_per_1k(task.budget, input_tokens + output_tokens)
             min_quality = float(request.get("minQuality", 0.0)) if request.get("minQuality") is not None else None
             task_type = _infer_task_type(task, request)
+            runtime_candidates = load_runtime_candidate_models()
             route_preview = build_model_route_decision(
                 task_type,
                 task_id=task_id,
-                candidates=request.get("candidateModels") if isinstance(request.get("candidateModels"), list) else None,
+                candidates=request.get("candidateModels") if isinstance(request.get("candidateModels"), list) else runtime_candidates,
                 budget_limit=budget_limit,
                 required_context_window=int(request["requiredContextWindow"]) if request.get("requiredContextWindow") is not None else None,
                 min_quality=min_quality,
@@ -662,9 +678,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 {
                     "routeDecisionId": route_decision.id,
                     "status": "running",
-                    "inputTokensUsed": input_tokens,
-                    "outputTokensUsed": output_tokens,
-                    "costUsed": estimated_cost,
                 },
             )
             task = task_repository.update_task(
@@ -673,7 +686,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "status": "running",
                     "currentFocus": request.get("currentFocus") or task.current_focus or f"{run_type}-agent-execution",
                     "currentObjective": request.get("currentObjective") or task.current_objective or task.goal,
-                    "budgetState": _updated_budget_state(task.budget, input_tokens=input_tokens, output_tokens=output_tokens, cost_used=estimated_cost),
                     "pauseRequested": bool(task.pause_requested),
                 },
             )
@@ -743,11 +755,56 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
 
             execution_root_id = task.execution_root_node_id or root_mount["executionRefs"][0]["id"]
             execution_actor_id = str(request.get("executionActorId") or ("subagent" if run_type == "subagent" else "main-agent"))
+            llm_result = invoke_runtime_completion(
+                session,
+                task=task,
+                run=run,
+                route_decision=route_decision,
+                task_type=task_type,
+                root_mount=root_mount,
+                current_context=pruning_result.get("retainedItems") if isinstance(pruning_result, dict) and isinstance(pruning_result.get("retainedItems"), list) else current_context,
+                request=request,
+                resume_path="snapshot" if snapshot is not None and command == "resume" else None,
+            )
+            actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
+            actual_output_tokens = int(llm_result["usage"].get("outputTokens", output_tokens))
+            actual_cost = float(llm_result.get("costUsed", estimated_cost))
+            run = task_repository.update_agent_run(
+                run.id,
+                {
+                    "selectedModel": llm_result["invocation"].get("resolvedModel") or route_decision.selected_model,
+                    "selectedProvider": llm_result["invocation"].get("resolvedProvider") or route_decision.selected_provider,
+                    "inputTokensUsed": actual_input_tokens,
+                    "outputTokensUsed": actual_output_tokens,
+                    "costUsed": actual_cost,
+                },
+            )
+            task = task_repository.update_task(
+                task_id,
+                {
+                    "budgetState": _updated_budget_state(
+                        task.budget,
+                        input_tokens=actual_input_tokens,
+                        output_tokens=actual_output_tokens,
+                        cost_used=actual_cost,
+                    ),
+                },
+            )
+            model_invocation_event = _persist_runtime_event(
+                session,
+                project_id=task.project_id,
+                aggregate_type="model-invocation",
+                aggregate_id=str(llm_result["invocation"]["id"]),
+                event_type="runtime.model-invocation.completed",
+                locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
+            )
             write_payload = _build_execution_write_payload(
                 task=task,
                 task_type=task_type,
                 root_mount=root_mount,
                 route_decision=route_decision.model_dump(by_alias=True, mode="json"),
+                model_output=str(llm_result["assistantText"]),
+                model_invocation=llm_result["invocation"],
                 pruning_result=pruning_result,
                 resume_path="snapshot" if snapshot is not None and command == "resume" else None,
             )
@@ -846,6 +903,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "pruning": pruning_result,
                     "pruningEvents": pruning_events,
                     "outboxRecords": {
+                        "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),
                         "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
                         "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
                         "snapshotCreated": snapshot_created_event.model_dump(by_alias=True, mode="json"),
@@ -874,7 +932,9 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 "createdNode": created_node.model_dump(by_alias=True, mode="json"),
                 "pruning": pruning_result,
                 "pruningEvents": pruning_events,
+                "modelInvocation": llm_result["invocation"],
                 "outboxRecords": {
+                    "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),
                     "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
                     "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
                     "writeCreated": write_event.model_dump(by_alias=True, mode="json"),

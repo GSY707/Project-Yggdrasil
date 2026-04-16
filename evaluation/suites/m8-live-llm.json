@@ -1,0 +1,32 @@
+{
+  "id": "evalsuite_live_m8_llm",
+  "name": "M8 Live LLM Smoke",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "live-invocations",
+    "latency-ms",
+    "total-tokens"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "live:m8-llm",
+  "cases": [
+    {
+      "id": "evalcase_m8_live_longcat",
+      "title": "LongCat 真实场景主链路联调",
+      "scenario": "m8.live_llm_task_execution",
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "requireLive": true,
+      "currentFocus": "M8 live LLM suite",
+      "currentObjective": "Explain why the new M8 benchmark, observability, and ops additions make the live runtime safer and more observable.",
+      "contextTitle": "M8 live validation context",
+      "context": "Use the mounted facts about benchmark baselines, OpenTelemetry export, Langfuse generation tracing, backup and restore, and compose smoke to produce one grounded runtime answer.",
+      "maxTokens": 320,
+      "temperature": 0.15,
+      "tags": ["m8", "live", "longcat", "llm"],
+      "difficulty": "hard"
+    }
+  ]
+}

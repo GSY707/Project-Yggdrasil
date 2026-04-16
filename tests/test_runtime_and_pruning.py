@@ -208,6 +208,11 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         runs = task_repository.list_agent_runs("task_runtime")
         assert runs[0].status == "paused"
         assert runtime_repository.list_model_route_decisions(task_id="task_runtime")
+        invocations = runtime_repository.list_model_invocations(task_id="task_runtime")
+        assert len(invocations) == 1
+        assert invocations[0].status == "fallback"
+        assert invocations[0].request_ref is not None
+        assert invocations[0].response_ref is not None
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
@@ -246,6 +251,9 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert snapshots[0].status == "consumed"
         decisions = runtime_repository.list_model_route_decisions(task_id="task_runtime")
         assert len(decisions) == 2
+        invocations = runtime_repository.list_model_invocations(task_id="task_runtime")
+        assert len(invocations) == 2
+        assert {invocation.status for invocation in invocations} == {"fallback"}
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)

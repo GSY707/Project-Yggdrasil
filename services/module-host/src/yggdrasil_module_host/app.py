@@ -1,10 +1,13 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from yggdrasil_sdk import instrument_fastapi_app
+
 from .services import ModuleHostService
 
 
 app = FastAPI(title="Yggdrasil Module Host", version="0.1.0")
+instrument_fastapi_app(app, "module-host")
 
 
 class QuarantineRequest(BaseModel):

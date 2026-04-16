@@ -1,0 +1,9 @@
+世界树计划在 M8 之前已经形成一条稳定的产品主线。首先，系统要求所有模块共享同一套术语：项目、空间、分支、节点、边、任务、运行与快照都要用一致命名，否则导入模块、协作模块和运行时模块在交换事件时会出现歧义。共享术语不是文档细节，而是跨模块协作的前提。
+
+其次，模块宿主负责生命周期管理、配置绑定、故障隔离与入口装配。模块不会直接绑在某个服务里，而是通过 manifest、install record 和 hook registration 被宿主加载。这样导入链路、检索链路和 Agent 能力才可以用同一套平台协议组合，而不是做成点对点集成。
+
+再次，事件总线是跨模块协作的正式通道。import.accepted、memory.tree.plan.proposed、memory.tree.materialized、task lifecycle 与 collaboration 事件都需要通过 outbox 和总线广播。这样一来，模块之间的协作依赖的是事件契约，而不是彼此调用内部函数。
+
+当前产品内真正上线的是记忆树检索。它依赖节点内容、边关系、子节点名称、相关节点名称和自然语言检索摘要来扩展上下文。当前仓库没有正式的在线向量库，因此“纯向量 baseline”只能留在 evaluation 层，作为扁平 lexical similarity 的对照策略，不能包装成产品已经支持的正式在线能力。
+
+M8 的收口要求不仅是接上真实 LLM，还包括把观测与运维补齐。观测侧要保留 JSONL spans、logs、metrics，同时增量导出到 OpenTelemetry，并为真实 generation 接入 Langfuse。运维侧需要本地 compose smoke，以及数据库与 state-root 的 backup/restore 策略，这样 live 联调和回归评测才不会只靠手工操作。

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from yggdrasil_sdk import get_persistence_runtime, sync_module_catalog_snapshot
+from yggdrasil_sdk import get_persistence_runtime, observe_span, record_log, record_metric, sync_module_catalog_snapshot
 from yggdrasil_sdk.catalog import load_in_process_plugin
 from yggdrasil_sdk.collaboration_runtime import execute_subagent_work_item
 from yggdrasil_sdk.contracts import WorkerActivityDescriptor
@@ -178,24 +179,48 @@ def dispatch_work_item(payload: dict[str, Any]) -> dict[str, object]:
 
 
 def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 1) -> dict[str, object]:
-    popped = pop_work_item(queue, timeout_seconds=timeout_seconds)
-    if popped["status"] != "received":
-        return popped
-    payload = popped["payload"]
-    if not isinstance(payload, dict):
+    with observe_span("worker", f"queue:{queue}", kind="worker", attributes={"queue": queue}) as span:
+        popped = pop_work_item(queue, timeout_seconds=timeout_seconds)
+        span["attributes"]["popStatus"] = popped["status"]
+        if popped["status"] != "received":
+            return popped
+        payload = popped["payload"]
+        if not isinstance(payload, dict):
+            record_log(
+                "worker",
+                "error",
+                "Worker payload must be a JSON object.",
+                attributes={"queue": queue, "traceId": span["traceId"], "payload": json.dumps(payload, ensure_ascii=False)},
+            )
+            return {
+                "status": "error",
+                "queue": queue,
+                "detail": "Worker payload must be a JSON object.",
+                "payload": payload,
+            }
+        span["attributes"]["activity"] = str(payload.get("activity") or "")
+        result = dispatch_work_item(payload)
+        worker_status = "processed" if result.get("status") not in {"error"} else "error"
+        record_metric(
+            "worker",
+            "work-item.processed",
+            1,
+            kind="counter",
+            attributes={"queue": queue, "activity": str(payload.get("activity") or "unknown"), "status": worker_status},
+        )
+        if worker_status == "error":
+            record_log(
+                "worker",
+                "error",
+                "Worker activity failed.",
+                attributes={"queue": queue, "traceId": span["traceId"], "payload": payload, "result": result},
+            )
         return {
-            "status": "error",
+            "status": worker_status,
             "queue": queue,
-            "detail": "Worker payload must be a JSON object.",
             "payload": payload,
+            "result": result,
         }
-    result = dispatch_work_item(payload)
-    return {
-        "status": "processed" if result.get("status") not in {"error"} else "error",
-        "queue": queue,
-        "payload": payload,
-        "result": result,
-    }
 
 
 def drain_work_queue(queue: str = AGENT_RUNTIME_QUEUE, *, max_items: int = 10, timeout_seconds: int = 1) -> dict[str, object]:

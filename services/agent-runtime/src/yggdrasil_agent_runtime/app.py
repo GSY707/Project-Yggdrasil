@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Query, status
 
+from yggdrasil_sdk import instrument_fastapi_app
 from yggdrasil_sdk.persistence.coordination import RedisCoordinator
 
 from .runtime import build_root_mount_package, load_package_entry, prepare_pause_snapshot, queue_main_agent_execution, request_task_pause
@@ -9,6 +10,7 @@ from yggdrasil_sdk import get_persistence_runtime
 
 
 app = FastAPI(title="Yggdrasil Agent Runtime", version="0.1.0")
+instrument_fastapi_app(app, "agent-runtime")
 
 
 @app.get("/health")

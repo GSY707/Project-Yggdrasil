@@ -1,0 +1,54 @@
+{
+  "id": "evalsuite_benchmark_m8_memory_strategies",
+  "name": "M8 Memory Strategy Benchmark",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "strategy-leaderboard",
+    "context-coverage",
+    "answer-coverage"
+  ],
+  "subjectKind": "retrieval-policy",
+  "subjectRef": "benchmark:m8-memory-strategies",
+  "cases": [
+    {
+      "id": "evalcase_m8_strategy_architecture",
+      "title": "共享术语、事件总线与模块宿主的协同原因",
+      "scenario": "m8.memory_strategy_compare",
+      "fixture": "m8_memory_benchmark.txt",
+      "query": "为什么这个系统需要共享术语、事件总线和模块宿主，而不是让模块直接互相调用？",
+      "expectedKeywords": [
+        "共享术语",
+        "事件总线",
+        "模块宿主",
+        "生命周期",
+        "跨模块"
+      ],
+      "topK": 4,
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "tags": ["m8", "benchmark", "memory-tree", "vector-flat", "no-memory"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_m8_strategy_eval_layer",
+      "title": "为何纯向量 baseline 只能留在 evaluation 层",
+      "scenario": "m8.memory_strategy_compare",
+      "fixture": "m8_memory_benchmark.txt",
+      "query": "为什么纯向量 baseline 必须留在 evaluation 层，而且 M8 还要同时补 OpenTelemetry、Langfuse 与 backup/restore？",
+      "expectedKeywords": [
+        "纯向量 baseline",
+        "evaluation 层",
+        "记忆树检索",
+        "OpenTelemetry",
+        "Langfuse",
+        "backup/restore"
+      ],
+      "topK": 5,
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "tags": ["m8", "benchmark", "observability", "ops"],
+      "difficulty": "hard"
+    }
+  ]
+}

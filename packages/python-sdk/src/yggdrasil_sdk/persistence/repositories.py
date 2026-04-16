@@ -28,10 +28,13 @@ from ..contracts import (
 from ..domain import (
     AgentRunRecord,
     EdgeRecord,
+    EvaluationRunRecord,
+    EvaluationSuiteRecord,
     ImportFragmentRecord,
     ImportJobRecord,
     ImportPolicy,
     MemoryBranchRecord,
+    ModelInvocationRecord,
     NodeRecord,
     NodeVersionRecord,
     OutboxRecord,
@@ -55,12 +58,15 @@ from .constants import (
 from .orm import (
     AgentRunORM,
     EdgeORM,
+    EvaluationRunORM,
+    EvaluationSuiteORM,
     EventSubscriptionORM,
     HealthReportORM,
     HookContributionORM,
     ImportFragmentORM,
     ImportJobORM,
     MemoryBranchORM,
+    ModelInvocationORM,
     ModelRouteDecisionORM,
     ModuleConfigBindingORM,
     ModuleInstallORM,
@@ -405,6 +411,33 @@ def _route_decision_record(model: ModelRouteDecisionORM) -> ModelRouteDecision:
     )
 
 
+def _model_invocation_record(model: ModelInvocationORM) -> ModelInvocationRecord:
+    return ModelInvocationRecord(
+        id=model.id,
+        projectId=model.project_id,
+        taskId=model.task_id,
+        agentRunId=model.agent_run_id,
+        routeDecisionId=model.route_decision_id,
+        requestedModel=model.requested_model,
+        requestedProvider=model.requested_provider,
+        resolvedModel=model.resolved_model,
+        resolvedProvider=model.resolved_provider,
+        invocationKind=model.invocation_kind,
+        status=model.status,
+        traceId=model.trace_id,
+        requestRef=_external_ref(model.request_ref),
+        responseRef=_external_ref(model.response_ref),
+        inputTokensUsed=model.input_tokens_used,
+        outputTokensUsed=model.output_tokens_used,
+        costUsed=model.cost_used,
+        latencyMs=model.latency_ms,
+        errorSummary=model.error_summary,
+        startedAt=model.started_at,
+        endedAt=model.ended_at,
+        createdAt=model.created_at,
+    )
+
+
 def _module_install_record(model: ModuleInstallORM) -> ModuleInstallRecord:
     return ModuleInstallRecord(
         id=model.id,
@@ -614,6 +647,31 @@ def _review_comment_record(model: ReviewCommentORM) -> ReviewCommentRecord:
     )
 
 
+def _evaluation_suite_record(model: EvaluationSuiteORM) -> EvaluationSuiteRecord:
+    return EvaluationSuiteRecord(
+        id=model.id,
+        name=model.name,
+        domain=model.domain,
+        metricRefs=list(model.metric_refs or []),
+        createdAt=model.created_at,
+    )
+
+
+def _evaluation_run_record(model: EvaluationRunORM) -> EvaluationRunRecord:
+    return EvaluationRunRecord(
+        id=model.id,
+        suiteId=model.suite_id,
+        projectId=model.project_id,
+        subjectKind=model.subject_kind,
+        subjectRef=model.subject_ref,
+        status=model.status,
+        metricsRef=_external_ref(model.metrics_ref),
+        startedAt=model.started_at,
+        endedAt=model.ended_at,
+        createdAt=model.created_at,
+    )
+
+
 class WorkspaceBootstrapRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -621,6 +679,8 @@ class WorkspaceBootstrapRepository:
     def ensure_default_workspace(self) -> dict[str, str]:
         now = utc_now()
         system_actor = _actor(None)
+        project_created = False
+        space_created = False
 
         project = self.session.get(ProjectORM, DEFAULT_PROJECT_ID)
         if project is None:
@@ -633,6 +693,10 @@ class WorkspaceBootstrapRepository:
                 created_by=system_actor.model_dump(mode="json"),
             )
             self.session.add(project)
+            project_created = True
+
+        if project_created:
+            self.session.flush()
 
         space = self.session.get(SpaceORM, DEFAULT_SPACE_ID)
         if space is None:
@@ -645,6 +709,10 @@ class WorkspaceBootstrapRepository:
                 created_at=now,
             )
             self.session.add(space)
+            space_created = True
+
+        if space_created:
+            self.session.flush()
 
         branch = self.session.get(MemoryBranchORM, DEFAULT_BRANCH_ID)
         if branch is None:
@@ -1468,6 +1536,120 @@ class RuntimeRepository:
             statement = statement.where(ModelRouteDecisionORM.task_id == task_id)
         return [_route_decision_record(model) for model in self.session.execute(statement).scalars().all()]
 
+    def create_model_invocation(self, payload: dict[str, Any]) -> ModelInvocationRecord:
+        project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
+        task_id = str(payload.get("taskId")) if payload.get("taskId") is not None else None
+        agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
+        route_decision_id = str(payload.get("routeDecisionId")) if payload.get("routeDecisionId") is not None else None
+        if self.session.get(ProjectORM, project_id) is None:
+            raise KeyError(f"Project {project_id} not found.")
+        if task_id is not None and self.session.get(TaskORM, task_id) is None:
+            raise KeyError(f"Task {task_id} not found.")
+        if agent_run_id is not None and self.session.get(AgentRunORM, agent_run_id) is None:
+            raise KeyError(f"Agent run {agent_run_id} not found.")
+        if route_decision_id is not None and self.session.get(ModelRouteDecisionORM, route_decision_id) is None:
+            raise KeyError(f"Route decision {route_decision_id} not found.")
+
+        record = ModelInvocationRecord(
+            id=str(payload.get("id") or new_id("llm", agent_run_id or task_id or utc_now().isoformat())),
+            projectId=project_id,
+            taskId=task_id,
+            agentRunId=agent_run_id,
+            routeDecisionId=route_decision_id,
+            requestedModel=str(payload.get("requestedModel") or payload.get("selectedModel") or "unknown"),
+            requestedProvider=str(payload.get("requestedProvider") or payload.get("selectedProvider")) if (payload.get("requestedProvider") or payload.get("selectedProvider")) is not None else None,
+            resolvedModel=str(payload.get("resolvedModel") or payload.get("requestedModel") or payload.get("selectedModel") or "unknown"),
+            resolvedProvider=str(payload.get("resolvedProvider") or payload.get("requestedProvider") or payload.get("selectedProvider")) if (payload.get("resolvedProvider") or payload.get("requestedProvider") or payload.get("selectedProvider")) is not None else None,
+            invocationKind="chat-completion",
+            status=str(payload.get("status") or "running"),
+            traceId=str(payload.get("traceId")) if payload.get("traceId") is not None else None,
+            requestRef=_external_ref(payload.get("requestRef")),
+            responseRef=_external_ref(payload.get("responseRef")),
+            inputTokensUsed=int(payload.get("inputTokensUsed", 0)),
+            outputTokensUsed=int(payload.get("outputTokensUsed", 0)),
+            costUsed=float(payload.get("costUsed", 0.0)),
+            latencyMs=float(payload["latencyMs"]) if payload.get("latencyMs") is not None else None,
+            errorSummary=str(payload.get("errorSummary")) if payload.get("errorSummary") is not None else None,
+            startedAt=payload.get("startedAt") or utc_now(),
+            endedAt=payload.get("endedAt"),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = ModelInvocationORM(
+            id=record.id,
+            project_id=record.project_id,
+            task_id=record.task_id,
+            agent_run_id=record.agent_run_id,
+            route_decision_id=record.route_decision_id,
+            requested_model=record.requested_model,
+            requested_provider=record.requested_provider,
+            resolved_model=record.resolved_model,
+            resolved_provider=record.resolved_provider,
+            invocation_kind=record.invocation_kind,
+            status=record.status,
+            trace_id=record.trace_id,
+            request_ref=record.request_ref.model_dump(mode="json") if record.request_ref is not None else None,
+            response_ref=record.response_ref.model_dump(mode="json") if record.response_ref is not None else None,
+            input_tokens_used=record.input_tokens_used,
+            output_tokens_used=record.output_tokens_used,
+            cost_used=record.cost_used,
+            latency_ms=record.latency_ms,
+            error_summary=record.error_summary,
+            started_at=record.started_at,
+            ended_at=record.ended_at,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _model_invocation_record(model)
+
+    def update_model_invocation(self, invocation_id: str, payload: dict[str, Any]) -> ModelInvocationRecord:
+        model = self.session.get(ModelInvocationORM, invocation_id)
+        if model is None:
+            raise KeyError(invocation_id)
+        if "status" in payload:
+            model.status = str(payload["status"])
+        if "traceId" in payload:
+            model.trace_id = str(payload["traceId"]) if payload["traceId"] is not None else None
+        if "resolvedModel" in payload:
+            model.resolved_model = str(payload["resolvedModel"])
+        if "resolvedProvider" in payload:
+            model.resolved_provider = str(payload["resolvedProvider"]) if payload["resolvedProvider"] is not None else None
+        if "requestRef" in payload:
+            model.request_ref = _external_ref(payload["requestRef"]).model_dump(mode="json") if payload["requestRef"] is not None else None
+        if "responseRef" in payload:
+            model.response_ref = _external_ref(payload["responseRef"]).model_dump(mode="json") if payload["responseRef"] is not None else None
+        if "inputTokensUsed" in payload:
+            model.input_tokens_used = int(payload["inputTokensUsed"])
+        if "outputTokensUsed" in payload:
+            model.output_tokens_used = int(payload["outputTokensUsed"])
+        if "costUsed" in payload:
+            model.cost_used = float(payload["costUsed"])
+        if "latencyMs" in payload:
+            model.latency_ms = float(payload["latencyMs"]) if payload["latencyMs"] is not None else None
+        if "errorSummary" in payload:
+            model.error_summary = str(payload["errorSummary"]) if payload["errorSummary"] is not None else None
+        if "endedAt" in payload:
+            model.ended_at = payload["endedAt"]
+        self.session.flush()
+        return _model_invocation_record(model)
+
+    def list_model_invocations(
+        self,
+        *,
+        task_id: str | None = None,
+        agent_run_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[ModelInvocationRecord]:
+        statement = sa.select(ModelInvocationORM).order_by(ModelInvocationORM.created_at.desc()).limit(limit)
+        if task_id:
+            statement = statement.where(ModelInvocationORM.task_id == task_id)
+        if agent_run_id:
+            statement = statement.where(ModelInvocationORM.agent_run_id == agent_run_id)
+        if status:
+            statement = statement.where(ModelInvocationORM.status == status)
+        return [_model_invocation_record(model) for model in self.session.execute(statement).scalars().all()]
+
 
 class ModuleStateRepository:
     def __init__(self, session: Session) -> None:
@@ -2026,3 +2208,100 @@ class CollaborationRepository:
         self.session.add(model)
         self.session.flush()
         return _review_comment_record(model)
+
+
+class EvaluationRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_suites(self, *, domain: str | None = None, limit: int = 100) -> list[EvaluationSuiteRecord]:
+        statement = sa.select(EvaluationSuiteORM).order_by(EvaluationSuiteORM.created_at.asc()).limit(limit)
+        if domain is not None:
+            statement = statement.where(EvaluationSuiteORM.domain == domain)
+        return [_evaluation_suite_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def get_suite(self, suite_id: str) -> EvaluationSuiteRecord | None:
+        model = self.session.get(EvaluationSuiteORM, suite_id)
+        return _evaluation_suite_record(model) if model is not None else None
+
+    def upsert_suite(self, record: EvaluationSuiteRecord) -> EvaluationSuiteRecord:
+        model = self.session.get(EvaluationSuiteORM, record.id)
+        if model is None:
+            model = EvaluationSuiteORM(id=record.id)
+            self.session.add(model)
+        model.name = record.name
+        model.domain = record.domain
+        model.metric_refs = list(record.metric_refs)
+        model.created_at = record.created_at
+        self.session.flush()
+        return _evaluation_suite_record(model)
+
+    def list_runs(
+        self,
+        *,
+        suite_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[EvaluationRunRecord]:
+        statement = sa.select(EvaluationRunORM).order_by(EvaluationRunORM.created_at.desc()).limit(limit)
+        if suite_id is not None:
+            statement = statement.where(EvaluationRunORM.suite_id == suite_id)
+        if status is not None:
+            statement = statement.where(EvaluationRunORM.status == status)
+        return [_evaluation_run_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def get_run(self, run_id: str) -> EvaluationRunRecord | None:
+        model = self.session.get(EvaluationRunORM, run_id)
+        return _evaluation_run_record(model) if model is not None else None
+
+    def create_run(self, payload: dict[str, Any]) -> EvaluationRunRecord:
+        suite_id = str(payload.get("suiteId") or "")
+        if not suite_id:
+            raise KeyError("suiteId")
+        if self.session.get(EvaluationSuiteORM, suite_id) is None:
+            raise KeyError(f"Evaluation suite {suite_id} not found.")
+        record = EvaluationRunRecord(
+            id=str(payload.get("id") or new_id("evalrun", suite_id, utc_now().isoformat())),
+            suiteId=suite_id,
+            projectId=str(payload.get("projectId") or DEFAULT_PROJECT_ID),
+            subjectKind=str(payload.get("subjectKind") or "workflow"),
+            subjectRef=str(payload.get("subjectRef") or suite_id),
+            status=str(payload.get("status") or "queued"),
+            metricsRef=_external_ref(payload.get("metricsRef")),
+            startedAt=payload.get("startedAt"),
+            endedAt=payload.get("endedAt"),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = EvaluationRunORM(
+            id=record.id,
+            suite_id=record.suite_id,
+            project_id=record.project_id,
+            subject_kind=record.subject_kind,
+            subject_ref=record.subject_ref,
+            status=record.status,
+            metrics_ref=record.metrics_ref.model_dump(mode="json") if record.metrics_ref else None,
+            started_at=record.started_at,
+            ended_at=record.ended_at,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _evaluation_run_record(model)
+
+    def update_run(self, run_id: str, payload: dict[str, Any]) -> EvaluationRunRecord:
+        model = self.session.get(EvaluationRunORM, run_id)
+        if model is None:
+            raise KeyError(run_id)
+        if "status" in payload:
+            model.status = str(payload["status"])
+        if "metricsRef" in payload:
+            metrics_ref = _external_ref(payload["metricsRef"])
+            model.metrics_ref = metrics_ref.model_dump(mode="json") if metrics_ref is not None else None
+        if "startedAt" in payload:
+            model.started_at = payload["startedAt"]
+        if "endedAt" in payload:
+            model.ended_at = payload["endedAt"]
+        if "subjectRef" in payload:
+            model.subject_ref = str(payload["subjectRef"])
+        self.session.flush()
+        return _evaluation_run_record(model)

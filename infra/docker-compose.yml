@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "${YGGDRASIL_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -15,15 +15,15 @@ services:
     image: redis:7.4-alpine
     container_name: yggdrasil-redis
     ports:
-      - "6379:6379"
+      - "${YGGDRASIL_REDIS_PORT:-6379}:6379"
 
   nats:
     image: nats:2.10-alpine
     container_name: yggdrasil-nats
     command: ["-js"]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "${YGGDRASIL_NATS_PORT:-4222}:4222"
+      - "${YGGDRASIL_NATS_MONITOR_PORT:-8222}:8222"
 
   minio:
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
@@ -33,8 +33,8 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${YGGDRASIL_MINIO_API_PORT:-9000}:9000"
+      - "${YGGDRASIL_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
 
@@ -42,16 +42,16 @@ services:
     image: temporalio/auto-setup:1.26.2
     container_name: yggdrasil-temporal
     environment:
-      DB: postgresql
+      DB: postgres12
       DB_PORT: 5432
       POSTGRES_USER: postgres
       POSTGRES_PWD: postgres
       POSTGRES_SEEDS: postgres
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/docker.yaml
     depends_on:
       - postgres
     ports:
-      - "7233:7233"
+      - "${YGGDRASIL_TEMPORAL_PORT:-7233}:7233"
 
   temporal-ui:
     image: temporalio/ui:2.33.0
@@ -61,7 +61,27 @@ services:
     depends_on:
       - temporal
     ports:
-      - "8088:8080"
+      - "${YGGDRASIL_TEMPORAL_UI_PORT:-8088}:8080"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.63.0
+    container_name: yggdrasil-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${YGGDRASIL_JAEGER_UI_PORT:-16686}:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    container_name: yggdrasil-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      - jaeger
+    ports:
+      - "${YGGDRASIL_OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${YGGDRASIL_OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
 
 volumes:
   postgres-data:
