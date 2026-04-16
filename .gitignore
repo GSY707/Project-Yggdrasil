@@ -24,3 +24,4 @@ LLM.txt
 
 # Local runtime state
 .yggdrasil/state/
+.yggdrasil/local-dev.db
