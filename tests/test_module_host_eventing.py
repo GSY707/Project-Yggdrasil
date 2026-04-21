@@ -64,10 +64,21 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     assert installs_by_module_id["text-memory"].lifecycle_state == "active"
     assert installs_by_module_id["context-pruning"].lifecycle_state == "active"
     assert installs_by_module_id["subagent-pr"].lifecycle_state == "active"
+    assert installs_by_module_id["shared-memory"].lifecycle_state == "active"
+    assert installs_by_module_id["pause-resume"].lifecycle_state == "active"
+    assert installs_by_module_id["multimodal-memory"].lifecycle_state == "active"
+    assert installs_by_module_id["memory-organizer"].lifecycle_state == "active"
+    assert installs_by_module_id["relation-discovery"].lifecycle_state == "active"
+    assert installs_by_module_id["training-lab"].lifecycle_state == "active"
+    assert installs_by_module_id["scene-learning-coach"].lifecycle_state == "active"
+    assert installs_by_module_id["scene-scenic-guide"].lifecycle_state == "active"
 
     hook_names = {hook.hook_name for hook in snapshot.hooks}
     assert HookNames.MODULE_ENABLE_PREFLIGHT in hook_names
     assert HookNames.MODULE_HEALTH_REPORT in hook_names
+    assert HookNames.AGENT_STARTUP_MOUNT_ROOT in hook_names
+    assert HookNames.TASK_PAUSE_PREPARE in hook_names
+    assert HookNames.MEMORY_RETRIEVE_RERANK in hook_names
 
     subscriptions = {(record.event_type, record.status) for record in snapshot.subscriptions}
     assert ("import.accepted", "active") in subscriptions
@@ -75,12 +86,28 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     assert ("task.started", "active") in subscriptions
 
     config_bindings = service.list_config_bindings()["configBindings"]
-    assert {record["moduleId"] for record in config_bindings} >= {"text-memory", "context-pruning", "subagent-pr"}
+    assert {record["moduleId"] for record in config_bindings} >= {
+        "text-memory",
+        "context-pruning",
+        "subagent-pr",
+        "shared-memory",
+        "pause-resume",
+        "multimodal-memory",
+        "memory-organizer",
+        "relation-discovery",
+        "training-lab",
+        "scene-learning-coach",
+        "scene-scenic-guide",
+    }
 
     health_reports = service.list_health_reports()["health"]
     health_by_module_id = {record["moduleId"]: record for record in health_reports}
     assert health_by_module_id["text-memory"]["status"] == "healthy"
     assert health_by_module_id["subagent-pr"]["status"] == "healthy"
+    assert health_by_module_id["shared-memory"]["status"] == "healthy"
+    assert health_by_module_id["training-lab"]["status"] == "healthy"
+    assert health_by_module_id["scene-learning-coach"]["status"] == "healthy"
+    assert health_by_module_id["scene-scenic-guide"]["status"] == "healthy"
 
 
 def test_module_platform_consumes_events_and_publishes_outbox() -> None:

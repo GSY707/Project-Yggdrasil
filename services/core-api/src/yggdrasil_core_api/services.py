@@ -1,38 +1,77 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import sqlalchemy as sa
 
 from yggdrasil_sdk import (
+    active_application_id,
     ActorRef,
+    AssetRepository,
     CollaborationRepository,
+    build_application_catalog_snapshot,
+    compile_runtime_prompt,
+    ensure_mcp_bridge_config,
     EvaluationRepository,
     EventEnvelope,
     ensure_evaluation_suites,
+    mcp_bridge_overview,
+    get_application_config_binding,
+    get_application_manifest,
     HookNames,
     list_evaluation_suite_definitions,
+    list_prompt_profile_definitions,
+    list_registered_agent_tools,
+    list_seed_template_definitions,
+    load_effective_application_config,
+    refresh_copyable_mcp_servers,
     MemoryRepository,
     NodeRepository,
     OutboxRepository,
+    PromptAssetRepository,
+    resolve_application_active_capabilities,
     RedisCoordinator,
     RetrievalBundle,
     RuntimeRepository,
     run_evaluation_suite,
+    set_mcp_bridge_server_enabled,
     summarize_observability,
+    sync_mcp_bridge_servers,
     TaskRepository,
+    TrainingRepository,
     ensure_workspace_bootstrap,
     get_persistence_runtime,
     load_in_process_plugin,
+    update_mcp_bridge_workspace,
     new_id,
+    set_active_application,
     sync_module_catalog_snapshot,
     utc_now,
+    upsert_mcp_bridge_server,
+    upsert_application_config_binding,
 )
 from yggdrasil_sdk.collaboration_runtime import create_pull_request as create_collaboration_pull_request
 from yggdrasil_sdk.collaboration_runtime import launch_subagent_task, review_pull_request as review_collaboration_pull_request
-from yggdrasil_sdk.persistence.orm import ImportJobORM, MemoryBranchORM, ModelInvocationORM, NodeORM, OutboxRecordORM, PullRequestORM, RetrievalRequestORM, TaskORM
+from yggdrasil_sdk.persistence.orm import (
+    ImportJobORM,
+    MemoryBranchORM,
+    ModelInvocationORM,
+    NodeORM,
+    OutboxRecordORM,
+    PermissionTupleORM,
+    PullRequestORM,
+    RetrievalRequestORM,
+    SpaceMountORM,
+    SpaceORM,
+    TaskORM,
+    TaskSnapshotORM,
+)
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
+from yggdrasil_sdk.runtime_kernel import queue_main_agent_execution as queue_runtime_task_execution
+from yggdrasil_sdk.runtime_kernel import request_task_pause as request_runtime_task_pause
 from yggdrasil_sdk.support import read_json
 
 
@@ -57,11 +96,40 @@ class WorkspaceService:
         value = session.execute(statement).scalar_one()
         return int(value or 0)
 
-    def _load_metrics_payload(self, locator: str | None) -> dict[str, Any] | None:
+    def _resolve_locator_path(self, locator: str | None) -> Path | None:
         if not locator:
             return None
-        payload = read_json(Path(locator), None)
+        candidate = Path(locator)
+        if candidate.is_absolute():
+            return candidate
+        if self.workspace_root is not None:
+            return self.workspace_root / candidate
+        return candidate
+
+    def _load_ref_payload(self, locator: str | None) -> Any:
+        path = self._resolve_locator_path(locator)
+        if path is None:
+            return None
+        return read_json(path, None)
+
+    def _load_metrics_payload(self, locator: str | None) -> dict[str, Any] | None:
+        payload = self._load_ref_payload(locator)
         return payload if isinstance(payload, dict) else None
+
+    def _load_jsonl_preview(self, locator: str | None, *, limit: int = 3) -> list[Any]:
+        path = self._resolve_locator_path(locator)
+        if path is None or not path.exists():
+            return []
+        rows: list[Any] = []
+        for line in path.read_text(encoding="utf-8").splitlines()[:limit]:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                rows.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                rows.append(stripped)
+        return rows
 
     def _load_module(self, module_id: str):
         snapshot = sync_module_catalog_snapshot(self.workspace_root)
@@ -233,6 +301,45 @@ class WorkspaceService:
             "statusCounts": status_counts,
         }
 
+    def _task_runtime_control_summary(self, task, snapshots: list[Any]) -> dict[str, object]:
+        latest_snapshot = snapshots[0] if snapshots else None
+        latest_restorable_snapshot = next((snapshot for snapshot in snapshots if snapshot.status == "restorable"), None)
+        restorable_count = len([snapshot for snapshot in snapshots if snapshot.status == "restorable"])
+        consumed_count = len([snapshot for snapshot in snapshots if snapshot.status == "consumed"])
+
+        if task.status == "paused" and latest_restorable_snapshot is not None:
+            resume_status = "ready"
+        elif task.status == "pause-requested":
+            resume_status = "awaiting-safe-stop"
+        elif latest_restorable_snapshot is not None:
+            resume_status = "snapshot-present"
+        else:
+            resume_status = "unavailable"
+
+        return {
+            "pauseRequested": bool(task.pause_requested),
+            "activeSnapshotId": task.active_snapshot_id,
+            "lastSafeStopAt": task.last_safe_stop_at,
+            "snapshotCount": len(snapshots),
+            "restorableSnapshotCount": restorable_count,
+            "consumedSnapshotCount": consumed_count,
+            "resumeStatus": resume_status,
+            "canResume": bool(task.status == "paused" and latest_restorable_snapshot is not None),
+            "canRequestPause": bool(task.status in {"queued", "running", "pause-requested"}),
+            "recommendedResumeToken": latest_restorable_snapshot.resume_token if latest_restorable_snapshot is not None else None,
+            "recommendedResumeMessage": (
+                latest_restorable_snapshot.resume_message
+                if latest_restorable_snapshot is not None
+                else task.resume_message
+            ),
+            "latestSnapshot": latest_snapshot.model_dump(by_alias=True, mode="json") if latest_snapshot is not None else None,
+            "latestRestorableSnapshot": (
+                latest_restorable_snapshot.model_dump(by_alias=True, mode="json")
+                if latest_restorable_snapshot is not None
+                else None
+            ),
+        }
+
     def get_observability_summary(self, *, limit: int = 60) -> dict[str, object]:
         summary = summarize_observability(limit=limit, workspace_root=self.workspace_root)
         summary["health"] = self.health_report()
@@ -292,6 +399,354 @@ class WorkspaceService:
     def execute_evaluation_suite(self, suite_id: str) -> dict[str, object]:
         return run_evaluation_suite(suite_id, self.workspace_root)
 
+    def list_assets(
+        self,
+        *,
+        project_id: str | None = None,
+        space_id: str | None = None,
+        branch_id: str | None = None,
+        owner_node_id: str | None = None,
+        media_type: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            assets = AssetRepository(session).list_assets(
+                project_id=project_id,
+                space_id=space_id,
+                branch_id=branch_id,
+                owner_node_id=owner_node_id,
+                media_type=media_type,
+                limit=limit,
+            )
+        return {"assets": [asset.model_dump(by_alias=True, mode="json") for asset in assets]}
+
+    def get_asset(self, asset_id: str) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            repository = AssetRepository(session)
+            asset = repository.get_asset(asset_id)
+            if asset is None:
+                raise KeyError(asset_id)
+            segments = repository.list_asset_segments(asset_id, limit=1000)
+            segment_ids = {segment.id for segment in segments}
+            embeddings = [
+                embedding
+                for embedding in repository.list_embeddings(owner_kind="asset-segment", limit=max(len(segment_ids) * 4, 200))
+                if embedding.owner_id in segment_ids
+            ]
+            asset_embeddings = repository.list_embeddings(owner_kind="asset", owner_id=asset_id, limit=100)
+        return {
+            "asset": asset.model_dump(by_alias=True, mode="json"),
+            "segments": [segment.model_dump(by_alias=True, mode="json") for segment in segments],
+            "embeddings": [embedding.model_dump(by_alias=True, mode="json") for embedding in [*asset_embeddings, *embeddings]],
+            "sourcePayload": self._load_ref_payload(asset.source_ref.locator if asset.source_ref else None),
+        }
+
+    def ingest_asset(self, payload: dict[str, Any]) -> dict[str, object]:
+        from yggdrasil_multimodal_memory.plugin import MultimodalMemoryModule
+
+        result = MultimodalMemoryModule().ingest_asset(payload)
+        return result
+
+    def list_dataset_versions(
+        self,
+        *,
+        dataset_name: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            versions = TrainingRepository(session).list_dataset_versions(dataset_name=dataset_name, limit=limit)
+        return {"datasetVersions": [version.model_dump(by_alias=True, mode="json") for version in versions]}
+
+    def get_dataset_version(self, dataset_version_id: str) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            repository = TrainingRepository(session)
+            dataset_version = repository.get_dataset_version(dataset_version_id)
+            if dataset_version is None:
+                raise KeyError(dataset_version_id)
+            model_artifacts = repository.list_model_artifacts(dataset_version_id=dataset_version_id, limit=200)
+        return {
+            "datasetVersion": dataset_version.model_dump(by_alias=True, mode="json"),
+            "modelArtifacts": [artifact.model_dump(by_alias=True, mode="json") for artifact in model_artifacts],
+            "previewRows": self._load_jsonl_preview(dataset_version.storage_key, limit=5),
+        }
+
+    def prepare_dataset_version(self, payload: dict[str, Any]) -> dict[str, object]:
+        from yggdrasil_training_lab.plugin import TrainingLabModule
+
+        return TrainingLabModule().prepare_dataset(payload)
+
+    def list_model_artifacts(
+        self,
+        *,
+        dataset_version_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            artifacts = TrainingRepository(session).list_model_artifacts(
+                dataset_version_id=dataset_version_id,
+                status=status,
+                limit=limit,
+            )
+        return {"modelArtifacts": [artifact.model_dump(by_alias=True, mode="json") for artifact in artifacts]}
+
+    def get_model_artifact(self, artifact_id: str) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            repository = TrainingRepository(session)
+            artifact = repository.get_model_artifact(artifact_id)
+            if artifact is None:
+                raise KeyError(artifact_id)
+            dataset_version = repository.get_dataset_version(artifact.dataset_version_id)
+        return {
+            "modelArtifact": artifact.model_dump(by_alias=True, mode="json"),
+            "datasetVersion": dataset_version.model_dump(by_alias=True, mode="json") if dataset_version is not None else None,
+            "metrics": self._load_metrics_payload(artifact.metrics_ref.locator if artifact.metrics_ref else None),
+        }
+
+    def stage_model_artifact(self, payload: dict[str, Any]) -> dict[str, object]:
+        from yggdrasil_training_lab.plugin import TrainingLabModule
+
+        return TrainingLabModule().stage_model_artifact(payload)
+
+    def list_prompt_profiles(
+        self,
+        app_id: str | None = None,
+        active_capabilities: list[str] | None = None,
+    ) -> dict[str, object]:
+        resolved_app_id = app_id or active_application_id(self.workspace_root)
+        return {
+            "appId": resolved_app_id,
+            "promptProfiles": [
+                profile.model_dump(by_alias=True, mode="json")
+                for profile in list_prompt_profile_definitions(resolved_app_id, active_capabilities)
+            ]
+        }
+
+    def list_seed_templates(
+        self,
+        app_id: str | None = None,
+        active_capabilities: list[str] | None = None,
+    ) -> dict[str, object]:
+        resolved_app_id = app_id or active_application_id(self.workspace_root)
+        return {
+            "appId": resolved_app_id,
+            "seedTemplates": [
+                template.model_dump(by_alias=True, mode="json")
+                for template in list_seed_template_definitions(resolved_app_id, active_capabilities)
+            ]
+        }
+
+    def list_registered_prompt_tools(
+        self,
+        active_capabilities: list[str] | None = None,
+        app_id: str | None = None,
+    ) -> dict[str, object]:
+        resolved_app_id = app_id or active_application_id(self.workspace_root)
+        resolved_capabilities = active_capabilities or resolve_application_active_capabilities(
+            app_id=resolved_app_id,
+            workspace_root=self.workspace_root,
+        )
+        return {
+            "appId": resolved_app_id,
+            "activeCapabilities": list(resolved_capabilities or []),
+            "registeredTools": list_registered_agent_tools(resolved_capabilities),
+        }
+
+    def list_prompt_compile_artifacts(
+        self,
+        *,
+        project_id: str | None = None,
+        task_id: str | None = None,
+        app_id: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            artifacts = PromptAssetRepository(session).list_prompt_compile_artifacts(
+                project_id=project_id,
+                task_id=task_id,
+                app_id=app_id,
+                limit=limit,
+            )
+        return {
+            "promptCompileArtifacts": [artifact.model_dump(by_alias=True, mode="json") for artifact in artifacts]
+        }
+
+    def get_prompt_compile_artifact(self, artifact_id: str) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            prompt_repository = PromptAssetRepository(session)
+            runtime_repository = RuntimeRepository(session)
+            artifact = prompt_repository.get_prompt_compile_artifact(artifact_id)
+            if artifact is None:
+                raise KeyError(artifact_id)
+            linked_invocation = next(
+                (
+                    invocation
+                    for invocation in runtime_repository.list_model_invocations(app_id=artifact.app_id, limit=200)
+                    if invocation.id == artifact.model_invocation_id or invocation.prompt_compile_artifact_id == artifact.id
+                ),
+                None,
+            )
+        return {
+            "promptCompileArtifact": artifact.model_dump(by_alias=True, mode="json"),
+            "compiledMessages": self._load_ref_payload(artifact.compiled_messages_ref.locator if artifact.compiled_messages_ref else None),
+            "modelInvocation": linked_invocation.model_dump(by_alias=True, mode="json") if linked_invocation is not None else None,
+            "requestPayload": self._load_ref_payload(linked_invocation.request_ref.locator if linked_invocation and linked_invocation.request_ref else None),
+            "responsePayload": self._load_ref_payload(linked_invocation.response_ref.locator if linked_invocation and linked_invocation.response_ref else None),
+        }
+
+    def compile_prompt_preview(self, payload: dict[str, Any]) -> dict[str, object]:
+        task_payload = payload.get("task") if isinstance(payload.get("task"), dict) else {}
+        request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+        root_mount_payload = payload.get("rootMount") if isinstance(payload.get("rootMount"), dict) else {}
+        app_id = str(payload.get("appId") or request_payload.get("appId") or active_application_id(self.workspace_root))
+        try:
+            effective_config = load_effective_application_config(app_id, self.workspace_root)
+        except KeyError as exc:
+            raise ValueError(f"Unknown application: {app_id}") from exc
+        preview_defaults = effective_config.get("promptPreviewDefaults") if isinstance(effective_config.get("promptPreviewDefaults"), dict) else {}
+        run_type = str(payload.get("runType") or effective_config.get("defaultRunType") or "main")
+        task_type = str(payload.get("taskType") or effective_config.get("defaultTaskType") or "generic")
+        active_capabilities = [
+            str(item)
+            for item in (
+                payload.get("activeCapabilities")
+                or root_mount_payload.get("activeCapabilities")
+                or effective_config.get("defaultCapabilities")
+                or []
+            )
+            if str(item).strip()
+        ]
+        request_payload = {**request_payload, "appId": app_id}
+        if not request_payload.get("responseRequirements") and preview_defaults.get("responseRequirements"):
+            request_payload["responseRequirements"] = str(preview_defaults["responseRequirements"])
+        task = SimpleNamespace(
+            title=str(task_payload.get("title") or "Prompt Control Preview"),
+            goal=str(task_payload.get("goal") or "Preview the compiled runtime prompt."),
+            current_focus=str(task_payload.get("currentFocus") or request_payload.get("currentFocus") or "prompt-ops"),
+            current_objective=str(task_payload.get("currentObjective") or request_payload.get("currentObjective") or task_payload.get("goal") or "preview compile"),
+            resume_message=str(task_payload.get("resumeMessage") or request_payload.get("resumeMessage") or ""),
+            app_id=app_id,
+        )
+        root_mount = {
+            "systemIntro": str(root_mount_payload.get("systemIntro") or "Prompt compile preview"),
+            "rootSummary": str(root_mount_payload.get("rootSummary") or "Use the same prompt compiler that the runtime persists into prompt artifacts."),
+            "taskObjective": str(root_mount_payload.get("taskObjective") or request_payload.get("currentObjective") or task.goal),
+            "resumeMessage": str(root_mount_payload.get("resumeMessage") or task.resume_message),
+            "mountedNodeRefs": list(root_mount_payload.get("mountedNodeRefs") or []),
+            "accessibleMounts": list(root_mount_payload.get("accessibleMounts") or []),
+            "activeCapabilities": active_capabilities,
+        }
+        current_context = [
+            dict(item)
+            for item in payload.get("currentContext") or []
+            if isinstance(item, dict)
+        ]
+        compiled = compile_runtime_prompt(
+            task=task,
+            run_type=run_type,
+            task_type=task_type,
+            root_mount=root_mount,
+            current_context=current_context,
+            request=request_payload,
+            resume_path=str(payload.get("resumePath")) if payload.get("resumePath") is not None else None,
+        )
+        return {
+            "appId": app_id,
+            "compiledPrompt": compiled.model_dump(by_alias=True, mode="json"),
+            "registeredTools": compiled.registered_tools,
+        }
+
+    def list_applications(self) -> dict[str, object]:
+        snapshot = build_application_catalog_snapshot(self.workspace_root)
+        active_app_id = active_application_id(self.workspace_root)
+        applications = []
+        for manifest in snapshot.manifests:
+            binding = get_application_config_binding(manifest.app_id, self.workspace_root)
+            applications.append(
+                {
+                    "application": manifest.model_dump(by_alias=True, mode="json"),
+                    "configBinding": binding.model_dump(by_alias=True, mode="json"),
+                }
+            )
+        return {
+            "activeAppId": active_app_id,
+            "applications": applications,
+        }
+
+    def get_application(self, app_id: str) -> dict[str, object]:
+        manifest = get_application_manifest(app_id, self.workspace_root)
+        binding = get_application_config_binding(app_id, self.workspace_root)
+        return {
+            "application": manifest.model_dump(by_alias=True, mode="json"),
+            "configBinding": binding.model_dump(by_alias=True, mode="json"),
+            "effectiveConfig": load_effective_application_config(app_id, self.workspace_root),
+            "dashboard": self._load_ref_payload(manifest.dashboard_ref.locator if manifest.dashboard_ref else None),
+        }
+
+    def activate_application(self, app_id: str) -> dict[str, object]:
+        binding = set_active_application(app_id, self.workspace_root)
+        manifest = get_application_manifest(app_id, self.workspace_root)
+        return {
+            "application": manifest.model_dump(by_alias=True, mode="json"),
+            "configBinding": binding.model_dump(by_alias=True, mode="json"),
+            "effectiveConfig": load_effective_application_config(app_id, self.workspace_root),
+        }
+
+    def update_application_config(self, app_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        important_config = payload.get("importantConfig") if isinstance(payload.get("importantConfig"), dict) else payload
+        binding = upsert_application_config_binding(app_id, dict(important_config or {}), self.workspace_root)
+        manifest = get_application_manifest(app_id, self.workspace_root)
+        return {
+            "application": manifest.model_dump(by_alias=True, mode="json"),
+            "configBinding": binding.model_dump(by_alias=True, mode="json"),
+            "effectiveConfig": load_effective_application_config(app_id, self.workspace_root),
+        }
+
+    def get_mcp_bridge_state(self) -> dict[str, object]:
+        ensure_mcp_bridge_config(self.workspace_root)
+        state = mcp_bridge_overview(self.workspace_root)
+        if not state.get("syncedServers"):
+            sync_mcp_bridge_servers(self.workspace_root)
+            state = mcp_bridge_overview(self.workspace_root)
+        return state
+
+    def refresh_mcp_bridge_imports(self) -> dict[str, object]:
+        refresh_copyable_mcp_servers(self.workspace_root)
+        return self.get_mcp_bridge_state()
+
+    def sync_mcp_bridge(self, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        request = payload or {}
+        server_ids = [
+            str(item)
+            for item in request.get("serverIds") or []
+            if str(item).strip()
+        ]
+        sync_mcp_bridge_servers(self.workspace_root, server_ids=server_ids or None)
+        return self.get_mcp_bridge_state()
+
+    def update_mcp_bridge_workspace(self, payload: dict[str, Any]) -> dict[str, object]:
+        project_workspace = str(payload.get("projectWorkspace") or "").strip()
+        if not project_workspace:
+            raise ValueError("projectWorkspace is required.")
+        update_mcp_bridge_workspace(project_workspace, self.workspace_root)
+        return self.get_mcp_bridge_state()
+
+    def upsert_mcp_bridge_server(self, payload: dict[str, Any]) -> dict[str, object]:
+        upsert_mcp_bridge_server(payload, self.workspace_root)
+        return self.get_mcp_bridge_state()
+
+    def set_mcp_bridge_server_enabled(self, server_id: str, *, enabled: bool) -> dict[str, object]:
+        set_mcp_bridge_server_enabled(server_id, enabled, self.workspace_root)
+        return self.get_mcp_bridge_state()
+
     def get_workbench_overview(self) -> dict[str, object]:
         with self.runtime.session_scope() as session:
             WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -310,6 +765,10 @@ class WorkspaceService:
             total_nodes = self._scalar_count(session, NodeORM, NodeORM.node_type != "root")
             total_branches = self._scalar_count(session, MemoryBranchORM)
             total_retrievals = self._scalar_count(session, RetrievalRequestORM)
+            total_shared_spaces = self._scalar_count(session, SpaceORM, SpaceORM.space_type == "shared")
+            total_space_mounts = self._scalar_count(session, SpaceMountORM)
+            total_permission_tuples = self._scalar_count(session, PermissionTupleORM)
+            total_restorable_snapshots = self._scalar_count(session, TaskSnapshotORM, TaskSnapshotORM.status == "restorable")
             llm_summary = self._llm_summary(session)
 
         module_snapshot = sync_module_catalog_snapshot(self.workspace_root)
@@ -339,6 +798,11 @@ class WorkspaceService:
                 "modelInvocations": int(llm_summary["totalInvocations"]),
                 "llmFallbacks": int(llm_summary["fallbackInvocations"]),
                 "llmCostUsed": float(llm_summary["totalCostUsed"]),
+                "sharedSpaces": total_shared_spaces,
+                "spaceMounts": total_space_mounts,
+                "permissionTuples": total_permission_tuples,
+                "pausedTasks": task_status_counts.get("paused", 0),
+                "restorableSnapshots": total_restorable_snapshots,
             },
             "moduleSummary": module_summary,
             "llmSummary": llm_summary,
@@ -353,6 +817,42 @@ class WorkspaceService:
             "recentEvaluationRuns": evaluation_runs,
             "evaluationSuites": evaluation_suites,
             "observability": observability,
+        }
+
+    def list_spaces(
+        self,
+        *,
+        project_id: str | None = None,
+        space_type: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            spaces = CollaborationRepository(session).list_spaces(
+                project_id=project_id,
+                space_type=space_type,
+                status=status,
+                limit=limit,
+            )
+        return {"spaces": [space.model_dump(by_alias=True, mode="json") for space in spaces]}
+
+    def create_space(self, payload: dict[str, Any]) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            space = CollaborationRepository(session).create_space(payload)
+            event = OutboxRepository(session).record_event(
+                {
+                    "projectId": space.project_id,
+                    "aggregateType": "space",
+                    "aggregateId": space.id,
+                    "eventType": "space.created",
+                    "payloadRef": {"type": "package-entry", "locator": f"core-api/collaboration/spaces/{space.id}"},
+                }
+            )
+        return {
+            "space": space.model_dump(by_alias=True, mode="json"),
+            "outboxRecord": event.model_dump(by_alias=True, mode="json"),
         }
 
     def list_modules(self) -> dict[str, object]:
@@ -466,11 +966,22 @@ class WorkspaceService:
             "outboxRecord": event.model_dump(by_alias=True, mode="json"),
         }
 
-    def list_tasks(self, *, status: str | None = None, limit: int = 100) -> dict[str, object]:
+    def list_tasks(self, *, status: str | None = None, app_id: str | None = None, limit: int = 100) -> dict[str, object]:
         with self.runtime.session_scope() as session:
             WorkspaceBootstrapRepository(session).ensure_default_workspace()
-            tasks = TaskRepository(session).list_tasks(status=status, limit=limit)
+            tasks = TaskRepository(session).list_tasks(status=status, app_id=app_id, limit=limit)
         return {"tasks": [task.model_dump(by_alias=True, mode="json") for task in tasks]}
+
+    def start_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return queue_runtime_task_execution(task_id, dict(payload or {}))
+
+    def request_task_pause(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return request_runtime_task_pause(task_id, dict(payload or {}))
+
+    def resume_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        request = dict(payload or {})
+        request["command"] = "resume"
+        return queue_runtime_task_execution(task_id, request)
 
     def list_branches(
         self,
@@ -489,6 +1000,105 @@ class WorkspaceService:
                 limit=limit,
             )
         return {"branches": [branch.model_dump(by_alias=True, mode="json") for branch in branches]}
+
+    def create_branch(self, payload: dict[str, Any]) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            branch = CollaborationRepository(session).create_branch(payload)
+            event = OutboxRepository(session).record_event(
+                {
+                    "projectId": branch.project_id,
+                    "aggregateType": "branch",
+                    "aggregateId": branch.id,
+                    "eventType": "branch.created",
+                    "payloadRef": {"type": "package-entry", "locator": f"core-api/collaboration/branches/{branch.id}"},
+                }
+            )
+        return {
+            "branch": branch.model_dump(by_alias=True, mode="json"),
+            "outboxRecord": event.model_dump(by_alias=True, mode="json"),
+        }
+
+    def list_space_mounts(
+        self,
+        *,
+        project_id: str | None = None,
+        host_space_id: str | None = None,
+        mounted_space_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            mounts = CollaborationRepository(session).list_space_mounts(
+                project_id=project_id,
+                host_space_id=host_space_id,
+                mounted_space_id=mounted_space_id,
+                status=status,
+                limit=limit,
+            )
+        return {"spaceMounts": [mount.model_dump(by_alias=True, mode="json") for mount in mounts]}
+
+    def create_space_mount(self, payload: dict[str, Any]) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            mount = CollaborationRepository(session).create_space_mount(payload)
+            event = OutboxRepository(session).record_event(
+                {
+                    "projectId": mount.project_id,
+                    "aggregateType": "space-mount",
+                    "aggregateId": mount.id,
+                    "eventType": "space.mount.created",
+                    "payloadRef": {"type": "package-entry", "locator": f"core-api/collaboration/space-mounts/{mount.id}"},
+                }
+            )
+        return {
+            "spaceMount": mount.model_dump(by_alias=True, mode="json"),
+            "outboxRecord": event.model_dump(by_alias=True, mode="json"),
+        }
+
+    def list_permission_tuples(
+        self,
+        *,
+        project_id: str | None = None,
+        subject: str | None = None,
+        relation: str | None = None,
+        resource: str | None = None,
+        effect: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            tuples = CollaborationRepository(session).list_permission_tuples(
+                project_id=project_id,
+                subject=subject,
+                relation=relation,
+                resource=resource,
+                effect=effect,
+                limit=limit,
+            )
+        return {"permissionTuples": [item.model_dump(by_alias=True, mode="json") for item in tuples]}
+
+    def create_permission_tuple(self, payload: dict[str, Any]) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            permission_tuple = CollaborationRepository(session).create_permission_tuple(payload)
+            event = OutboxRepository(session).record_event(
+                {
+                    "projectId": permission_tuple.project_id,
+                    "aggregateType": "permission-tuple",
+                    "aggregateId": permission_tuple.id,
+                    "eventType": "permission.tuple.created",
+                    "payloadRef": {
+                        "type": "package-entry",
+                        "locator": f"core-api/collaboration/permission-tuples/{permission_tuple.id}",
+                    },
+                }
+            )
+        return {
+            "permissionTuple": permission_tuple.model_dump(by_alias=True, mode="json"),
+            "outboxRecord": event.model_dump(by_alias=True, mode="json"),
+        }
 
     def list_pull_requests(
         self,
@@ -539,6 +1149,7 @@ class WorkspaceService:
             "task": task.model_dump(by_alias=True, mode="json"),
             "agentRuns": [run.model_dump(by_alias=True, mode="json") for run in runs],
             "snapshots": [snapshot.model_dump(by_alias=True, mode="json") for snapshot in snapshots],
+            "runtimeControl": self._task_runtime_control_summary(task, snapshots),
             "routeDecisions": [decision.model_dump(by_alias=True, mode="json") for decision in decisions],
             "modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations],
         }
@@ -604,6 +1215,7 @@ class WorkspaceService:
         *,
         task_id: str | None = None,
         agent_run_id: str | None = None,
+        app_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> dict[str, object]:
@@ -612,6 +1224,7 @@ class WorkspaceService:
             invocations = RuntimeRepository(session).list_model_invocations(
                 task_id=task_id,
                 agent_run_id=agent_run_id,
+                app_id=app_id,
                 status=status,
                 limit=limit,
             )

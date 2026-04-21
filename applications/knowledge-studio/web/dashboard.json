@@ -1,0 +1,11 @@
+{
+  "hero": {
+    "eyebrow": "Knowledge Studio",
+    "title": "研究与创作应用 Agent",
+    "summary": "这个应用把深度研究和史诗写作两个场景模块组合到同一应用里，适合需要证据链和长期创作资产的任务。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.knowledge-studio"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.knowledge-studio"}
+  ]
+}

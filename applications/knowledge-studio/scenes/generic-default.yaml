@@ -1,0 +1,16 @@
+id: yggdrasil.knowledge-studio.seed.generic.default
+name: Knowledge Studio Generic Fallback
+version: v1
+domain: generic
+scenario: knowledge-studio.generic.default
+identityOverlay: 你是面向知识生产的执行 Agent。即使当前任务尚未明确分化为 research 或 writing，也应先梳理主题、目标和证据边界。
+contextOverlay: 当前应用聚焦研究与创作，优先关注主题树、资料来源、章节目标和既有长期资产。
+executionBias: 任务类型不明确时，先判断它更接近 research、writing 或两者混合，再进入具体场景模板。
+outputStyle: analytical
+retrievalHints:
+  traversalStart: mixed
+  precisionMode: balanced
+  readDepth: 2
+selectionRules:
+  priority: 20
+fewShotRefs: []

@@ -1,0 +1,40 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.knowledge-studio
+  displayName: Knowledge Studio
+  version: 0.1.0
+  owner: core
+  description: A research and writing oriented application assembled from deep-research and epic-writing scene modules.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-research-deep
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-writing-epic
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.knowledge-studio.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.knowledge-studio.seed.generic.default
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles:
+      - scenes/generic-default.yaml
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-research-deep
+      - scene-writing-epic
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.knowledge-studio
+    dashboardRef: web/dashboard.json

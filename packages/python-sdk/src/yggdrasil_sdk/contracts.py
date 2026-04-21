@@ -50,11 +50,14 @@ class ToolDescriptor(BaseModel):
     module_id: str = Field(alias="moduleId")
     version: str
     display_name: str = Field(alias="displayName")
+    description: str | None = None
     schema_ref: str = Field(alias="schemaRef")
     execution_mode: Literal["sync", "async", "stream"] = Field(alias="executionMode")
     timeout_ms: int = Field(default=5000, alias="timeoutMs")
     idempotent: bool = True
     permission_required: list[str] = Field(default_factory=list, alias="permissionRequired")
+    input_schema: dict[str, Any] = Field(default_factory=dict, alias="inputSchema")
+    implementation_ref: str | None = Field(default=None, alias="implementationRef")
 
 
 class ModuleManifestSummary(BaseModel):
@@ -220,6 +223,7 @@ class TaskSnapshotSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
+    app_id: str = Field(alias="appId")
     task_id: str = Field(alias="taskId")
     agent_run_id: str = Field(alias="agentRunId")
     project_id: str = Field(alias="projectId")
@@ -338,3 +342,42 @@ class ModuleCatalogSnapshot(BaseModel):
     hooks: list[HookContributionRecord]
     subscriptions: list[EventSubscriptionRecord]
     health: list[HealthReport]
+
+
+class ApplicationManifestSummary(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    app_id: str = Field(alias="appId")
+    display_name: str = Field(alias="displayName")
+    version: str
+    manifest_path: str = Field(alias="manifestPath")
+    owner: str | None = None
+    description: str | None = None
+    default_load: bool = Field(default=False, alias="defaultLoad")
+    module_dependencies: list[str] = Field(default_factory=list, alias="moduleDependencies")
+    capability_module_ids: list[str] = Field(default_factory=list, alias="capabilityModuleIds")
+    scene_module_ids: list[str] = Field(default_factory=list, alias="sceneModuleIds")
+    default_prompt_profile_id: str | None = Field(default=None, alias="defaultPromptProfileId")
+    subagent_prompt_profile_id: str | None = Field(default=None, alias="subagentPromptProfileId")
+    default_seed_template_id: str | None = Field(default=None, alias="defaultSeedTemplateId")
+    prompt_profile_files: list[str] = Field(default_factory=list, alias="promptProfileFiles")
+    seed_template_files: list[str] = Field(default_factory=list, alias="seedTemplateFiles")
+    config_defaults_ref: ExternalRef | None = Field(default=None, alias="configDefaultsRef")
+    frontend_entry_route: str | None = Field(default=None, alias="frontendEntryRoute")
+    dashboard_ref: ExternalRef | None = Field(default=None, alias="dashboardRef")
+
+
+class ApplicationCatalogSnapshot(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    generated_at: datetime = Field(alias="generatedAt")
+    manifests: list[ApplicationManifestSummary]
+
+
+class ApplicationConfigBinding(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    app_id: str = Field(alias="appId")
+    active: bool = False
+    important_config: dict[str, Any] = Field(default_factory=dict, alias="importantConfig")
+    updated_at: datetime = Field(alias="updatedAt")

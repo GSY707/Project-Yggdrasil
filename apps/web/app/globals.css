@@ -273,6 +273,13 @@ textarea {
   margin-top: 20px;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
 .stat-card {
   padding: 20px;
 }
@@ -364,6 +371,37 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.58);
+}
+
+.form-field {
+  margin-top: 14px;
+}
+
+.field-input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink-0);
+}
+
+.field-input:focus {
+  outline: 2px solid rgba(14, 106, 90, 0.16);
+  border-color: rgba(14, 106, 90, 0.3);
+}
+
+.field-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
 }
 
 .meta-label {
@@ -547,6 +585,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .shell-side {
     position: relative;
     min-height: auto;
@@ -570,6 +612,7 @@ textarea {
   .content-grid,
   .content-grid.tight,
   .stat-grid,
+  .form-grid,
   .record-meta,
   .table-row,
   .kv-grid {

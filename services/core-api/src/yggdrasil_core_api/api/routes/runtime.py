@@ -32,8 +32,15 @@ def create_route_decision(
 def list_model_invocations(
     task_id: str | None = Query(default=None, alias="taskId"),
     agent_run_id: str | None = Query(default=None, alias="agentRunId"),
+    app_id: str | None = Query(default=None, alias="appId"),
     status_value: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, object]:
-    return service.list_model_invocations(task_id=task_id, agent_run_id=agent_run_id, status=status_value, limit=limit)
+    return service.list_model_invocations(
+        task_id=task_id,
+        agent_run_id=agent_run_id,
+        app_id=app_id,
+        status=status_value,
+        limit=limit,
+    )

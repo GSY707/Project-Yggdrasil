@@ -9,7 +9,7 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
-from yggdrasil_sdk.support import normalize_excerpt, resolve_workspace_root
+from yggdrasil_sdk.support import new_id, normalize_excerpt, resolve_workspace_root
 
 
 _QUOTES_TRANSLATION = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
@@ -245,17 +245,20 @@ def _extract_text_content(payload: Any) -> str:
     return str(payload or "")
 
 
-def _fallback_response(messages: list[dict[str, str]], reason: str, *, requested_model: str | None, requested_provider: str | None) -> dict[str, Any]:
+def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested_model: str | None, requested_provider: str | None) -> dict[str, Any]:
     user_message = next((message for message in reversed(messages) if message.get("role") == "user"), {"content": ""})
+    summarized_prompt = normalize_excerpt(str(user_message.get("content") or ""), 400)
     content = (
         "LLM 网关未能执行真实调用，已切换到 deterministic fallback。\n\n"
         f"原因: {reason}\n"
         f"请求模型: {requested_model or 'unspecified'}\n"
         f"请求提供商: {requested_provider or 'unspecified'}\n\n"
         "当前任务摘要:\n"
-        f"{normalize_excerpt(str(user_message.get('content') or ''), 800)}"
+        f"{summarized_prompt}"
     )
-    input_tokens = sum(_estimate_tokens(str(message.get("content") or "")) for message in messages)
+    # Fallback mode is synthetic: estimate work from the actionable user payload,
+    # not from the full compiled prompt scaffold that would only be billed on real model calls.
+    input_tokens = _estimate_tokens(summarized_prompt)
     output_tokens = _estimate_tokens(content)
     return {
         "mode": "fallback",
@@ -270,6 +273,7 @@ def _fallback_response(messages: list[dict[str, str]], reason: str, *, requested
         },
         "costUsed": 0.0,
         "error": reason,
+        "toolCalls": [],
         "rawResponse": {
             "id": "fallback",
             "object": "chat.completion",
@@ -287,12 +291,13 @@ def invoke_model(
     *,
     requested_model: str | None,
     requested_provider: str | None,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     temperature: float | None = None,
     max_tokens: int | None = None,
     workspace_root: Path | None = None,
     timeout_seconds: int = 90,
     allow_fallback: bool = True,
+    tools: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if _truthy_env("YGGDRASIL_DISABLE_LIVE_LLM", default=False):
         return _fallback_response(
@@ -321,6 +326,9 @@ def invoke_model(
         request_payload["temperature"] = temperature
     if max_tokens is not None:
         request_payload["max_tokens"] = max_tokens
+    if tools:
+        request_payload["tools"] = tools
+        request_payload["tool_choice"] = "auto"
 
     encoded_payload = json.dumps(request_payload).encode("utf-8")
     endpoint = f"{config.base_url}/chat/completions"
@@ -354,6 +362,28 @@ def invoke_model(
     choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
     message = choice.get("message") or {}
     output_text = _extract_text_content(message.get("content"))
+    tool_calls: list[dict[str, Any]] = []
+    for raw_call in message.get("tool_calls") or []:
+        if not isinstance(raw_call, dict):
+            continue
+        function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
+        name = str(function_payload.get("name") or "").strip()
+        arguments_text = str(function_payload.get("arguments") or "{}").strip() or "{}"
+        try:
+            arguments = json.loads(arguments_text)
+            if not isinstance(arguments, dict):
+                arguments = {"value": arguments}
+        except Exception:
+            arguments = {"_raw": arguments_text}
+        tool_calls.append(
+            {
+                "id": str(raw_call.get("id") or new_id("toolcall", name or resolved_model)),
+                "type": str(raw_call.get("type") or "function"),
+                "name": name,
+                "arguments": arguments,
+                "argumentsText": arguments_text,
+            }
+        )
     usage = raw_response.get("usage") if isinstance(raw_response, dict) else {}
     input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or sum(_estimate_tokens(str(item.get("content") or "")) for item in messages))
     output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or _estimate_tokens(output_text))
@@ -372,6 +402,7 @@ def invoke_model(
         },
         "costUsed": cost_used,
         "error": None,
+        "toolCalls": tool_calls,
         "rawResponse": raw_response,
         "requestPayload": request_payload,
     }

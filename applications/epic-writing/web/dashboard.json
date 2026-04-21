@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Epic Writing Studio",
+    "title": "创意写作应用",
+    "summary": "面向长线创作任务的具体应用，强调叙事连续性、角色一致性、时间线管理和长期设定资产。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.epic-writing"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.epic-writing"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

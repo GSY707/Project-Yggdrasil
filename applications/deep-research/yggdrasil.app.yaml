@@ -1,0 +1,36 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.deep-research
+  displayName: Deep Research Lab
+  version: 0.1.0
+  owner: core
+  description: Dedicated application for deep research and evidence-first exploration.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-research-deep
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.deep-research.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.research.deep
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles: []
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-research-deep
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.deep-research
+    dashboardRef: web/dashboard.json

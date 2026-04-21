@@ -1,0 +1,13 @@
+{
+  "defaultTaskType": "generic",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "subagent-runtime",
+    "mcp-bridge"
+  ],
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给结论，再给下一步。"
+  }
+}

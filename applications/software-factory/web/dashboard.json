@@ -1,0 +1,23 @@
+{
+  "hero": {
+    "eyebrow": "Software Factory",
+    "title": "软件交付应用 Agent",
+    "summary": "这个具体应用把 coding 和 maintenance 场景装进同一个应用插件，并通过基座控制面暴露重要配置、Prompt 装配结果和工程入口。"
+  },
+  "quickActions": [
+    {"label": "任务", "href": "/tasks"},
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.software-factory"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.software-factory"}
+  ],
+  "sections": [
+    {
+      "title": "默认能力",
+      "items": [
+        "coding/new-project",
+        "coding/inherit-project",
+        "maintenance/default",
+        "Sub-Agent runtime"
+      ]
+    }
+  ]
+}

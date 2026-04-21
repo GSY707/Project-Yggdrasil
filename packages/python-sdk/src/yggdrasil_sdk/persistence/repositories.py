@@ -27,6 +27,10 @@ from ..contracts import (
 )
 from ..domain import (
     AgentRunRecord,
+    AssetEmbeddingRecord,
+    AssetRecord,
+    AssetSegmentRecord,
+    DatasetVersionRecord,
     EdgeRecord,
     EvaluationRunRecord,
     EvaluationSuiteRecord,
@@ -34,20 +38,27 @@ from ..domain import (
     ImportJobRecord,
     ImportPolicy,
     MemoryBranchRecord,
+    ModelArtifactRecord,
     ModelInvocationRecord,
     NodeRecord,
     NodeVersionRecord,
     OutboxRecord,
+    PermissionTupleRecord,
     ProjectRecord,
+    PromptCompileArtifactRecord,
+    PromptProfileVersionRecord,
     RetrievalBundle,
     RetrievalRequestRecord,
+    SeedTemplateVersionRecord,
     SourceAnnotationRecord,
     SpaceRecord,
+    SpaceMountRecord,
     TaskRecord,
     TreePlanRecord,
 )
 from ..support import new_id, utc_now
 from .constants import (
+    DEFAULT_APP_ID,
     DEFAULT_BRANCH_ID,
     DEFAULT_OWNER_PROFILE_ID,
     DEFAULT_PROJECT_ID,
@@ -57,6 +68,10 @@ from .constants import (
 )
 from .orm import (
     AgentRunORM,
+    AssetEmbeddingORM,
+    AssetORM,
+    AssetSegmentORM,
+    DatasetVersionORM,
     EdgeORM,
     EvaluationRunORM,
     EvaluationSuiteORM,
@@ -66,6 +81,7 @@ from .orm import (
     ImportFragmentORM,
     ImportJobORM,
     MemoryBranchORM,
+    ModelArtifactORM,
     ModelInvocationORM,
     ModelRouteDecisionORM,
     ModuleConfigBindingORM,
@@ -73,12 +89,17 @@ from .orm import (
     NodeORM,
     NodeVersionORM,
     OutboxRecordORM,
+    PermissionTupleORM,
     ProjectORM,
+    PromptCompileArtifactORM,
+    PromptProfileVersionORM,
     RetrievalRequestORM,
     PullRequestORM,
     ReviewCommentORM,
+    SeedTemplateVersionORM,
     SourceAnnotationORM,
     SpaceORM,
+    SpaceMountORM,
     TaskORM,
     TaskSnapshotORM,
     TreePlanORM,
@@ -164,6 +185,33 @@ def _branch_record(model: MemoryBranchORM) -> MemoryBranchRecord:
         baseBranchId=model.base_branch_id,
         headRef=model.head_ref,
         status=model.status,
+        createdAt=model.created_at,
+        createdBy=_actor(model.created_by),
+    )
+
+
+def _space_mount_record(model: SpaceMountORM) -> SpaceMountRecord:
+    return SpaceMountRecord(
+        id=model.id,
+        projectId=model.project_id,
+        hostSpaceId=model.host_space_id,
+        mountedSpaceId=model.mounted_space_id,
+        mountMode=model.mount_mode,
+        status=model.status,
+        createdAt=model.created_at,
+        createdBy=_actor(model.created_by),
+    )
+
+
+def _permission_tuple_record(model: PermissionTupleORM) -> PermissionTupleRecord:
+    return PermissionTupleRecord(
+        id=model.id,
+        projectId=model.project_id,
+        subject=model.subject,
+        relation=model.relation,
+        resource=model.resource,
+        condition=dict(model.condition or {}) if model.condition is not None else None,
+        effect=model.effect,
         createdAt=model.created_at,
         createdBy=_actor(model.created_by),
     )
@@ -327,6 +375,7 @@ def _tree_plan_record(model: TreePlanORM) -> TreePlanRecord:
 def _task_record(model: TaskORM) -> TaskRecord:
     return TaskRecord(
         id=model.id,
+        appId=model.app_id,
         projectId=model.project_id,
         spaceId=model.space_id,
         branchId=model.branch_id,
@@ -353,6 +402,7 @@ def _task_record(model: TaskORM) -> TaskRecord:
 def _agent_run_record(model: AgentRunORM) -> AgentRunRecord:
     return AgentRunRecord(
         id=model.id,
+        appId=model.app_id,
         taskId=model.task_id,
         projectId=model.project_id,
         branchId=model.branch_id,
@@ -374,6 +424,7 @@ def _agent_run_record(model: AgentRunORM) -> AgentRunRecord:
 def _task_snapshot_record(model: TaskSnapshotORM) -> TaskSnapshotSummary:
     return TaskSnapshotSummary(
         id=model.id,
+        appId=model.app_id,
         taskId=model.task_id,
         agentRunId=model.agent_run_id,
         projectId=model.project_id,
@@ -414,6 +465,7 @@ def _route_decision_record(model: ModelRouteDecisionORM) -> ModelRouteDecision:
 def _model_invocation_record(model: ModelInvocationORM) -> ModelInvocationRecord:
     return ModelInvocationRecord(
         id=model.id,
+        appId=model.app_id,
         projectId=model.project_id,
         taskId=model.task_id,
         agentRunId=model.agent_run_id,
@@ -425,6 +477,7 @@ def _model_invocation_record(model: ModelInvocationORM) -> ModelInvocationRecord
         invocationKind=model.invocation_kind,
         status=model.status,
         traceId=model.trace_id,
+        promptCompileArtifactId=model.prompt_compile_artifact_id,
         requestRef=_external_ref(model.request_ref),
         responseRef=_external_ref(model.response_ref),
         inputTokensUsed=model.input_tokens_used,
@@ -668,6 +721,126 @@ def _evaluation_run_record(model: EvaluationRunORM) -> EvaluationRunRecord:
         metricsRef=_external_ref(model.metrics_ref),
         startedAt=model.started_at,
         endedAt=model.ended_at,
+        createdAt=model.created_at,
+    )
+
+
+def _asset_record(model: AssetORM) -> AssetRecord:
+    return AssetRecord(
+        id=model.id,
+        projectId=model.project_id,
+        spaceId=model.space_id,
+        branchId=model.branch_id,
+        ownerNodeId=model.owner_node_id,
+        mediaType=model.media_type,
+        role=model.role,
+        storageKey=model.storage_key,
+        checksum=model.checksum,
+        sourceRef=_external_ref(model.source_ref),
+        durationMs=model.duration_ms,
+        width=model.width,
+        height=model.height,
+        createdAt=model.created_at,
+        createdBy=_actor(model.created_by),
+    )
+
+
+def _asset_segment_record(model: AssetSegmentORM) -> AssetSegmentRecord:
+    return AssetSegmentRecord(
+        id=model.id,
+        assetId=model.asset_id,
+        ordinal=model.ordinal,
+        startOffset=model.start_offset,
+        endOffset=model.end_offset,
+        textExcerpt=model.text_excerpt,
+        summary=model.summary,
+        embeddingId=model.embedding_id,
+        createdAt=model.created_at,
+    )
+
+
+def _asset_embedding_record(model: AssetEmbeddingORM) -> AssetEmbeddingRecord:
+    return AssetEmbeddingRecord(
+        id=model.id,
+        ownerKind=model.owner_kind,
+        ownerId=model.owner_id,
+        model=model.model,
+        dimension=model.dimension,
+        vectorRef=_external_ref(model.vector_ref),
+        createdAt=model.created_at,
+    )
+
+
+def _dataset_version_record(model: DatasetVersionORM) -> DatasetVersionRecord:
+    return DatasetVersionRecord(
+        id=model.id,
+        datasetName=model.dataset_name,
+        version=model.version,
+        sourceFilter=dict(model.source_filter or {}),
+        storageKey=model.storage_key,
+        rowCount=model.row_count,
+        createdAt=model.created_at,
+    )
+
+
+def _model_artifact_record(model: ModelArtifactORM) -> ModelArtifactRecord:
+    return ModelArtifactRecord(
+        id=model.id,
+        baseModel=model.base_model,
+        tuningMethod=model.tuning_method,
+        datasetVersionId=model.dataset_version_id,
+        metricsRef=_external_ref(model.metrics_ref),
+        storageKey=model.storage_key,
+        status=model.status,
+        createdAt=model.created_at,
+    )
+
+
+def _prompt_profile_version_record(model: PromptProfileVersionORM) -> PromptProfileVersionRecord:
+    return PromptProfileVersionRecord(
+        id=model.id,
+        promptProfileId=model.prompt_profile_id,
+        name=model.name,
+        version=model.version,
+        runScope=model.run_scope,
+        body=dict(model.body or {}),
+        contentHash=model.content_hash,
+        createdAt=model.created_at,
+    )
+
+
+def _seed_template_version_record(model: SeedTemplateVersionORM) -> SeedTemplateVersionRecord:
+    return SeedTemplateVersionRecord(
+        id=model.id,
+        seedTemplateId=model.seed_template_id,
+        name=model.name,
+        version=model.version,
+        domain=model.domain,
+        scenario=model.scenario,
+        body=dict(model.body or {}),
+        contentHash=model.content_hash,
+        createdAt=model.created_at,
+    )
+
+
+def _prompt_compile_artifact_record(model: PromptCompileArtifactORM) -> PromptCompileArtifactRecord:
+    return PromptCompileArtifactRecord(
+        id=model.id,
+        appId=model.app_id,
+        projectId=model.project_id,
+        taskId=model.task_id,
+        agentRunId=model.agent_run_id,
+        modelInvocationId=model.model_invocation_id,
+        promptProfileVersionId=model.prompt_profile_version_id,
+        seedTemplateVersionId=model.seed_template_version_id,
+        runType=model.run_type,
+        taskType=model.task_type,
+        scenario=model.scenario,
+        registeredTools=list(model.registered_tools or []),
+        systemSections=dict(model.system_sections or {}),
+        userSections=dict(model.user_sections or {}),
+        compiledMessagesRef=_external_ref(model.compiled_messages_ref),
+        contentHash=model.content_hash,
         createdAt=model.created_at,
     )
 
@@ -1042,10 +1215,12 @@ class TaskRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list_tasks(self, *, status: str | None = None, limit: int = 100) -> list[TaskRecord]:
+    def list_tasks(self, *, status: str | None = None, app_id: str | None = None, limit: int = 100) -> list[TaskRecord]:
         statement = sa.select(TaskORM).order_by(TaskORM.created_at.desc()).limit(limit)
         if status:
             statement = statement.where(TaskORM.status == status)
+        if app_id:
+            statement = statement.where(TaskORM.app_id == app_id)
         return [_task_record(model) for model in self.session.execute(statement).scalars().all()]
 
     def get_task(self, task_id: str) -> TaskRecord | None:
@@ -1076,6 +1251,8 @@ class TaskRepository:
             task.resume_message = str(payload["resumeMessage"]) if payload["resumeMessage"] is not None else None
         if "restartMessage" in payload:
             task.restart_message = str(payload["restartMessage"]) if payload["restartMessage"] is not None else None
+        if "appId" in payload:
+            task.app_id = str(payload["appId"]) if payload["appId"] is not None else DEFAULT_APP_ID
         if "executionRootNodeId" in payload:
             task.execution_root_node_id = (
                 str(payload["executionRootNodeId"]) if payload["executionRootNodeId"] is not None else None
@@ -1154,8 +1331,10 @@ class TaskRepository:
         budget = BudgetState.model_validate(payload.get("budget") or payload.get("budgetState") or {})
         project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
         branch_id = str(payload.get("branchId") or DEFAULT_BRANCH_ID)
+        app_id = str(payload.get("appId") or DEFAULT_APP_ID)
         task = TaskORM(
             id=str(payload.get("id") or new_id("task", payload.get("title") or now.isoformat())),
+            app_id=app_id,
             project_id=project_id,
             space_id=str(payload.get("spaceId") or DEFAULT_SPACE_ID),
             branch_id=branch_id,
@@ -1186,8 +1365,12 @@ class TaskRepository:
         if task is None:
             raise KeyError(f"Task {task_id} not found.")
         now = utc_now()
+        app_id = str(payload.get("appId") or task.app_id or DEFAULT_APP_ID)
+        if task.app_id and app_id != task.app_id:
+            raise ValueError(f"Agent run appId {app_id} does not match task {task_id} appId {task.app_id}.")
         run = AgentRunORM(
             id=str(payload.get("id") or new_id("run", task_id, now.isoformat())),
+            app_id=app_id,
             task_id=task_id,
             project_id=task.project_id,
             branch_id=task.branch_id,
@@ -1216,8 +1399,16 @@ class TaskRepository:
         task = self.session.get(TaskORM, summary.task_id)
         if task is None:
             raise KeyError(f"Task {summary.task_id} not found.")
+        run = self.session.get(AgentRunORM, summary.agent_run_id)
+        if run is None:
+            raise KeyError(f"Agent run {summary.agent_run_id} not found.")
+        if summary.app_id != task.app_id or summary.app_id != run.app_id:
+            raise ValueError(
+                f"Snapshot appId {summary.app_id} does not match task/run app ids {task.app_id}/{run.app_id}."
+            )
         snapshot = TaskSnapshotORM(
             id=summary.id,
+            app_id=summary.app_id,
             task_id=summary.task_id,
             agent_run_id=summary.agent_run_id,
             project_id=summary.project_id,
@@ -1541,17 +1732,27 @@ class RuntimeRepository:
         task_id = str(payload.get("taskId")) if payload.get("taskId") is not None else None
         agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
         route_decision_id = str(payload.get("routeDecisionId")) if payload.get("routeDecisionId") is not None else None
+        task = self.session.get(TaskORM, task_id) if task_id is not None else None
+        run = self.session.get(AgentRunORM, agent_run_id) if agent_run_id is not None else None
         if self.session.get(ProjectORM, project_id) is None:
             raise KeyError(f"Project {project_id} not found.")
-        if task_id is not None and self.session.get(TaskORM, task_id) is None:
+        if task_id is not None and task is None:
             raise KeyError(f"Task {task_id} not found.")
-        if agent_run_id is not None and self.session.get(AgentRunORM, agent_run_id) is None:
+        if agent_run_id is not None and run is None:
             raise KeyError(f"Agent run {agent_run_id} not found.")
         if route_decision_id is not None and self.session.get(ModelRouteDecisionORM, route_decision_id) is None:
             raise KeyError(f"Route decision {route_decision_id} not found.")
+        if task is not None and run is not None and task.app_id != run.app_id:
+            raise ValueError(f"Task {task_id} appId {task.app_id} does not match agent run {agent_run_id} appId {run.app_id}.")
+        app_id = str(payload.get("appId") or (task.app_id if task is not None else None) or (run.app_id if run is not None else None) or DEFAULT_APP_ID)
+        if task is not None and app_id != task.app_id:
+            raise ValueError(f"Model invocation appId {app_id} does not match task {task_id} appId {task.app_id}.")
+        if run is not None and app_id != run.app_id:
+            raise ValueError(f"Model invocation appId {app_id} does not match agent run {agent_run_id} appId {run.app_id}.")
 
         record = ModelInvocationRecord(
             id=str(payload.get("id") or new_id("llm", agent_run_id or task_id or utc_now().isoformat())),
+            appId=app_id,
             projectId=project_id,
             taskId=task_id,
             agentRunId=agent_run_id,
@@ -1563,6 +1764,7 @@ class RuntimeRepository:
             invocationKind="chat-completion",
             status=str(payload.get("status") or "running"),
             traceId=str(payload.get("traceId")) if payload.get("traceId") is not None else None,
+            promptCompileArtifactId=str(payload.get("promptCompileArtifactId")) if payload.get("promptCompileArtifactId") is not None else None,
             requestRef=_external_ref(payload.get("requestRef")),
             responseRef=_external_ref(payload.get("responseRef")),
             inputTokensUsed=int(payload.get("inputTokensUsed", 0)),
@@ -1576,6 +1778,7 @@ class RuntimeRepository:
         )
         model = ModelInvocationORM(
             id=record.id,
+            app_id=record.app_id,
             project_id=record.project_id,
             task_id=record.task_id,
             agent_run_id=record.agent_run_id,
@@ -1587,6 +1790,7 @@ class RuntimeRepository:
             invocation_kind=record.invocation_kind,
             status=record.status,
             trace_id=record.trace_id,
+            prompt_compile_artifact_id=record.prompt_compile_artifact_id,
             request_ref=record.request_ref.model_dump(mode="json") if record.request_ref is not None else None,
             response_ref=record.response_ref.model_dump(mode="json") if record.response_ref is not None else None,
             input_tokens_used=record.input_tokens_used,
@@ -1610,6 +1814,8 @@ class RuntimeRepository:
             model.status = str(payload["status"])
         if "traceId" in payload:
             model.trace_id = str(payload["traceId"]) if payload["traceId"] is not None else None
+        if "promptCompileArtifactId" in payload:
+            model.prompt_compile_artifact_id = str(payload["promptCompileArtifactId"]) if payload["promptCompileArtifactId"] is not None else None
         if "resolvedModel" in payload:
             model.resolved_model = str(payload["resolvedModel"])
         if "resolvedProvider" in payload:
@@ -1638,6 +1844,7 @@ class RuntimeRepository:
         *,
         task_id: str | None = None,
         agent_run_id: str | None = None,
+        app_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[ModelInvocationRecord]:
@@ -1646,6 +1853,8 @@ class RuntimeRepository:
             statement = statement.where(ModelInvocationORM.task_id == task_id)
         if agent_run_id:
             statement = statement.where(ModelInvocationORM.agent_run_id == agent_run_id)
+        if app_id:
+            statement = statement.where(ModelInvocationORM.app_id == app_id)
         if status:
             statement = statement.where(ModelInvocationORM.status == status)
         return [_model_invocation_record(model) for model in self.session.execute(statement).scalars().all()]
@@ -2048,6 +2257,49 @@ class CollaborationRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def list_spaces(
+        self,
+        *,
+        project_id: str | None = None,
+        space_type: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[SpaceRecord]:
+        statement = sa.select(SpaceORM).order_by(SpaceORM.created_at.desc()).limit(limit)
+        if project_id is not None:
+            statement = statement.where(SpaceORM.project_id == project_id)
+        if space_type is not None:
+            statement = statement.where(SpaceORM.space_type == space_type)
+        if status is not None:
+            statement = statement.where(SpaceORM.status == status)
+        return [_space_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def get_space(self, space_id: str) -> SpaceRecord | None:
+        model = self.session.get(SpaceORM, space_id)
+        return _space_record(model) if model else None
+
+    def create_space(self, payload: dict[str, Any]) -> SpaceRecord:
+        now = payload.get("createdAt") or utc_now()
+        project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
+        if self.session.get(ProjectORM, project_id) is None:
+            raise KeyError(project_id)
+
+        space_id = str(payload.get("id") or new_id("space", payload.get("spaceType") or payload.get("ownerSubject") or now.isoformat()))
+        if self.session.get(SpaceORM, space_id) is not None:
+            raise ValueError(f"Space {space_id} already exists.")
+
+        model = SpaceORM(
+            id=space_id,
+            project_id=project_id,
+            space_type=str(payload.get("spaceType") or "shared"),
+            status=str(payload.get("status") or "active"),
+            owner_subject=str(payload["ownerSubject"]) if payload.get("ownerSubject") is not None else None,
+            created_at=now,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _space_record(model)
+
     def list_branches(
         self,
         *,
@@ -2064,6 +2316,146 @@ class CollaborationRepository:
         if status is not None:
             statement = statement.where(MemoryBranchORM.status == status)
         return [_branch_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def list_space_mounts(
+        self,
+        *,
+        project_id: str | None = None,
+        host_space_id: str | None = None,
+        mounted_space_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[SpaceMountRecord]:
+        statement = sa.select(SpaceMountORM).order_by(SpaceMountORM.created_at.desc()).limit(limit)
+        if project_id is not None:
+            statement = statement.where(SpaceMountORM.project_id == project_id)
+        if host_space_id is not None:
+            statement = statement.where(SpaceMountORM.host_space_id == host_space_id)
+        if mounted_space_id is not None:
+            statement = statement.where(SpaceMountORM.mounted_space_id == mounted_space_id)
+        if status is not None:
+            statement = statement.where(SpaceMountORM.status == status)
+        return [_space_mount_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def create_space_mount(self, payload: dict[str, Any]) -> SpaceMountRecord:
+        now = payload.get("createdAt") or utc_now()
+        actor = _actor(payload.get("createdBy"), default_type="user", default_id="core-api")
+        host_space_id = str(payload["hostSpaceId"])
+        mounted_space_id = str(payload["mountedSpaceId"])
+        mount_mode = str(payload.get("mountMode") or "readonly")
+
+        if host_space_id == mounted_space_id:
+            raise ValueError("Space mount cannot target the same space as both host and mounted source.")
+
+        host_space = self.session.get(SpaceORM, host_space_id)
+        mounted_space = self.session.get(SpaceORM, mounted_space_id)
+        if host_space is None:
+            raise KeyError(host_space_id)
+        if mounted_space is None:
+            raise KeyError(mounted_space_id)
+
+        project_id = str(payload.get("projectId") or host_space.project_id)
+        if self.session.get(ProjectORM, project_id) is None:
+            raise KeyError(project_id)
+        if host_space.project_id != project_id or mounted_space.project_id != project_id:
+            raise ValueError("Host space and mounted space must belong to the same project.")
+
+        duplicate_statement = (
+            sa.select(SpaceMountORM)
+            .where(SpaceMountORM.project_id == project_id)
+            .where(SpaceMountORM.host_space_id == host_space_id)
+            .where(SpaceMountORM.mounted_space_id == mounted_space_id)
+            .where(SpaceMountORM.mount_mode == mount_mode)
+            .where(SpaceMountORM.status != "detached")
+            .limit(1)
+        )
+        duplicate = self.session.execute(duplicate_statement).scalar_one_or_none()
+        if duplicate is not None:
+            raise ValueError(
+                f"Space mount already exists for {host_space_id} -> {mounted_space_id} in mode {mount_mode}."
+            )
+
+        model = SpaceMountORM(
+            id=str(payload.get("id") or new_id("mount", host_space_id, mounted_space_id, mount_mode, now.isoformat())),
+            project_id=project_id,
+            host_space_id=host_space_id,
+            mounted_space_id=mounted_space_id,
+            mount_mode=mount_mode,
+            status=str(payload.get("status") or "active"),
+            created_at=now,
+            created_by=actor.model_dump(mode="json"),
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _space_mount_record(model)
+
+    def list_permission_tuples(
+        self,
+        *,
+        project_id: str | None = None,
+        subject: str | None = None,
+        relation: str | None = None,
+        resource: str | None = None,
+        effect: str | None = None,
+        limit: int = 100,
+    ) -> list[PermissionTupleRecord]:
+        statement = sa.select(PermissionTupleORM).order_by(PermissionTupleORM.created_at.desc()).limit(limit)
+        if project_id is not None:
+            statement = statement.where(PermissionTupleORM.project_id == project_id)
+        if subject is not None:
+            statement = statement.where(PermissionTupleORM.subject == subject)
+        if relation is not None:
+            statement = statement.where(PermissionTupleORM.relation == relation)
+        if resource is not None:
+            statement = statement.where(PermissionTupleORM.resource == resource)
+        if effect is not None:
+            statement = statement.where(PermissionTupleORM.effect == effect)
+        return [_permission_tuple_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def create_permission_tuple(self, payload: dict[str, Any]) -> PermissionTupleRecord:
+        now = payload.get("createdAt") or utc_now()
+        actor = _actor(payload.get("createdBy"), default_type="user", default_id="core-api")
+        project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
+        if self.session.get(ProjectORM, project_id) is None:
+            raise KeyError(project_id)
+
+        subject = str(payload["subject"])
+        relation = str(payload["relation"])
+        resource = str(payload["resource"])
+        condition = payload.get("condition")
+        if condition is not None and not isinstance(condition, dict):
+            raise ValueError("Permission tuple condition must be an object when provided.")
+        effect = str(payload.get("effect") or "allow")
+
+        duplicate_statement = (
+            sa.select(PermissionTupleORM)
+            .where(PermissionTupleORM.project_id == project_id)
+            .where(PermissionTupleORM.subject == subject)
+            .where(PermissionTupleORM.relation == relation)
+            .where(PermissionTupleORM.resource == resource)
+            .where(PermissionTupleORM.effect == effect)
+        )
+        for existing in self.session.execute(duplicate_statement).scalars().all():
+            existing_condition = dict(existing.condition or {}) if existing.condition is not None else None
+            if existing_condition == condition:
+                raise ValueError(
+                    f"Permission tuple already exists for {subject} {relation} {resource} ({effect})."
+                )
+
+        model = PermissionTupleORM(
+            id=str(payload.get("id") or new_id("perm", project_id, subject, relation, resource, effect, now.isoformat())),
+            project_id=project_id,
+            subject=subject,
+            relation=relation,
+            resource=resource,
+            condition=dict(condition) if condition is not None else None,
+            effect=effect,
+            created_at=now,
+            created_by=actor.model_dump(mode="json"),
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _permission_tuple_record(model)
 
     def get_branch(self, branch_id: str) -> MemoryBranchRecord | None:
         model = self.session.get(MemoryBranchORM, branch_id)
@@ -2287,6 +2679,399 @@ class EvaluationRepository:
         self.session.add(model)
         self.session.flush()
         return _evaluation_run_record(model)
+
+    def update_run(self, run_id: str, payload: dict[str, Any]) -> EvaluationRunRecord:
+        model = self.session.get(EvaluationRunORM, run_id)
+        if model is None:
+            raise KeyError(f"Evaluation run {run_id} not found.")
+        if "status" in payload:
+            model.status = str(payload.get("status") or model.status)
+        if "metricsRef" in payload:
+            metrics_ref = _external_ref(payload.get("metricsRef"))
+            model.metrics_ref = metrics_ref.model_dump(mode="json") if metrics_ref is not None else None
+        if "startedAt" in payload:
+            model.started_at = payload.get("startedAt")
+        if "endedAt" in payload:
+            model.ended_at = payload.get("endedAt")
+        self.session.flush()
+        return _evaluation_run_record(model)
+
+
+class AssetRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_assets(
+        self,
+        *,
+        project_id: str | None = None,
+        space_id: str | None = None,
+        branch_id: str | None = None,
+        owner_node_id: str | None = None,
+        media_type: str | None = None,
+        limit: int = 100,
+    ) -> list[AssetRecord]:
+        statement = sa.select(AssetORM).order_by(AssetORM.created_at.desc()).limit(limit)
+        if project_id is not None:
+            statement = statement.where(AssetORM.project_id == project_id)
+        if space_id is not None:
+            statement = statement.where(AssetORM.space_id == space_id)
+        if branch_id is not None:
+            statement = statement.where(AssetORM.branch_id == branch_id)
+        if owner_node_id is not None:
+            statement = statement.where(AssetORM.owner_node_id == owner_node_id)
+        if media_type is not None:
+            statement = statement.where(AssetORM.media_type == media_type)
+        return [_asset_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        model = self.session.get(AssetORM, asset_id)
+        return _asset_record(model) if model is not None else None
+
+    def create_asset(self, payload: dict[str, Any]) -> AssetRecord:
+        record = AssetRecord(
+            id=str(payload.get("id") or new_id("asset", payload.get("mediaType") or utc_now().isoformat())),
+            projectId=str(payload.get("projectId") or DEFAULT_PROJECT_ID),
+            spaceId=str(payload.get("spaceId") or DEFAULT_SPACE_ID),
+            branchId=str(payload.get("branchId") or DEFAULT_BRANCH_ID),
+            ownerNodeId=str(payload.get("ownerNodeId")) if payload.get("ownerNodeId") is not None else None,
+            mediaType=str(payload.get("mediaType") or "document"),
+            role=str(payload.get("role") or "original"),
+            storageKey=str(payload.get("storageKey") or ""),
+            checksum=str(payload.get("checksum") or ""),
+            sourceRef=_external_ref(payload.get("sourceRef")),
+            durationMs=int(payload["durationMs"]) if payload.get("durationMs") is not None else None,
+            width=int(payload["width"]) if payload.get("width") is not None else None,
+            height=int(payload["height"]) if payload.get("height") is not None else None,
+            createdAt=payload.get("createdAt") or utc_now(),
+            createdBy=_actor(payload.get("createdBy"), default_type="module", default_id="multimodal-memory"),
+        )
+        model = AssetORM(
+            id=record.id,
+            project_id=record.project_id,
+            space_id=record.space_id,
+            branch_id=record.branch_id,
+            owner_node_id=record.owner_node_id,
+            media_type=record.media_type,
+            role=record.role,
+            storage_key=record.storage_key,
+            checksum=record.checksum,
+            source_ref=record.source_ref.model_dump(mode="json") if record.source_ref else None,
+            duration_ms=record.duration_ms,
+            width=record.width,
+            height=record.height,
+            created_at=record.created_at,
+            created_by=record.created_by.model_dump(mode="json"),
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _asset_record(model)
+
+    def replace_asset_segments(self, asset_id: str, segments: list[dict[str, Any]]) -> list[AssetSegmentRecord]:
+        if self.session.get(AssetORM, asset_id) is None:
+            raise KeyError(asset_id)
+        self.session.execute(sa.delete(AssetSegmentORM).where(AssetSegmentORM.asset_id == asset_id))
+        created_at = utc_now()
+        created: list[AssetSegmentORM] = []
+        for index, segment in enumerate(segments, start=1):
+            model = AssetSegmentORM(
+                id=str(segment.get("id") or new_id("assetseg", asset_id, index, stable=True)),
+                asset_id=asset_id,
+                ordinal=int(segment.get("ordinal") or index),
+                start_offset=int(segment.get("startOffset") or 0),
+                end_offset=int(segment.get("endOffset") or segment.get("startOffset") or 0),
+                text_excerpt=str(segment.get("textExcerpt")) if segment.get("textExcerpt") is not None else None,
+                summary=str(segment.get("summary")) if segment.get("summary") is not None else None,
+                embedding_id=str(segment.get("embeddingId")) if segment.get("embeddingId") is not None else None,
+                created_at=segment.get("createdAt") or created_at,
+            )
+            self.session.add(model)
+            created.append(model)
+        self.session.flush()
+        return [_asset_segment_record(model) for model in sorted(created, key=lambda item: item.ordinal)]
+
+    def list_asset_segments(self, asset_id: str, limit: int = 500) -> list[AssetSegmentRecord]:
+        statement = sa.select(AssetSegmentORM).where(AssetSegmentORM.asset_id == asset_id).order_by(AssetSegmentORM.ordinal.asc()).limit(limit)
+        return [_asset_segment_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def create_embedding(self, payload: dict[str, Any]) -> AssetEmbeddingRecord:
+        record = AssetEmbeddingRecord(
+            id=str(payload.get("id") or new_id("embedding", payload.get("ownerKind") or "asset", payload.get("ownerId") or utc_now().isoformat())),
+            ownerKind=str(payload.get("ownerKind") or "asset"),
+            ownerId=str(payload.get("ownerId") or ""),
+            model=str(payload.get("model") or "keyword-hash-v1"),
+            dimension=int(payload.get("dimension") or 0),
+            vectorRef=_external_ref(payload.get("vectorRef")),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = AssetEmbeddingORM(
+            id=record.id,
+            owner_kind=record.owner_kind,
+            owner_id=record.owner_id,
+            model=record.model,
+            dimension=record.dimension,
+            vector_ref=record.vector_ref.model_dump(mode="json"),
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _asset_embedding_record(model)
+
+    def list_embeddings(
+        self,
+        *,
+        owner_kind: str | None = None,
+        owner_id: str | None = None,
+        limit: int = 500,
+    ) -> list[AssetEmbeddingRecord]:
+        statement = sa.select(AssetEmbeddingORM).order_by(AssetEmbeddingORM.created_at.desc()).limit(limit)
+        if owner_kind is not None:
+            statement = statement.where(AssetEmbeddingORM.owner_kind == owner_kind)
+        if owner_id is not None:
+            statement = statement.where(AssetEmbeddingORM.owner_id == owner_id)
+        return [_asset_embedding_record(model) for model in self.session.execute(statement).scalars().all()]
+
+
+class TrainingRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create_dataset_version(self, payload: dict[str, Any]) -> DatasetVersionRecord:
+        record = DatasetVersionRecord(
+            id=str(payload.get("id") or new_id("dataset", payload.get("datasetName") or utc_now().isoformat())),
+            datasetName=str(payload.get("datasetName") or "dataset"),
+            version=str(payload.get("version") or "v1"),
+            sourceFilter=dict(payload.get("sourceFilter") or {}),
+            storageKey=str(payload.get("storageKey") or ""),
+            rowCount=int(payload.get("rowCount") or 0),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = DatasetVersionORM(
+            id=record.id,
+            dataset_name=record.dataset_name,
+            version=record.version,
+            source_filter=dict(record.source_filter),
+            storage_key=record.storage_key,
+            row_count=record.row_count,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _dataset_version_record(model)
+
+    def get_dataset_version(self, dataset_version_id: str) -> DatasetVersionRecord | None:
+        model = self.session.get(DatasetVersionORM, dataset_version_id)
+        return _dataset_version_record(model) if model is not None else None
+
+    def list_dataset_versions(self, *, dataset_name: str | None = None, limit: int = 100) -> list[DatasetVersionRecord]:
+        statement = sa.select(DatasetVersionORM).order_by(DatasetVersionORM.created_at.desc()).limit(limit)
+        if dataset_name is not None:
+            statement = statement.where(DatasetVersionORM.dataset_name == dataset_name)
+        return [_dataset_version_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def get_model_artifact(self, artifact_id: str) -> ModelArtifactRecord | None:
+        model = self.session.get(ModelArtifactORM, artifact_id)
+        return _model_artifact_record(model) if model is not None else None
+
+    def create_model_artifact(self, payload: dict[str, Any]) -> ModelArtifactRecord:
+        dataset_version_id = str(payload.get("datasetVersionId") or "")
+        if not dataset_version_id:
+            raise KeyError("datasetVersionId")
+        if self.session.get(DatasetVersionORM, dataset_version_id) is None:
+            raise KeyError(dataset_version_id)
+        record = ModelArtifactRecord(
+            id=str(payload.get("id") or new_id("modelart", payload.get("baseModel") or dataset_version_id, utc_now().isoformat())),
+            baseModel=str(payload.get("baseModel") or "unknown-base-model"),
+            tuningMethod=str(payload.get("tuningMethod") or "distillation"),
+            datasetVersionId=dataset_version_id,
+            metricsRef=_external_ref(payload.get("metricsRef")),
+            storageKey=str(payload.get("storageKey") or ""),
+            status=str(payload.get("status") or "staged"),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = ModelArtifactORM(
+            id=record.id,
+            base_model=record.base_model,
+            tuning_method=record.tuning_method,
+            dataset_version_id=record.dataset_version_id,
+            metrics_ref=record.metrics_ref.model_dump(mode="json") if record.metrics_ref else None,
+            storage_key=record.storage_key,
+            status=record.status,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _model_artifact_record(model)
+
+    def update_model_artifact(self, artifact_id: str, payload: dict[str, Any]) -> ModelArtifactRecord:
+        model = self.session.get(ModelArtifactORM, artifact_id)
+        if model is None:
+            raise KeyError(artifact_id)
+        if "metricsRef" in payload:
+            metrics_ref = _external_ref(payload.get("metricsRef"))
+            model.metrics_ref = metrics_ref.model_dump(mode="json") if metrics_ref is not None else None
+        if "status" in payload:
+            model.status = str(payload.get("status") or model.status)
+        if "storageKey" in payload:
+            model.storage_key = str(payload.get("storageKey") or model.storage_key)
+        self.session.flush()
+        return _model_artifact_record(model)
+
+    def list_model_artifacts(
+        self,
+        *,
+        dataset_version_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[ModelArtifactRecord]:
+        statement = sa.select(ModelArtifactORM).order_by(ModelArtifactORM.created_at.desc()).limit(limit)
+        if dataset_version_id is not None:
+            statement = statement.where(ModelArtifactORM.dataset_version_id == dataset_version_id)
+        if status is not None:
+            statement = statement.where(ModelArtifactORM.status == status)
+        return [_model_artifact_record(model) for model in self.session.execute(statement).scalars().all()]
+
+
+class PromptAssetRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_prompt_compile_artifacts(
+        self,
+        *,
+        project_id: str | None = None,
+        task_id: str | None = None,
+        app_id: str | None = None,
+        limit: int = 100,
+    ) -> list[PromptCompileArtifactRecord]:
+        statement = sa.select(PromptCompileArtifactORM).order_by(PromptCompileArtifactORM.created_at.desc()).limit(limit)
+        if project_id is not None:
+            statement = statement.where(PromptCompileArtifactORM.project_id == project_id)
+        if task_id is not None:
+            statement = statement.where(PromptCompileArtifactORM.task_id == task_id)
+        if app_id is not None:
+            statement = statement.where(PromptCompileArtifactORM.app_id == app_id)
+        return [_prompt_compile_artifact_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def upsert_prompt_profile_version(self, record: PromptProfileVersionRecord) -> PromptProfileVersionRecord:
+        statement = sa.select(PromptProfileVersionORM).where(PromptProfileVersionORM.id == record.id)
+        model = self.session.execute(statement).scalar_one_or_none()
+        if model is None:
+            model = PromptProfileVersionORM(id=record.id)
+            self.session.add(model)
+        model.prompt_profile_id = record.prompt_profile_id
+        model.name = record.name
+        model.version = record.version
+        model.run_scope = record.run_scope
+        model.body = dict(record.body)
+        model.content_hash = record.content_hash
+        model.created_at = record.created_at
+        self.session.flush()
+        return _prompt_profile_version_record(model)
+
+    def upsert_seed_template_version(self, record: SeedTemplateVersionRecord) -> SeedTemplateVersionRecord:
+        statement = sa.select(SeedTemplateVersionORM).where(SeedTemplateVersionORM.id == record.id)
+        model = self.session.execute(statement).scalar_one_or_none()
+        if model is None:
+            model = SeedTemplateVersionORM(id=record.id)
+            self.session.add(model)
+        model.seed_template_id = record.seed_template_id
+        model.name = record.name
+        model.version = record.version
+        model.domain = record.domain
+        model.scenario = record.scenario
+        model.body = dict(record.body)
+        model.content_hash = record.content_hash
+        model.created_at = record.created_at
+        self.session.flush()
+        return _seed_template_version_record(model)
+
+    def create_prompt_compile_artifact(self, payload: dict[str, Any]) -> PromptCompileArtifactRecord:
+        project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
+        task_id = str(payload.get("taskId")) if payload.get("taskId") is not None else None
+        agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
+        model_invocation_id = str(payload.get("modelInvocationId")) if payload.get("modelInvocationId") is not None else None
+        task = self.session.get(TaskORM, task_id) if task_id is not None else None
+        run = self.session.get(AgentRunORM, agent_run_id) if agent_run_id is not None else None
+        invocation = self.session.get(ModelInvocationORM, model_invocation_id) if model_invocation_id is not None else None
+        if self.session.get(ProjectORM, project_id) is None:
+            raise KeyError(f"Project {project_id} not found.")
+        if task_id is not None and task is None:
+            raise KeyError(f"Task {task_id} not found.")
+        if agent_run_id is not None and run is None:
+            raise KeyError(f"Agent run {agent_run_id} not found.")
+        if model_invocation_id is not None and invocation is None:
+            raise KeyError(f"Model invocation {model_invocation_id} not found.")
+        if task is not None and run is not None and task.app_id != run.app_id:
+            raise ValueError(f"Task {task_id} appId {task.app_id} does not match agent run {agent_run_id} appId {run.app_id}.")
+        if task is not None and invocation is not None and task.app_id != invocation.app_id:
+            raise ValueError(
+                f"Task {task_id} appId {task.app_id} does not match model invocation {model_invocation_id} appId {invocation.app_id}."
+            )
+        if run is not None and invocation is not None and run.app_id != invocation.app_id:
+            raise ValueError(
+                f"Agent run {agent_run_id} appId {run.app_id} does not match model invocation {model_invocation_id} appId {invocation.app_id}."
+            )
+        app_id = str(
+            payload.get("appId")
+            or (task.app_id if task is not None else None)
+            or (run.app_id if run is not None else None)
+            or (invocation.app_id if invocation is not None else None)
+            or DEFAULT_APP_ID
+        )
+        if task is not None and app_id != task.app_id:
+            raise ValueError(f"Prompt compile artifact appId {app_id} does not match task {task_id} appId {task.app_id}.")
+        if run is not None and app_id != run.app_id:
+            raise ValueError(f"Prompt compile artifact appId {app_id} does not match agent run {agent_run_id} appId {run.app_id}.")
+        if invocation is not None and app_id != invocation.app_id:
+            raise ValueError(
+                f"Prompt compile artifact appId {app_id} does not match model invocation {model_invocation_id} appId {invocation.app_id}."
+            )
+        record = PromptCompileArtifactRecord(
+            id=str(payload.get("id") or new_id("promptcmp", payload.get("modelInvocationId") or payload.get("agentRunId") or utc_now().isoformat())),
+            appId=app_id,
+            projectId=project_id,
+            taskId=task_id,
+            agentRunId=agent_run_id,
+            modelInvocationId=model_invocation_id,
+            promptProfileVersionId=str(payload.get("promptProfileVersionId")),
+            seedTemplateVersionId=str(payload.get("seedTemplateVersionId")) if payload.get("seedTemplateVersionId") is not None else None,
+            runType=str(payload.get("runType") or "main"),
+            taskType=str(payload.get("taskType") or "generic"),
+            scenario=str(payload.get("scenario")) if payload.get("scenario") is not None else None,
+            registeredTools=list(payload.get("registeredTools") or []),
+            systemSections=dict(payload.get("systemSections") or {}),
+            userSections=dict(payload.get("userSections") or {}),
+            compiledMessagesRef=_external_ref(payload.get("compiledMessagesRef")),
+            contentHash=str(payload.get("contentHash")),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = PromptCompileArtifactORM(
+            id=record.id,
+            app_id=record.app_id,
+            project_id=record.project_id,
+            task_id=record.task_id,
+            agent_run_id=record.agent_run_id,
+            model_invocation_id=record.model_invocation_id,
+            prompt_profile_version_id=record.prompt_profile_version_id,
+            seed_template_version_id=record.seed_template_version_id,
+            run_type=record.run_type,
+            task_type=record.task_type,
+            scenario=record.scenario,
+            registered_tools=list(record.registered_tools),
+            system_sections=dict(record.system_sections),
+            user_sections=dict(record.user_sections),
+            compiled_messages_ref=record.compiled_messages_ref.model_dump(mode="json"),
+            content_hash=record.content_hash,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _prompt_compile_artifact_record(model)
+
+    def get_prompt_compile_artifact(self, artifact_id: str) -> PromptCompileArtifactRecord | None:
+        model = self.session.get(PromptCompileArtifactORM, artifact_id)
+        return _prompt_compile_artifact_record(model) if model is not None else None
 
     def update_run(self, run_id: str, payload: dict[str, Any]) -> EvaluationRunRecord:
         model = self.session.get(EvaluationRunORM, run_id)

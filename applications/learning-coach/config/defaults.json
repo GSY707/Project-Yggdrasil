@@ -1,0 +1,19 @@
+{
+  "defaultTaskType": "learning",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-learning-coach"
+  ],
+  "learningLoop": {
+    "trackMastery": true,
+    "proactiveCheckins": true,
+    "preferShortAssessmentCycles": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给对当前学习状态的判断，再给讲解或练习，再给下一步复习与检查点。"
+  }
+}

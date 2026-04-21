@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Existing Project Studio",
+    "title": "中途介入开发应用",
+    "summary": "面向接手既有工程的具体应用，强调现状分析、约束识别、最小变更和回归安全。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.coding-inherit"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.coding-inherit"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

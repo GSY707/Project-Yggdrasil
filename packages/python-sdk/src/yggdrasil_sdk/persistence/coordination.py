@@ -17,6 +17,13 @@ _MEMORY_QUEUES: dict[str, deque[str]] = defaultdict(deque)
 _MEMORY_LOCKS: dict[str, tuple[str, float]] = {}
 
 
+def reset_memory_coordination() -> None:
+    with _MEMORY_MUTEX:
+        _MEMORY_CACHE.clear()
+        _MEMORY_QUEUES.clear()
+        _MEMORY_LOCKS.clear()
+
+
 class RedisCoordinator:
     def __init__(self, settings: PersistenceSettings | None = None) -> None:
         self.settings = settings or PersistenceSettings.load()

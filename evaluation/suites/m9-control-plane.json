@@ -1,0 +1,29 @@
+{
+  "id": "evalsuite_regression_m9_control_plane",
+  "name": "M9 Control Plane Regression",
+  "domain": "coding",
+  "metricRefs": [
+    "passRate",
+    "failedCaseCount",
+    "totalDurationMs"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "m9-control-plane",
+  "createdAt": "2026-04-21T00:00:00Z",
+  "cases": [
+    {
+      "id": "evalcase_m9_resource_surface",
+      "title": "Asset and training resource surfaces stay readable and actionable",
+      "scenario": "m9.control_plane_resource_surface",
+      "tags": ["m9", "control-plane", "assets", "training"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_m9_prompt_control_plane",
+      "title": "Prompt control plane exposes profiles, tools, artifacts, and compile preview",
+      "scenario": "m9.prompt_control_plane",
+      "tags": ["m9", "control-plane", "promptops"],
+      "difficulty": "medium"
+    }
+  ]
+}

@@ -24,4 +24,6 @@ LLM.txt
 
 # Local runtime state
 .yggdrasil/state/
+.yggdrasil/evaluation-sandbox/
 .yggdrasil/local-dev.db
+.tmp*

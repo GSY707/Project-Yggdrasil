@@ -1,0 +1,42 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: subagent-runtime
+  displayName: Sub-Agent Runtime Prompt
+  version: 0.1.0
+  category: runtime
+  owner: core
+  description: Provides the default generic Sub-Agent prompt profile as a runtime capability module.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_sdk.prompt_modules.subagent_runtime:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules: []
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - prompt.profiles.register
+    publishes: []
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties: {}
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested: []
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

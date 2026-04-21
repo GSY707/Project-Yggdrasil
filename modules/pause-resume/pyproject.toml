@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-pause-resume"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[project.entry-points."yggdrasil.modules"]
+pause-resume = "yggdrasil_pause_resume.plugin:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_pause_resume"]

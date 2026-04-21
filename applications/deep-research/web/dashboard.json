@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Deep Research Lab",
+    "title": "深度研究应用",
+    "summary": "面向高不确定性研究任务的具体应用，强调来源跟踪、证据组织、主动转向和长期知识沉淀。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.deep-research"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.deep-research"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

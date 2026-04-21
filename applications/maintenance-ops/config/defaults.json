@@ -1,0 +1,19 @@
+{
+  "defaultTaskType": "maintenance",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-pr",
+    "subagent-runtime",
+    "scene-maintenance-default"
+  ],
+  "maintenancePolicy": {
+    "preferRootCause": true,
+    "requireRegressionCheck": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给根因判断，再给最小修复方案、验证结果和残余风险。"
+  }
+}

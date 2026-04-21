@@ -1,0 +1,45 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.software-factory
+  displayName: Software Factory
+  version: 0.1.0
+  owner: core
+  description: A concrete software-delivery application assembled from coding and maintenance scene modules.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-coding-new-project
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-coding-inherit-project
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-maintenance-default
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+      - id: subagent-pr
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.software-factory.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.software-factory.seed.generic.default
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles:
+      - scenes/generic-default.yaml
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-coding-new-project
+      - scene-coding-inherit-project
+      - scene-maintenance-default
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.software-factory
+    dashboardRef: web/dashboard.json

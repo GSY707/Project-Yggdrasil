@@ -17,6 +17,7 @@
 
 ## 文档列表
 
+- [yggdrasil.app.yaml 协议 v0.1](yggdrasil-application-manifest-v0.1.md)
 - [yggdrasil.module.yaml 协议 v0.1](yggdrasil-module-manifest-v0.1.md)
 - [模块生命周期协议 v0.1](module-lifecycle-v0.1.md)
 - [Hook 点协议 v0.1](hook-contracts-v0.1.md)

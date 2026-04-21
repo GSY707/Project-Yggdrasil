@@ -16,10 +16,10 @@ from .observability_exporters import finish_langfuse_generation
 from .observability_exporters import flush_observability_exporters
 from .observability_exporters import start_langfuse_generation
 from .observability import observe_span, record_log, record_metric
-from .persistence import EvaluationRepository, RuntimeRepository, ensure_workspace_bootstrap, get_persistence_runtime, initialize_schema, reset_persistence_runtime
+from .persistence import EvaluationRepository, PromptAssetRepository, RuntimeRepository, ensure_workspace_bootstrap, get_persistence_runtime, initialize_schema, reset_persistence_runtime
 from .persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID
-from .persistence.repositories import NodeRepository, TaskRepository, WorkspaceBootstrapRepository
-from .support import new_id, normalize_excerpt, read_json, resolve_workspace_root, resolve_state_dir, utc_now, write_json
+from .persistence.repositories import CollaborationRepository, NodeRepository, TaskRepository, TrainingRepository, WorkspaceBootstrapRepository
+from .support import ensure_state_subdir, new_id, normalize_excerpt, read_json, relative_workspace_path, resolve_workspace_root, resolve_state_dir, utc_now, write_json
 
 
 def _evaluation_root(workspace_root: Path | None = None) -> Path:
@@ -28,6 +28,25 @@ def _evaluation_root(workspace_root: Path | None = None) -> Path:
 
 def _suites_dir(workspace_root: Path | None = None) -> Path:
     return _evaluation_root(workspace_root) / "suites"
+
+
+def _resolve_external_ref_path(ref: ExternalRef | dict[str, Any] | None, workspace_root: Path | None = None) -> Path | None:
+    if ref is None:
+        return None
+    locator = str(ref.locator if isinstance(ref, ExternalRef) else ref.get("locator") or "").strip()
+    if not locator:
+        return None
+    candidate = Path(locator)
+    if candidate.is_absolute():
+        return candidate
+    return resolve_workspace_root(workspace_root) / locator
+
+
+def _read_external_ref_json(ref: ExternalRef | dict[str, Any] | None, workspace_root: Path | None = None) -> Any:
+    path = _resolve_external_ref_path(ref, workspace_root)
+    if path is None:
+        return None
+    return read_json(path, None)
 
 
 def _read_text_fixture(name: str, workspace_root: Path | None = None) -> str:
@@ -382,6 +401,57 @@ def isolated_runtime_environment() -> Iterator[None]:
             reset_persistence_runtime()
 
 
+@contextmanager
+def local_evaluation_runtime_environment(workspace_root: Path | None = None) -> Iterator[None]:
+    managed_keys = [
+        "YGGDRASIL_DATABASE_URL",
+        "YGGDRASIL_AUTO_CREATE_SCHEMA",
+        "YGGDRASIL_REDIS_URL",
+        "YGGDRASIL_STATE_ROOT",
+        "YGGDRASIL_STATE_DIR",
+    ]
+    previous = {key: os.environ.get(key) for key in managed_keys}
+    sandbox_root = resolve_workspace_root(workspace_root) / ".yggdrasil" / "evaluation-sandbox"
+    sandbox_root.mkdir(parents=True, exist_ok=True)
+    os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
+    os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
+    os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
+    os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
+    os.environ.pop("YGGDRASIL_STATE_DIR", None)
+    reset_persistence_runtime()
+    initialize_schema()
+    ensure_workspace_bootstrap()
+    try:
+        yield
+    finally:
+        reset_persistence_runtime()
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        reset_persistence_runtime()
+
+
+def _prepare_suite_run(definition: dict[str, Any], suite_id: str, workspace_root: Path | None = None) -> tuple[Any, Any]:
+    ensure_evaluation_suites(workspace_root)
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        repository = EvaluationRepository(session)
+        run = repository.create_run(
+            {
+                "suiteId": suite_id,
+                "projectId": DEFAULT_PROJECT_ID,
+                "subjectKind": definition.get("subjectKind") or "workflow",
+                "subjectRef": definition.get("subjectRef") or suite_id,
+                "status": "running",
+                "startedAt": utc_now(),
+            }
+        )
+    return runtime, run
+
+
 def _run_git(repo_path: Path, *args: str) -> str:
     completed = subprocess.run(["git", "-C", str(repo_path), *args], capture_output=True, text=True, check=False)
     if completed.returncode != 0:
@@ -411,6 +481,48 @@ def _seed_runtime_task(task_id: str) -> dict[str, Any]:
             }
         )
     return task.model_dump(by_alias=True, mode="json")
+
+
+def _seed_tool_case_memory(task_id: str) -> list[dict[str, Any]]:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        node_repository = NodeRepository(session)
+        task = task_repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        created: list[dict[str, Any]] = []
+        for title, content in [
+            (
+                "Prompt artifact rollout",
+                "Each model invocation now persists prompt profile version, seed template version, compiled messages ref, and promptMetadata-linked prompt compile artifacts.",
+            ),
+            (
+                "Tool execution trace rollout",
+                "Live runtime responses now persist toolExecutions, round traces, and request/response payloads so tool use can be audited after the run.",
+            ),
+            (
+                "Safe-stop retention note",
+                "For the next run, keep the current objective, the latest model invocation summary, and the pruning narrative while dropping low-value noise.",
+            ),
+        ]:
+            node = node_repository.create_node(
+                {
+                    "projectId": task.project_id,
+                    "spaceId": task.space_id,
+                    "branchId": task.branch_id,
+                    "parentId": task.execution_root_node_id,
+                    "rootBranch": "execution",
+                    "nodeType": "task",
+                    "title": title,
+                    "content": content,
+                    "createdBy": {"type": "agent", "id": "evaluation"},
+                    "updatedBy": {"type": "agent", "id": "evaluation"},
+                }
+            )
+            created.append(node.model_dump(by_alias=True, mode="json"))
+        return created
 
 
 def _seed_parent_task() -> dict[str, Any]:
@@ -449,6 +561,158 @@ def _seed_parent_task() -> dict[str, Any]:
             }
         )
     return task.model_dump(by_alias=True, mode="json")
+
+
+def _branch_context_parent_id(node_repository: NodeRepository, branch_id: str = DEFAULT_BRANCH_ID) -> str:
+    _, context_refs, _ = node_repository.root_mount_refs(DEFAULT_PROJECT_ID, branch_id)
+    return context_refs[0].id
+
+
+def _create_context_node(
+    node_repository: NodeRepository,
+    *,
+    branch_id: str,
+    space_id: str,
+    title: str,
+    content: str,
+) -> dict[str, Any]:
+    node = node_repository.create_node(
+        {
+            "projectId": DEFAULT_PROJECT_ID,
+            "spaceId": space_id,
+            "branchId": branch_id,
+            "parentId": _branch_context_parent_id(node_repository, branch_id),
+            "rootBranch": "context",
+            "nodeType": "detail",
+            "title": title,
+            "content": content,
+            "createdBy": {"type": "agent", "id": "evaluation"},
+            "updatedBy": {"type": "agent", "id": "evaluation"},
+        }
+    )
+    return node.model_dump(by_alias=True, mode="json")
+
+
+def _seed_shared_space_mount(subject: str = "profile:identity_profile_default") -> dict[str, Any]:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        collaboration_repository = CollaborationRepository(session)
+        node_repository = NodeRepository(session)
+        shared_space = collaboration_repository.create_space(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceType": "shared",
+                "ownerSubject": subject,
+            }
+        )
+        shared_branch = collaboration_repository.create_branch(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceId": shared_space.id,
+                "name": "shared-m9-evidence",
+            }
+        )
+        collaboration_repository.create_space_mount(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "hostSpaceId": "space_default",
+                "mountedSpaceId": shared_space.id,
+                "mountMode": "bidirectional",
+            }
+        )
+        for relation in ("mount", "read", "write"):
+            collaboration_repository.create_permission_tuple(
+                {
+                    "projectId": DEFAULT_PROJECT_ID,
+                    "subject": subject,
+                    "relation": relation,
+                    "resource": f"space:{shared_space.id}",
+                }
+            )
+        anchor_node = _create_context_node(
+            node_repository,
+            branch_id=shared_branch.id,
+            space_id=shared_space.id,
+            title="Shared Recovery Anchor",
+            content="共享空间中的恢复锚点要求主任务在挂载后读取多模态证据，并在恢复链中保留 safe-stop 关键信息。",
+        )
+    return {
+        "subject": subject,
+        "spaceId": shared_space.id,
+        "branchId": shared_branch.id,
+        "anchorNodeId": anchor_node["id"],
+    }
+
+
+def _seed_training_prompt_assets(case_name: str) -> dict[str, Any]:
+    workspace_root = resolve_workspace_root()
+    state_dir = ensure_state_subdir("evaluations/m9-training", workspace_root)
+    compiled_messages_path = state_dir / f"{case_name}-compiled.json"
+    request_path = state_dir / f"{case_name}-request.json"
+    response_path = state_dir / f"{case_name}-response.json"
+    write_json(
+        compiled_messages_path,
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "请把共享空间里的恢复证据沉淀成可用于蒸馏验证的数据样本。",
+                }
+            ]
+        },
+    )
+    write_json(request_path, {"input": "shared memory recovery dataset"})
+    write_json(response_path, {"rawResponse": {"text": "dataset version should preserve shared multimodal recovery evidence"}})
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        prompt_repository = PromptAssetRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        artifact = prompt_repository.create_prompt_compile_artifact(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "promptProfileVersionId": f"prompt_profile_{case_name}",
+                "runType": "main",
+                "taskType": "analysis",
+                "registeredTools": [
+                    {"name": "shared_memory.describe_mounts"},
+                    {"name": "training_lab.prepare_dataset"},
+                ],
+                "compiledMessagesRef": {
+                    "type": "file",
+                    "locator": relative_workspace_path(compiled_messages_path, workspace_root),
+                },
+                "contentHash": f"hash_{case_name}",
+            }
+        )
+        invocation = runtime_repository.create_model_invocation(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "requestedModel": "gpt-5.4",
+                "requestedProvider": "copilot",
+                "resolvedModel": "gpt-5.4",
+                "resolvedProvider": "copilot",
+                "status": "completed",
+                "promptCompileArtifactId": artifact.id,
+                "requestRef": {
+                    "type": "file",
+                    "locator": relative_workspace_path(request_path, workspace_root),
+                },
+                "responseRef": {
+                    "type": "file",
+                    "locator": relative_workspace_path(response_path, workspace_root),
+                },
+                "inputTokensUsed": 48,
+                "outputTokensUsed": 96,
+                "costUsed": 0.03,
+            }
+        )
+    return {
+        "promptCompileArtifactId": artifact.id,
+        "modelInvocationId": invocation.id,
+    }
 
 
 def _run_memory_import_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -687,9 +951,13 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         repository = TaskRepository(session)
+        prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
         persisted_task = repository.get_task(task["id"])
         invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=5)
+        prompt_artifact = None
+        if invocations and invocations[0].prompt_compile_artifact_id:
+            prompt_artifact = prompt_repository.get_prompt_compile_artifact(invocations[0].prompt_compile_artifact_id)
 
     if not invocations:
         raise RuntimeError("live evaluation did not persist any model invocation")
@@ -702,8 +970,8 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
             f"live provider mismatch: expected {expected_provider}, got {invocation.resolved_provider or 'unknown'}"
         )
 
-    request_payload = read_json(Path(invocation.request_ref.locator), None) if invocation.request_ref else None
-    response_payload = read_json(Path(invocation.response_ref.locator), None) if invocation.response_ref else None
+    request_payload = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
+    response_payload = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
     live_summary = {
         "taskId": task["id"],
         "taskStatus": persisted_task.status if persisted_task is not None else result_payload.get("status"),
@@ -715,6 +983,133 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "latencyMs": invocation.latency_ms,
         "totalTokens": int((invocation.input_tokens_used or 0) + (invocation.output_tokens_used or 0)),
         "costUsed": float(invocation.cost_used or 0.0),
+        "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
+    }
+    if invocation.prompt_compile_artifact_id and prompt_artifact is None:
+        raise RuntimeError(f"prompt compile artifact missing for invocation {invocation.id}")
+    return {
+        **live_summary,
+        "liveScenario": live_summary,
+        "assistantPreview": normalize_excerpt(str(result_payload.get("assistantText") or ""), 240),
+        "requestPayload": request_payload,
+        "responsePayload": response_payload,
+    }
+
+
+def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+    from yggdrasil_agent_runtime.app import app as runtime_app
+    from yggdrasil_worker.registry import run_worker_once
+    from .llm_runtime import load_runtime_candidate_models
+
+    case_payload = dict(case or {})
+    task_id = str(case_payload.get("taskId") or new_id("task", "m8-live-tool-evaluation", stable=False))
+    requested_provider = str(case_payload.get("requestedProvider") or "longcat")
+    requested_model = str(case_payload.get("requestedModel") or "LongCat-Flash-Lite")
+    candidate_models = [
+        dict(candidate)
+        for candidate in load_runtime_candidate_models() or []
+        if str(candidate.get("provider") or "") == requested_provider and str(candidate.get("model") or "") == requested_model
+    ]
+    require_live = bool(case_payload.get("requireLive", False))
+    if require_live and not candidate_models:
+        raise RuntimeError(f"requested live candidate is unavailable: {requested_provider}/{requested_model}")
+
+    task = _seed_runtime_task(task_id)
+    _seed_tool_case_memory(task_id)
+    client = TestClient(runtime_app)
+    start_payload = {
+        "currentFocus": str(case_payload.get("currentFocus") or "M8 live tool validation"),
+        "currentObjective": str(
+            case_payload.get("currentObjective")
+            or "Recover the archived runtime changes from durable branch memory and prepare a safe-stop retain plan for the next run under a 160 token budget."
+        ),
+        "currentContext": case_payload.get("currentContext")
+        or [
+            {
+                "id": "ctx_handoff_goal",
+                "title": "handoff target",
+                "content": "The final note must name the archived runtime changes and include a concrete retain plan for the next run.",
+                "importance": 0.98,
+            },
+            {
+                "id": "ctx_handoff_budget",
+                "title": "handoff budget",
+                "content": "The safe-stop package should fit within roughly 160 retained tokens and prioritize objective, invocation summary, and pruning narrative.",
+                "importance": 0.87,
+            },
+            {
+                "id": "ctx_noise",
+                "title": "noise",
+                "content": "Older brainstorming fragments can be dropped if they do not help the next run resume safely.",
+                "importance": 0.12,
+            },
+        ],
+        "protectedItems": case_payload.get("protectedItems") or [{"kind": "node", "id": "ctx_handoff_goal"}],
+        "allowModelFallback": bool(case_payload.get("allowFallback", True)),
+        "temperature": float(case_payload.get("temperature") or 0.1),
+        "maxTokens": int(case_payload.get("maxTokens") or 420),
+    }
+    if candidate_models:
+        start_payload["candidateModels"] = candidate_models
+    started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
+    if started.status_code != 202:
+        raise RuntimeError(f"live tool evaluation start failed: {started.text}")
+
+    processed = run_worker_once("agent-runtime")
+    result_payload = dict(processed.get("result") or {})
+    if result_payload.get("status") != "completed":
+        raise RuntimeError(f"live tool evaluation worker failed: {json.dumps(processed, ensure_ascii=False)}")
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        repository = TaskRepository(session)
+        prompt_repository = PromptAssetRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        persisted_task = repository.get_task(task["id"])
+        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=5)
+        prompt_artifact = None
+        if invocations and invocations[0].prompt_compile_artifact_id:
+            prompt_artifact = prompt_repository.get_prompt_compile_artifact(invocations[0].prompt_compile_artifact_id)
+
+    if not invocations:
+        raise RuntimeError("live tool evaluation did not persist any model invocation")
+    invocation = invocations[0]
+    if require_live and invocation.status != "completed":
+        raise RuntimeError(f"live tool provider invocation did not complete: {invocation.status}")
+    if require_live and invocation.resolved_provider not in {requested_provider, str(case_payload.get('providerAlias') or '')}:
+        raise RuntimeError(
+            f"live tool provider mismatch: expected {requested_provider}, got {invocation.resolved_provider or 'unknown'}"
+        )
+
+    request_payload = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
+    response_payload = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
+    tool_executions = response_payload.get("toolExecutions") if isinstance(response_payload, dict) else []
+    tool_names = [
+        str((execution.get("tool") or {}).get("name"))
+        for execution in tool_executions
+        if isinstance(execution, dict) and (execution.get("tool") or {}).get("name")
+    ]
+    required_tools = [str(name) for name in case_payload.get("requiredTools") or ["text_memory.retrieve", "context_pruning.plan"]]
+    missing_tools = [name for name in required_tools if name not in tool_names]
+    if missing_tools:
+        raise RuntimeError(f"live tool evaluation did not execute required tools: {', '.join(missing_tools)}")
+    if invocation.prompt_compile_artifact_id and prompt_artifact is None:
+        raise RuntimeError(f"prompt compile artifact missing for invocation {invocation.id}")
+
+    live_summary = {
+        "taskId": task["id"],
+        "taskStatus": persisted_task.status if persisted_task is not None else result_payload.get("status"),
+        "invocationId": invocation.id,
+        "invocationStatus": invocation.status,
+        "provider": invocation.resolved_provider,
+        "model": invocation.resolved_model,
+        "traceId": invocation.trace_id,
+        "latencyMs": invocation.latency_ms,
+        "totalTokens": int((invocation.input_tokens_used or 0) + (invocation.output_tokens_used or 0)),
+        "costUsed": float(invocation.cost_used or 0.0),
+        "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
+        "toolExecutionNames": tool_names,
     }
     return {
         **live_summary,
@@ -776,133 +1171,660 @@ def _run_subagent_pr_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
         }
 
 
+def _run_m9_shared_multimodal_reasoning_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from yggdrasil_memory_organizer.plugin import MemoryOrganizerModule
+    from yggdrasil_multimodal_memory.plugin import MultimodalMemoryModule
+    from yggdrasil_relation_discovery.plugin import RelationDiscoveryModule
+    from yggdrasil_shared_memory.plugin import describe_mounts_tool, plugin as shared_memory_plugin
+    from yggdrasil_training_lab.plugin import TrainingLabModule
+
+    case_payload = dict(case or {})
+    question = str(
+        case_payload.get("query")
+        or "为什么主任务必须挂载共享空间中的多模态恢复证据，并把这些证据通过关联发现沉淀为 dataset version 与 model artifact，而不是只保留一条摘要？"
+    )
+    expected_keywords = [str(keyword) for keyword in case_payload.get("expectedKeywords") or []]
+    transcript = _read_text_fixture(str(case_payload.get("fixture") or "m9_multimodal_shared_evidence.txt"))
+    shared_setup = _seed_shared_space_mount()
+    _seed_training_prompt_assets("m9-shared-multimodal")
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        shared_related_node = _create_context_node(
+            node_repository,
+            branch_id=shared_setup["branchId"],
+            space_id=shared_setup["spaceId"],
+            title="Distillation Readiness Note",
+            content="关联发现表明恢复步骤、共享空间证据、多模态摘要与 dataset version / model artifact 之间必须保留图谱连接。",
+        )
+        low_value_node = _create_context_node(
+            node_repository,
+            branch_id=DEFAULT_BRANCH_ID,
+            space_id="space_default",
+            title="Temporary Scratchpad",
+            content="临时草稿，后续应由软遗忘治理压缩。",
+        )
+        node_repository.append_version(
+            low_value_node["id"],
+            {
+                "importance": 0.05,
+                "stability": 0.1,
+                "accessScore": 0.0,
+                "feedforwardScore": 0.0,
+                "changeReason": "m9-acceptance-low-value",
+                "updatedBy": {"type": "agent", "id": "evaluation"},
+            },
+        )
+
+    ingest_result = MultimodalMemoryModule().ingest_asset(
+        {
+            "mediaType": "audio",
+            "sourceText": transcript,
+            "spaceId": shared_setup["spaceId"],
+            "branchId": shared_setup["branchId"],
+            "ownerNodeId": shared_setup["anchorNodeId"],
+            "executionContext": {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceId": shared_setup["spaceId"],
+                "branchId": shared_setup["branchId"],
+                "actor": {"type": "module", "id": "evaluation"},
+            },
+        }
+    )
+    describe_result = describe_mounts_tool(
+        {
+            "executionContext": {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceId": "space_default",
+                "branchId": DEFAULT_BRANCH_ID,
+                "ownerProfileId": "identity_profile_default",
+                "subject": shared_setup["subject"],
+            }
+        }
+    )
+    expanded = shared_memory_plugin.expand_retrieval(
+        {
+            "executionContext": {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceId": "space_default",
+                "branchId": DEFAULT_BRANCH_ID,
+                "ownerProfileId": "identity_profile_default",
+                "subject": shared_setup["subject"],
+                "rootMount": {"spaceId": "space_default"},
+            }
+        }
+    )
+    scan_result = RelationDiscoveryModule().scan_branch_relations({"branchId": shared_setup["branchId"]})
+    organizer_preview = MemoryOrganizerModule().apply_soft_forgetting(
+        {
+            "branchId": DEFAULT_BRANCH_ID,
+            "targetCount": 1,
+            "dryRun": True,
+        }
+    )
+    organizer_result = MemoryOrganizerModule().apply_soft_forgetting(
+        {
+            "branchId": DEFAULT_BRANCH_ID,
+            "targetCount": 1,
+            "dryRun": False,
+        }
+    )
+    training_lab = TrainingLabModule()
+    dataset_result = training_lab.prepare_dataset(
+        {
+            "datasetName": "m9_acceptance_shared_reasoning",
+            "branchId": shared_setup["branchId"],
+            "maxRows": 12,
+            "includeMemoryNodes": True,
+        }
+    )
+    model_result = training_lab.stage_model_artifact(
+        {
+            "datasetVersionId": dataset_result["datasetVersion"]["id"],
+            "baseModel": "gpt-5.4",
+            "tuningMethod": "distillation",
+            "minimumRows": 1,
+        }
+    )
+
+    context_blocks = [
+        (
+            "共享空间挂载证据: 主任务已挂载共享空间，并通过 mounted branch 读取恢复材料；"
+            f"accessible mounts={len(describe_result.get('accessibleMounts') or [])}。"
+        ),
+        (
+            "多模态证据: "
+            + str(ingest_result["summaryNode"].get("content") or "")
+        ),
+        (
+            "关联与实验证据: "
+            + str(scan_result.get("summary") or "")
+            + f" dataset version={dataset_result['datasetVersion']['version']}"
+            + f" model artifact={model_result['modelArtifact']['status']}"
+        ),
+        (
+            "软遗忘治理: "
+            + str(organizer_result.get("summary") or "")
+        ),
+    ]
+    answer = _generate_strategy_answer(case_payload, question, "m9-shared-multimodal", context_blocks)
+    answer_text = str(answer.get("outputText") or "")
+    answer_coverage = _coverage_ratio(answer_text, expected_keywords)
+    context_coverage = _coverage_ratio("\n\n".join(context_blocks), expected_keywords)
+    combined_score = round(context_coverage * 0.7 + answer_coverage * 0.3, 4)
+
+    if not describe_result.get("accessibleMounts"):
+        raise RuntimeError("shared mount description did not expose any accessible mounts")
+    if not expanded.get("nodes"):
+        raise RuntimeError("mounted retrieval expansion did not return any nodes")
+    if ingest_result.get("segmentCount", 0) < 1:
+        raise RuntimeError("multimodal ingestion did not create any segments")
+    if not scan_result.get("createdEdges"):
+        raise RuntimeError("relation discovery did not materialize any latent edges")
+    if organizer_preview.get("candidates", [{}])[0].get("nodeId") != low_value_node["id"]:
+        raise RuntimeError("memory organizer did not target the expected low-value node")
+    if dataset_result["datasetVersion"].get("rowCount", 0) < 1:
+        raise RuntimeError("training lab did not create a dataset row")
+    if model_result["modelArtifact"].get("status") != "validated":
+        raise RuntimeError("training lab did not validate the staged model artifact")
+    if combined_score < 0.75:
+        raise RuntimeError(f"m9 shared reasoning answer coverage is too low: {combined_score}")
+
+    return {
+        "question": question,
+        "expectedKeywords": expected_keywords,
+        "answerPreview": normalize_excerpt(answer_text, 240),
+        "answerCoverage": answer_coverage,
+        "contextCoverage": context_coverage,
+        "combinedScore": combined_score,
+        "mountedSpaceCount": len(describe_result.get("accessibleMounts") or []),
+        "expandedNodeCount": len(expanded.get("nodes") or []),
+        "segmentCount": int(ingest_result.get("segmentCount") or 0),
+        "createdEdgeCount": len(scan_result.get("createdEdges") or []),
+        "datasetVersionId": dataset_result["datasetVersion"]["id"],
+        "datasetRowCount": dataset_result["datasetVersion"]["rowCount"],
+        "modelArtifactId": model_result["modelArtifact"]["id"],
+        "modelArtifactStatus": model_result["modelArtifact"]["status"],
+        "softForgotNodeId": organizer_result["adjustedNodes"][0]["nodeId"],
+        "usedFeatures": [
+            "shared-memory.describe-mounts",
+            "shared-memory.expand-retrieval",
+            "multimodal-memory.ingest-asset",
+            "relation-discovery.scan-branch",
+            "memory-organizer.soft-forgetting",
+            "training-lab.prepare-dataset",
+            "training-lab.stage-model-artifact",
+        ],
+        "liveScenario": {
+            "question": question,
+            "combinedScore": combined_score,
+            "usedFeatures": 7,
+        },
+        "relatedNodeId": shared_related_node["id"],
+    }
+
+
+def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+    from yggdrasil_agent_runtime.app import app as runtime_app
+    from yggdrasil_worker.registry import run_worker_once
+
+    case_payload = dict(case or {})
+    question = str(
+        case_payload.get("query")
+        or "在挂载共享记忆树后，任务必须在 safe-stop 中保留哪些上下文，恢复后又如何继续完成最终写入？"
+    )
+    expected_keywords = [str(keyword) for keyword in case_payload.get("expectedKeywords") or []]
+    shared_setup = _seed_shared_space_mount()
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        task_repository = TaskRepository(session)
+        _create_context_node(
+            node_repository,
+            branch_id=shared_setup["branchId"],
+            space_id=shared_setup["spaceId"],
+            title="Mounted Recovery Branch",
+            content="挂载记忆树中的恢复分支要求 safe-stop 保留 snapshot、protectedItems 与 resume token。",
+        )
+        task = task_repository.create_task(
+            {
+                "id": "eval_task_m9_pause_resume",
+                "title": "M9 Pause Resume Acceptance",
+                "goal": "Validate mounted-memory safe-stop and seamless resume.",
+                "status": "draft",
+                "currentObjective": question,
+                "currentFocus": "m9-pause-resume-acceptance",
+                "resumeMessage": "恢复后继续完成跨空间恢复总结。",
+                "budgetState": {
+                    "tokenBudgetTotal": 1400,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    client = TestClient(runtime_app)
+    started = client.post(
+        f"/runtime/tasks/{task.id}/start",
+        json={
+            "currentFocus": "执行挂载记忆树任务的 safe-stop 验收",
+            "currentObjective": question,
+            "currentContext": [
+                {
+                    "id": "ctx_resume_keep",
+                    "title": "Safe Stop Plan",
+                    "content": "safe-stop 必须保留 protectedItems、snapshot token、mounted summary 与恢复后的 followup actions。",
+                    "importance": 0.98,
+                },
+                {
+                    "id": "ctx_resume_noise",
+                    "title": "Noise",
+                    "content": "低价值草稿应在恢复后继续压缩。",
+                    "importance": 0.1,
+                },
+            ],
+            "protectedItems": [{"kind": "node", "id": "ctx_resume_keep"}],
+        },
+    )
+    if started.status_code != 202:
+        raise RuntimeError(f"m9 pause-resume start failed: {started.text}")
+    paused = client.post(
+        f"/runtime/tasks/{task.id}/pause-request",
+        json={
+            "reason": "m9-acceptance-safe-stop",
+            "resumeMessage": "恢复后继续完成挂载记忆树总结。",
+        },
+    )
+    if paused.status_code != 202:
+        raise RuntimeError(f"m9 pause request failed: {paused.text}")
+    first = run_worker_once("agent-runtime")
+    if first.get("result", {}).get("status") != "paused":
+        raise RuntimeError(f"m9 pause step failed: {json.dumps(first, ensure_ascii=False)}")
+    snapshot = first["result"]["snapshot"]
+    root_mount_preview = snapshot.get("rootMountPreview") or {}
+    if not root_mount_preview.get("accessibleMounts"):
+        raise RuntimeError("m9 pause snapshot did not include any mounted shared space")
+
+    resumed = client.post(
+        f"/runtime/tasks/{task.id}/resume",
+        json={
+            "resumeToken": snapshot["resumeToken"],
+            "nextObjective": "恢复后完成跨空间恢复说明并写入最终执行记录。",
+        },
+    )
+    if resumed.status_code != 202:
+        raise RuntimeError(f"m9 resume request failed: {resumed.text}")
+    second = run_worker_once("agent-runtime")
+    if second.get("result", {}).get("status") != "completed":
+        raise RuntimeError(f"m9 resume completion failed: {json.dumps(second, ensure_ascii=False)}")
+
+    rehydration = second["result"].get("rehydration") or {}
+    restored_state = rehydration.get("restoredState") or {}
+    context_blocks = [
+        (
+            "记忆树 safe-stop: "
+            f"snapshot={snapshot['id']} safe-stop={snapshot['safeToPause']} protectedItems preserved before pause."
+        ),
+        (
+            "挂载恢复上下文: "
+            f"mountedSpaces={len(root_mount_preview.get('accessibleMounts') or [])} mountedRefs={len(root_mount_preview.get('mountedNodeRefs') or [])}."
+        ),
+        (
+            "无感恢复: "
+            + "; ".join(str(summary) for summary in rehydration.get("summaries") or [])
+            + f" restoredContext={len(restored_state.get('currentContext') or [])} resume actions={len(rehydration.get('followupActions') or [])}"
+        ),
+    ]
+    answer = _generate_strategy_answer(case_payload, question, "m9-pause-resume", context_blocks)
+    answer_text = str(answer.get("outputText") or "")
+    answer_coverage = _coverage_ratio(answer_text, expected_keywords)
+    context_coverage = _coverage_ratio("\n\n".join(context_blocks), expected_keywords)
+    combined_score = round(context_coverage * 0.7 + answer_coverage * 0.3, 4)
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        node_repository = NodeRepository(session)
+        persisted_task = task_repository.get_task(task.id)
+        execution_notes = [
+            node
+            for node in node_repository.list_nodes(branch_id=persisted_task.branch_id, limit=200)
+            if node.node_type == "task" and node.parent_id == persisted_task.execution_root_node_id
+        ]
+        snapshots = task_repository.list_snapshots(task.id)
+    if combined_score < 0.75:
+        raise RuntimeError(f"m9 pause-resume answer coverage is too low: {combined_score}")
+    if persisted_task is None or persisted_task.status != "completed":
+        raise RuntimeError("m9 pause-resume task did not reach completed status")
+    if len(execution_notes) < 2:
+        raise RuntimeError("m9 pause-resume did not persist both pre-pause and post-resume execution notes")
+    if not snapshots or snapshots[0].status != "consumed":
+        raise RuntimeError("m9 pause-resume snapshot was not consumed on resume")
+
+    return {
+        "question": question,
+        "expectedKeywords": expected_keywords,
+        "answerPreview": normalize_excerpt(answer_text, 240),
+        "answerCoverage": answer_coverage,
+        "contextCoverage": context_coverage,
+        "combinedScore": combined_score,
+        "pauseStatus": first["result"]["status"],
+        "resumeStatus": second["result"]["status"],
+        "snapshotId": snapshot["id"],
+        "mountedSpaceCount": len(root_mount_preview.get("accessibleMounts") or []),
+        "mountedRefCount": len(root_mount_preview.get("mountedNodeRefs") or []),
+        "rehydratedContextCount": len(restored_state.get("currentContext") or []),
+        "rehydratedProtectedItemCount": len(restored_state.get("protectedItems") or []),
+        "followupActionCount": len(rehydration.get("followupActions") or []),
+        "executionNoteCount": len(execution_notes),
+        "usedFeatures": [
+            "shared-memory.mount-root",
+            "pause-resume.prepare",
+            "pause-resume.rehydrate",
+            "runtime-kernel.pause-request",
+            "runtime-kernel.resume",
+        ],
+        "liveScenario": {
+            "question": question,
+            "combinedScore": combined_score,
+            "usedFeatures": 5,
+        },
+    }
+
+
+def _run_m9_control_plane_resource_surface_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+    from yggdrasil_core_api.app import app
+
+    case_payload = dict(case or {})
+    client = TestClient(app)
+    dataset_name = str(case_payload.get("datasetName") or f"m9_control_plane_{utc_now().strftime('%H%M%S')}")
+    ingested = client.post(
+        "/assets/ingest",
+        json={
+            "mediaType": "document",
+            "sourceText": str(
+                case_payload.get("sourceText")
+                or "共享空间恢复记录、多模态素材摘要和训练实验样本必须作为正式资源暴露到控制面，并能被后续评测与运维链路读取。"
+            ),
+            "spaceId": "space_default",
+            "branchId": DEFAULT_BRANCH_ID,
+        },
+    )
+    if ingested.status_code != 201:
+        raise RuntimeError(f"asset ingestion failed: {ingested.text}")
+    asset_payload = ingested.json()
+    asset_id = str(asset_payload["asset"]["id"])
+
+    prepared = client.post(
+        "/training/dataset-versions/prepare",
+        json={
+            "datasetName": dataset_name,
+            "maxRows": int(case_payload.get("maxRows") or 12),
+            "includeMemoryNodes": True,
+        },
+    )
+    if prepared.status_code != 201:
+        raise RuntimeError(f"dataset preparation failed: {prepared.text}")
+    dataset_payload = prepared.json()
+    dataset_id = str(dataset_payload["datasetVersion"]["id"])
+
+    staged = client.post(
+        "/training/model-artifacts/stage",
+        json={
+            "datasetVersionId": dataset_id,
+            "baseModel": str(case_payload.get("baseModel") or "gpt-5.4"),
+            "tuningMethod": str(case_payload.get("tuningMethod") or "distillation"),
+            "minimumRows": 1,
+        },
+    )
+    if staged.status_code != 201:
+        raise RuntimeError(f"model artifact staging failed: {staged.text}")
+    artifact_payload = staged.json()
+    artifact_id = str(artifact_payload["modelArtifact"]["id"])
+
+    assets = client.get("/assets", params={"limit": 50})
+    asset_detail = client.get(f"/assets/{asset_id}")
+    datasets = client.get("/training/dataset-versions", params={"limit": 50})
+    dataset_detail = client.get(f"/training/dataset-versions/{dataset_id}")
+    artifacts = client.get("/training/model-artifacts", params={"limit": 50})
+    artifact_detail = client.get(f"/training/model-artifacts/{artifact_id}")
+    responses = [assets, asset_detail, datasets, dataset_detail, artifacts, artifact_detail]
+    if any(response.status_code != 200 for response in responses):
+        raise RuntimeError("control-plane resource surface returned non-200 responses")
+
+    asset_count = len(assets.json().get("assets") or [])
+    dataset_count = len(datasets.json().get("datasetVersions") or [])
+    artifact_count = len(artifacts.json().get("modelArtifacts") or [])
+    if asset_count < 1 or dataset_count < 1 or artifact_count < 1:
+        raise RuntimeError("control-plane resource lists did not expose the seeded resources")
+    if len(asset_detail.json().get("segments") or []) < 1:
+        raise RuntimeError("asset detail did not expose segments")
+    if len(dataset_detail.json().get("previewRows") or []) < 1:
+        raise RuntimeError("dataset detail did not expose preview rows")
+    if not artifact_detail.json().get("metrics"):
+        raise RuntimeError("model artifact detail did not expose validation metrics")
+
+    return {
+        "assetId": asset_id,
+        "segmentCount": len(asset_detail.json().get("segments") or []),
+        "datasetVersionId": dataset_id,
+        "datasetRowCount": int(dataset_payload["datasetVersion"].get("rowCount") or 0),
+        "modelArtifactId": artifact_id,
+        "modelArtifactStatus": artifact_payload["modelArtifact"].get("status"),
+        "resourceCounts": {
+            "assets": asset_count,
+            "datasets": dataset_count,
+            "artifacts": artifact_count,
+        },
+    }
+
+
+def _run_m9_prompt_control_plane_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+    from yggdrasil_core_api.app import app
+
+    case_payload = dict(case or {})
+    seeded = _seed_training_prompt_assets(str(case_payload.get("seedName") or "m9-prompt-control-plane"))
+    client = TestClient(app)
+    app_id = str(case_payload.get("appId") or "yggdrasil.app.software-factory")
+
+    prompt_profiles = client.get("/prompting/prompt-profiles", params={"appId": app_id})
+    seed_templates = client.get("/prompting/seed-templates", params={"appId": app_id})
+    registered_tools = client.get(
+        "/prompting/registered-tools",
+        params={"activeCapabilities": str(case_payload.get("activeCapabilities") or "text-memory,shared-memory,training-lab")},
+    )
+    compile_artifacts = client.get("/prompting/compile-artifacts", params={"limit": 50})
+    compile_artifact_detail = client.get(f"/prompting/compile-artifacts/{seeded['promptCompileArtifactId']}")
+    preview = client.post(
+        "/prompting/compile-preview",
+        json={
+            "appId": app_id,
+            "runType": "main",
+            "taskType": "coding",
+            "activeCapabilities": ["text-memory", "shared-memory", "training-lab"],
+            "task": {
+                "title": "PromptOps Evaluation",
+                "goal": "Expose the compiled prompt through the control plane.",
+                "currentFocus": "prompt-control-plane",
+                "currentObjective": "Verify prompt profile, seed template, tool registration, and compiled messages.",
+                "resumeMessage": "继续查看 prompt 编译结果。",
+            },
+            "request": {
+                "currentFocus": "prompt-control-plane",
+                "currentObjective": "Verify prompt profile, seed template, tool registration, and compiled messages.",
+                "responseRequirements": "输出必须包含风险与下一步。",
+            },
+        },
+    )
+    responses = [prompt_profiles, seed_templates, registered_tools, compile_artifacts, compile_artifact_detail, preview]
+    if any(response.status_code not in {200, 201} for response in responses):
+        raise RuntimeError("prompt control-plane surface returned non-200 responses")
+
+    profile_list = prompt_profiles.json().get("promptProfiles") or []
+    template_list = seed_templates.json().get("seedTemplates") or []
+    tool_list = registered_tools.json().get("registeredTools") or []
+    artifact_list = compile_artifacts.json().get("promptCompileArtifacts") or []
+    preview_payload = preview.json().get("compiledPrompt") or {}
+    if len(profile_list) < 2:
+        raise RuntimeError("prompt control plane did not expose prompt profiles")
+    if len(template_list) < 3:
+        raise RuntimeError("prompt control plane did not expose seed templates")
+    if not any(str(tool.get("name") or "") == "training_lab.prepare_dataset" for tool in tool_list):
+        raise RuntimeError("prompt control plane did not expose the expected registered tool")
+    if not any(str(artifact.get("id") or "") == seeded["promptCompileArtifactId"] for artifact in artifact_list):
+        raise RuntimeError("prompt control plane did not expose the seeded compile artifact")
+    if len((compile_artifact_detail.json().get("compiledMessages") or {}).get("messages") or []) < 1:
+        raise RuntimeError("compile artifact detail did not expose compiled messages")
+    if preview_payload.get("promptProfileId") != "yggdrasil.software-factory.main-agent":
+        raise RuntimeError("prompt preview did not select the software-factory main prompt profile")
+    if preview_payload.get("seedTemplateId") != "yggdrasil.seed.coding.inherit-project":
+        raise RuntimeError("prompt preview did not select the expected coding seed template")
+
+    return {
+        "appId": app_id,
+        "promptProfileCount": len(profile_list),
+        "seedTemplateCount": len(template_list),
+        "registeredToolCount": len(tool_list),
+        "promptCompileArtifactId": seeded["promptCompileArtifactId"],
+        "previewScenario": preview_payload.get("scenario"),
+        "previewMessageCount": len(preview_payload.get("messages") or []),
+    }
+
+
 SCENARIO_HANDLERS = {
     "m4.memory_import_retrieval": _run_memory_import_case,
     "m5.main_agent_pause_resume": _run_main_agent_case,
     "m6.subagent_pr_loop": _run_subagent_pr_case,
     "m8.live_llm_task_execution": _run_live_llm_task_case,
+    "m8.live_llm_tool_task": _run_live_llm_tool_case,
     "m8.memory_strategy_compare": _run_memory_strategy_compare_case,
+    "m9.control_plane_resource_surface": _run_m9_control_plane_resource_surface_case,
+    "m9.prompt_control_plane": _run_m9_prompt_control_plane_case,
+    "m9.shared_multimodal_reasoning": _run_m9_shared_multimodal_reasoning_case,
+    "m9.pause_resume_memory_tree": _run_m9_pause_resume_memory_tree_case,
 }
 
 
 def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> dict[str, Any]:
     definition = get_evaluation_suite_definition(suite_id, workspace_root)
-    ensure_evaluation_suites(workspace_root)
-    runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        repository = EvaluationRepository(session)
-        run = repository.create_run(
-            {
-                "suiteId": suite_id,
-                "projectId": DEFAULT_PROJECT_ID,
-                "subjectKind": definition.get("subjectKind") or "workflow",
-                "subjectRef": definition.get("subjectRef") or suite_id,
-                "status": "running",
-                "startedAt": utc_now(),
-            }
-        )
+    fallback_context = None
+    try:
+        runtime, run = _prepare_suite_run(definition, suite_id, workspace_root)
+    except Exception:
+        fallback_context = local_evaluation_runtime_environment(workspace_root)
+        fallback_context.__enter__()
+        runtime, run = _prepare_suite_run(definition, suite_id, workspace_root)
 
-    case_results: list[dict[str, Any]] = []
-    with observe_span("evaluation", f"suite:{suite_id}", kind="evaluation", attributes={"suiteId": suite_id}) as span:
-        record_log("evaluation", "info", f"Starting evaluation suite {suite_id}", attributes={"runId": run.id})
-        for case in definition.get("cases") or []:
-            case_id = str(case.get("id") or new_id("evalcase", suite_id))
-            scenario = str(case.get("scenario") or "")
-            handler = SCENARIO_HANDLERS.get(scenario)
-            if handler is None:
+    try:
+        case_results: list[dict[str, Any]] = []
+        with observe_span("evaluation", f"suite:{suite_id}", kind="evaluation", attributes={"suiteId": suite_id}) as span:
+            record_log("evaluation", "info", f"Starting evaluation suite {suite_id}", attributes={"runId": run.id})
+            for case in definition.get("cases") or []:
+                case_id = str(case.get("id") or new_id("evalcase", suite_id))
+                scenario = str(case.get("scenario") or "")
+                handler = SCENARIO_HANDLERS.get(scenario)
+                if handler is None:
+                    case_results.append(
+                        {
+                            "id": case_id,
+                            "title": str(case.get("title") or case_id),
+                            "scenario": scenario,
+                            "status": "failed",
+                            "durationMs": 0.0,
+                            "detail": {"error": f"Unsupported scenario: {scenario}"},
+                        }
+                    )
+                    continue
+
+                case_started = perf_counter()
+                try:
+                    with isolated_runtime_environment():
+                        detail = handler(case)
+                    case_status = "passed"
+                except Exception as exc:
+                    detail = {"error": str(exc), "errorType": exc.__class__.__name__}
+                    case_status = "failed"
+                    record_log(
+                        "evaluation",
+                        "error",
+                        f"Evaluation case failed: {case_id}",
+                        attributes={"runId": run.id, "suiteId": suite_id, "caseId": case_id, "error": str(exc)},
+                    )
+                duration_ms = round((perf_counter() - case_started) * 1000.0, 2)
+                record_metric(
+                    "evaluation",
+                    "case.duration",
+                    duration_ms,
+                    kind="histogram",
+                    unit="ms",
+                    attributes={"suiteId": suite_id, "caseId": case_id, "status": case_status},
+                )
                 case_results.append(
                     {
                         "id": case_id,
                         "title": str(case.get("title") or case_id),
                         "scenario": scenario,
-                        "status": "failed",
-                        "durationMs": 0.0,
-                        "detail": {"error": f"Unsupported scenario: {scenario}"},
+                        "status": case_status,
+                        "durationMs": duration_ms,
+                        "detail": detail,
+                        "tags": [str(tag) for tag in case.get("tags") or []],
+                        "difficulty": str(case.get("difficulty") or "medium"),
                     }
                 )
-                continue
 
-            case_started = perf_counter()
-            try:
-                with isolated_runtime_environment():
-                    detail = handler(case)
-                case_status = "passed"
-            except Exception as exc:
-                detail = {"error": str(exc), "errorType": exc.__class__.__name__}
-                case_status = "failed"
-                record_log(
-                    "evaluation",
-                    "error",
-                    f"Evaluation case failed: {case_id}",
-                    attributes={"runId": run.id, "suiteId": suite_id, "caseId": case_id, "error": str(exc)},
-                )
-            duration_ms = round((perf_counter() - case_started) * 1000.0, 2)
-            record_metric(
-                "evaluation",
-                "case.duration",
-                duration_ms,
-                kind="histogram",
-                unit="ms",
-                attributes={"suiteId": suite_id, "caseId": case_id, "status": case_status},
-            )
-            case_results.append(
+            passed_count = len([row for row in case_results if row["status"] == "passed"])
+            failed_count = len(case_results) - passed_count
+            total_duration_ms = round(sum(float(row["durationMs"]) for row in case_results), 2)
+            metrics_payload = {
+                "suiteId": suite_id,
+                "suiteName": definition.get("name") or suite_id,
+                "runId": run.id,
+                "status": "completed" if failed_count == 0 else "failed",
+                "caseCount": len(case_results),
+                "passedCount": passed_count,
+                "failedCount": failed_count,
+                "failedCaseCount": failed_count,
+                "passRate": round(passed_count / len(case_results), 4) if case_results else 0.0,
+                "totalDurationMs": total_duration_ms,
+                "cases": case_results,
+                "generatedAt": utc_now().isoformat(),
+                "traceId": span["traceId"],
+            }
+            metrics_payload.update(_aggregate_case_metrics(case_results))
+
+        metrics_dir = resolve_state_dir(workspace_root) / "evaluations"
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        metrics_path = metrics_dir / f"{run.id}.json"
+        write_json(metrics_path, metrics_payload)
+        with runtime.session_scope() as session:
+            repository = EvaluationRepository(session)
+            completed_run = repository.update_run(
+                run.id,
                 {
-                    "id": case_id,
-                    "title": str(case.get("title") or case_id),
-                    "scenario": scenario,
-                    "status": case_status,
-                    "durationMs": duration_ms,
-                    "detail": detail,
-                    "tags": [str(tag) for tag in case.get("tags") or []],
-                    "difficulty": str(case.get("difficulty") or "medium"),
+                    "status": metrics_payload["status"],
+                    "metricsRef": ExternalRef(type="file", locator=str(metrics_path.resolve())),
+                    "endedAt": utc_now(),
                 }
             )
 
-        passed_count = len([row for row in case_results if row["status"] == "passed"])
-        failed_count = len(case_results) - passed_count
-        total_duration_ms = round(sum(float(row["durationMs"]) for row in case_results), 2)
-        metrics_payload = {
-            "suiteId": suite_id,
-            "suiteName": definition.get("name") or suite_id,
-            "runId": run.id,
-            "status": "completed" if failed_count == 0 else "failed",
-            "caseCount": len(case_results),
-            "passedCount": passed_count,
-            "failedCount": failed_count,
-            "failedCaseCount": failed_count,
-            "passRate": round(passed_count / len(case_results), 4) if case_results else 0.0,
-            "totalDurationMs": total_duration_ms,
-            "cases": case_results,
-            "generatedAt": utc_now().isoformat(),
-            "traceId": span["traceId"],
-        }
-        metrics_payload.update(_aggregate_case_metrics(case_results))
-
-    metrics_dir = resolve_state_dir(workspace_root) / "evaluations"
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-    metrics_path = metrics_dir / f"{run.id}.json"
-    write_json(metrics_path, metrics_payload)
-    with runtime.session_scope() as session:
-        repository = EvaluationRepository(session)
-        completed_run = repository.update_run(
-            run.id,
-            {
-                "status": metrics_payload["status"],
-                "metricsRef": ExternalRef(type="file", locator=str(metrics_path.resolve())),
-                "endedAt": utc_now(),
-            },
+        record_log(
+            "evaluation",
+            "info",
+            f"Completed evaluation suite {suite_id}",
+            attributes={"runId": completed_run.id, "status": completed_run.status, "failedCount": metrics_payload["failedCount"]},
         )
-
-    record_log(
-        "evaluation",
-        "info",
-        f"Completed evaluation suite {suite_id}",
-        attributes={"runId": completed_run.id, "status": completed_run.status, "failedCount": metrics_payload["failedCount"]},
-    )
-    flush_observability_exporters()
-    return {
-        "suite": definition,
-        "run": completed_run.model_dump(by_alias=True, mode="json"),
-        "metrics": metrics_payload,
-    }
+        flush_observability_exporters()
+        return {
+            "suite": definition,
+            "run": completed_run.model_dump(by_alias=True, mode="json"),
+            "metrics": metrics_payload,
+        }
+    finally:
+        if fallback_context is not None:
+            fallback_context.__exit__(None, None, None)

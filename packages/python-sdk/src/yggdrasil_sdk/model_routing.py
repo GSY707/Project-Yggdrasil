@@ -45,6 +45,7 @@ DEFAULT_CANDIDATES = [
 TASK_WEIGHTS = {
 	"coding": {"quality": 0.45, "budget": 0.15, "latency": 0.1, "context": 0.3},
 	"research": {"quality": 0.45, "budget": 0.1, "latency": 0.1, "context": 0.35},
+	"writing": {"quality": 0.4, "budget": 0.1, "latency": 0.1, "context": 0.4},
 	"maintenance": {"quality": 0.2, "budget": 0.4, "latency": 0.25, "context": 0.15},
 	"generic": {"quality": 0.35, "budget": 0.25, "latency": 0.15, "context": 0.25},
 }

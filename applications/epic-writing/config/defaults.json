@@ -1,0 +1,18 @@
+{
+  "defaultTaskType": "writing",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-writing-epic"
+  ],
+  "storyMode": {
+    "trackCanon": true,
+    "auditContinuity": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给章节目标或当前叙事判断，再给推进方案、设定冲突和下一步。"
+  }
+}

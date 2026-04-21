@@ -1,0 +1,42 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: scene-maintenance-default
+  displayName: Maintenance Scene - Default
+  version: 0.1.0
+  category: core-extension
+  owner: core
+  description: Contributes the maintenance seed template.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_sdk.prompt_modules.scene_maintenance_default:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules: []
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - prompt.seed-templates.register
+    publishes: []
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties: {}
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested: []
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

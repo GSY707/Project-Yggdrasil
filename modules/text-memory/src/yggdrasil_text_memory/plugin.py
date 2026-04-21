@@ -5,9 +5,13 @@ from pathlib import Path
 import re
 from typing import Any
 
-from yggdrasil_sdk.contracts import EventEnvelope, EventHandlingResult, ModuleEventEmission
+from yggdrasil_sdk.contracts import EventEnvelope, EventHandlingResult, ModuleEventEmission, ToolDescriptor
+from yggdrasil_sdk.hook_runtime import collect_hook_results
 from yggdrasil_sdk.hooks import HookNames
 from yggdrasil_sdk.module import BaseModulePlugin, HookRegistration
+from yggdrasil_sdk.persistence import get_persistence_runtime
+from yggdrasil_sdk.persistence.constants import DEFAULT_BRANCH_ID
+from yggdrasil_sdk.persistence.repositories import NodeRepository, WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import new_id, normalize_excerpt, utc_now
 
 
@@ -162,11 +166,47 @@ class TextMemoryModule(BaseModulePlugin):
         return (
             HookRegistration(name=HookNames.MODULE_ENABLE_PREFLIGHT, handler=self.enable_preflight),
             HookRegistration(name=HookNames.MODULE_HEALTH_REPORT, handler=self.report_health),
+            HookRegistration(name=HookNames.AGENT_TOOLS_REGISTER, handler=self.register_tools_hook),
             HookRegistration(name=HookNames.MEMORY_INGEST_PREPROCESS, handler=self.preprocess_import),
             HookRegistration(name=HookNames.MEMORY_INGEST_PLAN_TREE, handler=self.plan_tree),
             HookRegistration(name=HookNames.MEMORY_RETRIEVE_EXPAND, handler=self.expand_retrieval),
             HookRegistration(name=HookNames.MEMORY_WRITE_VALIDATE, handler=self.validate_memory_write),
         )
+
+    def register_tools(self) -> tuple[dict[str, object], ...]:
+        tools = (
+            ToolDescriptor(
+                name="text_memory.retrieve",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Retrieve Durable Memory Context",
+                description="Search the current branch memory graph and return grounded nodes, related links, and a natural language retrieval summary.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=5000,
+                permissionRequired=["memory.read"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "queryText": {"type": "string"},
+                        "maxLeafNodes": {"type": "integer", "minimum": 1, "maximum": 8, "default": 4},
+                        "maxRelatedNodes": {"type": "integer", "minimum": 0, "maximum": 8, "default": 4},
+                        "tokenBudget": {"type": "integer", "minimum": 32},
+                    },
+                    "required": ["queryText"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:retrieve_memory_tool",
+            ),
+        )
+        return tuple(tool.model_dump(by_alias=True) for tool in tools)
+
+    def register_tools_hook(self, payload: dict[str, object]) -> dict[str, object]:
+        return {
+            "tools": list(self.register_tools()),
+            "toolCount": len(self.register_tools()),
+            "moduleId": self.module_id,
+        }
 
     def enable_preflight(self, payload: dict[str, object]) -> dict[str, object]:
         install = payload.get("install") if isinstance(payload.get("install"), dict) else {}
@@ -443,6 +483,13 @@ class TextMemoryModule(BaseModulePlugin):
         candidate_nodes = [node for node in payload.get("candidateNodes", []) if isinstance(node, dict)]
         candidate_edges = [edge for edge in payload.get("candidateEdges", []) if isinstance(edge, dict)]
         if not candidate_nodes:
+            node_payload = payload.get("nodePayload") if isinstance(payload.get("nodePayload"), dict) else None
+            if node_payload is not None:
+                title = str(node_payload.get("title") or "").strip()
+                content = str(node_payload.get("content") or "").strip()
+                if not title or not content:
+                    return {"status": "error", "summary": "Runtime write payload must include both title and content."}
+                return {"status": "ok", "summary": "Validated runtime write payload for durable materialization."}
             return {"status": "error", "summary": "Tree plan does not contain any candidate nodes."}
         node_ids = {str(node.get("id")) for node in candidate_nodes if node.get("id")}
         invalid_edges = [
@@ -455,7 +502,13 @@ class TextMemoryModule(BaseModulePlugin):
                 "status": "error",
                 "summary": f"Tree plan contains {len(invalid_edges)} edges referencing unknown nodes.",
             }
-        oversized_nodes = [node for node in candidate_nodes if len(str(node.get("content") or "")) > 240]
+        oversized_nodes = [
+            node
+            for node in candidate_nodes
+            if len(str(node.get("content") or "")) > 240
+            and str(node.get("rootBranch") or "") != "execution"
+            and str(node.get("nodeType") or "") != "task"
+        ]
         if oversized_nodes:
             return {
                 "status": "error",
@@ -501,3 +554,111 @@ class TextMemoryModule(BaseModulePlugin):
 
 
 plugin = TextMemoryModule()
+
+
+def retrieve_memory_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    branch_id = str(payload.get("branchId") or execution_context.get("branchId") or DEFAULT_BRANCH_ID)
+    query_text = str(payload.get("queryText") or "").strip()
+    if not query_text:
+        raise KeyError("queryText")
+    active_capabilities = [
+        str(module_id)
+        for module_id in execution_context.get("activeCapabilities") or []
+        if str(module_id) != plugin.module_id
+    ]
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        nodes = [
+            node.model_dump(by_alias=True, mode="json")
+            for node in node_repository.list_nodes(branch_id=branch_id, limit=int(payload.get("nodeScanLimit") or 200))
+            if node.node_type != "root"
+        ]
+        edges = [
+            edge.model_dump(by_alias=True, mode="json")
+            for edge in node_repository.list_edges(branch_id=branch_id, limit=int(payload.get("edgeScanLimit") or 200))
+        ]
+        source_annotations = [
+            annotation.model_dump(by_alias=True, mode="json")
+            for annotation in node_repository.list_source_annotations(branch_id=branch_id, limit=int(payload.get("annotationLimit") or 200))
+        ]
+
+    retrieval_request = {
+        "id": new_id("retr", branch_id, query_text),
+        "queryText": query_text,
+        "maxLeafNodes": int(payload.get("maxLeafNodes") or 4),
+        "maxRelatedNodes": int(payload.get("maxRelatedNodes") or 4),
+        "tokenBudget": int(payload["tokenBudget"]) if payload.get("tokenBudget") is not None else None,
+    }
+    retrieval_payload = {
+        "retrievalRequest": retrieval_request,
+        "nodes": nodes,
+        "edges": edges,
+        "sourceAnnotations": source_annotations,
+        "executionContext": execution_context,
+    }
+
+    if active_capabilities:
+        expansion_results = collect_hook_results(
+            HookNames.MEMORY_RETRIEVE_EXPAND,
+            retrieval_payload,
+            module_ids=active_capabilities,
+        )
+        nodes_by_id = {str(node.get("id")): node for node in nodes if node.get("id") is not None}
+        edges_by_id = {str(edge.get("id")): edge for edge in edges if edge.get("id") is not None}
+        annotations_by_id = {
+            str(annotation.get("id")): annotation
+            for annotation in source_annotations
+            if annotation.get("id") is not None
+        }
+        module_expansions: list[dict[str, object]] = []
+        for item in expansion_results:
+            if item.get("error"):
+                continue
+            result = item.get("result") if isinstance(item.get("result"), dict) else {}
+            module_expansions.append(
+                {
+                    "moduleId": item.get("moduleId"),
+                    "summary": result.get("summary"),
+                }
+            )
+            for node in result.get("nodes") or []:
+                if isinstance(node, dict) and node.get("id") is not None:
+                    nodes_by_id[str(node["id"])] = node
+            for edge in result.get("edges") or []:
+                if isinstance(edge, dict) and edge.get("id") is not None:
+                    edges_by_id[str(edge["id"])] = edge
+            for annotation in result.get("sourceAnnotations") or []:
+                if isinstance(annotation, dict) and annotation.get("id") is not None:
+                    annotations_by_id[str(annotation["id"])] = annotation
+        retrieval_payload["nodes"] = list(nodes_by_id.values())
+        retrieval_payload["edges"] = list(edges_by_id.values())
+        retrieval_payload["sourceAnnotations"] = list(annotations_by_id.values())
+        retrieval_payload["moduleExpansions"] = module_expansions
+
+    retrieval_bundle = plugin.expand_retrieval(retrieval_payload)
+    if active_capabilities:
+        rerank_results = collect_hook_results(
+            HookNames.MEMORY_RETRIEVE_RERANK,
+            {
+                **retrieval_payload,
+                "retrievalBundle": retrieval_bundle,
+            },
+            module_ids=active_capabilities,
+        )
+        for item in rerank_results:
+            if item.get("error"):
+                continue
+            result = item.get("result") if isinstance(item.get("result"), dict) else {}
+            if isinstance(result.get("matchedNodeRefs"), list):
+                retrieval_bundle["matchedNodeRefs"] = [reference for reference in result["matchedNodeRefs"] if isinstance(reference, dict)]
+            if isinstance(result.get("nodePayloads"), list):
+                retrieval_bundle["nodePayloads"] = [node for node in result["nodePayloads"] if isinstance(node, dict)]
+            if result.get("naturalLanguageSummary"):
+                retrieval_bundle["naturalLanguageSummary"] = str(result["naturalLanguageSummary"])
+            if isinstance(result.get("relatedNameMap"), dict):
+                retrieval_bundle["relatedNameMap"] = dict(result["relatedNameMap"])
+    return retrieval_bundle

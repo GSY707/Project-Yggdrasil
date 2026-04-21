@@ -26,16 +26,19 @@ export function OverviewPage() {
         summary={
           <>
             当前工作台直接消费 core-api 的任务、节点、协作、评测与观测接口，不再依赖仓库文件扫描。
-            这里展示的是 M4 到 M6 的真实运行脉冲，而不是开发说明页。
+            这里同时收口了 M4 到 M6 的运行脉冲，以及 M9 的共享空间、资产、训练与 PromptOps 控制面。
           </>
         }
         actions={
           <>
-            <Link className="action-button" href="/evaluations">
-              进入回归评测
+            <Link className="action-button" href="/prompting">
+              进入 Prompt 控制面
             </Link>
-            <Link className="ghost-button" href="/observability">
-              查看观测信号
+            <Link className="ghost-button" href="/assets">
+              查看多模态资产
+            </Link>
+            <Link className="ghost-button" href="/training">
+              查看训练实验
             </Link>
           </>
         }
@@ -47,6 +50,8 @@ export function OverviewPage() {
         <StatCard label="Pull Requests" value={data.cards.pullRequests} copy={`分支 ${data.cards.branches} 条，待审 PR ${data.pullRequestStatusCounts.open ?? 0} 个。`} />
         <StatCard label="LLM Runs" value={data.cards.modelInvocations} copy={`fallback ${data.cards.llmFallbacks} 次，累计成本 ${data.cards.llmCostUsed.toFixed(4)} USD。`} />
         <StatCard label="Signals" value={data.cards.observabilityErrors} copy={`最近记录 ${data.observability.totalSpans} 个 span，错误 ${data.cards.observabilityErrors} 个。`} />
+        <StatCard label="Shared Spaces" value={data.cards.sharedSpaces} copy={`挂载 ${data.cards.spaceMounts} 条，权限 tuple ${data.cards.permissionTuples} 条。`} />
+        <StatCard label="Runtime Control" value={data.cards.pausedTasks} copy={`暂停中 ${data.cards.pausedTasks} 个，等待 safe-stop ${data.taskStatusCounts["pause-requested"] ?? 0} 个，可恢复快照 ${data.cards.restorableSnapshots} 个。`} />
       </section>
 
       <div className="content-grid">
@@ -82,6 +87,35 @@ export function OverviewPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </Surface>
+
+          <Surface>
+            <p className="section-kicker">M9 Control</p>
+            <h3 className="section-title">共享空间与恢复控制</h3>
+            <div className="kv-grid">
+              <div className="kv-item">
+                <p className="meta-label">Shared Spaces</p>
+                <p className="meta-copy">{data.cards.sharedSpaces}</p>
+              </div>
+              <div className="kv-item">
+                <p className="meta-label">Space Mounts</p>
+                <p className="meta-copy">{data.cards.spaceMounts}</p>
+              </div>
+              <div className="kv-item">
+                <p className="meta-label">Permission Tuples</p>
+                <p className="meta-copy">{data.cards.permissionTuples}</p>
+              </div>
+              <div className="kv-item">
+                <p className="meta-label">Restorable Snapshots</p>
+                <p className="meta-copy">{data.cards.restorableSnapshots}</p>
+              </div>
+            </div>
+            <div className="pill-row">
+              <span className="inline-chip">paused {data.cards.pausedTasks}</span>
+              <span className="inline-chip">pause-requested {data.taskStatusCounts["pause-requested"] ?? 0}</span>
+              <span className="inline-chip">shared spaces {data.cards.sharedSpaces}</span>
+              <span className="inline-chip">mounts {data.cards.spaceMounts}</span>
             </div>
           </Surface>
 

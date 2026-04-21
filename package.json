@@ -8,6 +8,7 @@
     "eval:regression": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_regression_m4_m6",
     "eval:m8:benchmark": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_benchmark_m8_memory_strategies",
     "eval:m8:live": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_live_m8_llm",
+    "eval:m9:control-plane": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_regression_m9_control_plane",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:smoke": "uv run python -m yggdrasil_sdk.ops_cli compose-smoke",

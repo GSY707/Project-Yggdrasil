@@ -1,0 +1,56 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: memory-organizer
+  displayName: Memory Organizer
+  version: 0.1.0
+  category: memory
+  owner: core
+  description: Automatic memory score adjustment and soft-forgetting governance for low-value nodes.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_memory_organizer.plugin:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules:
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - agent.tools.register
+    publishes:
+      - memory.organized
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      maxAdjustmentsPerRun:
+        type: integer
+        minimum: 1
+      minimumContentLength:
+        type: integer
+        minimum: 32
+    required:
+      - maxAdjustmentsPerRun
+      - minimumContentLength
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested:
+      - node.read
+      - node.write
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

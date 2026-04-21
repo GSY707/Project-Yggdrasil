@@ -1,9 +1,13 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
 from yggdrasil_context_pruning.plugin import ContextPruningModule
-from yggdrasil_sdk import TaskRepository, get_persistence_runtime
+from yggdrasil_sdk import PromptAssetRepository, TaskRepository, get_persistence_runtime, resolve_workspace_root
+from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
 from yggdrasil_worker.registry import run_worker_once
 
@@ -11,7 +15,12 @@ from yggdrasil_worker.registry import run_worker_once
 client = TestClient(runtime_app)
 
 
-def _seed_task(task_id: str = "task_alpha", agent_run_id: str = "run_alpha") -> None:
+def _seed_task(
+    task_id: str = "task_alpha",
+    agent_run_id: str = "run_alpha",
+    *,
+    app_id: str = DEFAULT_APP_ID,
+) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -19,6 +28,7 @@ def _seed_task(task_id: str = "task_alpha", agent_run_id: str = "run_alpha") -> 
         task_repository.create_task(
             {
                 "id": task_id,
+                "appId": app_id,
                 "title": "实现正式持久化底座",
                 "goal": "把运行时、模块注册和快照链路落到正式存储。",
                 "status": "running",
@@ -54,8 +64,28 @@ def test_root_mount_package_uses_formal_runtime_fields() -> None:
     assert mount_package["contextRefs"]
     assert mount_package["executionRefs"]
     assert "text-memory" in mount_package["activeCapabilities"]
+    assert "training-lab" not in mount_package["activeCapabilities"]
     assert mount_package["mountedNodeRefs"]
     assert mount_package["source"] == "database"
+
+
+def test_root_mount_package_respects_application_default_capabilities() -> None:
+    _seed_task(
+        task_id="task_learning",
+        agent_run_id="run_learning",
+        app_id="yggdrasil.app.learning-coach",
+    )
+
+    mount_package = build_root_mount_package("task_learning")
+
+    assert set(mount_package["activeCapabilities"]) == {
+        "text-memory",
+        "context-pruning",
+        "mcp-bridge",
+        "pause-resume",
+        "subagent-runtime",
+        "scene-learning-coach",
+    }
 
 
 def test_pause_snapshot_reports_blockers_and_safe_stop() -> None:
@@ -69,8 +99,10 @@ def test_pause_snapshot_reports_blockers_and_safe_stop() -> None:
         },
     )
     assert blocked_snapshot["safeToPause"] is False
+    assert blocked_snapshot["appId"] == DEFAULT_APP_ID
     assert "active-tool-calls" in blocked_snapshot["blockers"]
     assert blocked_snapshot["persisted"] is True
+    assert any("Prepared safe-stop" in summary for summary in blocked_snapshot["moduleSummaries"])
 
     safe_snapshot = prepare_pause_snapshot(
         "task_alpha",
@@ -81,8 +113,10 @@ def test_pause_snapshot_reports_blockers_and_safe_stop() -> None:
         },
     )
     assert safe_snapshot["safeToPause"] is True
+    assert safe_snapshot["appId"] == DEFAULT_APP_ID
     assert safe_snapshot["flushedWrites"] == 1
     assert safe_snapshot["persisted"] is True
+    assert any(action["kind"] == "resume-digest" for action in safe_snapshot["pendingActions"])
 
 
 def test_context_pruning_retains_protected_refs() -> None:
@@ -198,6 +232,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         task_repository = TaskRepository(session)
+        prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
@@ -210,9 +245,23 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert runtime_repository.list_model_route_decisions(task_id="task_runtime")
         invocations = runtime_repository.list_model_invocations(task_id="task_runtime")
         assert len(invocations) == 1
+        assert invocations[0].app_id == DEFAULT_APP_ID
         assert invocations[0].status == "fallback"
+        assert invocations[0].prompt_compile_artifact_id is not None
+        artifact = prompt_repository.get_prompt_compile_artifact(str(invocations[0].prompt_compile_artifact_id))
+        assert artifact is not None
+        assert artifact.app_id == DEFAULT_APP_ID
+        assert artifact.prompt_profile_version_id
+        assert artifact.compiled_messages_ref is not None
         assert invocations[0].request_ref is not None
         assert invocations[0].response_ref is not None
+        request_path = Path(resolve_workspace_root()) / invocations[0].request_ref.locator
+        request_payload = json.loads(request_path.read_text(encoding="utf-8"))
+        assert request_payload["appId"] == DEFAULT_APP_ID
+        assert request_payload["promptCompileArtifactId"] == invocations[0].prompt_compile_artifact_id
+        assert request_payload["promptMetadata"]["promptProfileId"] == "yggdrasil.main-agent"
+        assert request_payload["promptMetadata"]["seedTemplateId"] == "yggdrasil.seed.generic.default"
+        assert request_payload["promptMetadata"]["runType"] == "main"
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
@@ -234,6 +283,8 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     assert second_run["status"] == "processed"
     assert second_run["result"]["status"] == "completed"
     assert second_run["result"]["resume"] is not None
+    assert second_run["result"]["rehydration"] is not None
+    assert any("Rehydrated" in summary for summary in second_run["result"]["rehydration"]["summaries"])
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -248,11 +299,13 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert len(runs) == 2
         assert {run.status for run in runs} == {"paused", "completed"}
         snapshots = task_repository.list_snapshots("task_runtime")
+        assert snapshots[0].app_id == DEFAULT_APP_ID
         assert snapshots[0].status == "consumed"
         decisions = runtime_repository.list_model_route_decisions(task_id="task_runtime")
         assert len(decisions) == 2
         invocations = runtime_repository.list_model_invocations(task_id="task_runtime")
         assert len(invocations) == 2
+        assert {invocation.app_id for invocation in invocations} == {DEFAULT_APP_ID}
         assert {invocation.status for invocation in invocations} == {"fallback"}
         execution_notes = [
             node

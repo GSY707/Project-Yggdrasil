@@ -1,0 +1,19 @@
+{
+  "defaultTaskType": "coding",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-pr",
+    "subagent-runtime",
+    "scene-coding-new-project"
+  ],
+  "architectureMode": {
+    "preferSpecsFirst": true,
+    "requireSystemDesign": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先说明整体设计，再说明当前实现步骤、验证和下一步。"
+  }
+}

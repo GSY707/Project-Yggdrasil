@@ -1,0 +1,11 @@
+{
+  "hero": {
+    "eyebrow": "Base Template",
+    "title": "默认基础应用",
+    "summary": "当没有选择任何具体应用时，Kernel 会装载这个基础模板。它只提供主 Agent、通用 Sub-Agent 和 generic fallback。"
+  },
+  "quickActions": [
+    {"label": "预览 Prompt", "href": "/prompting"},
+    {"label": "查看应用管理", "href": "/applications"}
+  ]
+}

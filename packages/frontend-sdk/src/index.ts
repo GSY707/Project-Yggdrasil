@@ -35,19 +35,62 @@ export interface ServiceHealthSnapshot {
 
 export interface TaskSummaryRecord {
   id: string;
+  appId: string;
+  projectId?: string;
+  spaceId?: string;
   title: string;
   goal: string;
   status: string;
   currentFocus?: string | null;
   currentObjective?: string | null;
   branchId?: string;
+  pauseRequested?: boolean;
+  activeSnapshotId?: string | null;
+  resumeMessage?: string | null;
+  lastSafeStopAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   [key: string]: unknown;
 }
 
+export interface SpaceRecord {
+  id: string;
+  projectId: string;
+  spaceType: string;
+  status: string;
+  ownerSubject?: string | null;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface SpaceMountRecord {
+  id: string;
+  projectId: string;
+  hostSpaceId: string;
+  mountedSpaceId: string;
+  mountMode: string;
+  status: string;
+  createdAt: string;
+  createdBy?: { type: string; id: string };
+  [key: string]: unknown;
+}
+
+export interface PermissionTupleRecord {
+  id: string;
+  projectId: string;
+  subject: string;
+  relation: string;
+  resource: string;
+  condition?: Record<string, unknown> | null;
+  effect: string;
+  createdAt: string;
+  createdBy?: { type: string; id: string };
+  [key: string]: unknown;
+}
+
 export interface AgentRunRecord {
   id: string;
+  appId: string;
   taskId: string;
   status: string;
   runType: string;
@@ -60,6 +103,7 @@ export interface AgentRunRecord {
 
 export interface SnapshotRecord {
   id: string;
+  appId: string;
   status: string;
   resumeToken?: string | null;
   resumeMessage?: string | null;
@@ -80,6 +124,7 @@ export interface RouteDecisionRecord {
 
 export interface ModelInvocationRecord {
   id: string;
+  appId: string;
   projectId: string;
   taskId?: string | null;
   agentRunId?: string | null;
@@ -91,6 +136,7 @@ export interface ModelInvocationRecord {
   invocationKind: string;
   status: string;
   traceId?: string | null;
+  promptCompileArtifactId?: string | null;
   requestRef?: { type: string; locator: string } | null;
   responseRef?: { type: string; locator: string } | null;
   inputTokensUsed: number;
@@ -100,6 +146,211 @@ export interface ModelInvocationRecord {
   errorSummary?: string | null;
   startedAt: string;
   endedAt?: string | null;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface AssetRecord {
+  id: string;
+  projectId: string;
+  spaceId: string;
+  branchId: string;
+  ownerNodeId?: string | null;
+  mediaType: string;
+  role: string;
+  storageKey: string;
+  checksum: string;
+  sourceRef?: { type: string; locator: string } | null;
+  durationMs?: number | null;
+  width?: number | null;
+  height?: number | null;
+  createdAt: string;
+  createdBy: { type: string; id: string };
+  [key: string]: unknown;
+}
+
+export interface AssetSegmentRecord {
+  id: string;
+  assetId: string;
+  ordinal: number;
+  startOffset: number;
+  endOffset: number;
+  textExcerpt?: string | null;
+  summary?: string | null;
+  embeddingId?: string | null;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface AssetEmbeddingRecord {
+  id: string;
+  ownerKind: string;
+  ownerId: string;
+  model: string;
+  dimension: number;
+  vectorRef: { type: string; locator: string };
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface DatasetVersionRecord {
+  id: string;
+  datasetName: string;
+  version: string;
+  sourceFilter: Record<string, unknown>;
+  storageKey: string;
+  rowCount: number;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface ModelArtifactRecord {
+  id: string;
+  baseModel: string;
+  tuningMethod: string;
+  datasetVersionId: string;
+  metricsRef?: { type: string; locator: string } | null;
+  storageKey: string;
+  status: string;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+export interface PromptProfileDefinition {
+  id: string;
+  name: string;
+  version: string;
+  runScope: string;
+  systemRole: string;
+  kernelTruth: string;
+  behaviorGuidelines: string;
+  toolPolicy: string;
+  memoryPolicy: string;
+  evidencePolicy: string;
+  outputContract: string;
+  selfEvolution?: string | null;
+  fewShotRefs: string[];
+  sourceAppId?: string | null;
+  sourceModuleId?: string | null;
+}
+
+export interface SeedTemplateDefinition {
+  id: string;
+  name: string;
+  version: string;
+  domain: string;
+  scenario: string;
+  identityOverlay: string;
+  contextOverlay: string;
+  executionBias: string;
+  toolPolicyOverlay?: string | null;
+  outputStyle?: string | null;
+  retrievalHints: Record<string, unknown>;
+  selectionRules: Record<string, unknown>;
+  fewShotRefs: string[];
+  sourceAppId?: string | null;
+  sourceModuleId?: string | null;
+}
+
+export interface ApplicationManifestSummary {
+  appId: string;
+  displayName: string;
+  version: string;
+  manifestPath: string;
+  owner?: string | null;
+  description?: string | null;
+  defaultLoad: boolean;
+  moduleDependencies: string[];
+  capabilityModuleIds: string[];
+  sceneModuleIds: string[];
+  defaultPromptProfileId?: string | null;
+  subagentPromptProfileId?: string | null;
+  defaultSeedTemplateId?: string | null;
+  promptProfileFiles: string[];
+  seedTemplateFiles: string[];
+  configDefaultsRef?: { type: string; locator: string } | null;
+  frontendEntryRoute?: string | null;
+  dashboardRef?: { type: string; locator: string } | null;
+}
+
+export interface ApplicationConfigBinding {
+  appId: string;
+  active: boolean;
+  importantConfig: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface MCPWorkspaceOption {
+  label: string;
+  value: string;
+  source: string;
+}
+
+export interface MCPServerDefinition {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  transport: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string | null;
+  enabled: boolean;
+  keepAlive: boolean;
+  toolPrefix: string;
+  origin: string;
+  sourcePath?: string | null;
+  timeoutMs: number;
+}
+
+export interface MCPToolBinding {
+  serverId: string;
+  serverDisplayName: string;
+  remoteToolName: string;
+  exposedName: string;
+  description?: string | null;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface MCPSyncedServer {
+  id: string;
+  displayName: string;
+  status: string;
+  error?: string | null;
+  tools: MCPToolBinding[];
+  toolCount: number;
+  lastSyncedAt?: string | null;
+  sourcePath?: string | null;
+  origin?: string | null;
+}
+
+export interface MCPBridgeState {
+  generatedAt: string;
+  projectWorkspace: string;
+  workspaceOptions: MCPWorkspaceOption[];
+  servers: MCPServerDefinition[];
+  syncedServers: MCPSyncedServer[];
+  tools: MCPToolBinding[];
+  availableImports: MCPServerDefinition[];
+}
+
+export interface PromptCompileArtifactRecord {
+  id: string;
+  appId: string;
+  projectId: string;
+  taskId?: string | null;
+  agentRunId?: string | null;
+  modelInvocationId?: string | null;
+  promptProfileVersionId: string;
+  seedTemplateVersionId?: string | null;
+  runType: string;
+  taskType: string;
+  scenario?: string | null;
+  registeredTools: Array<Record<string, unknown>>;
+  systemSections: Record<string, string>;
+  userSections: Record<string, string>;
+  compiledMessagesRef: { type: string; locator: string };
+  contentHash: string;
   createdAt: string;
   [key: string]: unknown;
 }
@@ -185,6 +436,22 @@ export interface PullRequestRecord {
   mergedAt?: string | null;
   createdAt: string;
   [key: string]: unknown;
+}
+
+export interface TaskRuntimeControlSummary {
+  pauseRequested: boolean;
+  activeSnapshotId?: string | null;
+  lastSafeStopAt?: string | null;
+  snapshotCount: number;
+  restorableSnapshotCount: number;
+  consumedSnapshotCount: number;
+  resumeStatus: string;
+  canResume: boolean;
+  canRequestPause: boolean;
+  recommendedResumeToken?: string | null;
+  recommendedResumeMessage?: string | null;
+  latestSnapshot?: SnapshotRecord | null;
+  latestRestorableSnapshot?: SnapshotRecord | null;
 }
 
 export interface EvaluationCaseDefinition {
@@ -276,6 +543,11 @@ export interface WorkbenchOverview {
     modelInvocations: number;
     llmFallbacks: number;
     llmCostUsed: number;
+    sharedSpaces: number;
+    spaceMounts: number;
+    permissionTuples: number;
+    pausedTasks: number;
+    restorableSnapshots: number;
   };
   moduleSummary: {
     total: number;
@@ -301,8 +573,19 @@ export interface TaskDetailResponse {
   task: TaskSummaryRecord;
   agentRuns: AgentRunRecord[];
   snapshots: SnapshotRecord[];
+  runtimeControl: TaskRuntimeControlSummary;
   routeDecisions: RouteDecisionRecord[];
   modelInvocations: ModelInvocationRecord[];
+}
+
+export interface TaskControlActionResponse {
+  status: string;
+  task: TaskSummaryRecord;
+  queue?: string;
+  queueDepth?: number;
+  workItem?: Record<string, unknown>;
+  outboxRecord?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface NodeDetailResponse {

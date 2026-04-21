@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .catalog import load_in_process_plugin
+from .application_runtime import resolve_application_active_capabilities, resolve_runtime_application_id
 from .contracts import ActorRef, BudgetState, EntityRef, ExternalRef, RootMountPackage, TaskSnapshotSummary
+from .hook_runtime import active_module_ids, call_module_hook, collect_hook_results, load_active_module, validate_memory_write
 from .hooks import HookNames
 from .llm_runtime import invoke_runtime_completion, load_runtime_candidate_models
 from .model_routing import build_model_route_decision
-from .persistence import OutboxRepository, RedisCoordinator, RuntimeRepository, TaskRepository, get_persistence_runtime, sync_module_catalog_snapshot
-from .persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
+from .persistence import OutboxRepository, RedisCoordinator, RuntimeRepository, TaskRepository, get_persistence_runtime
+from .persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
 from .persistence.repositories import NodeRepository, WorkspaceBootstrapRepository
 from .support import new_id, normalize_excerpt, utc_now
 
@@ -46,45 +47,15 @@ def _root_ref(project_id: str, branch_id: str, root_branch: str) -> EntityRef:
 
 
 def _active_capabilities() -> list[str]:
-    snapshot = sync_module_catalog_snapshot()
-    installs_by_module_id = {record.module_id: record for record in snapshot.installs}
-    return [
-        manifest.module_id
-        for manifest in snapshot.manifests
-        if installs_by_module_id[manifest.module_id].desired_state == "enabled"
-        and installs_by_module_id[manifest.module_id].lifecycle_state in {"active", "degraded"}
-    ]
+    return active_module_ids()
 
 
 def _load_active_module(module_id: str):
-    snapshot = sync_module_catalog_snapshot()
-    manifests_by_module_id = {manifest.module_id: manifest for manifest in snapshot.manifests}
-    installs_by_module_id = {record.module_id: record for record in snapshot.installs}
-    manifest = manifests_by_module_id.get(module_id)
-    install = installs_by_module_id.get(module_id)
-    if manifest is None or install is None or not manifest.entry_point:
-        raise KeyError(f"Module not available: {module_id}")
-    if install.desired_state != "enabled" or install.lifecycle_state not in {"active", "degraded"}:
-        raise RuntimeError(f"Module {module_id} is not active.")
-    plugin = load_in_process_plugin(manifest.entry_point)
-    return plugin
+    return load_active_module(module_id)
 
 
 def _call_module_hook(module_id: str, hook_name: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-    try:
-        plugin = _load_active_module(module_id)
-    except Exception:
-        return None
-    for registration in plugin.register_hooks():
-        if registration.name != hook_name:
-            continue
-        result = registration.handler(payload)
-        if result is None:
-            return {}
-        if isinstance(result, dict):
-            return dict(result)
-        return {"items": list(result)}
-    return None
+    return call_module_hook(module_id, hook_name, payload)
 
 
 def _cache_package_entry(coordinator: RedisCoordinator, locator: str, payload: Any) -> bool:
@@ -137,6 +108,8 @@ def _infer_task_type(task, payload: dict[str, Any]) -> str:
         return "coding"
     if any(term in text for term in ("research", "调研", "分析", "总结")):
         return "research"
+    if any(term in text for term in ("writing", "write", "写作", "叙事", "剧情", "章节", "角色", "设定", "trpg")):
+        return "writing"
     if any(term in text for term in ("maintenance", "维护", "修复", "回归")):
         return "maintenance"
     return "generic"
@@ -246,7 +219,14 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
     except Exception:
         task_record = None
 
-    active_capabilities = _active_capabilities()
+    app_id = resolve_runtime_application_id(
+        task_record.app_id if task_record is not None else request.get("appId"),
+    )
+    active_capabilities = resolve_application_active_capabilities(
+        app_id=app_id,
+        requested_capabilities=request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
+    )
+    host_space_id = task_record.space_id if task_record is not None else str(request.get("spaceId", DEFAULT_SPACE_ID))
 
     summary_parts = [
         "Identity root is mounted for stable agent policy.",
@@ -259,6 +239,48 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         summary_parts.append(f"Objective: {normalize_excerpt(str(task_objective), 160)}")
     if resume_message:
         summary_parts.append(f"Resume message available: {normalize_excerpt(str(resume_message), 120)}")
+
+    module_mount_fragments: list[dict[str, Any]] = []
+    module_mounted_node_refs: list[dict[str, Any]] = []
+    accessible_mounts: list[dict[str, Any]] = []
+    startup_results = collect_hook_results(
+        HookNames.AGENT_STARTUP_MOUNT_ROOT,
+        {
+            "taskId": task_id,
+            "projectId": project_id,
+            "spaceId": host_space_id,
+            "branchId": branch_id,
+            "ownerProfileId": task_record.owner_profile_id if task_record is not None else request.get("ownerProfileId"),
+            "subject": (
+                f"profile:{task_record.owner_profile_id}"
+                if task_record is not None and task_record.owner_profile_id
+                else request.get("subject")
+            ),
+            "rootBranches": {
+                "identity": [reference.model_dump(mode="json") for reference in identity_refs],
+                "context": [reference.model_dump(mode="json") for reference in context_refs],
+                "execution": [reference.model_dump(mode="json") for reference in execution_refs],
+            },
+            "startupPolicy": {
+                "includeMountedSpaces": True,
+                "mode": "runtime-root-mount",
+            },
+            "activeCapabilities": active_capabilities,
+        },
+        module_ids=active_capabilities,
+    )
+    for item in startup_results:
+        if item.get("error"):
+            continue
+        result = item.get("result") if isinstance(item.get("result"), dict) else {}
+        if result.get("summary") is not None:
+            summary_parts.append(normalize_excerpt(str(result["summary"]), 180))
+        for summary_part in result.get("rootSummaryParts") or []:
+            if summary_part is not None:
+                summary_parts.append(normalize_excerpt(str(summary_part), 180))
+        module_mount_fragments.extend(fragment for fragment in result.get("mountFragments") or [] if isinstance(fragment, dict))
+        module_mounted_node_refs.extend(reference for reference in result.get("mountedNodeRefs") or [] if isinstance(reference, dict))
+        accessible_mounts.extend(mount for mount in result.get("accessibleMounts") or [] if isinstance(mount, dict))
 
     package = RootMountPackage(
         id=new_id("mount", task_id, project_id, branch_id, stable=True),
@@ -280,13 +302,23 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         generatedAt=utc_now(),
     )
     response = package.model_dump(by_alias=True, mode="json")
-    response["mountedNodeRefs"] = [
+    response["mountedNodeRefs"] = []
+    seen_mounted_refs: set[str] = set()
+    for reference in [
         *response["identityRefs"],
         *response["contextRefs"],
         *response["executionRefs"],
-    ]
-    response["spaceId"] = str(request.get("spaceId", DEFAULT_SPACE_ID))
+        *module_mounted_node_refs,
+    ]:
+        ref_key = f"{reference.get('kind')}::{reference.get('id')}"
+        if ref_key in seen_mounted_refs:
+            continue
+        seen_mounted_refs.add(ref_key)
+        response["mountedNodeRefs"].append(reference)
+    response["spaceId"] = host_space_id
     response["source"] = "database" if task_record is not None else "preview"
+    response["moduleMountFragments"] = module_mount_fragments
+    response["accessibleMounts"] = accessible_mounts
     response["cached"] = _cache_package_entry(coordinator, f"runtime/tasks/{task_id}/root-mount/current", response)
     return response
 
@@ -295,6 +327,7 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     request = payload or {}
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
+    app_id = str(request.get("appId") or DEFAULT_APP_ID)
     project_id = str(request.get("projectId", DEFAULT_PROJECT_ID))
     branch_id = str(request.get("branchId", DEFAULT_BRANCH_ID))
     agent_run_id = str(request.get("agentRunId", new_id("run", task_id, stable=True)))
@@ -305,16 +338,27 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     current_context_state = request.get("currentContextState") if isinstance(request.get("currentContextState"), list) else []
     blockers: list[str] = []
 
+    try:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            task = TaskRepository(session).get_task(task_id)
+            if task is not None:
+                app_id = task.app_id
+                project_id = task.project_id
+                branch_id = task.branch_id
+    except Exception:
+        pass
+
     if active_tool_calls:
         blockers.append("active-tool-calls")
     if current_response_state not in {"completed", "idle", "drained"}:
         blockers.append("response-not-finished")
 
-    safe_to_pause = not blockers
     snapshot_id = str(request.get("snapshotId") or new_id("snap", task_id, agent_run_id))
     root_mount = request.get("rootMountPreview") if isinstance(request.get("rootMountPreview"), dict) else build_root_mount_package(
         task_id,
         {
+            "appId": app_id,
             "projectId": project_id,
             "branchId": branch_id,
             "spaceId": request.get("spaceId", DEFAULT_SPACE_ID),
@@ -328,8 +372,48 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     root_mount_cached = _cache_package_entry(coordinator, root_mount_locator, root_mount)
     context_cached = _cache_package_entry(coordinator, context_locator, current_context_state)
 
+    snapshot_delta: dict[str, Any] = {}
+    module_summaries: list[str] = []
+    pause_active_capabilities = resolve_application_active_capabilities(app_id=app_id)
+    pause_results = collect_hook_results(
+        HookNames.TASK_PAUSE_PREPARE,
+        {
+            "taskId": task_id,
+            "taskState": {
+                "projectId": project_id,
+                "branchId": branch_id,
+                "spaceId": request.get("spaceId", DEFAULT_SPACE_ID),
+                "agentRunId": agent_run_id,
+            },
+            "pendingWrites": [reference.model_dump(mode="json") for reference in pending_writes],
+            "pendingActions": pending_actions,
+            "activeToolCalls": [str(tool_call) for tool_call in active_tool_calls],
+            "currentResponseState": current_response_state,
+            "currentContextState": current_context_state,
+            "rootMountPreview": root_mount,
+        },
+        module_ids=pause_active_capabilities,
+    )
+    for item in pause_results:
+        module_id = str(item.get("moduleId") or "unknown")
+        if item.get("error"):
+            blockers.append(f"{module_id}:{item['error']}")
+            continue
+        result = item.get("result") if isinstance(item.get("result"), dict) else {}
+        if isinstance(result.get("snapshotDelta"), dict):
+            snapshot_delta.update(result["snapshotDelta"])
+        if isinstance(result.get("blockers"), list):
+            blockers.extend(str(blocker) for blocker in result["blockers"])
+        if result.get("safeToPause") is False:
+            blockers.append(f"{module_id}:unsafe")
+        if result.get("summary") is not None:
+            module_summaries.append(str(result["summary"]))
+
+    safe_to_pause = not blockers
+
     snapshot = TaskSnapshotSummary(
         id=snapshot_id,
+        appId=app_id,
         taskId=task_id,
         agentRunId=agent_run_id,
         projectId=project_id,
@@ -340,13 +424,19 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         contextRef=ExternalRef(type="package-entry", locator=context_locator),
         rootMountRef=ExternalRef(type="package-entry", locator=root_mount_locator),
         pendingWrites=pending_writes,
-        pendingActions=[action for action in pending_actions if isinstance(action, dict)],
+        pendingActions=[
+            action
+            for action in [*pending_actions, *(snapshot_delta.get("pendingActions") or [])]
+            if isinstance(action, dict)
+        ],
         resumeMessage=(
-            str(request.get("resumeMessage"))
+            str(snapshot_delta.get("resumeMessage"))
+            if snapshot_delta.get("resumeMessage") is not None
+            else str(request.get("resumeMessage"))
             if request.get("resumeMessage") is not None
             else f"Resume task {task_id} from the last safe stop."
         ),
-        safeStopReason=str(request.get("safeStopReason", "manual-pause")),
+        safeStopReason=str(snapshot_delta.get("safeStopReason") or request.get("safeStopReason", "manual-pause")),
         createdAt=utc_now(),
         safeToPause=safe_to_pause,
         blockers=blockers,
@@ -358,6 +448,7 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         "flushedWrites": len(pending_writes),
         "rootMountCached": root_mount_cached,
         "contextCached": context_cached,
+        "moduleSummaries": module_summaries,
         "projectId": project_id,
     }
 
@@ -408,6 +499,7 @@ def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) 
     response["persisted"] = persisted
     response["rootMountCached"] = state["rootMountCached"]
     response["contextCached"] = state["contextCached"]
+    response["moduleSummaries"] = state.get("moduleSummaries") or []
     return response
 
 
@@ -423,6 +515,7 @@ def queue_main_agent_execution(task_id: str, payload: dict[str, Any] | None = No
         if task is None:
             raise KeyError(f"Task {task_id} not found.")
         update_payload: dict[str, Any] = {}
+        outbox_record = None
         for key in ("currentFocus", "currentObjective", "resumeMessage", "budget", "budgetState"):
             if key in request:
                 update_payload[key] = request[key]
@@ -439,6 +532,23 @@ def queue_main_agent_execution(task_id: str, payload: dict[str, Any] | None = No
             update_payload["status"] = "queued"
             update_payload["pauseRequested"] = False
             update_payload["resumeMessage"] = request.get("resumeMessage") or snapshot.resume_message or task.resume_message
+            resume_request_locator = f"agent-runtime/tasks/{task.id}/resume-requests/{new_id('resume', task.id)}"
+            resume_request_payload = {
+                "requestedBy": request.get("requestedBy") or {"type": "user", "id": "operator"},
+                "reason": request.get("reason") or "manual-resume",
+                "resumeToken": request.get("resumeToken") or snapshot.resume_token,
+                "resumeMessage": update_payload["resumeMessage"],
+                "requestedAt": utc_now().isoformat(),
+            }
+            _cache_package_entry(coordinator, resume_request_locator, resume_request_payload)
+            outbox_record = _persist_runtime_event(
+                session,
+                project_id=task.project_id,
+                aggregate_type="task",
+                aggregate_id=task.id,
+                event_type="task.resume.requested",
+                locator=resume_request_locator,
+            )
         else:
             if task.status in {"paused", "completed", "failed", "cancelled"}:
                 raise ValueError(f"Task {task_id} is in state {task.status} and cannot be started directly.")
@@ -458,6 +568,7 @@ def queue_main_agent_execution(task_id: str, payload: dict[str, Any] | None = No
         "queueDepth": queue_depth,
         "task": task.model_dump(by_alias=True, mode="json"),
         "workItem": work_item,
+        "outboxRecord": outbox_record.model_dump(by_alias=True, mode="json") if outbox_record is not None else None,
     }
 
 
@@ -482,25 +593,25 @@ def request_task_pause(task_id: str, payload: dict[str, Any] | None = None) -> d
                 "currentFocus": request.get("currentFocus") or task.current_focus,
             },
         )
+        pause_request_payload = {
+            "requestedBy": request.get("requestedBy") or {"type": "user", "id": "operator"},
+            "reason": request.get("reason") or "manual-pause",
+            "pauseMode": request.get("pauseMode") or "manual",
+            "waitForSafeStop": bool(request.get("waitForSafeStop", True)),
+            "resumeMessage": request.get("resumeMessage"),
+            "requestedAt": utc_now().isoformat(),
+        }
+        pause_request_locator = f"agent-runtime/tasks/{task.id}/pause-requests/{new_id('pause', task.id)}"
+        coordinator = RedisCoordinator(runtime.settings)
+        _cache_package_entry(coordinator, pause_request_locator, pause_request_payload)
+        _cache_package_entry(coordinator, f"runtime/tasks/{task_id}/pause-request/current", pause_request_payload)
         event = _persist_runtime_event(
             session,
             project_id=task.project_id,
             aggregate_type="task",
             aggregate_id=task.id,
             event_type="task.pause.requested",
-            locator=f"agent-runtime/tasks/{task.id}/pause-requests/{new_id('pause', task.id)}",
-        )
-        _cache_package_entry(
-            RedisCoordinator(runtime.settings),
-            f"runtime/tasks/{task_id}/pause-request/current",
-            {
-                "requestedBy": request.get("requestedBy") or {"type": "user", "id": "operator"},
-                "reason": request.get("reason") or "manual-pause",
-                "pauseMode": request.get("pauseMode") or "manual",
-                "waitForSafeStop": bool(request.get("waitForSafeStop", True)),
-                "resumeMessage": request.get("resumeMessage"),
-                "requestedAt": utc_now().isoformat(),
-            },
+            locator=pause_request_locator,
         )
     return {
         "status": "pause-requested",
@@ -526,6 +637,7 @@ def _build_execution_write_payload(
     route_decision: dict[str, Any],
     model_output: str,
     model_invocation: dict[str, Any] | None,
+    tool_executions: list[dict[str, Any]] | None,
     pruning_result: dict[str, Any] | None,
     resume_path: str | None,
 ) -> dict[str, str]:
@@ -547,7 +659,17 @@ def _build_execution_write_payload(
                 f"Resolved model: {model_invocation.get('resolvedModel') or model_invocation.get('requestedModel')}",
                 f"Resolved provider: {model_invocation.get('resolvedProvider') or 'unknown'}",
                 f"Trace id: {model_invocation.get('traceId') or 'n/a'}",
+                f"Prompt artifact: {model_invocation.get('promptCompileArtifactId') or 'n/a'}",
             ]
+        )
+    if tool_executions:
+        lines.append(
+            "Tool executions: "
+            + "; ".join(
+                f"{(execution.get('tool') or {}).get('name') or 'unknown'}={'ok' if execution.get('success') else 'error'}"
+                for execution in tool_executions[:6]
+                if isinstance(execution, dict)
+            )
         )
     if resume_path:
         lines.append(f"Resume path: {resume_path}")
@@ -622,6 +744,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 {
                     "projectId": task.project_id,
                     "branchId": task.branch_id,
+                    "spaceId": task.space_id,
                     "taskObjective": request.get("taskObjective") or task.current_objective or task.goal,
                     "currentObjective": request.get("currentObjective") or task.current_objective,
                     "currentFocus": request.get("currentFocus") or task.current_focus,
@@ -629,6 +752,55 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "budgetState": request.get("budgetState") or task.budget.model_dump(by_alias=True),
                 },
             )
+
+            rehydration_result = None
+            if snapshot is not None and command == "resume":
+                rehydration_results = collect_hook_results(
+                    HookNames.TASK_RESUME_REHYDRATE,
+                    {
+                        "taskId": task.id,
+                        "taskSnapshot": snapshot.model_dump(by_alias=True, mode="json"),
+                        "rootMounts": root_mount,
+                        "resumePolicy": {
+                            "resumePath": "snapshot",
+                            "preserveProtectedItems": True,
+                        },
+                    },
+                    module_ids=root_mount.get("activeCapabilities") or None,
+                )
+                merged_restored_state: dict[str, Any] = {}
+                followup_actions: list[dict[str, Any]] = []
+                resume_summaries: list[str] = []
+                for item in rehydration_results:
+                    if item.get("error"):
+                        raise RuntimeError(f"Resume rehydrate failed in {item.get('moduleId')}: {item['error']}")
+                    result = item.get("result") if isinstance(item.get("result"), dict) else {}
+                    restored_state = result.get("restoredState") if isinstance(result.get("restoredState"), dict) else {}
+                    merged_restored_state.update(restored_state)
+                    if isinstance(result.get("followupActions"), list):
+                        followup_actions.extend(action for action in result["followupActions"] if isinstance(action, dict))
+                    if result.get("resumeMessage") is not None:
+                        request["resumeMessage"] = str(result["resumeMessage"])
+                        root_mount["resumeMessage"] = str(result["resumeMessage"])
+                    if result.get("summary") is not None:
+                        resume_summaries.append(str(result["summary"]))
+                if isinstance(merged_restored_state.get("currentContext"), list):
+                    current_context = [item for item in merged_restored_state["currentContext"] if isinstance(item, dict)]
+                if isinstance(merged_restored_state.get("protectedItems"), list):
+                    protected_items = [item for item in merged_restored_state["protectedItems"] if isinstance(item, dict)]
+                if followup_actions:
+                    request["pendingActions"] = [
+                        action
+                        for action in [*(request.get("pendingActions") or []), *followup_actions]
+                        if isinstance(action, dict)
+                    ]
+                if resume_summaries:
+                    root_mount["rootSummary"] = " ".join([root_mount.get("rootSummary") or "", *resume_summaries]).strip()
+                rehydration_result = {
+                    "restoredState": merged_restored_state,
+                    "followupActions": followup_actions,
+                    "summaries": resume_summaries,
+                }
 
             input_tokens, output_tokens = _estimate_usage(task, root_mount, current_context, request)
             budget_limit = _remaining_cost_per_1k(task.budget, input_tokens + output_tokens)
@@ -710,13 +882,23 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if snapshot is not None and command == "resume":
                 resumed_snapshot = task_repository.update_snapshot(snapshot.id, status="consumed", consumed_at=utc_now())
                 task = task_repository.update_task(task_id, {"activeSnapshotId": None, "pauseRequested": False})
+                resumed_locator = f"agent-runtime/tasks/{task.id}/resume/{run.id}"
+                _cache_package_entry(
+                    coordinator,
+                    resumed_locator,
+                    {
+                        "snapshotId": snapshot.id,
+                        "restoredFromCheckpoint": True,
+                        "resumePath": "snapshot",
+                    },
+                )
                 resume_event = _persist_runtime_event(
                     session,
                     project_id=task.project_id,
                     aggregate_type="task",
                     aggregate_id=task.id,
                     event_type="task.resumed",
-                    locator=f"agent-runtime/tasks/{task.id}/resume/{run.id}",
+                    locator=resumed_locator,
                 )
                 resume_event_payload = {
                     "snapshot": resumed_snapshot.model_dump(by_alias=True, mode="json"),
@@ -805,14 +987,54 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 route_decision=route_decision.model_dump(by_alias=True, mode="json"),
                 model_output=str(llm_result["assistantText"]),
                 model_invocation=llm_result["invocation"],
+                tool_executions=llm_result.get("toolExecutions"),
                 pruning_result=pruning_result,
                 resume_path="snapshot" if snapshot is not None and command == "resume" else None,
             )
+            write_validation = validate_memory_write(
+                {
+                    "taskId": task.id,
+                    "projectId": task.project_id,
+                    "hostSpaceId": task.space_id,
+                    "ownerProfileId": task.owner_profile_id,
+                    "subject": request.get("subject") or f"profile:{task.owner_profile_id}",
+                    "relation": "write",
+                    "nodePayload": write_payload,
+                    "candidateNodes": [
+                        {
+                            "id": new_id("candnode", task.id, run.id, stable=True),
+                            "title": write_payload["title"],
+                            "content": write_payload["content"],
+                            "parentId": execution_root_id,
+                            "rootBranch": "execution",
+                            "nodeType": "task",
+                        }
+                    ],
+                    "candidateEdges": [],
+                    "ownerProfileId": task.owner_profile_id,
+                    "subject": request.get("subject") or f"profile:{task.owner_profile_id}",
+                    "relation": "write",
+                    "nodePayload": write_payload,
+                    "rootMount": root_mount,
+                    "resumePath": "snapshot" if snapshot is not None and command == "resume" else None,
+                },
+                module_ids=root_mount.get("activeCapabilities") or None,
+            )
+            if not write_validation["allowed"]:
+                raise PermissionError("Memory write validation failed: " + "; ".join(write_validation["blockers"]))
+            target_space_id = str(write_validation.get("targetSpaceId") or task.space_id)
+            target_branch_id = str(write_validation.get("targetBranchId") or task.branch_id)
+            if target_space_id != task.space_id or target_branch_id != task.branch_id:
+                WorkspaceBootstrapRepository(session).ensure_branch_workspace(
+                    branch_id=target_branch_id,
+                    project_id=task.project_id,
+                    space_id=target_space_id,
+                )
             created_node = node_repository.create_node(
                 {
                     "projectId": task.project_id,
-                    "spaceId": task.space_id,
-                    "branchId": task.branch_id,
+                    "spaceId": target_space_id,
+                    "branchId": target_branch_id,
                     "parentId": execution_root_id,
                     "rootBranch": "execution",
                     "nodeType": "task",
@@ -823,6 +1045,26 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "changeReason": f"{run_type}-agent-execution",
                 }
             )
+            for index, annotation in enumerate(
+                [annotation for annotation in write_validation.get("annotations") or [] if isinstance(annotation, dict)],
+                start=1,
+            ):
+                node_repository.add_source_annotation(
+                    "node",
+                    created_node.id,
+                    {
+                        "id": annotation.get("id") or new_id("srcann", created_node.id, index, stable=True),
+                        "projectId": task.project_id,
+                        "branchId": target_branch_id,
+                        "sourceType": annotation.get("sourceType") or "memory",
+                        "sourceRef": annotation.get("sourceRef"),
+                        "excerpt": annotation.get("excerpt"),
+                        "inferenceSummary": annotation.get("inferenceSummary") or annotation.get("summary"),
+                        "evidenceRefs": annotation.get("evidenceRefs") or [],
+                        "confidence": float(annotation.get("confidence", 0.85)),
+                        "createdBy": annotation.get("createdBy") or {"type": "module", "id": "runtime-kernel"},
+                    },
+                )
             write_event = _persist_runtime_event(
                 session,
                 project_id=task.project_id,
@@ -884,13 +1126,24 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     },
                 )
                 run = task_repository.update_agent_run(run.id, {"status": "paused"})
+                paused_locator = f"agent-runtime/tasks/{task.id}/pause/{pause_snapshot['id']}"
+                _cache_package_entry(
+                    coordinator,
+                    paused_locator,
+                    {
+                        "snapshotId": pause_snapshot["id"],
+                        "flushedWrites": pause_state["flushedWrites"],
+                        "pendingExternalActions": pause_snapshot_summary.pending_actions,
+                        "resumeToken": pause_snapshot["resumeToken"],
+                    },
+                )
                 paused_event = _persist_runtime_event(
                     session,
                     project_id=task.project_id,
                     aggregate_type="task",
                     aggregate_id=task.id,
                     event_type="task.paused",
-                    locator=f"agent-runtime/tasks/{task.id}/pause/{pause_snapshot['id']}",
+                    locator=paused_locator,
                 )
                 return {
                     "status": "paused",
@@ -911,6 +1164,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         "taskPaused": paused_event.model_dump(by_alias=True, mode="json"),
                     },
                     "resume": resume_event_payload,
+                    "writeValidation": write_validation,
+                    "rehydration": rehydration_result,
                 }
 
             task = task_repository.update_task(
@@ -940,6 +1195,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "writeCreated": write_event.model_dump(by_alias=True, mode="json"),
                 },
                 "resume": resume_event_payload,
+                "writeValidation": write_validation,
+                "rehydration": rehydration_result,
             }
     except Exception as exc:
         try:

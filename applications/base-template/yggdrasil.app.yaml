@@ -1,0 +1,30 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.base
+  displayName: Base Template
+  version: 0.1.0
+  owner: core
+  description: Default fallback application loaded by the kernel when no concrete application is selected.
+  defaultLoad: true
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.generic.default
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles:
+      - scenes/generic-default.yaml
+    capabilityModules:
+      - subagent-runtime
+    sceneModules: []
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.base
+    dashboardRef: web/dashboard.json

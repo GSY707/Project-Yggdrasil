@@ -1,0 +1,36 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.scenic-guide
+  displayName: Scenic Guide
+  version: 0.1.0
+  owner: core
+  description: Dedicated application for scenic-area guidance and visitor service mode.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-scenic-guide
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.scenic-guide.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.scenic.guide
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles: []
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-scenic-guide
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.scenic-guide
+    dashboardRef: web/dashboard.json

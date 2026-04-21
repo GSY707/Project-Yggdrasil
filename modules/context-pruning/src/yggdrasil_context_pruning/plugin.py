@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from yggdrasil_sdk.contracts import ActorRef, ContextPruningPlan, EntityRef, EventEnvelope, EventHandlingResult, ModuleEventEmission
+from yggdrasil_sdk.contracts import ActorRef, ContextPruningPlan, EntityRef, EventEnvelope, EventHandlingResult, ModuleEventEmission, ToolDescriptor
 from yggdrasil_sdk.hooks import HookNames
 from yggdrasil_sdk.module import BaseModulePlugin, HookRegistration
 from yggdrasil_sdk.support import new_id, normalize_excerpt, utc_now
@@ -40,6 +40,7 @@ class ContextPruningModule(BaseModulePlugin):
         return (
             HookRegistration(name=HookNames.MODULE_ENABLE_PREFLIGHT, handler=self.enable_preflight),
             HookRegistration(name=HookNames.MODULE_HEALTH_REPORT, handler=self.report_health),
+            HookRegistration(name=HookNames.AGENT_TOOLS_REGISTER, handler=self.register_tools_hook),
             HookRegistration(name=HookNames.CONTEXT_PRUNING_PLAN, handler=self.plan),
             HookRegistration(
                 name=HookNames.CONTEXT_PRUNING_EXECUTE,
@@ -47,6 +48,38 @@ class ContextPruningModule(BaseModulePlugin):
                 side_effects="controlled-write",
             ),
         )
+
+    def register_tools(self) -> tuple[dict[str, object], ...]:
+        tools = (
+            ToolDescriptor(
+                name="context_pruning.plan",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Plan Safe-Stop Retention",
+                description="Generate and preview a context pruning plan for the current mounted context and a token budget.",
+                schemaRef="docs/specs/runtime-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=3000,
+                permissionRequired=["context.read"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nextObjective": {"type": "string"},
+                        "maxRetainedTokens": {"type": "integer", "minimum": 32, "default": 160},
+                    },
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_context_pruning.plugin:plan_context_pruning_tool",
+            ),
+        )
+        return tuple(tool.model_dump(by_alias=True) for tool in tools)
+
+    def register_tools_hook(self, payload: dict[str, object]) -> dict[str, object]:
+        return {
+            "tools": list(self.register_tools()),
+            "toolCount": len(self.register_tools()),
+            "moduleId": self.module_id,
+        }
 
     def enable_preflight(self, payload: dict[str, object]) -> dict[str, object]:
         install = payload.get("install") if isinstance(payload.get("install"), dict) else {}
@@ -232,3 +265,24 @@ class ContextPruningModule(BaseModulePlugin):
 
 
 plugin = ContextPruningModule()
+
+
+def plan_context_pruning_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    current_context = payload.get("currentContext") if isinstance(payload.get("currentContext"), list) else execution_context.get("currentContext") or []
+    next_objective = str(payload.get("nextObjective") or execution_context.get("currentObjective") or execution_context.get("taskGoal") or "Continue current task.")
+    plan = plugin.plan(
+        {
+            "taskId": execution_context.get("taskId"),
+            "sourceRunId": execution_context.get("runId"),
+            "nextObjective": next_objective,
+            "budget": {"maxRetainedTokens": int(payload.get("maxRetainedTokens") or 160)},
+            "currentContext": current_context,
+        }
+    )
+    preview = plugin.execute({"plan": plan, "currentContext": current_context})
+    return {
+        "plan": plan,
+        "preview": preview,
+        "compressedNarrative": preview.get("compressedNarrative"),
+    }

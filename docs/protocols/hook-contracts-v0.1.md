@@ -60,6 +60,8 @@ Hook 不是任意代码插入点，而是被平台显式治理的扩展接口。
 - agent.tools.register
 - agent.startup.mount-root
 - agent.startup.extend-system-context
+- prompt.profiles.register
+- prompt.seed-templates.register
 - task.pause.prepare
 - task.resume.rehydrate
 

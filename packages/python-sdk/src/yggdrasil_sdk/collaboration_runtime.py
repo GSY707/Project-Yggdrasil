@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+from .application_runtime import resolve_application_active_capabilities
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -193,14 +194,7 @@ def _build_readonly_context_package_from_session(
         parent_task.branch_id,
         parent_task.execution_root_node_id,
     )
-    installs = ModuleStateRepository(session).list_module_installs()
-    active_capabilities = sorted(
-        {
-            record.module_id
-            for record in installs
-            if record.desired_state == "enabled" and record.lifecycle_state in {"active", "degraded", "discovered"}
-        }
-    )
+    active_capabilities = resolve_application_active_capabilities(parent_task.app_id)
     summary_parts = [
         "Identity root is mounted for stable agent policy.",
         "Context root is mounted for project and world state.",
@@ -533,6 +527,7 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
         child_budget = _derive_child_budget(parent_task.budget, request.get("subAgentBudget") if isinstance(request.get("subAgentBudget"), dict) else None)
         child_task = task_repository.create_task(
             {
+                "appId": parent_task.app_id,
                 "projectId": parent_task.project_id,
                 "spaceId": parent_task.space_id,
                 "branchId": child_branch.id,

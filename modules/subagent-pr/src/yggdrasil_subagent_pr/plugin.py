@@ -56,22 +56,48 @@ class SubagentPrModule(BaseModulePlugin):
                 moduleId=self.module_id,
                 version="0.1.0",
                 displayName="Create Sub-Agent Pull Request",
+                description="Create a pull request from a prepared source branch into a target branch and attach readonly context metadata.",
                 schemaRef="docs/specs/collaboration-and-governance-data-spec-v0.1.md",
                 executionMode="sync",
                 timeoutMs=5000,
                 idempotent=False,
                 permissionRequired=["pr.write", "branch.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "sourceBranchId": {"type": "string"},
+                        "targetBranchId": {"type": "string"},
+                        "title": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "readonlyContextRef": {"type": "object"},
+                    },
+                    "required": ["sourceBranchId", "targetBranchId", "title", "summary"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_subagent_pr.plugin:create_pull_request_tool",
             ),
             ToolDescriptor(
                 name="subagent_pr.review",
                 moduleId=self.module_id,
                 version="0.1.0",
                 displayName="Review Sub-Agent Pull Request",
+                description="Review a sub-agent pull request and optionally merge it immediately.",
                 schemaRef="docs/specs/collaboration-and-governance-data-spec-v0.1.md",
                 executionMode="sync",
                 timeoutMs=5000,
                 idempotent=False,
                 permissionRequired=["pr.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "prId": {"type": "string"},
+                        "decision": {"type": "string", "enum": ["approved", "rejected"]},
+                        "mergeImmediately": {"type": "boolean"},
+                    },
+                    "required": ["prId", "decision"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_subagent_pr.plugin:review_pull_request_tool",
             ),
         )
         return tuple(tool.model_dump(by_alias=True) for tool in tools)
@@ -168,3 +194,11 @@ class SubagentPrModule(BaseModulePlugin):
 
 
 plugin = SubagentPrModule()
+
+
+def create_pull_request_tool(payload: dict[str, object]) -> dict[str, object]:
+    return plugin.create_pull_request(payload)
+
+
+def review_pull_request_tool(payload: dict[str, object]) -> dict[str, object]:
+    return plugin.review_pull_request(payload)

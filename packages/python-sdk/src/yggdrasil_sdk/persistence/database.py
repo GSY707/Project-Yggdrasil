@@ -83,6 +83,9 @@ def initialize_schema() -> None:
 
 
 def reset_persistence_runtime() -> None:
+    from .coordination import reset_memory_coordination
+
     runtime = get_persistence_runtime()
     runtime.dispose()
     get_persistence_runtime.cache_clear()
+    reset_memory_coordination()

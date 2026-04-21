@@ -1,0 +1,47 @@
+{
+  "id": "evalsuite_acceptance_m9_capabilities",
+  "name": "M9 Capability Acceptance",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "duration-ms",
+    "failed-cases"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "acceptance:m9-capabilities",
+  "cases": [
+    {
+      "id": "evalcase_m9_shared_multimodal_reasoning",
+      "title": "跨空间多模态恢复证据与蒸馏沉淀",
+      "scenario": "m9.shared_multimodal_reasoning",
+      "fixture": "m9_multimodal_shared_evidence.txt",
+      "query": "为什么主任务必须挂载共享空间中的多模态恢复证据，并把这些证据通过关联发现沉淀为 dataset version 与 model artifact，而不是只保留一条摘要？",
+      "expectedKeywords": [
+        "共享空间",
+        "多模态",
+        "关联",
+        "dataset version",
+        "model artifact",
+        "恢复"
+      ],
+      "tags": ["m9", "shared-memory", "multimodal", "relation-discovery", "training-lab"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_m9_pause_resume_memory_tree",
+      "title": "挂载记忆树任务的 safe-stop 与无感恢复",
+      "scenario": "m9.pause_resume_memory_tree",
+      "query": "在挂载共享记忆树后，任务必须在 safe-stop 中保留哪些上下文，恢复后又如何继续完成最终写入？",
+      "expectedKeywords": [
+        "记忆树",
+        "safe-stop",
+        "snapshot",
+        "protectedItems",
+        "resume",
+        "挂载"
+      ],
+      "tags": ["m9", "pause-resume", "runtime", "memory-tree"],
+      "difficulty": "hard"
+    }
+  ]
+}

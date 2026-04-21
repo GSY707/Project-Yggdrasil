@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Maintenance Ops",
+    "title": "维护修复应用",
+    "summary": "面向排障和维护任务的具体应用，强调根因定位、最小修复范围、回归控制和运行稳定性。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.maintenance-ops"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.maintenance-ops"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

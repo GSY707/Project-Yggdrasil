@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Learning Coach",
+    "title": "学习辅导应用",
+    "summary": "面向长期学习辅导的具体应用，先摄入资料与学习背景，再持续跟踪学习状态并主动推进学习。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.learning-coach"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.learning-coach"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

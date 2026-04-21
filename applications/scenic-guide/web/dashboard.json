@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Scenic Guide",
+    "title": "景区导览服务应用",
+    "summary": "面向景区导览和游客服务的具体应用，先准备景区资料，再根据游客状态持续提供导览与现场建议。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.scenic-guide"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.scenic-guide"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

@@ -1,0 +1,58 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: relation-discovery
+  displayName: Relation Discovery
+  version: 0.1.0
+  category: memory
+  owner: core
+  description: Discover latent node relations and use the resulting graph to rerank retrieval bundles.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_relation_discovery.plugin:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules:
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - agent.tools.register
+      - memory.ingest.suggest-links
+      - memory.retrieve.rerank
+    publishes:
+      - memory.link.proposed
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      minOverlapTerms:
+        type: integer
+        minimum: 1
+      maxCreatedEdges:
+        type: integer
+        minimum: 1
+    required:
+      - minOverlapTerms
+      - maxCreatedEdges
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested:
+      - edge.write
+      - node.read
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

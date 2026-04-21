@@ -1,0 +1,14 @@
+{
+  "defaultTaskType": "research",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-research-deep",
+    "scene-writing-epic"
+  ],
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给结论或章节目标，再给证据和后续动作。"
+  }
+}

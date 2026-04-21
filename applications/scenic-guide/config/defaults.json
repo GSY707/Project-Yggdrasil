@@ -1,0 +1,19 @@
+{
+  "defaultTaskType": "service",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-scenic-guide"
+  ],
+  "serviceMode": {
+    "verifyRealtimeInfo": true,
+    "adaptToVisitorState": true,
+    "preferActionableRoutes": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给导览或服务建议，再给依据、约束和需要确认的事项。"
+  }
+}

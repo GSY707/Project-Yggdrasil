@@ -56,6 +56,33 @@ class MemoryBranchORM(Base):
     created_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
 
 
+class SpaceMountORM(Base):
+    __tablename__ = "space_mounts"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    host_space_id: Mapped[str] = mapped_column(sa.ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    mounted_space_id: Mapped[str] = mapped_column(sa.ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    mount_mode: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    created_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+
+
+class PermissionTupleORM(Base):
+    __tablename__ = "permission_tuples"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    relation: Mapped[str] = mapped_column(sa.String(128), nullable=False, index=True)
+    resource: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    condition: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    effect: Mapped[str] = mapped_column(sa.String(16), nullable=False, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    created_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+
+
 class NodeORM(Base):
     __tablename__ = "nodes"
 
@@ -217,6 +244,7 @@ class TaskORM(Base):
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     space_id: Mapped[str] = mapped_column(sa.ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True)
     branch_id: Mapped[str] = mapped_column(sa.ForeignKey("memory_branches.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -243,6 +271,7 @@ class AgentRunORM(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     branch_id: Mapped[str] = mapped_column(sa.ForeignKey("memory_branches.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -264,6 +293,7 @@ class TaskSnapshotORM(Base):
     __tablename__ = "task_snapshots"
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_run_id: Mapped[str] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -304,6 +334,7 @@ class ModelInvocationORM(Base):
     __tablename__ = "model_invocations"
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str | None] = mapped_column(sa.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -315,6 +346,7 @@ class ModelInvocationORM(Base):
     invocation_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
     trace_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    prompt_compile_artifact_id: Mapped[str | None] = mapped_column(sa.ForeignKey("prompt_compile_artifacts.id", ondelete="SET NULL"), nullable=True, index=True)
     request_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
     response_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
     input_tokens_used: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
@@ -467,4 +499,126 @@ class EvaluationRunORM(Base):
     metrics_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
     started_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
     ended_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class AssetORM(Base):
+    __tablename__ = "assets"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    space_id: Mapped[str] = mapped_column(sa.ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    branch_id: Mapped[str] = mapped_column(sa.ForeignKey("memory_branches.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_node_id: Mapped[str | None] = mapped_column(sa.ForeignKey("nodes.id", ondelete="SET NULL"), nullable=True, index=True)
+    media_type: Mapped[str] = mapped_column(sa.String(128), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    storage_key: Mapped[str] = mapped_column(sa.String(512), nullable=False)
+    checksum: Mapped[str] = mapped_column(sa.String(128), nullable=False, index=True)
+    source_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer(), nullable=True)
+    width: Mapped[int | None] = mapped_column(sa.Integer(), nullable=True)
+    height: Mapped[int | None] = mapped_column(sa.Integer(), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    created_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+
+
+class AssetSegmentORM(Base):
+    __tablename__ = "asset_segments"
+    __table_args__ = (sa.UniqueConstraint("asset_id", "ordinal"),)
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    asset_id: Mapped[str] = mapped_column(sa.ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    ordinal: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    start_offset: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    end_offset: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    text_excerpt: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    summary: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    embedding_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class AssetEmbeddingORM(Base):
+    __tablename__ = "asset_embeddings"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    owner_kind: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(sa.String(128), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    dimension: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    vector_ref: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class DatasetVersionORM(Base):
+    __tablename__ = "dataset_versions"
+    __table_args__ = (sa.UniqueConstraint("dataset_name", "version"),)
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    dataset_name: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    source_filter: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    storage_key: Mapped[str] = mapped_column(sa.String(512), nullable=False)
+    row_count: Mapped[int] = mapped_column(sa.Integer(), nullable=False)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class ModelArtifactORM(Base):
+    __tablename__ = "model_artifacts"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    base_model: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    tuning_method: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    dataset_version_id: Mapped[str] = mapped_column(sa.ForeignKey("dataset_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+    metrics_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    storage_key: Mapped[str] = mapped_column(sa.String(512), nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class PromptProfileVersionORM(Base):
+    __tablename__ = "prompt_profile_versions"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    prompt_profile_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    version: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    run_scope: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    body: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class SeedTemplateVersionORM(Base):
+    __tablename__ = "seed_template_versions"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    seed_template_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    version: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    domain: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    scenario: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    body: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class PromptCompileArtifactORM(Base):
+    __tablename__ = "prompt_compile_artifacts"
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(sa.ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    model_invocation_id: Mapped[str | None] = mapped_column(sa.ForeignKey("model_invocations.id", ondelete="SET NULL"), nullable=True, index=True)
+    prompt_profile_version_id: Mapped[str] = mapped_column(sa.ForeignKey("prompt_profile_versions.id", ondelete="RESTRICT"), nullable=False, index=True)
+    seed_template_version_id: Mapped[str | None] = mapped_column(sa.ForeignKey("seed_template_versions.id", ondelete="SET NULL"), nullable=True, index=True)
+    run_type: Mapped[str] = mapped_column(sa.String(32), nullable=False)
+    task_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    scenario: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    registered_tools: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    system_sections: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    user_sections: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    compiled_messages_ref: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    content_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)

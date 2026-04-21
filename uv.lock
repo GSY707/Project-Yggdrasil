@@ -8,11 +8,17 @@ members = [
     "yggdrasil-context-pruning",
     "yggdrasil-core-api",
     "yggdrasil-media-providers",
+    "yggdrasil-memory-organizer",
     "yggdrasil-model-providers",
     "yggdrasil-module-host",
+    "yggdrasil-multimodal-memory",
+    "yggdrasil-pause-resume",
+    "yggdrasil-relation-discovery",
     "yggdrasil-sdk",
+    "yggdrasil-shared-memory",
     "yggdrasil-subagent-pr",
     "yggdrasil-text-memory",
+    "yggdrasil-training-lab",
     "yggdrasil-worker",
 ]
 
@@ -1018,6 +1024,17 @@ dependencies = [
 requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
 
 [[package]]
+name = "yggdrasil-memory-organizer"
+version = "0.1.0"
+source = { editable = "modules/memory-organizer" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
+
+[[package]]
 name = "yggdrasil-model-providers"
 version = "0.1.0"
 source = { editable = "adapters/model-providers" }
@@ -1046,6 +1063,43 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "yggdrasil-sdk", editable = "packages/python-sdk" },
 ]
+
+[[package]]
+name = "yggdrasil-multimodal-memory"
+version = "0.1.0"
+source = { editable = "modules/multimodal-memory" }
+dependencies = [
+    { name = "yggdrasil-media-providers" },
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "yggdrasil-media-providers", editable = "adapters/media-providers" },
+    { name = "yggdrasil-sdk", editable = "packages/python-sdk" },
+]
+
+[[package]]
+name = "yggdrasil-pause-resume"
+version = "0.1.0"
+source = { editable = "modules/pause-resume" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
+
+[[package]]
+name = "yggdrasil-relation-discovery"
+version = "0.1.0"
+source = { editable = "modules/relation-discovery" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
 
 [[package]]
 name = "yggdrasil-sdk"
@@ -1079,6 +1133,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "yggdrasil-shared-memory"
+version = "0.1.0"
+source = { editable = "modules/shared-memory" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
+
+[[package]]
 name = "yggdrasil-subagent-pr"
 version = "0.1.0"
 source = { editable = "modules/subagent-pr" }
@@ -1093,6 +1158,17 @@ requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
 name = "yggdrasil-text-memory"
 version = "0.1.0"
 source = { editable = "modules/text-memory" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
+
+[[package]]
+name = "yggdrasil-training-lab"
+version = "0.1.0"
+source = { editable = "modules/training-lab" }
 dependencies = [
     { name = "yggdrasil-sdk" },
 ]

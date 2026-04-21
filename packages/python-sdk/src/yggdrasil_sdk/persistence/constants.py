@@ -5,6 +5,7 @@ DEFAULT_PROJECT_ID = "project_default"
 DEFAULT_SPACE_ID = "space_default"
 DEFAULT_BRANCH_ID = "branch_main"
 DEFAULT_OWNER_PROFILE_ID = "identity_profile_default"
+DEFAULT_APP_ID = "yggdrasil.app.base"
 
 ROOT_BRANCH_TITLES = {
     "identity": "我是谁",

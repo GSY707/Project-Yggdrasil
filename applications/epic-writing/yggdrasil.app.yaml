@@ -1,0 +1,36 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.epic-writing
+  displayName: Epic Writing Studio
+  version: 0.1.0
+  owner: core
+  description: Dedicated application for long-form creative writing and continuity management.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-writing-epic
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.epic-writing.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.writing.epic
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles: []
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-writing-epic
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.epic-writing
+    dashboardRef: web/dashboard.json

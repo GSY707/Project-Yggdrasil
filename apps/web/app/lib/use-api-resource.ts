@@ -2,18 +2,26 @@
 
 import { startTransition, useEffect, useState } from "react";
 
-export function useApiResource<T>(path: string) {
+export function useApiResource<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    if (!path) {
+      setData(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function load() {
       setIsLoading(true);
       setError(null);
+      setData(null);
       try {
         const response = await fetch(`/api/core${path}`, { cache: "no-store" });
         if (!response.ok) {

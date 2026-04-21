@@ -44,6 +44,33 @@ class MemoryBranchRecord(BaseModel):
     created_by: ActorRef = Field(alias="createdBy")
 
 
+class SpaceMountRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    host_space_id: str = Field(alias="hostSpaceId")
+    mounted_space_id: str = Field(alias="mountedSpaceId")
+    mount_mode: Literal["readonly", "copy-on-write", "bidirectional"] = Field(alias="mountMode")
+    status: Literal["active", "disabled", "detached"]
+    created_at: datetime = Field(alias="createdAt")
+    created_by: ActorRef = Field(alias="createdBy")
+
+
+class PermissionTupleRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    subject: str
+    relation: str
+    resource: str
+    condition: dict[str, Any] | None = None
+    effect: Literal["allow", "deny"]
+    created_at: datetime = Field(alias="createdAt")
+    created_by: ActorRef = Field(alias="createdBy")
+
+
 class NodeRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -234,6 +261,7 @@ class TaskRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
+    app_id: str = Field(alias="appId")
     project_id: str = Field(alias="projectId")
     space_id: str = Field(alias="spaceId")
     branch_id: str = Field(alias="branchId")
@@ -260,6 +288,7 @@ class AgentRunRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
+    app_id: str = Field(alias="appId")
     task_id: str = Field(alias="taskId")
     project_id: str = Field(alias="projectId")
     branch_id: str = Field(alias="branchId")
@@ -281,6 +310,7 @@ class ModelInvocationRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
+    app_id: str = Field(alias="appId")
     project_id: str = Field(alias="projectId")
     task_id: str | None = Field(default=None, alias="taskId")
     agent_run_id: str | None = Field(default=None, alias="agentRunId")
@@ -292,6 +322,7 @@ class ModelInvocationRecord(BaseModel):
     invocation_kind: Literal["chat-completion"] = Field(alias="invocationKind")
     status: Literal["queued", "running", "completed", "failed", "fallback"]
     trace_id: str | None = Field(default=None, alias="traceId")
+    prompt_compile_artifact_id: str | None = Field(default=None, alias="promptCompileArtifactId")
     request_ref: ExternalRef | None = Field(default=None, alias="requestRef")
     response_ref: ExternalRef | None = Field(default=None, alias="responseRef")
     input_tokens_used: int = Field(alias="inputTokensUsed")
@@ -344,4 +375,124 @@ class EvaluationRunRecord(BaseModel):
     metrics_ref: ExternalRef | None = Field(default=None, alias="metricsRef")
     started_at: datetime | None = Field(default=None, alias="startedAt")
     ended_at: datetime | None = Field(default=None, alias="endedAt")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class AssetRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    space_id: str = Field(alias="spaceId")
+    branch_id: str = Field(alias="branchId")
+    owner_node_id: str | None = Field(default=None, alias="ownerNodeId")
+    media_type: str = Field(alias="mediaType")
+    role: Literal["original", "derived", "preview", "thumbnail", "transcript"]
+    storage_key: str = Field(alias="storageKey")
+    checksum: str
+    source_ref: ExternalRef | None = Field(default=None, alias="sourceRef")
+    duration_ms: int | None = Field(default=None, alias="durationMs")
+    width: int | None = Field(default=None, alias="width")
+    height: int | None = Field(default=None, alias="height")
+    created_at: datetime = Field(alias="createdAt")
+    created_by: ActorRef = Field(alias="createdBy")
+
+
+class AssetSegmentRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    asset_id: str = Field(alias="assetId")
+    ordinal: int
+    start_offset: int = Field(alias="startOffset")
+    end_offset: int = Field(alias="endOffset")
+    text_excerpt: str | None = Field(default=None, alias="textExcerpt")
+    summary: str | None = None
+    embedding_id: str | None = Field(default=None, alias="embeddingId")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class AssetEmbeddingRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    owner_kind: Literal["asset", "asset-segment", "node"] = Field(alias="ownerKind")
+    owner_id: str = Field(alias="ownerId")
+    model: str
+    dimension: int
+    vector_ref: ExternalRef = Field(alias="vectorRef")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class DatasetVersionRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    dataset_name: str = Field(alias="datasetName")
+    version: str
+    source_filter: dict[str, Any] = Field(default_factory=dict, alias="sourceFilter")
+    storage_key: str = Field(alias="storageKey")
+    row_count: int = Field(alias="rowCount")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class ModelArtifactRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    base_model: str = Field(alias="baseModel")
+    tuning_method: Literal["sft", "dpo", "distillation", "adapter"] = Field(alias="tuningMethod")
+    dataset_version_id: str = Field(alias="datasetVersionId")
+    metrics_ref: ExternalRef | None = Field(default=None, alias="metricsRef")
+    storage_key: str = Field(alias="storageKey")
+    status: Literal["staged", "validated", "promoted", "retired"]
+    created_at: datetime = Field(alias="createdAt")
+
+
+class PromptProfileVersionRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    prompt_profile_id: str = Field(alias="promptProfileId")
+    name: str
+    version: str
+    run_scope: str = Field(alias="runScope")
+    body: dict[str, Any]
+    content_hash: str = Field(alias="contentHash")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class SeedTemplateVersionRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    seed_template_id: str = Field(alias="seedTemplateId")
+    name: str
+    version: str
+    domain: str
+    scenario: str
+    body: dict[str, Any]
+    content_hash: str = Field(alias="contentHash")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class PromptCompileArtifactRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    app_id: str = Field(alias="appId")
+    project_id: str = Field(alias="projectId")
+    task_id: str | None = Field(default=None, alias="taskId")
+    agent_run_id: str | None = Field(default=None, alias="agentRunId")
+    model_invocation_id: str | None = Field(default=None, alias="modelInvocationId")
+    prompt_profile_version_id: str = Field(alias="promptProfileVersionId")
+    seed_template_version_id: str | None = Field(default=None, alias="seedTemplateVersionId")
+    run_type: str = Field(alias="runType")
+    task_type: str = Field(alias="taskType")
+    scenario: str | None = None
+    registered_tools: list[dict[str, Any]] = Field(default_factory=list, alias="registeredTools")
+    system_sections: dict[str, str] = Field(default_factory=dict, alias="systemSections")
+    user_sections: dict[str, str] = Field(default_factory=dict, alias="userSections")
+    compiled_messages_ref: ExternalRef = Field(alias="compiledMessagesRef")
+    content_hash: str = Field(alias="contentHash")
     created_at: datetime = Field(alias="createdAt")

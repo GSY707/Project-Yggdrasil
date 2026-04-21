@@ -8,6 +8,12 @@ members = [
   "modules/text-memory",
   "modules/context-pruning",
   "modules/subagent-pr",
+  "modules/shared-memory",
+  "modules/pause-resume",
+  "modules/multimodal-memory",
+  "modules/memory-organizer",
+  "modules/relation-discovery",
+  "modules/training-lab",
   "adapters/model-providers",
   "adapters/media-providers"
 ]
@@ -20,6 +26,7 @@ dev = [
 
 [tool.uv.sources]
 yggdrasil-model-providers = { workspace = true }
+yggdrasil-media-providers = { workspace = true }
 yggdrasil-sdk = { workspace = true }
 
 [tool.ruff]

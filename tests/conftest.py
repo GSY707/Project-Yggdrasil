@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from yggdrasil_sdk import ensure_workspace_bootstrap, get_persistence_runtime, initialize_schema, reset_persistence_runtime
+from yggdrasil_sdk import close_mcp_bridge_sessions, ensure_workspace_bootstrap, get_persistence_runtime, initialize_schema, reset_persistence_runtime
 from yggdrasil_sdk.persistence.coordination import RedisCoordinator
 
 
@@ -26,6 +26,7 @@ def persistence_env(tmp_path, monkeypatch):
     except Exception:
         pass
     yield
+    close_mcp_bridge_sessions()
     reset_persistence_runtime()
     if state_dir.exists():
         shutil.rmtree(state_dir)

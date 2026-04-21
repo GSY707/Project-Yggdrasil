@@ -1,0 +1,12 @@
+{
+  "hero": {
+    "eyebrow": "Greenfield Studio",
+    "title": "全新项目开发应用",
+    "summary": "面向项目冷启动阶段的具体应用，优先处理需求摄入、架构设计、模块边界和后续可持续开发。"
+  },
+  "quickActions": [
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.coding-greenfield"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.coding-greenfield"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

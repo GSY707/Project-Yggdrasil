@@ -1,0 +1,59 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: multimodal-memory
+  displayName: Multimodal Memory
+  version: 0.1.0
+  category: memory
+  owner: core
+  description: Multimodal asset ingestion, segmentation, embedding persistence, and memory node materialization.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_multimodal_memory.plugin:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules:
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+    adapters:
+      - id: media-providers
+        version: ">=0.1.0 <0.2.0"
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - agent.tools.register
+    publishes:
+      - asset.ingested
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      maxSegmentChars:
+        type: integer
+        minimum: 80
+      maxEmbeddingTerms:
+        type: integer
+        minimum: 8
+    required:
+      - maxSegmentChars
+      - maxEmbeddingTerms
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested:
+      - asset.write
+      - node.write
+      - source.annotation.write
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

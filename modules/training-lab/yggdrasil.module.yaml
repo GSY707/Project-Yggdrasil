@@ -1,0 +1,55 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ModuleManifest
+metadata:
+  id: training-lab
+  displayName: Training Lab
+  version: 0.1.0
+  category: evaluation
+  owner: core
+  description: Dataset version generation and model artifact gating for training and distillation experiments.
+spec:
+  runtime:
+    mode: in-process
+    entryPoint: yggdrasil_training_lab.plugin:plugin
+    protocol: python-entrypoint
+  compatibility:
+    kernel: ">=0.1.0 <0.2.0"
+  dependencies:
+    modules: []
+    adapters: []
+    services: []
+  capabilities:
+    hooks:
+      - module.enable.preflight
+      - module.health.report
+      - agent.tools.register
+    publishes:
+      - dataset.version.created
+      - model.artifact.staged
+    subscribes: []
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      maxDatasetRows:
+        type: integer
+        minimum: 1
+      minimumValidatedRows:
+        type: integer
+        minimum: 1
+    required:
+      - maxDatasetRows
+      - minimumValidatedRows
+  migrations:
+    strategy: none
+    revisions: []
+  frontend:
+    panels: []
+    routes: []
+  permissions:
+    requested:
+      - evaluation.read
+      - model.write
+  healthChecks:
+    - kind: in-process
+      timeoutMs: 3000

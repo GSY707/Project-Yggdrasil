@@ -1,0 +1,20 @@
+{
+  "defaultTaskType": "coding",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-pr",
+    "subagent-runtime",
+    "scene-coding-new-project",
+    "scene-coding-inherit-project",
+    "scene-maintenance-default"
+  ],
+  "codeReview": {
+    "requireTests": true,
+    "preferMinimalDiff": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先说明代码事实，再说明验证和下一步。"
+  }
+}

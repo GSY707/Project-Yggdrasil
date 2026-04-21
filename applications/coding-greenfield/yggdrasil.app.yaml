@@ -1,0 +1,38 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.coding-greenfield
+  displayName: Greenfield Studio
+  version: 0.1.0
+  owner: core
+  description: Dedicated application for cold-start software projects.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-coding-new-project
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+      - id: subagent-pr
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.coding-greenfield.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.coding.new-project
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles: []
+    capabilityModules:
+      - subagent-runtime
+    sceneModules:
+      - scene-coding-new-project
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.coding-greenfield
+    dashboardRef: web/dashboard.json

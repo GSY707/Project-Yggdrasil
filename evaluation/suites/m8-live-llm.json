@@ -27,6 +27,22 @@
       "temperature": 0.15,
       "tags": ["m8", "live", "longcat", "llm"],
       "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_m8_live_tool_task_longcat",
+      "title": "LongCat 真实任务型工具闭环",
+      "scenario": "m8.live_llm_tool_task",
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "requireLive": true,
+      "currentFocus": "M8 live tool suite",
+      "currentObjective": "Recover the archived runtime changes from durable branch memory and prepare a safe-stop retain plan for the next run under a 160 token budget.",
+      "maxTokens": 420,
+      "temperature": 0.1,
+      "requiredTools": ["text_memory.retrieve", "context_pruning.plan"],
+      "tags": ["m8", "live", "longcat", "tool-calling"],
+      "difficulty": "hard"
     }
   ]
 }

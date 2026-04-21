@@ -7,10 +7,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from yggdrasil_core_api.app import app
-from yggdrasil_sdk import get_persistence_runtime
+from yggdrasil_sdk import PromptAssetRepository, get_persistence_runtime, resolve_workspace_root
 from yggdrasil_sdk.collaboration_runtime import GitCollaborationAdapter, launch_subagent_task
-from yggdrasil_sdk.persistence.constants import DEFAULT_BRANCH_ID
-from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, TaskRepository, WorkspaceBootstrapRepository
+from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID
+from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, RuntimeRepository, TaskRepository, WorkspaceBootstrapRepository
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
 
 
@@ -114,6 +114,7 @@ def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_p
     assert launched["status"] == "queued"
     assert launched["readonlyContext"]["mode"] == "readonly"
     assert launched["branch"]["name"].startswith("yggdrasil/subagent/")
+    assert parent_task["appId"] == DEFAULT_APP_ID
 
     processed = run_worker_once()
     assert processed["status"] == "processed"
@@ -129,12 +130,30 @@ def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_p
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         task_repository = TaskRepository(session)
+        prompt_repository = PromptAssetRepository(session)
         collaboration_repository = CollaborationRepository(session)
+        runtime_repository = RuntimeRepository(session)
         child_task = task_repository.get_task(str(launched["task"]["id"]))
         assert child_task is not None
+        assert child_task.app_id == str(parent_task["appId"])
         assert child_task.status == "completed"
         runs = task_repository.list_agent_runs(child_task.id)
+        assert runs[0].app_id == child_task.app_id
         assert runs[0].run_type == "subagent"
+        invocations = runtime_repository.list_model_invocations(task_id=child_task.id)
+        assert len(invocations) == 1
+        assert invocations[0].app_id == child_task.app_id
+        assert invocations[0].request_ref is not None
+        assert invocations[0].prompt_compile_artifact_id is not None
+        prompt_artifact = prompt_repository.get_prompt_compile_artifact(str(invocations[0].prompt_compile_artifact_id))
+        assert prompt_artifact is not None
+        assert prompt_artifact.app_id == child_task.app_id
+        request_path = Path(resolve_workspace_root()) / invocations[0].request_ref.locator
+        request_payload = json.loads(request_path.read_text(encoding="utf-8"))
+        assert request_payload["appId"] == child_task.app_id
+        assert request_payload["promptMetadata"]["promptProfileId"] == "yggdrasil.subagent"
+        assert request_payload["promptMetadata"]["runType"] == "subagent"
+        assert request_payload["promptCompileArtifactId"] == invocations[0].prompt_compile_artifact_id
         pull_request = collaboration_repository.get_pull_request(str(result["pullRequest"]["id"]))
         assert pull_request is not None
         assert pull_request.status == "open"

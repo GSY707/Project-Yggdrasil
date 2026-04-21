@@ -1,0 +1,18 @@
+{
+  "defaultTaskType": "research",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-research-deep"
+  ],
+  "researchMode": {
+    "requireSourceTracking": true,
+    "allowPivot": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给当前结论，再给证据链、未决问题和下一步研究建议。"
+  }
+}

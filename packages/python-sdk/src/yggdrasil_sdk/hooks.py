@@ -11,6 +11,8 @@ class HookNames:
     AGENT_STARTUP_MOUNT_ROOT = "agent.startup.mount-root"
     AGENT_STARTUP_EXTEND_SYSTEM_CONTEXT = "agent.startup.extend-system-context"
     AGENT_TOOLS_REGISTER = "agent.tools.register"
+    PROMPT_PROFILES_REGISTER = "prompt.profiles.register"
+    PROMPT_SEED_TEMPLATES_REGISTER = "prompt.seed-templates.register"
     MEMORY_INGEST_PREPROCESS = "memory.ingest.preprocess"
     MEMORY_INGEST_PLAN_TREE = "memory.ingest.plan-tree"
     MEMORY_INGEST_SUGGEST_LINKS = "memory.ingest.suggest-links"
