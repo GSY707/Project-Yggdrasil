@@ -91,7 +91,7 @@ def build_llm_tool_specs(registered_tools: list[dict[str, Any]] | list[ToolDescr
     return specs
 
 
-def _load_tool_callable(implementation_ref: str):
+def _load_tool_callable(implementation_ref: str) -> Any:
     module_name, _, attribute_name = implementation_ref.partition(":")
     if not module_name or not attribute_name:
         raise ValueError(f"Unsupported tool implementation ref: {implementation_ref}")

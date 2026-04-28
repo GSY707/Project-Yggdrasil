@@ -21,5 +21,8 @@
     "web:build": "corepack pnpm --filter @yggdrasil/web build",
     "web:lint": "corepack pnpm --filter @yggdrasil/web lint",
     "web:typecheck": "corepack pnpm --filter @yggdrasil/web typecheck"
+  },
+  "devDependencies": {
+    "pyright": "^1.1.409"
   }
 }

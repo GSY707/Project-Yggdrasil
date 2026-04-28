@@ -5,6 +5,7 @@ node_modules/
 .next/
 dist/
 coverage/
+package-lock.json
 
 # Python
 .venv/
