@@ -750,6 +750,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "currentFocus": request.get("currentFocus") or task.current_focus,
                     "resumeMessage": request.get("resumeMessage") or (snapshot.resume_message if snapshot else task.resume_message),
                     "budgetState": request.get("budgetState") or task.budget.model_dump(by_alias=True),
+                    "activeCapabilities": request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
                 },
             )
 
@@ -858,7 +859,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "status": "running",
                     "currentFocus": request.get("currentFocus") or task.current_focus or f"{run_type}-agent-execution",
                     "currentObjective": request.get("currentObjective") or task.current_objective or task.goal,
-                    "pauseRequested": bool(task.pause_requested),
                 },
             )
             run_created_event = _persist_runtime_event(
@@ -1073,6 +1073,12 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 event_type="node.created",
                 locator=f"agent-runtime/tasks/{task.id}/writes/{created_node.id}",
             )
+
+            # Re-read task to detect pause requests that arrived during execution
+            # (the local `task` variable may be stale if request_task_pause was called concurrently)
+            fresh_task = task_repository.get_task(task_id)
+            if fresh_task is not None:
+                task = fresh_task
 
             if task.pause_requested or bool(request.get("pauseAfterWrite", False)):
                 pause_resume_message = request.get("resumeMessage") or task.resume_message or f"Resume task {task.id} after the last safe stop."

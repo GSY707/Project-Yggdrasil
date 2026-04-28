@@ -360,3 +360,97 @@ def test_main_agent_runtime_fails_when_budget_is_exhausted() -> None:
         assert task.status == "failed"
         assert task_repository.list_agent_runs("task_budget_fail") == []
         assert runtime_repository.list_model_route_decisions(task_id="task_budget_fail") == []
+
+
+def test_pause_request_not_overwritten_on_worker_startup() -> None:
+    """
+    Regression test for the pause-request detection race condition.
+
+    The bug (now fixed): execute_main_agent_work_item previously called
+    update_task(..., "pauseRequested": bool(task.pause_requested)) during
+    worker startup. If a pause was requested between the work item being
+    enqueued and the worker's initial task load (or between the load and that
+    update_task call), the worker would echo back a stale False and overwrite
+    the DB's True, causing the pause to be silently dropped.
+
+    Fixes applied:
+    - Removed "pauseRequested" from the startup update_task payload so the DB
+      value is never overwritten by a stale local variable.
+    - Added a fresh DB read of the task immediately before the pause-check so
+      that pause requests arriving during execution are always detected.
+
+    This test verifies that a pause request issued after start-queuing but
+    before the worker runs is correctly honoured (status → "paused").
+    """
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_pause_regression",
+                "title": "pause-request race condition regression",
+                "goal": "验证 worker 启动阶段不会覆盖 pauseRequested 标志。",
+                "status": "draft",
+                "currentObjective": "执行并在 safe-stop 处暂停。",
+                "currentFocus": "regression-pause-detection",
+                "budgetState": {
+                    "tokenBudgetTotal": 1000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_pause_regression/start",
+        json={
+            "currentFocus": "regression-pause-detection",
+            "currentContext": [
+                {
+                    "id": "ctx_reg",
+                    "title": "回归场景上下文",
+                    "content": "验证 pauseRequested 标志在 worker 启动时不被覆盖。",
+                    "importance": 0.9,
+                }
+            ],
+        },
+    )
+    assert started.status_code == 202
+    assert started.json()["status"] == "queued"
+
+    # Pause is requested AFTER the work item is enqueued but BEFORE the worker
+    # processes it. This is the exact timing that the bug affected: the worker
+    # would load the task (pause_requested=True at this point), then call
+    # update_task with the stale local value, overwriting True → False.
+    pause_resp = client.post(
+        "/runtime/tasks/task_pause_regression/pause-request",
+        json={"reason": "regression-test-pause"},
+    )
+    assert pause_resp.status_code == 202
+
+    # Confirm the flag is set in DB before the worker runs.
+    with runtime.session_scope() as session:
+        task_before = TaskRepository(session).get_task("task_pause_regression")
+        assert task_before is not None
+        assert task_before.pause_requested is True, (
+            "pauseRequested must be True in DB before the worker starts"
+        )
+
+    result = run_worker_once("agent-runtime")
+    assert result["status"] == "processed"
+    assert result["result"]["status"] == "paused", (
+        "Worker must honour the pause request and produce status='paused'. "
+        "If this fails, the pause-request detection race condition has regressed."
+    )
+    snapshot = result["result"]["snapshot"]
+    assert snapshot is not None
+    assert snapshot["safeStop"] is True
+
+    # Confirm the task is correctly paused in DB and pauseRequested was cleared
+    # (it is cleared only after the snapshot is committed, not before).
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        task_after = task_repository.get_task("task_pause_regression")
+        assert task_after is not None
+        assert task_after.status == "paused"
+        assert task_after.pause_requested is False  # cleared after honouring the pause
+        assert task_after.active_snapshot_id == snapshot["id"]

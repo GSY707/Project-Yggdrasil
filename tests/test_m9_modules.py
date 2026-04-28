@@ -112,6 +112,7 @@ def test_shared_memory_mounts_expand_retrieval_and_redirect_copy_on_write() -> N
             "spaceId": DEFAULT_SPACE_ID,
             "branchId": DEFAULT_BRANCH_ID,
             "subject": "profile:architect",
+            "activeCapabilities": ["shared-memory"],
         },
     )
     assert any(mount["mountedSpaceId"] == mounted_space.id for mount in mount_package["accessibleMounts"])

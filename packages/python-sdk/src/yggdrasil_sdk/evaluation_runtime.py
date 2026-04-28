@@ -1428,6 +1428,7 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
                 },
             ],
             "protectedItems": [{"kind": "node", "id": "ctx_resume_keep"}],
+            "activeCapabilities": ["shared-memory"],
         },
     )
     if started.status_code != 202:
