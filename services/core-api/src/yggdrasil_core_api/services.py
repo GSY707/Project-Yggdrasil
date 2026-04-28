@@ -131,7 +131,7 @@ class WorkspaceService:
                 rows.append(stripped)
         return rows
 
-    def _load_module(self, module_id: str):
+    def _load_module(self, module_id: str) -> tuple[Any, Any, Any]:
         snapshot = sync_module_catalog_snapshot(self.workspace_root)
         manifests_by_module_id = {manifest.module_id: manifest for manifest in snapshot.manifests}
         installs_by_module_id = {record.module_id: record for record in snapshot.installs}
@@ -157,7 +157,7 @@ class WorkspaceService:
             return {"items": list(result)}
         raise KeyError(f"Hook {hook_name} not exported by {module_id}.")
 
-    def _dispatch_module_event(self, module_id: str, envelope: EventEnvelope):
+    def _dispatch_module_event(self, module_id: str, envelope: EventEnvelope) -> Any:
         plugin, _, _ = self._load_module(module_id)
         return plugin.handle_event(envelope)
 

@@ -302,7 +302,7 @@ class ModulePlatformService:
                     failed += 1
                 local_result["emitted"] += int(outcome.get("emitted", 0))
                 emitted += int(outcome.get("emitted", 0))
-                return outcome["ack"]
+                return bool(outcome["ack"])
 
             consume_result = self.event_bus.consume(
                 event_type=subscription.event_type,
