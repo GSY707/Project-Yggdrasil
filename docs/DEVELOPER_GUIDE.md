@@ -431,6 +431,9 @@ uv run alembic check
 
 ### 10.1 运行测试
 
+> **重要**：本项目使用 UV 工作区管理 Python 依赖，`yggdrasil_sdk` 等包仅在工作区虚拟环境中可用。
+> 必须通过 `uv run pytest` 运行测试，**直接调用 `pytest` 会因找不到模块而报错**。
+
 ```bash
 # 运行所有测试
 uv run pytest -q
