@@ -10,6 +10,48 @@
   ],
   "subjectKind": "retrieval-policy",
   "subjectRef": "benchmark:m8-memory-strategies",
+  "baselineMetrics": {
+    "recordedAt": "2026-04-29",
+    "environment": "sqlite-in-process, fallback-LLM",
+    "note": "在 CI fallback 模式（无真实 LLM）下固化的最低合格线。live 模式下各指标预期更高。",
+    "passRate": {
+      "threshold": 1.0,
+      "description": "所有 case 的 combinedScore 须 ≥ 0.5 才算通过，passRate = 通过 case 数 / 总 case 数"
+    },
+    "strategyLeaderboard": [
+      {
+        "name": "memory-tree",
+        "minAvgCombinedScore": 0.70,
+        "minAvgContextCoverage": 0.75,
+        "minAvgAnswerCoverage": 0.50,
+        "description": "记忆树检索：依赖 nodePayloads、边关系、子节点名称与自然语言摘要扩展上下文，预期显著优于扁平向量对照"
+      },
+      {
+        "name": "vector-flat",
+        "minAvgCombinedScore": 0.45,
+        "minAvgContextCoverage": 0.55,
+        "minAvgAnswerCoverage": 0.30,
+        "description": "扁平向量 baseline（evaluation 层对照）：lexical similarity 扁平扫描，不依赖记忆树结构"
+      },
+      {
+        "name": "no-memory",
+        "minAvgCombinedScore": 0.00,
+        "minAvgContextCoverage": 0.00,
+        "minAvgAnswerCoverage": 0.00,
+        "description": "无记忆对照组：不挂载任何上下文，回答只能依赖模型先验知识，预期最低"
+      }
+    ],
+    "contextCoverage": {
+      "memory-tree": {"min": 0.75, "target": 0.85},
+      "vector-flat": {"min": 0.55, "target": 0.70},
+      "no-memory":   {"min": 0.00, "target": 0.10}
+    },
+    "answerCoverage": {
+      "memory-tree": {"min": 0.50, "target": 0.65},
+      "vector-flat": {"min": 0.30, "target": 0.45},
+      "no-memory":   {"min": 0.00, "target": 0.05}
+    }
+  },
   "cases": [
     {
       "id": "evalcase_m8_strategy_architecture",

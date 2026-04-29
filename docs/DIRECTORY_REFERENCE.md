@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/29 更新：新增 Phase 4 质量基线文档）
 
 ---
 
@@ -18,7 +18,9 @@
 ├── evaluation/     # 评测框架
 ├── infra/          # 本地基础设施
 ├── migrations/     # 数据库迁移
-└── tests/          # 集成测试
+├── scripts/        # CI 辅助脚本
+├── tests/          # 集成测试
+└── .github/        # GitHub Actions CI 配置
 ```
 
 ---
@@ -324,6 +326,7 @@ docs/
 ├── DEVELOPER_GUIDE.md              # 开发指南（本套文档之一）
 ├── USER_GUIDE.md                   # 使用指南（本套文档之一）
 ├── DIRECTORY_REFERENCE.md          # 目录说明书（本文档）
+├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值
 │
 ├── adr/                            # 架构决策记录 (Architecture Decision Records)
 │   ├── README.md                   # ADR 索引
@@ -428,21 +431,99 @@ migrations/
 ```
 tests/
 ├── conftest.py                     # pytest 共享 Fixture（数据库、客户端、测试数据）
+├── fixtures/                       # 测试用固定样本数据
 │
-├── # ── 按里程碑分层 ─────────────────────────────────────
+├── # ── 基础层测试 ────────────────────────────────────────
 ├── test_persistence_api.py         # 持久化层：ORM、仓储、迁移
 ├── test_prompting_runtime.py       # PromptCompiler 链路端到端
 ├── test_runtime_and_pruning.py     # 运行时内核 + 上下文裁剪
+├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
+├── test_module_catalog.py          # 模块目录发现与注册
+├── test_module_host_eventing.py    # 模块宿主事件总线集成
+├── test_mcp_bridge.py              # MCP 协议桥接回归
+├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
+├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成
 │
+├── # ── Phase 1 专项测试（质量巩固） ────────────────────────
+├── test_phase1_permissions_and_errors.py
+│   │                               #   Pause-Resume：执行中途 pause / resume 轮次一致性
+│   │                               #   权限元组：read-only mount、exclusive-read、无权限 Space
+│   │                               #   错误恢复：LLM 5xx 回滚、Redis 不可用、快照损坏
+│
+├── # ── Phase 3 专项测试（稳定性与边界） ─────────────────────
+├── test_phase3_stability_and_scale.py
+│   │                               #   规模：1000 节点检索延迟基准
+│   │                               #   规模：10 万词 fragment 导入内存/时间上界
+│   │                               #   并发：2 worker 同时 pause 不产生双重快照
+│   │                               #   并发：Sub-agent 并发写同一 Space 不产生数据竞争
+│   │                               #   Hook 故障隔离：单模块 hook 异常不影响其他模块
+│
+├── # ── M8/M9 里程碑测试 ─────────────────────────────────
 ├── test_m8_runtime.py              # M8：评测与运维基础回归
 ├── test_m9_modules.py              # M9：第二阶段模块单元测试
 │   │                               #   shared-memory、pause-resume、
 │   │                               #   multimodal-memory、relation-discovery、
 │   │                               #   memory-organizer、training-lab
-├── test_m9_acceptance.py           # M9：端到端验收测试
-│
-└── test_m9_control_plane.py        # M9：控制面 API 回归
+└── test_m9_acceptance.py           # M9：端到端验收测试 + 控制面 API 回归
 ```
+
+**pytest 标记说明：**
+
+| 标记 | 含义 | 运行时机 |
+|------|------|---------|
+| （无标记） | 快速单元 / 集成测试，使用 SQLite | PR、merge |
+| `slow` | 需要真实 LLM 调用的测试 | nightly 仅 |
+
+---
+
+## scripts/ · CI 辅助脚本
+
+```
+scripts/
+├── check_migrations.sh             # 验证 Alembic 迁移头与 ORM 模型一致
+│                                   #   启动临时 pgvector 容器 → alembic upgrade head
+│                                   #   → alembic check（检测 ORM 漂移）
+└── smoke_test.sh                   # Compose 冒烟测试：启动 infra stack，调 core-api /health
+                                    #   启动 postgres/redis/nats/minio → alembic upgrade head
+                                    #   → 启动 core-api → GET /health
+```
+
+**运行方式：**
+```bash
+bash scripts/check_migrations.sh   # 需要 docker，约 30 s
+bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
+```
+
+---
+
+## .github/ · GitHub Actions CI
+
+```
+.github/
+└── workflows/
+    ├── pr.yml      # PR 门禁（触发：pull_request）
+    │               #   pytest -m "not slow" + web lint/typecheck/build
+    │               #   目标：快速反馈，约 5 min
+    │
+    ├── ci.yml      # merge 门禁（触发：push to main）
+    │               #   pytest -m "not slow" + eval:regression
+    │               #   + eval:m9:control-plane + web lint/typecheck/build
+    │               #   目标：完整验证，约 15 min
+    │
+    └── nightly.yml # 每日夜间（02:17 UTC，workflow_dispatch 可手动触发）
+                    #   migration-check：check_migrations.sh（ORM 漂移检测）
+                    #   smoke-test：smoke_test.sh（端到端 /health 验证）
+                    #   slow-tests：pytest -m slow（真实 LLM 测试）
+                    #   benchmark：eval:m8:benchmark（离线基准评测）
+```
+
+**CI 三层策略：**
+
+| 层级 | 触发 | 跳过内容 | 耗时 |
+|------|------|---------|------|
+| PR | pull_request | slow 测试、回归评测、docker | ~5 min |
+| merge | push to main | slow 测试、docker | ~15 min |
+| nightly | 定时 / 手动 | — | ~30-60 min |
 
 ---
 
@@ -482,4 +563,8 @@ tests/
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/<suite>/` |
+| 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
 | 架构决策理由 | `docs/adr/ADR-<number>-*.md` |
+| CI 工作流定义 | `.github/workflows/{pr,ci,nightly}.yml` |
+| Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |
+| 端到端冒烟测试 | `scripts/smoke_test.sh` |

@@ -25,21 +25,21 @@
 
 ### Phase 2 — 构建 CI 门禁
 - [x] `pytest.ini` 补充 `slow` marker 定义
-- [ ] 写 `scripts/check_migrations.sh`：验证 Alembic 头与 ORM 一致
-- [ ] 写 compose smoke test：启动 infra stack，调 `/health`
-- [ ] 配置 GitHub Actions 三层 workflow（PR / merge / nightly）
+- [x] 写 `scripts/check_migrations.sh`：验证 Alembic 头与 ORM 一致
+- [x] 写 compose smoke test：启动 infra stack，调 `/health`（`scripts/smoke_test.sh`）
+- [x] 配置 GitHub Actions 三层 workflow（PR / merge / nightly）
 
 ### Phase 3 — 稳定性与边界测试
-- [ ] 规模测试：1000 节点树的检索延迟基准
-- [ ] 规模测试：10 万词 fragment 导入的内存和时间上界
-- [ ] 并发安全：2 个 worker 同时 pause 同一 Task 不产生双重快照
-- [ ] 并发安全：Sub-agent 并发写同一 Space 不产生数据竞争
-- [ ] Hook 故障隔离：一个 module hook 抛异常，其他模块和主流程继续
+- [x] 规模测试：1000 节点树的检索延迟基准
+- [x] 规模测试：10 万词 fragment 导入的内存和时间上界
+- [x] 并发安全：2 个 worker 同时 pause 同一 Task 不产生双重快照
+- [x] 并发安全：Sub-agent 并发写同一 Space 不产生数据竞争
+- [x] Hook 故障隔离：一个 module hook 抛异常，其他模块和主流程继续
 
 ### Phase 4 — 质量基线（持续）
-- [ ] 固化 `evalsuite_benchmark_m8_memory_strategies` 结果为数字基准
-- [ ] 记录关键 API 路径 P50/P95 延迟基准
-- [ ] 建立 `QUALITY_BASELINE.md`
+- [x] 固化 `evalsuite_benchmark_m8_memory_strategies` 结果为数字基准
+- [x] 记录关键 API 路径 P50/P95 延迟基准
+- [x] 建立 `QUALITY_BASELINE.md`
 
 ### 新功能冻结（Phase 1-3 完成前不做）
 - training-lab 扩展（dataset diff / artifact promotion）

@@ -1,0 +1,134 @@
+name: nightly
+
+on:
+  schedule:
+    # 02:17 UTC daily — offset from :00/:30 to avoid fleet congestion
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  migration-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Verify Alembic migration head matches ORM
+        run: bash scripts/check_migrations.sh
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Run compose smoke test
+        run: bash scripts/smoke_test.sh
+
+  slow-tests:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6390:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      YGGDRASIL_DATABASE_URL: sqlite+pysqlite:///${{ github.workspace }}/.ci/yggdrasil.db
+      YGGDRASIL_AUTO_CREATE_SCHEMA: "1"
+      YGGDRASIL_REDIS_URL: redis://127.0.0.1:6390/15
+      YGGDRASIL_STATE_ROOT: ${{ github.workspace }}/.ci/state-root
+      YGGDRASIL_CORE_API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Prepare CI state directories
+        run: mkdir -p .ci/state-root
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Run slow tests (live LLM and benchmarks)
+        run: uv run pytest -m slow
+
+  benchmark:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6390:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      YGGDRASIL_DATABASE_URL: sqlite+pysqlite:///${{ github.workspace }}/.ci/yggdrasil.db
+      YGGDRASIL_AUTO_CREATE_SCHEMA: "1"
+      YGGDRASIL_REDIS_URL: redis://127.0.0.1:6390/15
+      YGGDRASIL_STATE_ROOT: ${{ github.workspace }}/.ci/state-root
+      YGGDRASIL_CORE_API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Prepare CI state directories
+        run: mkdir -p .ci/state-root
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Run M8 benchmark evaluation suite
+        run: uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_benchmark_m8_memory_strategies

@@ -27,7 +27,7 @@
 
 - docs/DEVELOPER_GUIDE.md：开发者手册。
 - docs/USER_GUIDE.md：用户手册。
-- docs/DIRECTORY_REFERENCE.md：项目完整目录（2026/4/29 更新）。
+- docs/DIRECTORY_REFERENCE.md：项目完整目录（2026/4/29 更新，含 Phase 4 质量基线）。
 - apps/web：Web 工作台，当前已提供总览、任务、节点、协作、资产、训练、Prompt、评测、观测页面。
 - services/core-api：控制面 API，当前已暴露 tasks、nodes、collaboration、runtime、memory、assets、training、prompting、evaluations、observability。
 - services/agent-runtime：运行时执行入口，负责主 Agent 启动、pause/resume、PromptCompiler 接线与模型执行闭环。
