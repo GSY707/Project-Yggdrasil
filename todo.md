@@ -12,19 +12,19 @@
 - [x] 为 pause-resume race condition 补充专项回归测试
 
 ### Phase 1 — 补全关键路径测试（目标：核心路径 100% 有测试）
-- [ ] Pause-Resume 专项：执行中途发出 pause，worker 必须在下一轮停下
-- [ ] Pause-Resume 专项：pause → resume 后上下文正确恢复
-- [ ] Pause-Resume 专项：连续 pause / resume 不累积状态污染
-- [ ] 权限元组验证：read-only mount 拒绝写入
-- [ ] 权限元组验证：exclusive-read mount 拒绝第二挂载者
-- [ ] 权限元组验证：无权限 Space 访问被拒绝
-- [ ] 错误恢复：LLM provider 5xx 时 task 状态正确回滚（不卡在 `running`）
-- [ ] 错误恢复：Redis 不可用时 pause 操作返回明确错误
-- [ ] 错误恢复：Resume 时快照损坏/缺失返回明确错误而非崩溃
-- [ ] Live LLM：将 `YGGDRASIL_DISABLE_LIVE_LLM` 改为 `slow` marker，CI nightly 跑
+- [x] Pause-Resume 专项：执行中途发出 pause，worker 必须在下一轮停下
+- [x] Pause-Resume 专项：pause → resume 后上下文正确恢复
+- [x] Pause-Resume 专项：连续 pause / resume 不累积状态污染
+- [x] 权限元组验证：read-only mount 拒绝写入
+- [x] 权限元组验证：exclusive-read mount 拒绝第二挂载者
+- [x] 权限元组验证：无权限 Space 访问被拒绝
+- [x] 错误恢复：LLM provider 5xx 时 task 状态正确回滚（不卡在 `running`）
+- [x] 错误恢复：Redis 不可用时 pause 操作返回明确错误
+- [x] 错误恢复：Resume 时快照损坏/缺失返回明确错误而非崩溃
+- [x] Live LLM：将 `YGGDRASIL_DISABLE_LIVE_LLM` 改为 `slow` marker，CI nightly 跑
 
 ### Phase 2 — 构建 CI 门禁
-- [ ] `pytest.ini` 补充 `slow` marker 定义
+- [x] `pytest.ini` 补充 `slow` marker 定义
 - [ ] 写 `scripts/check_migrations.sh`：验证 Alembic 头与 ORM 一致
 - [ ] 写 compose smoke test：启动 infra stack，调 `/health`
 - [ ] 配置 GitHub Actions 三层 workflow（PR / merge / nightly）
