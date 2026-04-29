@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：测试套件性能优化、coordination backend 选择、runtime 分段计时、阶段 4 审计分级）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：测试套件性能优化、coordination backend 选择、runtime 分段计时、阶段 4 审计分级、GitHub Actions Node 24 兼容基线）
 
 ---
 
@@ -530,6 +530,8 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | PR | pull_request | slow 测试、回归评测、docker | ~5 min |
 | merge | push to main | slow 测试、docker | ~15 min |
 | nightly | 定时 / 手动 | — | ~30-60 min |
+
+- 当前工作流已统一升级到 Node 24 兼容 action 基线：checkout v6、setup-node v6、setup-python v6、setup-uv v8.1.0、pnpm/action-setup v5。
 
 ---
 
