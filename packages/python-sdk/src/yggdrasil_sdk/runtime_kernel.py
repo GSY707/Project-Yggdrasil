@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 from .application_runtime import resolve_application_active_capabilities, resolve_runtime_application_id
@@ -16,6 +17,10 @@ from .support import new_id, normalize_excerpt, utc_now
 
 AGENT_RUNTIME_QUEUE = "agent-runtime"
 PACKAGE_ENTRY_TTL_SECONDS = 60 * 60 * 24
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((perf_counter() - started_at) * 1000.0, 2)
 
 
 def _normalize_budget(payload: dict[str, Any]) -> BudgetState:
@@ -459,6 +464,19 @@ def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) 
     snapshot: TaskSnapshotSummary = state["snapshot"]
     project_id = str(state["projectId"])
     runtime = get_persistence_runtime()
+    coordinator = RedisCoordinator(runtime.settings)
+    lock_owner = new_id("pause", task_id)
+    if not coordinator.acquire_lock(f"task:{task_id}", lock_owner, ttl_seconds=30):
+        response = snapshot.model_dump(by_alias=True, mode="json")
+        response["safeStop"] = snapshot.safe_to_pause
+        response["activeToolCalls"] = state["activeToolCalls"]
+        response["rootMountPreview"] = state["rootMountPreview"]
+        response["flushedWrites"] = state["flushedWrites"]
+        response["persisted"] = False
+        response["rootMountCached"] = state["rootMountCached"]
+        response["contextCached"] = state["contextCached"]
+        response["moduleSummaries"] = state.get("moduleSummaries") or []
+        return response
     persisted = False
     try:
         with runtime.session_scope() as session:
@@ -490,6 +508,8 @@ def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) 
                 persisted = True
     except Exception:
         persisted = False
+    finally:
+        coordinator.release_lock(f"task:{task_id}", lock_owner)
 
     response = snapshot.model_dump(by_alias=True, mode="json")
     response["safeStop"] = snapshot.safe_to_pause
@@ -709,12 +729,15 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
     request = work_item.get("payload") if isinstance(work_item.get("payload"), dict) else {}
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
+    runtime_timings: dict[str, Any] = {}
+    work_started_at = perf_counter()
     lock_owner = new_id("worker", task_id, utc_now().isoformat())
     if not coordinator.acquire_lock(f"task:{task_id}", lock_owner, ttl_seconds=120):
         return {"status": "locked", "taskId": task_id}
 
     try:
         with runtime.session_scope() as session:
+            task_load_started_at = perf_counter()
             WorkspaceBootstrapRepository(session).ensure_default_workspace()
             task_repository = TaskRepository(session)
             runtime_repository = RuntimeRepository(session)
@@ -736,9 +759,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 snapshot = task_repository.get_snapshot(task.active_snapshot_id)
             if command == "resume" and (snapshot is None or snapshot.status != "restorable"):
                 raise ValueError(f"Task {task_id} does not have a restorable snapshot.")
+            runtime_timings["loadTaskStateMs"] = _elapsed_ms(task_load_started_at)
 
             current_context = request.get("currentContext") if isinstance(request.get("currentContext"), list) else _load_snapshot_context(snapshot)
             protected_items = request.get("protectedItems") if isinstance(request.get("protectedItems"), list) else []
+            build_root_mount_started_at = perf_counter()
             root_mount = build_root_mount_package(
                 task_id,
                 {
@@ -753,9 +778,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "activeCapabilities": request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
                 },
             )
+            runtime_timings["buildRootMountMs"] = _elapsed_ms(build_root_mount_started_at)
 
             rehydration_result = None
             if snapshot is not None and command == "resume":
+                rehydration_started_at = perf_counter()
                 rehydration_results = collect_hook_results(
                     HookNames.TASK_RESUME_REHYDRATE,
                     {
@@ -802,7 +829,9 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "followupActions": followup_actions,
                     "summaries": resume_summaries,
                 }
+                runtime_timings["resumeRehydrateMs"] = _elapsed_ms(rehydration_started_at)
 
+            prepare_run_started_at = perf_counter()
             input_tokens, output_tokens = _estimate_usage(task, root_mount, current_context, request)
             budget_limit = _remaining_cost_per_1k(task.budget, input_tokens + output_tokens)
             min_quality = float(request.get("minQuality", 0.0)) if request.get("minQuality") is not None else None
@@ -861,6 +890,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "currentObjective": request.get("currentObjective") or task.current_objective or task.goal,
                 },
             )
+            runtime_timings["prepareRunMs"] = _elapsed_ms(prepare_run_started_at)
             run_created_event = _persist_runtime_event(
                 session,
                 project_id=task.project_id,
@@ -881,7 +911,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             resume_event_payload = None
             if snapshot is not None and command == "resume":
                 resumed_snapshot = task_repository.update_snapshot(snapshot.id, status="consumed", consumed_at=utc_now())
-                task = task_repository.update_task(task_id, {"activeSnapshotId": None, "pauseRequested": False})
+                task = task_repository.update_task(task_id, {"activeSnapshotId": None})
                 resumed_locator = f"agent-runtime/tasks/{task.id}/resume/{run.id}"
                 _cache_package_entry(
                     coordinator,
@@ -908,6 +938,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             pruning_result = None
             pruning_events = None
             if current_context:
+                pruning_started_at = perf_counter()
                 plan_result = _call_module_hook(
                     "context-pruning",
                     HookNames.CONTEXT_PRUNING_PLAN,
@@ -934,9 +965,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     )
                     if pruning_result is not None:
                         pruning_events = _record_pruning_events(session, task, plan_result, pruning_result)
+                runtime_timings["contextPruningMs"] = _elapsed_ms(pruning_started_at)
 
             execution_root_id = task.execution_root_node_id or root_mount["executionRefs"][0]["id"]
             execution_actor_id = str(request.get("executionActorId") or ("subagent" if run_type == "subagent" else "main-agent"))
+            llm_invoke_started_at = perf_counter()
             llm_result = invoke_runtime_completion(
                 session,
                 task=task,
@@ -948,6 +981,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 request=request,
                 resume_path="snapshot" if snapshot is not None and command == "resume" else None,
             )
+            runtime_timings["llmInvocationMs"] = _elapsed_ms(llm_invoke_started_at)
             actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
             actual_output_tokens = int(llm_result["usage"].get("outputTokens", output_tokens))
             actual_cost = float(llm_result.get("costUsed", estimated_cost))
@@ -980,6 +1014,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 event_type="runtime.model-invocation.completed",
                 locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
             )
+            memory_write_started_at = perf_counter()
             write_payload = _build_execution_write_payload(
                 task=task,
                 task_type=task_type,
@@ -1073,14 +1108,18 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 event_type="node.created",
                 locator=f"agent-runtime/tasks/{task.id}/writes/{created_node.id}",
             )
+            runtime_timings["memoryWriteMs"] = _elapsed_ms(memory_write_started_at)
 
             # Re-read task to detect pause requests that arrived during execution
             # (the local `task` variable may be stale if request_task_pause was called concurrently)
+            # Expire the identity-map entry so SQLAlchemy fetches a fresh row from the DB.
+            session.expire_all()
             fresh_task = task_repository.get_task(task_id)
             if fresh_task is not None:
                 task = fresh_task
 
             if task.pause_requested or bool(request.get("pauseAfterWrite", False)):
+                pause_transition_started_at = perf_counter()
                 pause_resume_message = request.get("resumeMessage") or task.resume_message or f"Resume task {task.id} after the last safe stop."
                 pause_state = _build_pause_snapshot_state(
                     task_id,
@@ -1151,6 +1190,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     event_type="task.paused",
                     locator=paused_locator,
                 )
+                runtime_timings["pauseTransitionMs"] = _elapsed_ms(pause_transition_started_at)
+                runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
                 return {
                     "status": "paused",
                     "task": task.model_dump(by_alias=True, mode="json"),
@@ -1172,8 +1213,10 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "resume": resume_event_payload,
                     "writeValidation": write_validation,
                     "rehydration": rehydration_result,
+                    "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
                 }
 
+            complete_transition_started_at = perf_counter()
             task = task_repository.update_task(
                 task_id,
                 {
@@ -1184,6 +1227,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 },
             )
             run = task_repository.update_agent_run(run.id, {"status": "completed"})
+            runtime_timings["completeTransitionMs"] = _elapsed_ms(complete_transition_started_at)
+            runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
             return {
                 "status": "completed",
                 "task": task.model_dump(by_alias=True, mode="json"),
@@ -1203,6 +1248,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 "resume": resume_event_payload,
                 "writeValidation": write_validation,
                 "rehydration": rehydration_result,
+                "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
             }
     except Exception as exc:
         try:
@@ -1227,6 +1273,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             "status": "failed",
             "taskId": task_id,
             "detail": str(exc),
+            "runtimeTimings": {**runtime_timings, "totalMs": _elapsed_ms(work_started_at)},
         }
     finally:
         coordinator.release_lock(f"task:{task_id}", lock_owner)

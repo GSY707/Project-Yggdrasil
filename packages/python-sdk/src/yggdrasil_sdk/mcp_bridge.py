@@ -131,7 +131,7 @@ def _builtin_server_definitions(workspace_root: Path | None = None) -> list[dict
             "command": python_executable,
             "args": ["-m", "yggdrasil_sdk.mcp_servers.read_server"],
             "enabled": True,
-            "keepAlive": False,
+            "keepAlive": True,
             "toolPrefix": "read",
             "origin": "builtin",
             "sourcePath": "yggdrasil_sdk.mcp_servers.read_server",
@@ -145,7 +145,7 @@ def _builtin_server_definitions(workspace_root: Path | None = None) -> list[dict
             "command": python_executable,
             "args": ["-m", "yggdrasil_sdk.mcp_servers.edit_server"],
             "enabled": True,
-            "keepAlive": False,
+            "keepAlive": True,
             "toolPrefix": "edit",
             "origin": "builtin",
             "sourcePath": "yggdrasil_sdk.mcp_servers.edit_server",
@@ -159,7 +159,7 @@ def _builtin_server_definitions(workspace_root: Path | None = None) -> list[dict
             "command": python_executable,
             "args": ["-m", "yggdrasil_sdk.mcp_servers.search_server"],
             "enabled": True,
-            "keepAlive": False,
+            "keepAlive": True,
             "toolPrefix": "search",
             "origin": "builtin",
             "sourcePath": "yggdrasil_sdk.mcp_servers.search_server",
@@ -173,7 +173,7 @@ def _builtin_server_definitions(workspace_root: Path | None = None) -> list[dict
             "command": python_executable,
             "args": ["-m", "yggdrasil_sdk.mcp_servers.execute_server"],
             "enabled": True,
-            "keepAlive": False,
+            "keepAlive": True,
             "toolPrefix": "execute",
             "origin": "builtin",
             "sourcePath": "yggdrasil_sdk.mcp_servers.execute_server",
@@ -187,7 +187,7 @@ def _builtin_server_definitions(workspace_root: Path | None = None) -> list[dict
             "command": python_executable,
             "args": ["-m", "yggdrasil_sdk.mcp_servers.python_server"],
             "enabled": True,
-            "keepAlive": False,
+            "keepAlive": True,
             "toolPrefix": "python",
             "origin": "builtin",
             "sourcePath": "yggdrasil_sdk.mcp_servers.python_server",
@@ -280,6 +280,7 @@ def update_mcp_bridge_workspace(project_workspace: str, workspace_root: Path | N
     config["updatedAt"] = utc_now().isoformat()
     write_json(_bridge_config_path(workspace_root), config)
     close_mcp_bridge_sessions()
+    sync_mcp_bridge_servers(workspace_root)
     return config
 
 
@@ -294,6 +295,7 @@ def upsert_mcp_bridge_server(server_payload: dict[str, Any], workspace_root: Pat
     config["updatedAt"] = utc_now().isoformat()
     write_json(_bridge_config_path(workspace_root), config)
     close_mcp_bridge_sessions(server["id"])
+    sync_mcp_bridge_servers(workspace_root, server_ids=[server["id"]])
     return config
 
 
@@ -312,6 +314,7 @@ def set_mcp_bridge_server_enabled(server_id: str, enabled: bool, workspace_root:
     write_json(_bridge_config_path(workspace_root), config)
     if not enabled:
         close_mcp_bridge_sessions(server_id)
+    sync_mcp_bridge_servers(workspace_root, server_ids=[server_id])
     return config
 
 
@@ -320,6 +323,7 @@ def refresh_copyable_mcp_servers(workspace_root: Path | None = None) -> dict[str
     config["servers"] = _merge_server_definitions(config["servers"], discover_copyable_mcp_servers())
     config["updatedAt"] = utc_now().isoformat()
     write_json(_bridge_config_path(workspace_root), config)
+    sync_mcp_bridge_servers(workspace_root)
     return config
 
 
@@ -681,8 +685,8 @@ def load_mcp_bridge_snapshot(workspace_root: Path | None = None, *, refresh_if_m
     return sync_mcp_bridge_servers(workspace_root)
 
 
-def list_mcp_bridge_tool_bindings(workspace_root: Path | None = None) -> list[dict[str, Any]]:
-    snapshot = load_mcp_bridge_snapshot(workspace_root)
+def list_mcp_bridge_tool_bindings(workspace_root: Path | None = None, *, refresh_if_missing: bool = False) -> list[dict[str, Any]]:
+    snapshot = load_mcp_bridge_snapshot(workspace_root, refresh_if_missing=refresh_if_missing)
     bindings: list[dict[str, Any]] = []
     for server in snapshot.get("servers") or []:
         if str(server.get("status") or "") != "ready":
@@ -691,8 +695,8 @@ def list_mcp_bridge_tool_bindings(workspace_root: Path | None = None) -> list[di
     return bindings
 
 
-def mcp_bridge_tool_descriptors(workspace_root: Path | None = None) -> list[dict[str, Any]]:
-    bindings = list_mcp_bridge_tool_bindings(workspace_root)
+def mcp_bridge_tool_descriptors(workspace_root: Path | None = None, *, refresh_if_missing: bool = False) -> list[dict[str, Any]]:
+    bindings = list_mcp_bridge_tool_bindings(workspace_root, refresh_if_missing=refresh_if_missing)
     descriptors: list[dict[str, Any]] = []
     for binding in bindings:
         descriptors.append(
@@ -713,10 +717,12 @@ def mcp_bridge_tool_descriptors(workspace_root: Path | None = None) -> list[dict
     return descriptors
 
 
-def _tool_binding_by_name(exposed_name: str, workspace_root: Path | None = None) -> dict[str, Any]:
-    for binding in list_mcp_bridge_tool_bindings(workspace_root):
+def _tool_binding_by_name(exposed_name: str, workspace_root: Path | None = None, *, refresh_on_miss: bool = False) -> dict[str, Any]:
+    for binding in list_mcp_bridge_tool_bindings(workspace_root, refresh_if_missing=False):
         if binding.get("exposedName") == exposed_name:
             return binding
+    if not refresh_on_miss:
+        raise KeyError(exposed_name)
     snapshot = sync_mcp_bridge_servers(workspace_root)
     for server in snapshot.get("servers") or []:
         for binding in server.get("tools") or []:
@@ -747,8 +753,14 @@ def _normalize_mcp_tool_call_result(result: dict[str, Any]) -> dict[str, Any]:
     return normalized or {"raw": result}
 
 
-def execute_mcp_bridge_tool(exposed_name: str, arguments: dict[str, Any], workspace_root: Path | None = None) -> dict[str, Any]:
-    binding = _tool_binding_by_name(exposed_name, workspace_root)
+def execute_mcp_bridge_tool(
+    exposed_name: str,
+    arguments: dict[str, Any],
+    workspace_root: Path | None = None,
+    *,
+    refresh_on_miss: bool = False,
+) -> dict[str, Any]:
+    binding = _tool_binding_by_name(exposed_name, workspace_root, refresh_on_miss=refresh_on_miss)
     config = ensure_mcp_bridge_config(workspace_root)
     servers = _server_lookup(config)
     server = servers.get(binding["serverId"])

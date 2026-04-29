@@ -23,7 +23,7 @@ class MCPBridgeModule(BaseModulePlugin):
         )
 
     def register_tools(self) -> tuple[dict[str, object], ...]:
-        return tuple(mcp_bridge_tool_descriptors())
+        return tuple(mcp_bridge_tool_descriptors(refresh_if_missing=True))
 
     def register_tools_hook(self, payload: dict[str, object]) -> dict[str, object]:
         return {

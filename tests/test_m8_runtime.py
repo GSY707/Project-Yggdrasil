@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yggdrasil_sdk.observability_exporters as observability_exporters
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
+from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import resolve_state_root
 
@@ -19,6 +21,22 @@ def test_m8_benchmark_suite_produces_strategy_metrics() -> None:
     leaderboard = metrics["strategyLeaderboard"]
     strategy_names = {row["name"] for row in leaderboard}
     assert {"no-memory", "vector-flat", "memory-tree"}.issubset(strategy_names)
+
+
+def test_isolated_evaluation_environment_disables_live_llm_by_default(monkeypatch) -> None:
+    monkeypatch.setenv("YGGDRASIL_DISABLE_LIVE_LLM", "0")
+
+    with isolated_runtime_environment():
+        assert os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] == "1"
+
+    assert os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] == "0"
+
+
+def test_isolated_evaluation_environment_can_allow_live_llm(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+
+    with isolated_runtime_environment(disable_live_llm=False):
+        assert os.environ.get("YGGDRASIL_DISABLE_LIVE_LLM") is None
 
 
 def test_runtime_backup_restore_round_trip(tmp_path) -> None:

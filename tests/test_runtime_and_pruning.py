@@ -220,6 +220,8 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     first_run = run_worker_once("agent-runtime")
     assert first_run["status"] == "processed"
     assert first_run["result"]["status"] == "paused"
+    assert first_run["result"]["runtimeTimings"]["buildRootMountMs"] >= 0
+    assert first_run["result"]["runtimeTimings"]["llm"]["compilePromptMs"] >= 0
     snapshot = first_run["result"]["snapshot"]
 
     cached_root_mount = client.get(
@@ -262,6 +264,10 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert request_payload["promptMetadata"]["promptProfileId"] == "yggdrasil.main-agent"
         assert request_payload["promptMetadata"]["seedTemplateId"] == "yggdrasil.seed.generic.default"
         assert request_payload["promptMetadata"]["runType"] == "main"
+        response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
+        response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+        assert response_payload["localRuntimeTimings"]["compilePromptMs"] >= 0
+        assert response_payload["localRuntimeTimings"]["modelToolLoopMs"] >= 0
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
@@ -282,6 +288,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     second_run = run_worker_once("agent-runtime")
     assert second_run["status"] == "processed"
     assert second_run["result"]["status"] == "completed"
+    assert second_run["result"]["runtimeTimings"]["totalMs"] >= 0
     assert second_run["result"]["resume"] is not None
     assert second_run["result"]["rehydration"] is not None
     assert any("Rehydrated" in summary for summary in second_run["result"]["rehydration"]["summaries"])
@@ -360,6 +367,82 @@ def test_main_agent_runtime_fails_when_budget_is_exhausted() -> None:
         assert task.status == "failed"
         assert task_repository.list_agent_runs("task_budget_fail") == []
         assert runtime_repository.list_model_route_decisions(task_id="task_budget_fail") == []
+
+
+def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_audit_lean",
+                "title": "lean audit runtime test",
+                "goal": "验证 lean 审计模式会写入紧凑工件。",
+                "status": "draft",
+                "currentObjective": "完成一次最小运行。",
+                "currentFocus": "lean-audit",
+                "budgetState": {
+                    "tokenBudgetTotal": 1000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_audit_lean/start",
+        json={
+            "auditLevel": "lean",
+            "currentFocus": "lean-audit",
+            "currentContext": [
+                {
+                    "id": "ctx_audit",
+                    "title": "lean audit context",
+                    "content": "验证 runtime 的 request/response/compiled prompt 工件可以被裁剪。",
+                    "importance": 0.8,
+                }
+            ],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "completed"
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        prompt_repository = PromptAssetRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        invocations = runtime_repository.list_model_invocations(task_id="task_audit_lean")
+        assert len(invocations) == 1
+        invocation = invocations[0]
+        artifact = prompt_repository.get_prompt_compile_artifact(str(invocation.prompt_compile_artifact_id))
+        assert artifact is not None
+        assert artifact.compiled_messages_ref is not None
+        assert invocation.request_ref is not None
+        assert invocation.response_ref is not None
+
+        compiled_path = Path(resolve_workspace_root()) / artifact.compiled_messages_ref.locator
+        compiled_payload = json.loads(compiled_path.read_text(encoding="utf-8"))
+        assert compiled_payload["auditLevel"] == "lean"
+        assert "messageDigests" in compiled_payload
+        assert "messages" not in compiled_payload
+
+        request_path = Path(resolve_workspace_root()) / invocation.request_ref.locator
+        request_payload = json.loads(request_path.read_text(encoding="utf-8"))
+        assert request_payload["auditLevel"] == "lean"
+        assert "messages" not in request_payload
+        assert "initialMessageDigests" in request_payload
+        assert "finalMessageDigests" in request_payload
+        assert "toolExecutionCount" in request_payload
+
+        response_path = Path(resolve_workspace_root()) / invocation.response_ref.locator
+        response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+        assert response_payload["auditLevel"] == "lean"
+        assert response_payload["localRuntimeTimings"]["compilePromptMs"] >= 0
+        assert "rawResponse" not in response_payload
+        assert "toolExecutions" not in response_payload
+        assert "toolExecutionCount" in response_payload
 
 
 def test_pause_request_not_overwritten_on_worker_startup() -> None:
@@ -636,10 +719,11 @@ def test_multiple_pause_resume_cycles_no_state_pollution() -> None:
         assert len(runs) == 2
         snapshots = TaskRepository(session).list_snapshots("task_multi_pause")
         assert len(snapshots) >= 2
-        # First snapshot should be consumed
-        assert snapshots[1].status == "consumed"
-        # Second snapshot should be current
-        assert snapshots[0].status == "current"
+        snapshots_by_id = {snapshot.id: snapshot for snapshot in snapshots}
+        # The resumed snapshot should be consumed after the second run.
+        assert snapshots_by_id[snapshot1_id].status == "consumed"
+        # The newest active snapshot remains restorable; current-ness is carried by active_snapshot_id.
+        assert snapshots_by_id[snapshot2_id].status == "restorable"
 
     # Second resume to verify state is still clean
     resumed2 = client.post(

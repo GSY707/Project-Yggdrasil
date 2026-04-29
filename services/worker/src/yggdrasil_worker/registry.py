@@ -178,7 +178,7 @@ def dispatch_work_item(payload: dict[str, Any]) -> dict[str, object]:
     }
 
 
-def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 1) -> dict[str, object]:
+def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) -> dict[str, object]:
     with observe_span("worker", f"queue:{queue}", kind="worker", attributes={"queue": queue}) as span:
         popped = pop_work_item(queue, timeout_seconds=timeout_seconds)
         span["attributes"]["popStatus"] = popped["status"]

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
+import time
+from threading import RLock
 from typing import Any
 
 import yaml
@@ -19,6 +21,15 @@ from .support import ensure_state_dir, new_id, read_json, relative_workspace_pat
 
 
 KERNEL_VERSION = "0.1.0"
+
+_CATALOG_CACHE: dict[str, tuple[ModuleCatalogSnapshot, float]] = {}
+_CATALOG_CACHE_TTL = 2.0
+_CATALOG_CACHE_LOCK = RLock()
+
+
+def invalidate_catalog_cache() -> None:
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE.clear()
 
 
 def default_modules_root(workspace_root: Path | None = None) -> Path:
@@ -102,6 +113,13 @@ def _desired_state_for(module_id: str, profile: dict[str, Any], existing: Module
 
 def build_module_catalog_snapshot(workspace_root: Path | None = None) -> ModuleCatalogSnapshot:
     root = resolve_workspace_root(workspace_root)
+    cache_key = str(root)
+    now = time.monotonic()
+    with _CATALOG_CACHE_LOCK:
+        cached = _CATALOG_CACHE.get(cache_key)
+        if cached is not None and now - cached[1] < _CATALOG_CACHE_TTL:
+            return cached[0]
+
     state_dir = ensure_state_dir(root)
     profile = _load_module_profile(state_dir)
     existing_installs = _load_existing_installs(state_dir)
@@ -205,6 +223,8 @@ def build_module_catalog_snapshot(workspace_root: Path | None = None) -> ModuleC
         state_dir / "module-catalog-snapshot.json",
         snapshot.model_dump(by_alias=True, mode="json"),
     )
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE[cache_key] = (snapshot, time.monotonic())
     return snapshot
 
 

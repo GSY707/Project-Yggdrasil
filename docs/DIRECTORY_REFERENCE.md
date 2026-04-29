@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/29 更新：新增 Phase 4 质量基线文档）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：测试套件性能优化、coordination backend 选择、runtime 分段计时、阶段 4 审计分级）
 
 ---
 
@@ -141,8 +141,8 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel.py       # 核心运行时内核（任务状态机、执行编排，61KB）
-│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）
+│       ├── runtime_kernel.py       # 核心运行时内核（任务状态机、执行编排，61KB）；返回 root-mount/LLM/写回分段计时
+│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）；记录 prompt/请求/响应分段计时，并支持 strict/default/lean 审计分级
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
@@ -156,19 +156,19 @@ packages/
 │       │
 │       ├── # ── 记忆与模块 ──────────────────────────────
 │       ├── model_routing.py        # 模型路由策略（按场景、按成本、按能力选模）
-│       ├── catalog.py              # 模块目录（发现、注册、能力查询）
-│       ├── app_catalog.py          # 应用目录（应用配置加载与管理）
+│       ├── catalog.py              # 模块目录（发现、注册、能力查询）；含 2s TTL 进程级缓存
+│       ├── app_catalog.py          # 应用目录（应用配置加载与管理）；含 2s TTL 进程级缓存
 │       ├── spec_catalog.py         # 规格目录（协议规格注册与查询）
 │       ├── module.py               # Module 基类（所有模块继承此类）
 │       │
 │       ├── # ── MCP 集成 ─────────────────────────────────
-│       ├── mcp_bridge.py           # MCP 协议桥接实现（32KB）
+│       ├── mcp_bridge.py           # MCP 协议桥接实现（32KB）；显式同步 snapshot，builtin server 默认 keep-alive
 │       ├── mcp_bridge_module.py    # MCP 模块封装
 │       ├── mcp_servers/            # 内置 MCP Server 实现
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime.py   # 评测 Suite 运行时（84KB）
+│       ├── evaluation_runtime.py   # 评测 Suite 运行时（84KB）；非 live suite 默认强制 fallback LLM，live case 通过 requireLive 显式放行
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -353,7 +353,13 @@ docs/
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │
-└── research/                       # 研究与探索性文档
+├── research/                       # 研究与探索性文档
+│   ├── prompt-engineering-and-seed-templates-v0.1.md
+│   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
+│   ├── runtime-optimization-plan-2026-04-29.md
+│   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
+│   └── test-suite-cpu-time-analysis-2026-04-29.md
+│                                   #   pytest CPU/等待时间拆分：Redis 超时、MCP bridge stdio、运行时与控制面热点
 ```
 
 ---
@@ -430,7 +436,7 @@ migrations/
 
 ```
 tests/
-├── conftest.py                     # pytest 共享 Fixture（数据库、客户端、测试数据）
+├── conftest.py                     # pytest 共享 Fixture：session 级 schema 初始化（单次），每 test 截断数据表并默认使用 memory coordination 与隔离 state root
 ├── fixtures/                       # 测试用固定样本数据
 │
 ├── # ── 基础层测试 ────────────────────────────────────────

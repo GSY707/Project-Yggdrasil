@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..catalog import build_module_catalog_snapshot, load_in_process_plugin
+from ..catalog import build_module_catalog_snapshot, invalidate_catalog_cache, load_in_process_plugin
 from ..contracts import (
     ActorRef,
     EventEnvelope,
@@ -22,6 +22,7 @@ from ..contracts import (
 from ..hooks import HookNames
 from ..module import HookRegistration
 from ..support import ensure_state_dir, ensure_state_subdir, new_id, read_json, relative_workspace_path, resolve_workspace_root, utc_now, write_json
+from ..tool_runtime import invalidate_tool_descriptor_cache
 from .constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
 from .database import PersistenceRuntime, get_persistence_runtime, initialize_schema
 from .eventing import EventBusClient, NatsJetStreamBus, OutboxPublisher, event_payload_ref
@@ -134,6 +135,8 @@ class ModulePlatformService:
         if manifest is None:
             raise KeyError(module_id)
         self._persist_desired_state(module_id, "enabled" if enabled else "disabled")
+        invalidate_catalog_cache()
+        invalidate_tool_descriptor_cache()
         with self.runtime.session_scope() as session:
             repository = ModuleStateRepository(session)
             outbox = OutboxRepository(session)

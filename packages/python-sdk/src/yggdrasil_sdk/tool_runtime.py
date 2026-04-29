@@ -2,11 +2,37 @@ from __future__ import annotations
 
 from importlib import import_module
 import json
+import time
+from threading import RLock
 from typing import Any
 
 from .catalog import build_module_catalog_snapshot, load_in_process_plugin
 from .contracts import ToolDescriptor
 from .hooks import HookNames
+from .mcp_bridge import load_mcp_bridge_snapshot
+from .support import resolve_workspace_root
+
+
+_TOOL_DESCRIPTOR_CACHE: dict[tuple[Any, ...], tuple[list[ToolDescriptor], float]] = {}
+_TOOL_DESCRIPTOR_CACHE_TTL = 2.0
+_TOOL_DESCRIPTOR_CACHE_LOCK = RLock()
+
+
+def invalidate_tool_descriptor_cache() -> None:
+    with _TOOL_DESCRIPTOR_CACHE_LOCK:
+        _TOOL_DESCRIPTOR_CACHE.clear()
+
+
+def _tool_descriptor_cache_key(active_capabilities: list[str] | None) -> tuple[Any, ...]:
+    module_snapshot = build_module_catalog_snapshot()
+    bridge_snapshot = load_mcp_bridge_snapshot(refresh_if_missing=False)
+    normalized_capabilities = tuple(sorted({str(item) for item in active_capabilities or []}))
+    return (
+        str(resolve_workspace_root()),
+        normalized_capabilities if active_capabilities is not None else None,
+        module_snapshot.generated_at.isoformat(),
+        str(bridge_snapshot.get("generatedAt") or ""),
+    )
 
 
 def _normalize_tool_descriptor(tool: dict[str, Any], module_id: str) -> ToolDescriptor:
@@ -23,6 +49,13 @@ def _normalize_tool_descriptor(tool: dict[str, Any], module_id: str) -> ToolDesc
 
 
 def resolve_registered_tool_descriptors(active_capabilities: list[str] | None = None) -> list[ToolDescriptor]:
+    cache_key = _tool_descriptor_cache_key(active_capabilities)
+    now = time.monotonic()
+    with _TOOL_DESCRIPTOR_CACHE_LOCK:
+        cached = _TOOL_DESCRIPTOR_CACHE.get(cache_key)
+        if cached is not None and now - cached[1] < _TOOL_DESCRIPTOR_CACHE_TTL:
+            return cached[0]
+
     snapshot = build_module_catalog_snapshot()
     installs_by_module_id = {record.module_id: record for record in snapshot.installs}
     descriptors: dict[str, ToolDescriptor] = {}
@@ -61,7 +94,10 @@ def resolve_registered_tool_descriptors(active_capabilities: list[str] | None = 
             descriptor = _normalize_tool_descriptor(tool, manifest.module_id)
             descriptors[descriptor.name] = descriptor
 
-    return [descriptors[name] for name in sorted(descriptors)]
+    resolved = [descriptors[name] for name in sorted(descriptors)]
+    with _TOOL_DESCRIPTOR_CACHE_LOCK:
+        _TOOL_DESCRIPTOR_CACHE[cache_key] = (resolved, time.monotonic())
+    return resolved
 
 
 def list_registered_tool_payloads(active_capabilities: list[str] | None = None) -> list[dict[str, Any]]:

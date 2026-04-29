@@ -1,17 +1,43 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
+from threading import RLock
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from .app_catalog import active_application_id, get_application_manifest
+from .app_catalog import active_application_id, build_application_catalog_snapshot, get_application_manifest
+from .catalog import build_module_catalog_snapshot
 from .hook_runtime import collect_hook_results
 from .hooks import HookNames
 from .persistence.constants import DEFAULT_APP_ID
 from .support import normalize_excerpt, read_json, resolve_workspace_root
 from .tool_runtime import resolve_registered_tool_descriptors
+
+
+_PROMPT_REGISTRY_CACHE: dict[tuple[Any, ...], tuple[dict[str, Any], float]] = {}
+_PROMPT_REGISTRY_CACHE_TTL = 2.0
+_PROMPT_REGISTRY_CACHE_LOCK = RLock()
+
+
+def invalidate_prompt_registry_cache() -> None:
+    with _PROMPT_REGISTRY_CACHE_LOCK:
+        _PROMPT_REGISTRY_CACHE.clear()
+
+
+def _prompt_registry_cache_key(app_id: str, active_capabilities: list[str] | None) -> tuple[Any, ...]:
+    application_snapshot = build_application_catalog_snapshot()
+    module_snapshot = build_module_catalog_snapshot()
+    normalized_capabilities = tuple(sorted({str(item) for item in active_capabilities or []}))
+    return (
+        str(resolve_workspace_root()),
+        app_id,
+        normalized_capabilities,
+        application_snapshot.generated_at.isoformat(),
+        module_snapshot.generated_at.isoformat(),
+    )
 
 
 class PromptProfile(BaseModel):
@@ -167,6 +193,13 @@ def assemble_prompt_registry(
     active_capabilities: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved_app_id = str(app_id or active_application_id() or DEFAULT_APP_ID)
+    cache_key = _prompt_registry_cache_key(resolved_app_id, active_capabilities)
+    now = time.monotonic()
+    with _PROMPT_REGISTRY_CACHE_LOCK:
+        cached = _PROMPT_REGISTRY_CACHE.get(cache_key)
+        if cached is not None and now - cached[1] < _PROMPT_REGISTRY_CACHE_TTL:
+            return cached[0]
+
     app_manifest = get_application_manifest(resolved_app_id)
     selected_module_ids = _allowed_module_ids(app_manifest, active_capabilities)
 
@@ -184,12 +217,15 @@ def assemble_prompt_registry(
     ]:
         templates_by_id[template.id] = template
 
-    return {
+    registry = {
         "application": app_manifest,
         "selectedModuleIds": selected_module_ids,
         "promptProfiles": [profiles_by_id[key] for key in sorted(profiles_by_id)],
         "seedTemplates": [templates_by_id[key] for key in sorted(templates_by_id)],
     }
+    with _PROMPT_REGISTRY_CACHE_LOCK:
+        _PROMPT_REGISTRY_CACHE[cache_key] = (registry, time.monotonic())
+    return registry
 
 
 def list_registered_agent_tools(active_capabilities: list[str] | None = None) -> list[dict[str, Any]]:
@@ -200,10 +236,11 @@ def get_prompt_profile_definition(
     prompt_profile_id: str,
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> PromptProfile | None:
-    registry = assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
+    resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
     return next(
-        (profile for profile in registry["promptProfiles"] if profile.id == prompt_profile_id),
+        (profile for profile in resolved_registry["promptProfiles"] if profile.id == prompt_profile_id),
         None,
     )
 
@@ -211,21 +248,23 @@ def get_prompt_profile_definition(
 def list_prompt_profile_definitions(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[PromptProfile]:
-    registry = assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
-    return list(registry["promptProfiles"])
+    resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
+    return list(resolved_registry["promptProfiles"])
 
 
 def get_seed_template_definition(
     seed_template_id: str | None,
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> SeedTemplate | None:
     if seed_template_id is None:
         return None
-    registry = assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
+    resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
     return next(
-        (template for template in registry["seedTemplates"] if template.id == seed_template_id),
+        (template for template in resolved_registry["seedTemplates"] if template.id == seed_template_id),
         None,
     )
 
@@ -233,9 +272,10 @@ def get_seed_template_definition(
 def list_seed_template_definitions(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[SeedTemplate]:
-    registry = assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
-    return list(registry["seedTemplates"])
+    resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
+    return list(resolved_registry["seedTemplates"])
 
 
 def _select_prompt_profile(run_type: str, request: dict[str, Any], app_manifest: Any, profiles: list[PromptProfile]) -> PromptProfile:
@@ -453,14 +493,16 @@ def compile_runtime_prompt(
     current_context: list[dict[str, Any]],
     request: dict[str, Any],
     resume_path: str | None,
+    registry: dict[str, Any] | None = None,
+    registered_tools: list[dict[str, Any]] | None = None,
 ) -> CompiledPrompt:
     app_id = str(request.get("appId") or getattr(task, "app_id", None) or DEFAULT_APP_ID)
     active_capabilities = [str(item) for item in root_mount.get("activeCapabilities") or []]
-    registry = assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
-    app_manifest = registry["application"]
-    profile = _select_prompt_profile(run_type, request, app_manifest, registry["promptProfiles"])
-    seed_template = _select_seed_template(task_type, run_type, request, app_manifest, registry["seedTemplates"])
-    registered_tools = list_registered_agent_tools(active_capabilities)
+    resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
+    app_manifest = resolved_registry["application"]
+    profile = _select_prompt_profile(run_type, request, app_manifest, resolved_registry["promptProfiles"])
+    seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
+    resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
 
     system_sections = {
         "system_role": profile.system_role,
@@ -475,7 +517,7 @@ def compile_runtime_prompt(
                 profile.tool_policy,
                 seed_template.tool_policy_overlay,
                 "当前可见模块能力:\n" + _format_active_capabilities(active_capabilities),
-                "当前可见结构化工具描述:\n" + _format_registered_tools(registered_tools),
+                "当前可见结构化工具描述:\n" + _format_registered_tools(resolved_registered_tools),
             ]
             if section
         ),
@@ -521,7 +563,7 @@ def compile_runtime_prompt(
         runType=run_type,
         taskType=task_type,
         scenario=seed_template.scenario,
-        registeredTools=registered_tools,
+        registeredTools=resolved_registered_tools,
         systemSections=system_sections,
         userSections=user_sections,
         messages=[

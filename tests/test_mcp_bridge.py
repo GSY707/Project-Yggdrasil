@@ -14,6 +14,8 @@ from yggdrasil_sdk import (
 )
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 
+import yggdrasil_sdk.mcp_bridge as mcp_bridge_module
+
 
 def _seed_task(task_id: str, *, app_id: str = "yggdrasil.app.software-factory"):
     runtime = get_persistence_runtime()
@@ -109,3 +111,34 @@ def test_mcp_bridge_syncs_builtin_servers_and_executes_tools(tmp_path) -> None:
     assert execution["result"]["serverId"] == "workspace-read"
     assert execution["result"]["result"]["content"] == "alpha\nbeta"
     assert execution["result"]["result"]["path"] == str(sample_file.resolve())
+
+
+def test_mcp_bridge_builtin_servers_default_to_keepalive() -> None:
+    config = ensure_mcp_bridge_config()
+    builtin_servers = {
+        server["id"]: server
+        for server in config["servers"]
+        if server["id"].startswith("workspace-")
+    }
+
+    assert builtin_servers
+    assert all(server["keepAlive"] is True for server in builtin_servers.values())
+
+
+def test_mcp_bridge_missing_binding_does_not_force_sync(monkeypatch) -> None:
+    sync_calls = {"count": 0}
+
+    def never_sync(*args, **kwargs):
+        sync_calls["count"] += 1
+        raise AssertionError("sync_mcp_bridge_servers should not be called from tool lookup hot path")
+
+    monkeypatch.setattr(mcp_bridge_module, "sync_mcp_bridge_servers", never_sync)
+
+    try:
+        mcp_bridge_module._tool_binding_by_name("mcp.read.missing_tool")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("Expected KeyError for a missing MCP tool binding")
+
+    assert sync_calls["count"] == 0

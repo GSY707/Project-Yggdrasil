@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+import time
+from threading import RLock
 from typing import Any
 
 import yaml
@@ -13,6 +15,14 @@ from .support import ensure_state_dir, read_json, relative_workspace_path, resol
 
 
 APP_MANIFEST_NAME = "yggdrasil.app.yaml"
+_APP_CATALOG_CACHE: dict[str, tuple[ApplicationCatalogSnapshot, float]] = {}
+_APP_CATALOG_CACHE_TTL = 2.0
+_APP_CATALOG_CACHE_LOCK = RLock()
+
+
+def invalidate_application_catalog_cache() -> None:
+    with _APP_CATALOG_CACHE_LOCK:
+        _APP_CATALOG_CACHE.clear()
 
 
 def default_applications_root(workspace_root: Path | None = None) -> Path:
@@ -104,6 +114,13 @@ def discover_application_manifests(applications_root: Path | None = None) -> lis
 
 def build_application_catalog_snapshot(workspace_root: Path | None = None) -> ApplicationCatalogSnapshot:
     root = resolve_workspace_root(workspace_root)
+    cache_key = str(root)
+    now = time.monotonic()
+    with _APP_CATALOG_CACHE_LOCK:
+        cached = _APP_CATALOG_CACHE.get(cache_key)
+        if cached is not None and now - cached[1] < _APP_CATALOG_CACHE_TTL:
+            return cached[0]
+
     snapshot = ApplicationCatalogSnapshot(
         generatedAt=utc_now(),
         manifests=discover_application_manifests(default_applications_root(root)),
@@ -112,6 +129,8 @@ def build_application_catalog_snapshot(workspace_root: Path | None = None) -> Ap
         ensure_state_dir(root) / "application-catalog-snapshot.json",
         snapshot.model_dump(by_alias=True, mode="json"),
     )
+    with _APP_CATALOG_CACHE_LOCK:
+        _APP_CATALOG_CACHE[cache_key] = (snapshot, time.monotonic())
     return snapshot
 
 
@@ -158,6 +177,7 @@ def set_active_application(app_id: str, workspace_root: Path | None = None) -> A
     binding = bindings.setdefault(app_id, {})
     binding["updatedAt"] = now.isoformat()
     _write_application_profile(profile, workspace_root)
+    invalidate_application_catalog_cache()
     return ApplicationConfigBinding(
         appId=app_id,
         active=True,
@@ -189,6 +209,7 @@ def upsert_application_config_binding(
     binding["importantConfig"] = dict(important_config or {})
     binding["updatedAt"] = now.isoformat()
     _write_application_profile(profile, workspace_root)
+    invalidate_application_catalog_cache()
     return ApplicationConfigBinding(
         appId=app_id,
         active=active_application_id(workspace_root) == app_id,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha1
 import json
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -26,6 +27,8 @@ FALLBACK_ROUTE_CANDIDATE = {
     "contextWindow": 64000,
     "freeTier": True,
 }
+
+_AUDIT_LEVELS = {"strict", "default", "lean"}
 
 
 def load_runtime_candidate_models() -> list[dict[str, Any]] | None:
@@ -153,6 +156,192 @@ def _merge_usage(total: dict[str, int], usage: dict[str, Any]) -> dict[str, int]
     return total
 
 
+def _elapsed_ms(started_at: float) -> float:
+    return round((perf_counter() - started_at) * 1000.0, 2)
+
+
+def _runtime_audit_level(request: dict[str, Any]) -> str:
+    explicit = request.get("auditLevel") if isinstance(request, dict) else None
+    candidate = str(explicit or os.getenv("YGGDRASIL_RUNTIME_AUDIT_LEVEL") or "default").strip().lower()
+    return candidate if candidate in _AUDIT_LEVELS else "default"
+
+
+def _message_digest(message: dict[str, Any]) -> dict[str, Any]:
+    content = str(message.get("content") or "")
+    tool_calls = message.get("tool_calls") if isinstance(message.get("tool_calls"), list) else []
+    return {
+        "role": str(message.get("role") or "unknown"),
+        "name": str(message.get("name")) if message.get("name") is not None else None,
+        "toolCallId": str(message.get("tool_call_id")) if message.get("tool_call_id") is not None else None,
+        "contentPreview": normalize_excerpt(content, 240),
+        "contentLength": len(content),
+        "toolCallNames": [
+            str((tool_call.get("function") or {}).get("name") or "")
+            for tool_call in tool_calls
+            if isinstance(tool_call, dict)
+        ],
+    }
+
+
+def _message_digests(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_message_digest(message) for message in messages]
+
+
+def _tool_execution_summary(execution: dict[str, Any]) -> dict[str, Any]:
+    tool = execution.get("tool") if isinstance(execution.get("tool"), dict) else {}
+    result = execution.get("result") if isinstance(execution.get("result"), dict) else {}
+    return {
+        "tool": str(tool.get("name") or "unknown"),
+        "success": bool(execution.get("success")),
+        "status": str(result.get("status") or ("ok" if execution.get("success") else "error")),
+        "resultPreview": normalize_excerpt(str(result), 240),
+    }
+
+
+def _tool_execution_summaries(tool_executions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_tool_execution_summary(execution) for execution in tool_executions if isinstance(execution, dict)]
+
+
+def _tool_specs_summary(tool_specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for spec in tool_specs:
+        function = spec.get("function") if isinstance(spec.get("function"), dict) else {}
+        parameters = function.get("parameters") if isinstance(function.get("parameters"), dict) else {}
+        properties = parameters.get("properties") if isinstance(parameters.get("properties"), dict) else {}
+        summaries.append(
+            {
+                "name": str(function.get("name") or "unknown"),
+                "description": str(function.get("description") or ""),
+                "parameterCount": len(properties),
+            }
+        )
+    return summaries
+
+
+def _compiled_prompt_file_payload(audit_level: str, compiled_prompt, invocation_id: str) -> dict[str, Any]:
+    payload = {
+        "appId": compiled_prompt.app_id,
+        "modelInvocationId": invocation_id,
+        "auditLevel": audit_level,
+        "prompt": compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"}),
+    }
+    if audit_level == "strict":
+        payload["messages"] = compiled_prompt.messages
+        return payload
+    payload["messageDigests"] = _message_digests([dict(message) for message in compiled_prompt.messages])
+    if audit_level == "default":
+        payload["messageCount"] = len(compiled_prompt.messages)
+    return payload
+
+
+def _request_file_payload(
+    audit_level: str,
+    *,
+    task: Any,
+    run: Any,
+    invocation_id: str,
+    route_payload: dict[str, Any],
+    temperature: float,
+    max_tokens: int,
+    prompt_artifact_id: str,
+    prompt_metadata: dict[str, Any],
+    messages: list[dict[str, Any]],
+    tool_specs: list[dict[str, Any]],
+    conversation_messages: list[dict[str, Any]] | None = None,
+    tool_executions: list[dict[str, Any]] | None = None,
+    round_summaries: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "appId": getattr(task, "app_id", None),
+        "invocationId": invocation_id,
+        "taskId": task.id,
+        "agentRunId": run.id,
+        "requestedModel": route_payload.get("selectedModel"),
+        "requestedProvider": route_payload.get("selectedProvider"),
+        "temperature": temperature,
+        "maxTokens": max_tokens,
+        "promptCompileArtifactId": prompt_artifact_id,
+        "promptMetadata": prompt_metadata,
+        "auditLevel": audit_level,
+    }
+    if audit_level == "strict":
+        payload["messages"] = messages
+        payload["tools"] = tool_specs
+        if conversation_messages is not None:
+            payload["initialMessages"] = messages
+            payload["messages"] = conversation_messages
+        if tool_executions is not None:
+            payload["toolExecutions"] = tool_executions
+        if round_summaries is not None:
+            payload["rounds"] = round_summaries
+        return payload
+
+    if conversation_messages is None:
+        payload["messageDigests"] = _message_digests(messages)
+    else:
+        payload["initialMessageDigests"] = _message_digests(messages)
+        payload["finalMessageDigests"] = _message_digests(conversation_messages)
+    payload["toolSpecs"] = _tool_specs_summary(tool_specs)
+
+    if audit_level == "default":
+        if tool_executions is not None:
+            payload["toolExecutionSummaries"] = _tool_execution_summaries(tool_executions)
+        if round_summaries is not None:
+            payload["rounds"] = round_summaries
+        return payload
+
+    payload["messageCount"] = len(conversation_messages if conversation_messages is not None else messages)
+    payload["toolExecutionCount"] = len(tool_executions or [])
+    payload["roundCount"] = len(round_summaries or [])
+    return payload
+
+
+def _response_file_payload(
+    audit_level: str,
+    *,
+    task: Any,
+    run: Any,
+    invocation_id: str,
+    prompt_artifact_id: str,
+    final_result: dict[str, Any],
+    usage_totals: dict[str, int],
+    accumulated_cost: float,
+    tool_executions: list[dict[str, Any]],
+    round_summaries: list[dict[str, Any]],
+    local_runtime_timings: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {
+        "appId": getattr(task, "app_id", None),
+        "invocationId": invocation_id,
+        "taskId": task.id,
+        "agentRunId": run.id,
+        "promptCompileArtifactId": prompt_artifact_id,
+        "mode": final_result.get("mode"),
+        "provider": final_result.get("provider"),
+        "model": final_result.get("model"),
+        "finishReason": final_result.get("finishReason"),
+        "usage": usage_totals,
+        "costUsed": accumulated_cost,
+        "error": final_result.get("error"),
+        "auditLevel": audit_level,
+        "localRuntimeTimings": dict(local_runtime_timings),
+    }
+    if audit_level == "strict":
+        payload["toolExecutions"] = tool_executions
+        payload["rounds"] = round_summaries
+        payload["rawResponse"] = final_result.get("rawResponse")
+        return payload
+
+    if audit_level == "default":
+        payload["toolExecutionSummaries"] = _tool_execution_summaries(tool_executions)
+        payload["rounds"] = round_summaries
+        return payload
+
+    payload["toolExecutionCount"] = len(tool_executions)
+    payload["roundCount"] = len(round_summaries)
+    return payload
+
+
 def _persist_prompt_assets(
     session,
     *,
@@ -161,6 +350,7 @@ def _persist_prompt_assets(
     invocation_id: str,
     compiled_prompt,
     workspace_root: Path,
+    audit_level: str,
 ):
     repository = PromptAssetRepository(session)
     prompt_profile = get_prompt_profile_definition(
@@ -213,15 +403,7 @@ def _persist_prompt_assets(
         )
 
     compiled_messages_path = ensure_state_subdir("prompt/compiled", workspace_root) / f"{invocation_id}.json"
-    write_json(
-        compiled_messages_path,
-        {
-            "appId": compiled_prompt.app_id,
-            "modelInvocationId": invocation_id,
-            "prompt": compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"}),
-            "messages": compiled_prompt.messages,
-        },
-    )
+    write_json(compiled_messages_path, _compiled_prompt_file_payload(audit_level, compiled_prompt, invocation_id))
     compiled_messages_ref = _invocation_file_ref(compiled_messages_path, workspace_root)
     artifact_hash = _json_hash(
         {
@@ -280,6 +462,11 @@ def invoke_runtime_completion(
     runtime_repository = RuntimeRepository(session)
     route_payload = _normalize_route_decision(route_decision)
     run_type = str(request.get("runType") or getattr(run, "run_type", "main"))
+    audit_level = _runtime_audit_level(request)
+    local_runtime_timings: dict[str, float] = {}
+    local_started_at = perf_counter()
+
+    compile_prompt_started_at = perf_counter()
     compiled_prompt = compile_runtime_prompt(
         task=task,
         run_type=run_type,
@@ -289,12 +476,16 @@ def invoke_runtime_completion(
         request=request,
         resume_path=resume_path,
     )
+    local_runtime_timings["compilePromptMs"] = _elapsed_ms(compile_prompt_started_at)
+    prompt_metadata = compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"})
     messages: list[dict[str, Any]] = [dict(message) for message in compiled_prompt.messages]
     temperature = float(request.get("temperature")) if request.get("temperature") is not None else _default_temperature(task_type)
     max_tokens = _default_max_tokens(task, request)
     allow_fallback = bool(request.get("allowModelFallback", True))
     allow_tool_execution = bool(request.get("allowToolExecution", True))
+    build_tool_specs_started_at = perf_counter()
     tool_specs = build_llm_tool_specs(compiled_prompt.registered_tools) if allow_tool_execution else []
+    local_runtime_timings["buildToolSpecsMs"] = _elapsed_ms(build_tool_specs_started_at)
     max_tool_rounds = max(0, int(request.get("maxToolRounds") or 4))
     now = utc_now()
     invocation = runtime_repository.create_model_invocation(
@@ -312,6 +503,7 @@ def invoke_runtime_completion(
         }
     )
 
+    persist_prompt_started_at = perf_counter()
     prompt_artifact = _persist_prompt_assets(
         session,
         task=task,
@@ -319,30 +511,33 @@ def invoke_runtime_completion(
         invocation_id=invocation.id,
         compiled_prompt=compiled_prompt,
         workspace_root=workspace_root,
+        audit_level=audit_level,
     )
+    local_runtime_timings["persistPromptAssetsMs"] = _elapsed_ms(persist_prompt_started_at)
     invocation = runtime_repository.update_model_invocation(
         invocation.id,
         {"promptCompileArtifactId": prompt_artifact.id},
     )
 
     request_path = ensure_state_subdir("llm/requests", workspace_root) / f"{invocation.id}.json"
+    write_initial_request_started_at = perf_counter()
     write_json(
         request_path,
-        {
-            "appId": getattr(task, "app_id", None),
-            "invocationId": invocation.id,
-            "taskId": task.id,
-            "agentRunId": run.id,
-            "requestedModel": route_payload.get("selectedModel"),
-            "requestedProvider": route_payload.get("selectedProvider"),
-            "temperature": temperature,
-            "maxTokens": max_tokens,
-            "promptCompileArtifactId": prompt_artifact.id,
-            "promptMetadata": compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"}),
-            "messages": messages,
-            "tools": tool_specs,
-        },
+        _request_file_payload(
+            audit_level,
+            task=task,
+            run=run,
+            invocation_id=invocation.id,
+            route_payload=route_payload,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            prompt_artifact_id=prompt_artifact.id,
+            prompt_metadata=prompt_metadata,
+            messages=messages,
+            tool_specs=tool_specs,
+        ),
     )
+    local_runtime_timings["writeInitialRequestMs"] = _elapsed_ms(write_initial_request_started_at)
     request_ref = _invocation_file_ref(request_path, workspace_root)
     invocation = runtime_repository.update_model_invocation(invocation.id, {"requestRef": request_ref.model_dump(mode="json")})
 
@@ -392,6 +587,7 @@ def invoke_runtime_completion(
             round_modes: list[str] = []
             final_result: dict[str, Any] | None = None
 
+            model_tool_loop_started_at = perf_counter()
             for round_index in range(max_tool_rounds + 1):
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
@@ -476,52 +672,36 @@ def invoke_runtime_completion(
             if final_result is None:
                 raise RuntimeError(f"Invocation {invocation.id} finished without a terminal model result.")
 
+            local_runtime_timings["modelToolLoopMs"] = _elapsed_ms(model_tool_loop_started_at)
+
+            rewrite_request_started_at = perf_counter()
             write_json(
                 request_path,
-                {
-                    "appId": getattr(task, "app_id", None),
-                    "invocationId": invocation.id,
-                    "taskId": task.id,
-                    "agentRunId": run.id,
-                    "requestedModel": route_payload.get("selectedModel"),
-                    "requestedProvider": route_payload.get("selectedProvider"),
-                    "temperature": temperature,
-                    "maxTokens": max_tokens,
-                    "promptCompileArtifactId": prompt_artifact.id,
-                    "promptMetadata": compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"}),
-                    "initialMessages": messages,
-                    "messages": conversation_messages,
-                    "tools": tool_specs,
-                    "toolExecutions": tool_executions,
-                    "rounds": round_summaries,
-                },
+                _request_file_payload(
+                    audit_level,
+                    task=task,
+                    run=run,
+                    invocation_id=invocation.id,
+                    route_payload=route_payload,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    prompt_artifact_id=prompt_artifact.id,
+                    prompt_metadata=prompt_metadata,
+                    messages=messages,
+                    tool_specs=tool_specs,
+                    conversation_messages=conversation_messages,
+                    tool_executions=tool_executions,
+                    round_summaries=round_summaries,
+                ),
             )
+            local_runtime_timings["rewriteRequestTranscriptMs"] = _elapsed_ms(rewrite_request_started_at)
 
             latency_ms = round((perf_counter() - started_counter) * 1000.0, 2)
             response_path = ensure_state_subdir("llm/responses", workspace_root) / f"{invocation.id}.json"
-            write_json(
-                response_path,
-                {
-                    "appId": getattr(task, "app_id", None),
-                    "invocationId": invocation.id,
-                    "taskId": task.id,
-                    "agentRunId": run.id,
-                    "promptCompileArtifactId": prompt_artifact.id,
-                    "mode": final_result.get("mode"),
-                    "provider": final_result.get("provider"),
-                    "model": final_result.get("model"),
-                    "finishReason": final_result.get("finishReason"),
-                    "usage": usage_totals,
-                    "costUsed": accumulated_cost,
-                    "error": final_result.get("error"),
-                    "toolExecutions": tool_executions,
-                    "rounds": round_summaries,
-                    "rawResponse": final_result.get("rawResponse"),
-                },
-            )
             response_ref = _invocation_file_ref(response_path, workspace_root)
             all_live_rounds = bool(round_modes) and all(mode == "live" for mode in round_modes)
             final_status = "completed" if all_live_rounds else "fallback"
+            finalize_invocation_started_at = perf_counter()
             invocation = runtime_repository.update_model_invocation(
                 invocation.id,
                 {
@@ -617,6 +797,27 @@ def invoke_runtime_completion(
                     },
                     workspace_root=workspace_root,
                 )
+            local_runtime_timings["finalizeInvocationMs"] = _elapsed_ms(finalize_invocation_started_at)
+            response_payload = _response_file_payload(
+                audit_level,
+                task=task,
+                run=run,
+                invocation_id=invocation.id,
+                prompt_artifact_id=prompt_artifact.id,
+                final_result=final_result,
+                usage_totals=usage_totals,
+                accumulated_cost=accumulated_cost,
+                tool_executions=tool_executions,
+                round_summaries=round_summaries,
+                local_runtime_timings={
+                    **local_runtime_timings,
+                    "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
+                },
+            )
+            write_response_started_at = perf_counter()
+            write_json(response_path, response_payload)
+            local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+            local_runtime_timings["totalLocalMs"] = _elapsed_ms(local_started_at)
             return {
                 "assistantText": str(final_result.get("outputText") or ""),
                 "invocation": invocation.model_dump(by_alias=True, mode="json"),
@@ -626,6 +827,8 @@ def invoke_runtime_completion(
                 "usage": dict(usage_totals),
                 "costUsed": float(accumulated_cost or 0.0),
                 "status": invocation.status,
+                "auditLevel": audit_level,
+                "timings": dict(local_runtime_timings),
             }
     except Exception as exc:
         latency_ms = round((perf_counter() - started_counter) * 1000.0, 2)
@@ -661,4 +864,5 @@ def invoke_runtime_completion(
             },
             workspace_root=workspace_root,
         )
+        local_runtime_timings["totalLocalMs"] = _elapsed_ms(local_started_at)
         raise

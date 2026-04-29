@@ -246,7 +246,7 @@ def test_resume_with_invalid_snapshot_returns_error() -> None:
     # Should return an error (not 202 success)
     # The exact status code depends on implementation, but it should indicate failure
     # Typically 400 (bad request) or 404 (not found) or 422 (validation error)
-    assert response.status_code in [400, 404, 422, 500]
+    assert response.status_code in [400, 404, 409, 422, 500]
     # Response should contain error information
     response_data = response.json()
     assert "error" in str(response_data).lower() or "detail" in str(response_data).lower()
@@ -287,7 +287,7 @@ def test_resume_with_missing_snapshot_returns_error() -> None:
     )
 
     # Should return an error
-    assert response.status_code in [400, 404, 422, 500]
+    assert response.status_code in [400, 404, 409, 422, 500]
     response_data = response.json()
     # Should mention snapshot or token issue
     assert any(

@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 from time import perf_counter
 import subprocess
 import tempfile
+import threading
 from typing import Any, Iterator
 
 from .contracts import ExternalRef
@@ -368,26 +370,65 @@ def ensure_evaluation_suites(workspace_root: Path | None = None) -> list[Evaluat
         return suites
 
 
+_SCHEMA_TEMPLATE_LOCK = threading.Lock()
+_SCHEMA_TEMPLATE_DIR: tempfile.TemporaryDirectory | None = None
+_SCHEMA_TEMPLATE_DB: str | None = None
+
+
+def _get_schema_template_db() -> str:
+    """Build a schema-only SQLite file once per process, then reuse it via file copy."""
+    global _SCHEMA_TEMPLATE_DIR, _SCHEMA_TEMPLATE_DB
+    if _SCHEMA_TEMPLATE_DB is not None:
+        return _SCHEMA_TEMPLATE_DB
+    with _SCHEMA_TEMPLATE_LOCK:
+        if _SCHEMA_TEMPLATE_DB is not None:
+            return _SCHEMA_TEMPLATE_DB
+        _SCHEMA_TEMPLATE_DIR = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-schema-")
+        template_path = Path(_SCHEMA_TEMPLATE_DIR.name) / "schema-template.db"
+        saved = {k: os.environ.get(k) for k in ("YGGDRASIL_DATABASE_URL", "YGGDRASIL_AUTO_CREATE_SCHEMA")}
+        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{template_path.as_posix()}"
+        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "0"
+        reset_persistence_runtime()
+        initialize_schema()
+        reset_persistence_runtime()
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _SCHEMA_TEMPLATE_DB = str(template_path)
+    return _SCHEMA_TEMPLATE_DB
+
+
 @contextmanager
-def isolated_runtime_environment() -> Iterator[None]:
+def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[None]:
     managed_keys = [
         "YGGDRASIL_DATABASE_URL",
         "YGGDRASIL_AUTO_CREATE_SCHEMA",
+        "YGGDRASIL_COORDINATION_BACKEND",
         "YGGDRASIL_REDIS_URL",
         "YGGDRASIL_STATE_ROOT",
         "YGGDRASIL_STATE_DIR",
         "YGGDRASIL_GIT_REPO_PATH",
+        "YGGDRASIL_DISABLE_LIVE_LLM",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
+    template_db = _get_schema_template_db()
     with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-") as temp_dir:
         temp_root = Path(temp_dir)
-        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(temp_root / 'evaluation.db').as_posix()}"
-        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
+        db_path = temp_root / "evaluation.db"
+        shutil.copy2(template_db, db_path)
+        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
+        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "0"
+        os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
         os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
         os.environ["YGGDRASIL_STATE_ROOT"] = str((temp_root / ".yggdrasil").resolve())
+        if disable_live_llm:
+            os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
+        else:
+            os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
         os.environ.pop("YGGDRASIL_STATE_DIR", None)
         reset_persistence_runtime()
-        initialize_schema()
         ensure_workspace_bootstrap()
         try:
             yield
@@ -402,21 +443,28 @@ def isolated_runtime_environment() -> Iterator[None]:
 
 
 @contextmanager
-def local_evaluation_runtime_environment(workspace_root: Path | None = None) -> Iterator[None]:
+def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, disable_live_llm: bool = True) -> Iterator[None]:
     managed_keys = [
         "YGGDRASIL_DATABASE_URL",
         "YGGDRASIL_AUTO_CREATE_SCHEMA",
+        "YGGDRASIL_COORDINATION_BACKEND",
         "YGGDRASIL_REDIS_URL",
         "YGGDRASIL_STATE_ROOT",
         "YGGDRASIL_STATE_DIR",
+        "YGGDRASIL_DISABLE_LIVE_LLM",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
     sandbox_root = resolve_workspace_root(workspace_root) / ".yggdrasil" / "evaluation-sandbox"
     sandbox_root.mkdir(parents=True, exist_ok=True)
     os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
     os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
+    os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
     os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
     os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
+    if disable_live_llm:
+        os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
+    else:
+        os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
     os.environ.pop("YGGDRASIL_STATE_DIR", None)
     reset_persistence_runtime()
     initialize_schema()
@@ -1745,7 +1793,7 @@ def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> d
 
                 case_started = perf_counter()
                 try:
-                    with isolated_runtime_environment():
+                    with isolated_runtime_environment(disable_live_llm=not bool(case.get("requireLive", False))):
                         detail = handler(case)
                     case_status = "passed"
                 except Exception as exc:
