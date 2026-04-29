@@ -166,8 +166,53 @@ def _runtime_audit_level(request: dict[str, Any]) -> str:
     return candidate if candidate in _AUDIT_LEVELS else "default"
 
 
+def _requested_thinking_mode(request: dict[str, Any]) -> str | None:
+    candidate = request.get("thinking") if isinstance(request, dict) else None
+    if isinstance(candidate, dict):
+        candidate = candidate.get("type")
+    if isinstance(candidate, bool):
+        return "enabled" if candidate else "disabled"
+    if candidate is None:
+        return None
+    lowered = str(candidate).strip().lower()
+    if lowered in {"1", "true", "enabled", "enable", "on", "thinking"}:
+        return "enabled"
+    if lowered in {"0", "false", "disabled", "disable", "off", "none"}:
+        return "disabled"
+    return None
+
+
+def _requested_reasoning_effort(request: dict[str, Any]) -> str | None:
+    raw = None
+    if isinstance(request, dict):
+        raw = request.get("reasoningEffort")
+        if raw is None:
+            raw = request.get("reasoning_effort")
+    if raw is None:
+        return None
+    lowered = str(raw).strip().lower()
+    if lowered in {"low", "medium", "high"}:
+        return "high"
+    if lowered in {"xhigh", "max"}:
+        return "max"
+    return None
+
+
+def _assistant_tool_round_message(result: dict[str, Any], assistant_tool_calls: list[dict[str, Any]]) -> dict[str, Any]:
+    message = {
+        "role": "assistant",
+        "content": str(result.get("outputText") or ""),
+        "tool_calls": assistant_tool_calls,
+    }
+    reasoning_content = result.get("reasoningContent")
+    if reasoning_content:
+        message["reasoning_content"] = str(reasoning_content)
+    return message
+
+
 def _message_digest(message: dict[str, Any]) -> dict[str, Any]:
     content = str(message.get("content") or "")
+    reasoning_content = str(message.get("reasoning_content") or "")
     tool_calls = message.get("tool_calls") if isinstance(message.get("tool_calls"), list) else []
     return {
         "role": str(message.get("role") or "unknown"),
@@ -175,6 +220,8 @@ def _message_digest(message: dict[str, Any]) -> dict[str, Any]:
         "toolCallId": str(message.get("tool_call_id")) if message.get("tool_call_id") is not None else None,
         "contentPreview": normalize_excerpt(content, 240),
         "contentLength": len(content),
+        "reasoningContentPreview": normalize_excerpt(reasoning_content, 240) if reasoning_content else None,
+        "reasoningContentLength": len(reasoning_content),
         "toolCallNames": [
             str((tool_call.get("function") or {}).get("name") or "")
             for tool_call in tool_calls
@@ -243,6 +290,8 @@ def _request_file_payload(
     route_payload: dict[str, Any],
     temperature: float,
     max_tokens: int,
+    thinking_mode: str | None,
+    reasoning_effort: str | None,
     prompt_artifact_id: str,
     prompt_metadata: dict[str, Any],
     messages: list[dict[str, Any]],
@@ -260,6 +309,8 @@ def _request_file_payload(
         "requestedProvider": route_payload.get("selectedProvider"),
         "temperature": temperature,
         "maxTokens": max_tokens,
+        "thinking": thinking_mode,
+        "reasoningEffort": reasoning_effort,
         "promptCompileArtifactId": prompt_artifact_id,
         "promptMetadata": prompt_metadata,
         "auditLevel": audit_level,
@@ -481,6 +532,8 @@ def invoke_runtime_completion(
     messages: list[dict[str, Any]] = [dict(message) for message in compiled_prompt.messages]
     temperature = float(request.get("temperature")) if request.get("temperature") is not None else _default_temperature(task_type)
     max_tokens = _default_max_tokens(task, request)
+    thinking_mode = _requested_thinking_mode(request)
+    reasoning_effort = _requested_reasoning_effort(request)
     allow_fallback = bool(request.get("allowModelFallback", True))
     allow_tool_execution = bool(request.get("allowToolExecution", True))
     build_tool_specs_started_at = perf_counter()
@@ -531,6 +584,8 @@ def invoke_runtime_completion(
             route_payload=route_payload,
             temperature=temperature,
             max_tokens=max_tokens,
+            thinking_mode=thinking_mode,
+            reasoning_effort=reasoning_effort,
             prompt_artifact_id=prompt_artifact.id,
             prompt_metadata=prompt_metadata,
             messages=messages,
@@ -567,7 +622,12 @@ def invoke_runtime_completion(
                     "invocationId": invocation.id,
                 },
                 model=str(route_payload.get("selectedModel")) if route_payload.get("selectedModel") is not None else None,
-                model_parameters={"temperature": temperature, "max_tokens": max_tokens},
+                model_parameters={
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "thinking": thinking_mode,
+                    "reasoning_effort": reasoning_effort,
+                },
                 metadata={
                     "serviceName": service_name,
                     "requestedProvider": route_payload.get("selectedProvider"),
@@ -589,6 +649,7 @@ def invoke_runtime_completion(
 
             model_tool_loop_started_at = perf_counter()
             for round_index in range(max_tool_rounds + 1):
+                round_started_at = perf_counter()
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
                 else:
@@ -601,6 +662,8 @@ def invoke_runtime_completion(
                         workspace_root=workspace_root,
                         allow_fallback=allow_fallback,
                         tools=tool_specs or None,
+                        thinking=thinking_mode,
+                        reasoning_effort=reasoning_effort,
                     )
 
                 _merge_usage(usage_totals, dict(result.get("usage") or {}))
@@ -612,6 +675,8 @@ def invoke_runtime_completion(
                         "index": round_index,
                         "mode": result.get("mode"),
                         "finishReason": result.get("finishReason"),
+                        "latencyMs": _elapsed_ms(round_started_at),
+                        "reasoningContentPresent": bool(result.get("reasoningContent")),
                         "toolCalls": [str(call.get("name")) for call in tool_calls],
                     }
                 )
@@ -632,13 +697,7 @@ def invoke_runtime_completion(
                     }
                     for call in tool_calls
                 ]
-                conversation_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": str(result.get("outputText") or ""),
-                        "tool_calls": assistant_tool_calls,
-                    }
-                )
+                conversation_messages.append(_assistant_tool_round_message(result, assistant_tool_calls))
                 for call in tool_calls:
                     tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), round_index))
                     try:
@@ -685,6 +744,8 @@ def invoke_runtime_completion(
                     route_payload=route_payload,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    thinking_mode=thinking_mode,
+                    reasoning_effort=reasoning_effort,
                     prompt_artifact_id=prompt_artifact.id,
                     prompt_metadata=prompt_metadata,
                     messages=messages,

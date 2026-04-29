@@ -9,10 +9,20 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
-from yggdrasil_sdk.support import new_id, normalize_excerpt, resolve_workspace_root
+from yggdrasil_sdk.support import new_id, normalize_excerpt
 
 
-_QUOTES_TRANSLATION = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
+_DEEPSEEK_MODEL_ALIASES = {
+    "deepseek-chat": "deepseek-v4-flash",
+    "deepseek-reasoner": "deepseek-v4-pro",
+}
+_DEEPSEEK_REASONING_EFFORT_ALIASES = {
+    "low": "high",
+    "medium": "high",
+    "high": "high",
+    "xhigh": "max",
+    "max": "max",
+}
 
 
 @dataclass(frozen=True)
@@ -55,12 +65,29 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
     },
     "deepseek_direct": {
         "base_url": "https://api.deepseek.com",
-        "default_model": "deepseek-chat",
-        "quality": 0.82,
-        "cost_per_1k_input": 0.14,
-        "cost_per_1k_output": 0.28,
-        "latency_ms": 1100,
-        "context_window": 64000,
+        "default_model": "deepseek-v4-flash",
+        "models": {
+            "deepseek-v4-flash": {
+                "quality": 0.84,
+                "cost_per_1k_input": 0.001,
+                "cost_per_1k_output": 0.002,
+                "latency_ms": 850,
+                "context_window": 1_000_000,
+                "supports_thinking": True,
+                "thinking_enabled_by_default": True,
+                "priority": 35,
+            },
+            "deepseek-v4-pro": {
+                "quality": 0.91,
+                "cost_per_1k_input": 0.003,
+                "cost_per_1k_output": 0.006,
+                "latency_ms": 1350,
+                "context_window": 1_000_000,
+                "supports_thinking": True,
+                "thinking_enabled_by_default": True,
+                "priority": 34,
+            },
+        },
         "free_tier": False,
         "priority": 30,
     },
@@ -78,10 +105,6 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 
-def _normalize_text(value: str) -> str:
-    return value.translate(_QUOTES_TRANSLATION)
-
-
 def _truthy_env(name: str, *, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -89,34 +112,120 @@ def _truthy_env(name: str, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _llm_txt_api_keys(workspace_root: Path | None = None) -> dict[str, str]:
-    root = resolve_workspace_root(workspace_root)
-    path = root / "LLM.txt"
-    if not path.exists():
-        return {}
+def _canonical_model_name(model: str | None) -> str | None:
+    if model is None:
+        return None
+    normalized = str(model).strip()
+    if not normalized:
+        return None
+    return _DEEPSEEK_MODEL_ALIASES.get(normalized.lower(), normalized)
 
-    keys: dict[str, str] = {}
-    in_api_keys = False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = _normalize_text(raw_line.rstrip())
-        stripped = line.strip()
-        if not stripped:
+
+def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] | None:
+    profile = PROVIDER_PROFILES.get(provider)
+    if profile is None:
+        return None
+
+    resolved_model = _canonical_model_name(model) or str(profile.get("default_model") or "")
+    model_profiles = profile.get("models")
+    if not isinstance(model_profiles, dict):
+        return {
+            "model": resolved_model,
+            "quality": float(profile["quality"]),
+            "cost_per_1k_input": float(profile["cost_per_1k_input"]),
+            "cost_per_1k_output": float(profile["cost_per_1k_output"]),
+            "latency_ms": int(profile["latency_ms"]),
+            "context_window": int(profile["context_window"]),
+            "priority": int(profile["priority"]),
+            "supports_thinking": False,
+            "thinking_enabled_by_default": False,
+        }
+
+    if resolved_model not in model_profiles:
+        resolved_model = str(profile.get("default_model") or next(iter(model_profiles)))
+    model_profile = model_profiles.get(resolved_model)
+    if not isinstance(model_profile, dict):
+        return None
+    return {
+        "model": resolved_model,
+        "quality": float(model_profile["quality"]),
+        "cost_per_1k_input": float(model_profile["cost_per_1k_input"]),
+        "cost_per_1k_output": float(model_profile["cost_per_1k_output"]),
+        "latency_ms": int(model_profile["latency_ms"]),
+        "context_window": int(model_profile["context_window"]),
+        "priority": int(model_profile.get("priority", profile["priority"])),
+        "supports_thinking": bool(model_profile.get("supports_thinking", False)),
+        "thinking_enabled_by_default": bool(model_profile.get("thinking_enabled_by_default", False)),
+    }
+
+
+def _provider_catalog_entries(provider: str, default_model: str | None) -> list[dict[str, Any]]:
+    profile = PROVIDER_PROFILES.get(provider)
+    if profile is None:
+        return []
+
+    model_profiles = profile.get("models")
+    if not isinstance(model_profiles, dict):
+        model_profile = _provider_model_profile(provider, default_model)
+        return [model_profile] if model_profile is not None else []
+
+    configured_default = (_provider_model_profile(provider, default_model) or {}).get("model")
+    entries: list[dict[str, Any]] = []
+    for model_name in model_profiles:
+        model_profile = _provider_model_profile(provider, model_name)
+        if model_profile is None:
             continue
-        if stripped.startswith("api_keys"):
-            in_api_keys = True
-            continue
-        if in_api_keys and not raw_line.startswith((" ", "\t")):
-            break
-        if not in_api_keys:
-            continue
-        match = re.match(r"^\s*([A-Za-z0-9_]+)\s*[:：]\s*\"?([^\"\n]+)\"?\s*$", line)
-        if match is None:
-            continue
-        provider, token = match.groups()
-        token = token.strip().strip("\"'")
-        if token:
-            keys[provider] = token
-    return keys
+        if model_profile["model"] == configured_default:
+            model_profile["priority"] = int(model_profile["priority"]) + 1
+        entries.append(model_profile)
+    entries.sort(key=lambda item: int(item["priority"]), reverse=True)
+    return entries
+
+
+def _normalize_thinking_type(value: Any) -> str | None:
+    candidate = value
+    if isinstance(candidate, dict):
+        candidate = candidate.get("type")
+    if isinstance(candidate, bool):
+        return "enabled" if candidate else "disabled"
+    if candidate is None:
+        return None
+    lowered = str(candidate).strip().lower()
+    if lowered in {"1", "true", "enabled", "enable", "on", "thinking"}:
+        return "enabled"
+    if lowered in {"0", "false", "disabled", "disable", "off", "none"}:
+        return "disabled"
+    return None
+
+
+def _normalize_reasoning_effort(value: Any) -> str | None:
+    if value is None:
+        return None
+    return _DEEPSEEK_REASONING_EFFORT_ALIASES.get(str(value).strip().lower())
+
+
+def _prepare_provider_tools(provider: str, tools: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]] | None, dict[str, str]]:
+    if not tools:
+        return None, {}
+    if provider != "deepseek_direct":
+        return [dict(tool) for tool in tools], {}
+
+    prepared: list[dict[str, Any]] = []
+    aliases: dict[str, str] = {}
+    for index, tool in enumerate(tools, start=1):
+        payload = dict(tool)
+        function_payload = dict(payload.get("function") or {})
+        original_name = str(function_payload.get("name") or "").strip()
+        aliased_name = original_name
+        if original_name and re.fullmatch(r"^[A-Za-z0-9_-]+$", original_name) is None:
+            sanitized = re.sub(r"[^A-Za-z0-9_-]+", "_", original_name).strip("_") or "tool"
+            aliased_name = f"deepseek_tool_{index}_{sanitized}"
+        function_payload["name"] = aliased_name
+        payload["function"] = function_payload
+        prepared.append(payload)
+        if original_name:
+            aliases[aliased_name] = original_name
+    return prepared, aliases
 
 
 def _environment_provider_keys() -> dict[str, str]:
@@ -136,25 +245,27 @@ def _build_provider_config(provider: str, api_key: str) -> ProviderConfig | None
     if profile is None:
         return None
     base_url = os.environ.get(f"YGGDRASIL_LLM_BASE_URL_{provider.upper()}", profile["base_url"])
-    default_model = os.environ.get(f"YGGDRASIL_LLM_MODEL_{provider.upper()}", profile["default_model"])
+    configured_model = os.environ.get(f"YGGDRASIL_LLM_MODEL_{provider.upper()}", profile["default_model"])
+    model_profile = _provider_model_profile(provider, configured_model)
+    if model_profile is None:
+        return None
     return ProviderConfig(
         provider=provider,
         api_key=api_key,
         base_url=str(base_url).rstrip("/"),
-        default_model=str(default_model),
-        quality=float(profile["quality"]),
-        cost_per_1k_input=float(profile["cost_per_1k_input"]),
-        cost_per_1k_output=float(profile["cost_per_1k_output"]),
-        latency_ms=int(profile["latency_ms"]),
-        context_window=int(profile["context_window"]),
+        default_model=str(model_profile["model"]),
+        quality=float(model_profile["quality"]),
+        cost_per_1k_input=float(model_profile["cost_per_1k_input"]),
+        cost_per_1k_output=float(model_profile["cost_per_1k_output"]),
+        latency_ms=int(model_profile["latency_ms"]),
+        context_window=int(model_profile["context_window"]),
         free_tier=bool(profile["free_tier"]),
         priority=int(profile["priority"]),
     )
 
 
 def _available_provider_configs(workspace_root: Path | None = None) -> dict[str, ProviderConfig]:
-    tokens = _llm_txt_api_keys(workspace_root)
-    tokens.update(_environment_provider_keys())
+    tokens = _environment_provider_keys()
     configs: dict[str, ProviderConfig] = {}
     for provider, token in tokens.items():
         config = _build_provider_config(provider, token)
@@ -172,17 +283,22 @@ def get_provider_catalog(workspace_root: Path | None = None) -> list[dict[str, A
     for config in sorted(configs.values(), key=lambda item: item.priority, reverse=True):
         if not config.free_tier and not allow_paid:
             continue
-        candidates.append(
-            {
-                "model": config.default_model,
-                "provider": config.provider,
-                "quality": config.quality,
-                "costPer1k": round(config.cost_per_1k_input + config.cost_per_1k_output, 3),
-                "latencyMs": config.latency_ms,
-                "contextWindow": config.context_window,
-                "freeTier": config.free_tier,
-            }
-        )
+        for model_profile in _provider_catalog_entries(config.provider, config.default_model):
+            candidates.append(
+                {
+                    "model": str(model_profile["model"]),
+                    "provider": config.provider,
+                    "quality": float(model_profile["quality"]),
+                    "costPer1k": round(float(model_profile["cost_per_1k_input"]) + float(model_profile["cost_per_1k_output"]), 3),
+                    "latencyMs": int(model_profile["latency_ms"]),
+                    "contextWindow": int(model_profile["context_window"]),
+                    "freeTier": config.free_tier,
+                    "_priority": int(model_profile["priority"]),
+                }
+            )
+    candidates.sort(key=lambda item: (int(item.get("_priority", 0)), float(item.get("quality", 0.0))), reverse=True)
+    for candidate in candidates:
+        candidate.pop("_priority", None)
     return candidates
 
 
@@ -298,6 +414,8 @@ def invoke_model(
     timeout_seconds: int = 90,
     allow_fallback: bool = True,
     tools: list[dict[str, Any]] | None = None,
+    thinking: Any = None,
+    reasoning_effort: str | None = None,
 ) -> dict[str, Any]:
     if _truthy_env("YGGDRASIL_DISABLE_LIVE_LLM", default=False):
         return _fallback_response(
@@ -308,7 +426,7 @@ def invoke_model(
         )
     config = _select_provider(
         requested_provider=requested_provider,
-        requested_model=requested_model,
+        requested_model=_canonical_model_name(requested_model),
         workspace_root=workspace_root,
     )
     if config is None:
@@ -316,18 +434,36 @@ def invoke_model(
             return _fallback_response(messages, "no-configured-free-provider", requested_model=requested_model, requested_provider=requested_provider)
         raise RuntimeError("No configured provider is available for model invocation.")
 
-    resolved_model = requested_model if requested_provider == config.provider and requested_model else config.default_model
+    normalized_requested_model = _canonical_model_name(requested_model)
+    inferred_provider = _infer_provider_from_model(normalized_requested_model)
+    resolved_model = config.default_model
+    if normalized_requested_model and (
+        requested_provider == config.provider or requested_provider is None or inferred_provider == config.provider
+    ):
+        resolved_model = normalized_requested_model
+    model_profile = _provider_model_profile(config.provider, resolved_model) or {}
+    resolved_model = str(model_profile.get("model") or resolved_model)
     request_payload: dict[str, Any] = {
         "model": resolved_model,
         "messages": messages,
         "stream": False,
     }
+    if config.provider == "deepseek_direct" and bool(model_profile.get("supports_thinking")):
+        thinking_type = _normalize_thinking_type(thinking)
+        if thinking_type is None and bool(model_profile.get("thinking_enabled_by_default")):
+            thinking_type = "enabled"
+        if thinking_type is not None:
+            request_payload["thinking"] = {"type": thinking_type}
+        normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
+        if thinking_type != "disabled" and normalized_reasoning_effort is not None:
+            request_payload["reasoning_effort"] = normalized_reasoning_effort
     if temperature is not None:
         request_payload["temperature"] = temperature
     if max_tokens is not None:
         request_payload["max_tokens"] = max_tokens
-    if tools:
-        request_payload["tools"] = tools
+    prepared_tools, tool_name_aliases = _prepare_provider_tools(config.provider, tools)
+    if prepared_tools:
+        request_payload["tools"] = prepared_tools
         request_payload["tool_choice"] = "auto"
 
     encoded_payload = json.dumps(request_payload).encode("utf-8")
@@ -362,12 +498,14 @@ def invoke_model(
     choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
     message = choice.get("message") or {}
     output_text = _extract_text_content(message.get("content"))
+    reasoning_content = _extract_text_content(message.get("reasoning_content")) if message.get("reasoning_content") is not None else ""
     tool_calls: list[dict[str, Any]] = []
     for raw_call in message.get("tool_calls") or []:
         if not isinstance(raw_call, dict):
             continue
         function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
         name = str(function_payload.get("name") or "").strip()
+        original_name = tool_name_aliases.get(name, name)
         arguments_text = str(function_payload.get("arguments") or "{}").strip() or "{}"
         try:
             arguments = json.loads(arguments_text)
@@ -377,9 +515,9 @@ def invoke_model(
             arguments = {"_raw": arguments_text}
         tool_calls.append(
             {
-                "id": str(raw_call.get("id") or new_id("toolcall", name or resolved_model)),
+                "id": str(raw_call.get("id") or new_id("toolcall", original_name or resolved_model)),
                 "type": str(raw_call.get("type") or "function"),
-                "name": name,
+                "name": original_name,
                 "arguments": arguments,
                 "argumentsText": arguments_text,
             }
@@ -388,12 +526,15 @@ def invoke_model(
     input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or sum(_estimate_tokens(str(item.get("content") or "")) for item in messages))
     output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or _estimate_tokens(output_text))
     total_tokens = int(usage.get("total_tokens") or input_tokens + output_tokens)
-    cost_used = round((input_tokens * config.cost_per_1k_input + output_tokens * config.cost_per_1k_output) / 1000.0, 6)
+    cost_per_1k_input = float(model_profile.get("cost_per_1k_input", config.cost_per_1k_input))
+    cost_per_1k_output = float(model_profile.get("cost_per_1k_output", config.cost_per_1k_output))
+    cost_used = round((input_tokens * cost_per_1k_input + output_tokens * cost_per_1k_output) / 1000.0, 6)
     return {
         "mode": "live",
         "provider": config.provider,
         "model": resolved_model,
         "outputText": output_text,
+        "reasoningContent": reasoning_content or None,
         "finishReason": choice.get("finish_reason") or "stop",
         "usage": {
             "inputTokens": input_tokens,

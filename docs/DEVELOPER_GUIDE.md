@@ -140,7 +140,25 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=http://127.0.0.1:3100
 ```
 
-> LLM 密钥也可以写入 `LLM.txt`，格式参考该文件。
+LLM 凭据只通过环境变量注入，运行时代码不会读取仓库内的 `LLM.txt`。
+
+推荐至少设置以下变量之一：
+
+```bash
+LONGCAT_API_KEY=YOUR_LONGCAT_KEY
+OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
+DEEPSEEK_API_KEY=YOUR_DEEPSEEK_KEY
+VECTORENGINE_API_KEY=YOUR_VECTORENGINE_KEY
+```
+
+Windows PowerShell 示例：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "YOUR_DEEPSEEK_KEY"
+$env:YGGDRASIL_ALLOW_PAID_MODELS = "1"
+```
+
+CI 或长期开发环境请使用各自的 secret manager / 用户级环境变量，不要把真实 key 写入仓库、评测沙箱或测试材料。
 
 ### 3.3 端口分配
 

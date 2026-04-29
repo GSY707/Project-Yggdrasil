@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .evaluation_runtime import ensure_evaluation_suites, list_evaluation_suite_definitions, run_evaluation_suite
-from .persistence import ensure_workspace_bootstrap, initialize_schema
+from .evaluation_runtime import list_evaluation_suite_definitions, run_evaluation_suite
 
 
 def main() -> None:
@@ -18,11 +17,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    initialize_schema()
-    ensure_workspace_bootstrap()
-
     if args.command == "list":
-        ensure_evaluation_suites()
         print(json.dumps({"suites": list_evaluation_suite_definitions()}, ensure_ascii=False, indent=2))
         return
 

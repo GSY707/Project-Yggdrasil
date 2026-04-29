@@ -14,6 +14,7 @@ from typing import Any, Iterator
 
 from .contracts import ExternalRef
 from .domain import EvaluationSuiteRecord
+from .mcp_bridge import close_mcp_bridge_sessions
 from .observability_exporters import finish_langfuse_generation
 from .observability_exporters import flush_observability_exporters
 from .observability_exporters import start_langfuse_generation
@@ -22,6 +23,32 @@ from .persistence import EvaluationRepository, PromptAssetRepository, RuntimeRep
 from .persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID
 from .persistence.repositories import CollaborationRepository, NodeRepository, TaskRepository, TrainingRepository, WorkspaceBootstrapRepository
 from .support import ensure_state_subdir, new_id, normalize_excerpt, read_json, relative_workspace_path, resolve_workspace_root, resolve_state_dir, utc_now, write_json
+
+
+_RUNTIME_SANDBOX_IGNORED_NAMES = {
+    ".git",
+    ".next",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".yggdrasil",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+}
+
+
+def _runtime_workspace_copy_ignore(_directory: str, names: list[str]) -> set[str]:
+    return {name for name in names if name in _RUNTIME_SANDBOX_IGNORED_NAMES}
+
+
+def _prepare_runtime_workspace_sandbox(temp_root: Path, workspace_root: Path | None = None) -> Path:
+    source_root = resolve_workspace_root(workspace_root)
+    sandbox_workspace = temp_root / "workspace"
+    shutil.copytree(source_root, sandbox_workspace, ignore=_runtime_workspace_copy_ignore)
+    return sandbox_workspace
 
 
 def _evaluation_root(workspace_root: Path | None = None) -> Path:
@@ -410,12 +437,14 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
         "YGGDRASIL_STATE_ROOT",
         "YGGDRASIL_STATE_DIR",
         "YGGDRASIL_GIT_REPO_PATH",
+        "YGGDRASIL_MCP_PROJECT_WORKSPACE",
         "YGGDRASIL_DISABLE_LIVE_LLM",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
     template_db = _get_schema_template_db()
     with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-") as temp_dir:
         temp_root = Path(temp_dir)
+        sandbox_workspace = _prepare_runtime_workspace_sandbox(temp_root)
         db_path = temp_root / "evaluation.db"
         shutil.copy2(template_db, db_path)
         os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
@@ -423,16 +452,20 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
         os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
         os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
         os.environ["YGGDRASIL_STATE_ROOT"] = str((temp_root / ".yggdrasil").resolve())
+        os.environ["YGGDRASIL_GIT_REPO_PATH"] = str(sandbox_workspace.resolve())
+        os.environ["YGGDRASIL_MCP_PROJECT_WORKSPACE"] = str(sandbox_workspace.resolve())
         if disable_live_llm:
             os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
         else:
             os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
         os.environ.pop("YGGDRASIL_STATE_DIR", None)
+        close_mcp_bridge_sessions()
         reset_persistence_runtime()
         ensure_workspace_bootstrap()
         try:
             yield
         finally:
+            close_mcp_bridge_sessions()
             reset_persistence_runtime()
             for key, value in previous.items():
                 if value is None:
@@ -451,34 +484,43 @@ def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, 
         "YGGDRASIL_REDIS_URL",
         "YGGDRASIL_STATE_ROOT",
         "YGGDRASIL_STATE_DIR",
+        "YGGDRASIL_GIT_REPO_PATH",
+        "YGGDRASIL_MCP_PROJECT_WORKSPACE",
         "YGGDRASIL_DISABLE_LIVE_LLM",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
-    sandbox_root = resolve_workspace_root(workspace_root) / ".yggdrasil" / "evaluation-sandbox"
-    sandbox_root.mkdir(parents=True, exist_ok=True)
-    os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
-    os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
-    os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
-    os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
-    os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
-    if disable_live_llm:
-        os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
-    else:
-        os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
-    os.environ.pop("YGGDRASIL_STATE_DIR", None)
-    reset_persistence_runtime()
-    initialize_schema()
-    ensure_workspace_bootstrap()
-    try:
-        yield
-    finally:
+    with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-") as temp_dir:
+        temp_root = Path(temp_dir)
+        sandbox_root = temp_root / ".yggdrasil"
+        sandbox_root.mkdir(parents=True, exist_ok=True)
+        sandbox_workspace = _prepare_runtime_workspace_sandbox(temp_root, workspace_root)
+        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
+        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
+        os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
+        os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
+        os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
+        os.environ["YGGDRASIL_GIT_REPO_PATH"] = str(sandbox_workspace.resolve())
+        os.environ["YGGDRASIL_MCP_PROJECT_WORKSPACE"] = str(sandbox_workspace.resolve())
+        if disable_live_llm:
+            os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
+        else:
+            os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
+        os.environ.pop("YGGDRASIL_STATE_DIR", None)
+        close_mcp_bridge_sessions()
         reset_persistence_runtime()
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-        reset_persistence_runtime()
+        initialize_schema()
+        ensure_workspace_bootstrap()
+        try:
+            yield
+        finally:
+            close_mcp_bridge_sessions()
+            reset_persistence_runtime()
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            reset_persistence_runtime()
 
 
 def _prepare_suite_run(definition: dict[str, Any], suite_id: str, workspace_root: Path | None = None) -> tuple[Any, Any]:
@@ -985,6 +1027,10 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "temperature": float(case_payload.get("temperature") or 0.15),
         "maxTokens": int(case_payload.get("maxTokens") or 320),
     }
+    if case_payload.get("allowToolExecution") is not None:
+        start_payload["allowToolExecution"] = bool(case_payload["allowToolExecution"])
+    if case_payload.get("maxToolRounds") is not None:
+        start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
     if candidate_models:
         start_payload["candidateModels"] = candidate_models
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
@@ -1063,6 +1109,46 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
     if require_live and not candidate_models:
         raise RuntimeError(f"requested live candidate is unavailable: {requested_provider}/{requested_model}")
 
+    required_tools = [str(name) for name in case_payload.get("requiredTools") or ["text_memory.retrieve", "context_pruning.plan"]]
+    current_context = [
+        dict(item)
+        for item in (
+            case_payload.get("currentContext")
+            or [
+                {
+                    "id": "ctx_handoff_goal",
+                    "title": "handoff target",
+                    "content": "The final note must name the archived runtime changes and include a concrete retain plan for the next run.",
+                    "importance": 0.98,
+                },
+                {
+                    "id": "ctx_handoff_budget",
+                    "title": "handoff budget",
+                    "content": "The safe-stop package should fit within roughly 160 retained tokens and prioritize objective, invocation summary, and pruning narrative.",
+                    "importance": 0.87,
+                },
+                {
+                    "id": "ctx_noise",
+                    "title": "noise",
+                    "content": "Older brainstorming fragments can be dropped if they do not help the next run resume safely.",
+                    "importance": 0.12,
+                },
+            ]
+        )
+    ]
+    current_context.append(
+        {
+            "id": "ctx_required_tools",
+            "title": "required tools",
+            "content": (
+                "Before finalizing the retain plan, you must call these tools and use their results: "
+                + ", ".join(required_tools)
+                + ". Do not skip the pruning step."
+            ),
+            "importance": 0.99,
+        }
+    )
+
     task = _seed_runtime_task(task_id)
     _seed_tool_case_memory(task_id)
     client = TestClient(runtime_app)
@@ -1072,32 +1158,16 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
             case_payload.get("currentObjective")
             or "Recover the archived runtime changes from durable branch memory and prepare a safe-stop retain plan for the next run under a 160 token budget."
         ),
-        "currentContext": case_payload.get("currentContext")
-        or [
-            {
-                "id": "ctx_handoff_goal",
-                "title": "handoff target",
-                "content": "The final note must name the archived runtime changes and include a concrete retain plan for the next run.",
-                "importance": 0.98,
-            },
-            {
-                "id": "ctx_handoff_budget",
-                "title": "handoff budget",
-                "content": "The safe-stop package should fit within roughly 160 retained tokens and prioritize objective, invocation summary, and pruning narrative.",
-                "importance": 0.87,
-            },
-            {
-                "id": "ctx_noise",
-                "title": "noise",
-                "content": "Older brainstorming fragments can be dropped if they do not help the next run resume safely.",
-                "importance": 0.12,
-            },
-        ],
+        "currentContext": current_context,
         "protectedItems": case_payload.get("protectedItems") or [{"kind": "node", "id": "ctx_handoff_goal"}],
         "allowModelFallback": bool(case_payload.get("allowFallback", True)),
         "temperature": float(case_payload.get("temperature") or 0.1),
         "maxTokens": int(case_payload.get("maxTokens") or 420),
     }
+    if case_payload.get("allowToolExecution") is not None:
+        start_payload["allowToolExecution"] = bool(case_payload["allowToolExecution"])
+    if case_payload.get("maxToolRounds") is not None:
+        start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
     if candidate_models:
         start_payload["candidateModels"] = candidate_models
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
@@ -1132,13 +1202,18 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
 
     request_payload = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
     response_payload = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
-    tool_executions = response_payload.get("toolExecutions") if isinstance(response_payload, dict) else []
-    tool_names = [
-        str((execution.get("tool") or {}).get("name"))
-        for execution in tool_executions
-        if isinstance(execution, dict) and (execution.get("tool") or {}).get("name")
-    ]
-    required_tools = [str(name) for name in case_payload.get("requiredTools") or ["text_memory.retrieve", "context_pruning.plan"]]
+    tool_entries = []
+    if isinstance(response_payload, dict):
+        tool_entries = list(response_payload.get("toolExecutions") or response_payload.get("toolExecutionSummaries") or [])
+    tool_names: list[str] = []
+    for entry in tool_entries:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(entry.get("tool"), dict) and entry["tool"].get("name"):
+            tool_names.append(str(entry["tool"]["name"]))
+            continue
+        if entry.get("tool"):
+            tool_names.append(str(entry["tool"]))
     missing_tools = [name for name in required_tools if name not in tool_names]
     if missing_tools:
         raise RuntimeError(f"live tool evaluation did not execute required tools: {', '.join(missing_tools)}")

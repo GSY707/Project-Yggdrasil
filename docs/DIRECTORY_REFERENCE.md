@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：测试套件性能优化、coordination backend 选择、runtime 分段计时、阶段 4 审计分级、GitHub Actions Node 24 兼容基线）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：DeepSeek V4 适配、真实用户验证冻结材料与内部试跑记录）
 
 ---
 
@@ -142,7 +142,7 @@ packages/
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
 │       ├── runtime_kernel.py       # 核心运行时内核（任务状态机、执行编排，61KB）；返回 root-mount/LLM/写回分段计时
-│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）；记录 prompt/请求/响应分段计时，并支持 strict/default/lean 审计分级
+│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）；记录 prompt/请求/响应与 round latency / reasoningContent 分段计时
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
@@ -157,18 +157,18 @@ packages/
 │       ├── # ── 记忆与模块 ──────────────────────────────
 │       ├── model_routing.py        # 模型路由策略（按场景、按成本、按能力选模）
 │       ├── catalog.py              # 模块目录（发现、注册、能力查询）；含 2s TTL 进程级缓存
-│       ├── app_catalog.py          # 应用目录（应用配置加载与管理）；含 2s TTL 进程级缓存
+│       ├── app_catalog.py          # 应用目录（应用配置加载与管理）
 │       ├── spec_catalog.py         # 规格目录（协议规格注册与查询）
 │       ├── module.py               # Module 基类（所有模块继承此类）
 │       │
 │       ├── # ── MCP 集成 ─────────────────────────────────
-│       ├── mcp_bridge.py           # MCP 协议桥接实现（32KB）；显式同步 snapshot，builtin server 默认 keep-alive
+│       ├── mcp_bridge.py           # MCP 协议桥接实现（32KB）
 │       ├── mcp_bridge_module.py    # MCP 模块封装
 │       ├── mcp_servers/            # 内置 MCP Server 实现
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime.py   # 评测 Suite 运行时（84KB）；非 live suite 默认强制 fallback LLM，live case 通过 requireLive 显式放行
+│       ├── evaluation_runtime.py   # 评测 Suite 运行时（84KB）
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -302,19 +302,22 @@ applications/<name>/
 
 ```
 adapters/
-├── model-providers/                # LLM 模型提供商适配器
-│   ├── anthropic/                  # Claude 系列适配
-│   ├── openai/                     # GPT 系列适配
-│   └── litellm/                    # LiteLLM 统一网关（默认）
+├── model-providers/                # LLM 模型提供商适配器包
+│   ├── pyproject.toml
+│   └── src/yggdrasil_model_providers/
+│       ├── __init__.py             # 导出 provider catalog / invoke_model / route_model
+│       ├── gateway.py              # 真实 provider 调用网关；LongCat/OpenRouter/DeepSeek/VectorEngine；DeepSeek V4、thinking mode、tool-name aliasing
+│       └── router.py               # 模型路由对接层（委派 python-sdk 的 route decision）
 │
-└── media-providers/                # 媒体处理适配器
-    ├── embedding/                  # 向量嵌入服务适配
-    └── transcription/              # 音频转录适配
+└── media-providers/                # 媒体处理适配器包
+    ├── pyproject.toml
+    └── src/                        # 媒体 provider 具体实现
 ```
 
 **关键说明：**
-- 模型路由默认通过 LiteLLM 统一处理，支持动态切换底层模型而无需修改业务代码。
-- `packages/python-sdk/model_routing.py` 实现路由策略，适配器负责具体的 API 调用。
+- `gateway.py` 现在维护实时 provider catalog，并按当前可用凭证暴露候选模型。
+- DeepSeek 直连 profile 已切换到 `deepseek-v4-flash` / `deepseek-v4-pro`，并兼容 thinking mode、`reasoning_effort` 与 `reasoning_content` 回传。
+- `packages/python-sdk/model_routing.py` 实现路由策略，适配器负责具体 API 调用和 provider 兼容性差异吸收。
 
 ---
 
@@ -356,6 +359,12 @@ docs/
 ├── research/                       # 研究与探索性文档
 │   ├── prompt-engineering-and-seed-templates-v0.1.md
 │   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
+│   ├── real-user-validation-plan-2026-04-30.md
+│   │                               #   真实用户验证计划：冻结材料、时间盒、评分口径与执行顺序
+│   ├── real-user-validation-baseline-freeze-2026-04-30.md
+│   │                               #   真实用户验证基线与材料冻结记录
+│   ├── real-user-validation-internal-pilot-deepseek-2026-04-30.md
+│   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
 │   ├── runtime-optimization-plan-2026-04-29.md
 │   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
 │   └── test-suite-cpu-time-analysis-2026-04-29.md
@@ -371,7 +380,8 @@ evaluation/
 ├── fixtures/                       # 评测样本数据
 │   ├── memory-tree/                # 记忆树操作的标准样本
 │   ├── retrieval/                  # 检索质量评测样本
-│   └── task-execution/             # 任务执行的端到端样本
+│   ├── task-execution/             # 任务执行的端到端样本
+│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表等）
 │
 └── suites/                         # 评测套件定义
     ├── regression/                 # M4-M6 回归套件
@@ -436,7 +446,7 @@ migrations/
 
 ```
 tests/
-├── conftest.py                     # pytest 共享 Fixture：session 级 schema 初始化（单次），每 test 截断数据表并默认使用 memory coordination 与隔离 state root
+├── conftest.py                     # pytest 共享 Fixture：session 级 schema 初始化（单次），每 test 截断数据表并默认使用 memory coordination
 ├── fixtures/                       # 测试用固定样本数据
 │
 ├── # ── 基础层测试 ────────────────────────────────────────
@@ -447,8 +457,10 @@ tests/
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
 ├── test_mcp_bridge.py              # MCP 协议桥接回归
+├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
 ├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成
+├── test_secret_hygiene.py          # 仓库凭据泄露与文档回归检查
 │
 ├── # ── Phase 1 专项测试（质量巩固） ────────────────────────
 ├── test_phase1_permissions_and_errors.py
@@ -465,7 +477,7 @@ tests/
 │   │                               #   Hook 故障隔离：单模块 hook 异常不影响其他模块
 │
 ├── # ── M8/M9 里程碑测试 ─────────────────────────────────
-├── test_m8_runtime.py              # M8：评测与运维基础回归
+├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测沙箱工作区隔离）
 ├── test_m9_modules.py              # M9：第二阶段模块单元测试
 │   │                               #   shared-memory、pause-resume、
 │   │                               #   multimodal-memory、relation-discovery、
@@ -531,8 +543,6 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | merge | push to main | slow 测试、docker | ~15 min |
 | nightly | 定时 / 手动 | — | ~30-60 min |
 
-- 当前工作流已统一升级到 Node 24 兼容 action 基线：checkout v6、setup-node v6、setup-python v6、setup-uv v8.1.0、pnpm/action-setup v5。
-
 ---
 
 ## 根目录配置文件
@@ -547,7 +557,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pytest.ini` | pytest 运行配置（测试发现规则、标记定义） |
 | `uv.lock` | Python 依赖锁定文件（不要手动修改） |
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
-| `LLM.txt` | LLM API 密钥配置（本地联调用，不提交到版本控制） |
+| `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `todo.md` | 开发里程碑与当前优先事项追踪 |
 

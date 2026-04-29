@@ -7,6 +7,7 @@ import yggdrasil_sdk.observability_exporters as observability_exporters
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
+from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import resolve_state_root
 
@@ -37,6 +38,27 @@ def test_isolated_evaluation_environment_can_allow_live_llm(monkeypatch) -> None
 
     with isolated_runtime_environment(disable_live_llm=False):
         assert os.environ.get("YGGDRASIL_DISABLE_LIVE_LLM") is None
+
+
+def test_isolated_evaluation_environment_redirects_workspace_writes() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    with isolated_runtime_environment():
+        config = ensure_mcp_bridge_config()
+        project_workspace = Path(config["projectWorkspace"])
+        git_repo_path = Path(os.environ["YGGDRASIL_GIT_REPO_PATH"])
+        state_root = Path(os.environ["YGGDRASIL_STATE_ROOT"])
+
+        assert project_workspace == git_repo_path
+        assert project_workspace.is_dir()
+        assert (project_workspace / "README.md").exists()
+
+        for path in (project_workspace, git_repo_path, state_root):
+            try:
+                path.relative_to(repo_root)
+            except ValueError:
+                continue
+            raise AssertionError(f"sandbox path leaked into repo root: {path}")
 
 
 def test_runtime_backup_restore_round_trip(tmp_path) -> None:

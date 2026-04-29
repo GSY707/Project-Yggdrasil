@@ -66,6 +66,9 @@ def _bridge_snapshot_path(workspace_root: Path | None = None) -> Path:
 
 
 def _project_workspace_default(workspace_root: Path | None = None) -> str:
+    configured_workspace = os.environ.get("YGGDRASIL_MCP_PROJECT_WORKSPACE")
+    if configured_workspace:
+        return str(Path(configured_workspace).expanduser().resolve())
     return str(resolve_workspace_root(workspace_root))
 
 
