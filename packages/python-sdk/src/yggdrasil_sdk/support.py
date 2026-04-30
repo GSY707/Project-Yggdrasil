@@ -5,6 +5,7 @@ from hashlib import sha1
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any
 from uuid import uuid4
 
@@ -28,6 +29,25 @@ def normalize_excerpt(value: str, limit: int) -> str:
     return compact[: max(limit - 1, 1)].rstrip() + "…"
 
 
+_RUNTIME_SANDBOX_IGNORED_NAMES = {
+    ".git",
+    ".next",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".yggdrasil",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+}
+
+
+def runtime_workspace_copy_ignore(_directory: str, names: list[str]) -> set[str]:
+    return {name for name in names if name in _RUNTIME_SANDBOX_IGNORED_NAMES}
+
+
 def resolve_workspace_root(start: Path | None = None) -> Path:
     cursor = (start or Path(__file__).resolve()).resolve()
     if cursor.is_file():
@@ -38,6 +58,13 @@ def resolve_workspace_root(start: Path | None = None) -> Path:
             return candidate
 
     raise FileNotFoundError("Unable to resolve Project Yggdrasil workspace root.")
+
+
+def prepare_runtime_workspace_sandbox(destination_root: Path, workspace_root: Path | None = None) -> Path:
+    source_root = resolve_workspace_root(workspace_root)
+    sandbox_workspace = destination_root / "workspace"
+    shutil.copytree(source_root, sandbox_workspace, ignore=runtime_workspace_copy_ignore)
+    return sandbox_workspace
 
 
 def _configured_path(raw_path: str, workspace_root: Path | None = None) -> Path:

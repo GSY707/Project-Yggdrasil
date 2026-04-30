@@ -22,33 +22,7 @@ from .observability import observe_span, record_log, record_metric
 from .persistence import EvaluationRepository, PromptAssetRepository, RuntimeRepository, ensure_workspace_bootstrap, get_persistence_runtime, initialize_schema, reset_persistence_runtime
 from .persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID
 from .persistence.repositories import CollaborationRepository, NodeRepository, TaskRepository, TrainingRepository, WorkspaceBootstrapRepository
-from .support import ensure_state_subdir, new_id, normalize_excerpt, read_json, relative_workspace_path, resolve_workspace_root, resolve_state_dir, utc_now, write_json
-
-
-_RUNTIME_SANDBOX_IGNORED_NAMES = {
-    ".git",
-    ".next",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".venv",
-    ".yggdrasil",
-    "__pycache__",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-}
-
-
-def _runtime_workspace_copy_ignore(_directory: str, names: list[str]) -> set[str]:
-    return {name for name in names if name in _RUNTIME_SANDBOX_IGNORED_NAMES}
-
-
-def _prepare_runtime_workspace_sandbox(temp_root: Path, workspace_root: Path | None = None) -> Path:
-    source_root = resolve_workspace_root(workspace_root)
-    sandbox_workspace = temp_root / "workspace"
-    shutil.copytree(source_root, sandbox_workspace, ignore=_runtime_workspace_copy_ignore)
-    return sandbox_workspace
+from .support import ensure_state_subdir, new_id, normalize_excerpt, prepare_runtime_workspace_sandbox, read_json, relative_workspace_path, resolve_workspace_root, resolve_state_dir, utc_now, write_json
 
 
 def _evaluation_root(workspace_root: Path | None = None) -> Path:
@@ -444,7 +418,7 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
     template_db = _get_schema_template_db()
     with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-") as temp_dir:
         temp_root = Path(temp_dir)
-        sandbox_workspace = _prepare_runtime_workspace_sandbox(temp_root)
+        sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root)
         db_path = temp_root / "evaluation.db"
         shutil.copy2(template_db, db_path)
         os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
@@ -493,7 +467,7 @@ def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, 
         temp_root = Path(temp_dir)
         sandbox_root = temp_root / ".yggdrasil"
         sandbox_root.mkdir(parents=True, exist_ok=True)
-        sandbox_workspace = _prepare_runtime_workspace_sandbox(temp_root, workspace_root)
+        sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root, workspace_root)
         os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
         os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
         os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"

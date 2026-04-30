@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
@@ -13,6 +14,7 @@ from yggdrasil_worker.registry import run_worker_once
 
 
 client = TestClient(runtime_app)
+pytestmark = pytest.mark.slow
 
 
 def _seed_task(

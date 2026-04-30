@@ -2,14 +2,35 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
 
+import pytest
 import yggdrasil_sdk.observability_exporters as observability_exporters
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
 from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
+from yggdrasil_sdk.ops_runtime import prepare_real_user_validation_sandbox
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import resolve_state_root
+
+
+pytestmark = pytest.mark.slow
+
+
+def _create_fake_validation_workspace(root: Path) -> Path:
+    (root / "services").mkdir(parents=True, exist_ok=True)
+    (root / "modules").mkdir(parents=True, exist_ok=True)
+    (root / "docs" / "research").mkdir(parents=True, exist_ok=True)
+    (root / "evaluation" / "fixtures" / "real-user-validation").mkdir(parents=True, exist_ok=True)
+    (root / "README.md").write_text("# Fake Workspace\n", encoding="utf-8")
+    (root / "package.json").write_text('{"name":"fake-workspace"}\n', encoding="utf-8")
+    (root / "docs" / "research" / "real-user-validation-plan-2026-04-30.md").write_text("# Plan\n", encoding="utf-8")
+    (root / "docs" / "research" / "real-user-validation-baseline-freeze-2026-04-30.md").write_text("# Baseline\n", encoding="utf-8")
+    (root / "docs" / "research" / "real-user-validation-internal-pilot-deepseek-2026-04-30.md").write_text("# Pilot\n", encoding="utf-8")
+    (root / "evaluation" / "fixtures" / "real-user-validation" / "task-pack-2026-04-30.md").write_text("# Task Pack\n", encoding="utf-8")
+    (root / "evaluation" / "fixtures" / "real-user-validation" / "scorecard-template-2026-04-30.csv").write_text("score\n", encoding="utf-8")
+    return root
 
 
 def test_m8_benchmark_suite_produces_strategy_metrics() -> None:
@@ -59,6 +80,42 @@ def test_isolated_evaluation_environment_redirects_workspace_writes() -> None:
             except ValueError:
                 continue
             raise AssertionError(f"sandbox path leaked into repo root: {path}")
+
+
+def test_real_user_validation_sandbox_prepares_isolated_git_workspace(tmp_path: Path) -> None:
+    workspace_root = _create_fake_validation_workspace(tmp_path / "source-workspace")
+    sandbox_root = tmp_path / "pilot-output"
+
+    result = prepare_real_user_validation_sandbox(
+        workspace_root=workspace_root,
+        output_dir=sandbox_root,
+        disable_live_llm=True,
+    )
+
+    workspace_path = Path(result["workspaceRoot"])
+    state_root = Path(result["stateRoot"])
+    powershell_script = Path(result["activationScripts"]["powershell"])
+    manifest_path = sandbox_root / "sandbox-manifest.json"
+    task_pack_path = sandbox_root / "materials" / "evaluation" / "fixtures" / "real-user-validation" / "task-pack-2026-04-30.md"
+
+    assert result["status"] == "ready"
+    assert result["workspaceIsolationConfirmed"] is True
+    assert workspace_path == sandbox_root / "workspace"
+    assert state_root == sandbox_root / ".yggdrasil"
+    assert powershell_script.exists()
+    assert manifest_path.exists()
+    assert task_pack_path.exists()
+    assert (workspace_path / "README.md").exists()
+    assert (workspace_path / ".git").exists()
+
+    git_head = subprocess.run(["git", "-C", str(workspace_path), "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
+    assert git_head.returncode == 0
+    assert git_head.stdout.strip() == result["git"]["head"]
+
+    activation_contents = powershell_script.read_text(encoding="utf-8")
+    assert "YGGDRASIL_GIT_REPO_PATH" in activation_contents
+    assert "YGGDRASIL_DISABLE_LIVE_LLM" in activation_contents
+    assert str(state_root.resolve()) in activation_contents
 
 
 def test_runtime_backup_restore_round_trip(tmp_path) -> None:

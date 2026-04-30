@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：DeepSeek V4 适配、真实用户验证冻结材料与内部试跑记录）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：DeepSeek V4 适配、真实用户验证冻结材料、内部试跑记录与专用沙箱入口）
 
 ---
 
@@ -176,9 +176,9 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime.py      # 备份/恢复运行时
-│           ├── ops_cli.py          # 运维命令行工具
-│           └── support.py          # 通用工具函数
+│           ├── ops_runtime.py      # 备份/恢复、compose smoke、真实用户试跑沙箱准备
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox）
+│           └── support.py          # 通用工具函数（含隔离工作区复制）
 │
 ├── contracts/                      # 跨语言共享类型定义
 │   ├── package.json
@@ -357,6 +357,8 @@ docs/
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │
 ├── research/                       # 研究与探索性文档
+│   ├── final-goal-roadmap-2026-04-30.md
+│   │                               #   通向最终目标的阶段路线图：gate、并行主线、测试与研究议程
 │   ├── prompt-engineering-and-seed-templates-v0.1.md
 │   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
@@ -381,7 +383,7 @@ evaluation/
 │   ├── memory-tree/                # 记忆树操作的标准样本
 │   ├── retrieval/                  # 检索质量评测样本
 │   ├── task-execution/             # 任务执行的端到端样本
-│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表等）
+│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表等；由 pilot-sandbox 命令复制到专用目录）
 │
 └── suites/                         # 评测套件定义
     ├── regression/                 # M4-M6 回归套件
@@ -440,6 +442,9 @@ migrations/
 - 根目录 `alembic.ini`：迁移工具主配置
 - `packages/python-sdk/src/yggdrasil_sdk/persistence/models.py`：ORM 模型（迁移的源）
 
+**当前迁移头补充：**
+- `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
+
 ---
 
 ## tests/ · 集成测试
@@ -477,7 +482,7 @@ tests/
 │   │                               #   Hook 故障隔离：单模块 hook 异常不影响其他模块
 │
 ├── # ── M8/M9 里程碑测试 ─────────────────────────────────
-├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测沙箱工作区隔离）
+├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测/真实试跑沙箱隔离）
 ├── test_m9_modules.py              # M9：第二阶段模块单元测试
 │   │                               #   shared-memory、pause-resume、
 │   │                               #   multimodal-memory、relation-discovery、
@@ -490,7 +495,7 @@ tests/
 | 标记 | 含义 | 运行时机 |
 |------|------|---------|
 | （无标记） | 快速单元 / 集成测试，使用 SQLite | PR、merge |
-| `slow` | 需要真实 LLM 调用的测试 | nightly 仅 |
+| `slow` | 慢的运行时闭环 / 控制面 API / 评测回归测试；nightly 以 `pytest -m slow -n auto --dist loadfile` 并行执行 | nightly 仅 |
 
 ---
 
@@ -531,7 +536,8 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
     └── nightly.yml # 每日夜间（02:17 UTC，workflow_dispatch 可手动触发）
                     #   migration-check：check_migrations.sh（ORM 漂移检测）
                     #   smoke-test：smoke_test.sh（端到端 /health 验证）
-                    #   slow-tests：pytest -m slow（真实 LLM 测试）
+                    #   slow-tests：pytest -m slow -n auto --dist loadfile
+                    #     （并行慢集成 / 评测回归；未收集到用例时 no-op）
                     #   benchmark：eval:m8:benchmark（离线基准评测）
 ```
 

@@ -17,6 +17,7 @@
     "infra:langfuse:logs": "docker compose -f infra/langfuse-compose.yml logs -f langfuse-web langfuse-worker",
     "ops:backup": "uv run python -m yggdrasil_sdk.ops_cli backup create",
     "ops:restore": "uv run python -m yggdrasil_sdk.ops_cli backup restore",
+    "real-user:prepare": "uv run python -m yggdrasil_sdk.ops_cli pilot-sandbox create",
     "web:dev": "corepack pnpm --filter @yggdrasil/web dev",
     "web:build": "corepack pnpm --filter @yggdrasil/web build",
     "web:lint": "corepack pnpm --filter @yggdrasil/web lint",

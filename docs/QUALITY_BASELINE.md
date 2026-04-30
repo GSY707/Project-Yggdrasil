@@ -40,7 +40,7 @@
 | `vector-flat` | 0.70 | 0.45 |
 | `no-memory`   | 0.10 | 0.05 |
 
-> **注意：** CI 中 fallback 模式（无真实 LLM）的基线偏保守；live 模式下（nightly `slow` 任务 + `eval:m8:benchmark`）各指标应达到 target 值。
+> **注意：** CI 中 fallback 模式（无真实 LLM）的基线偏保守；nightly `slow` 任务现在承载并行慢集成/回归测试，真实 LLM 目标值应通过专门的 live 评测与人工验证单独核对。
 
 ---
 
@@ -102,7 +102,7 @@
 |------|------|------------|
 | PR | pull_request | pytest (not slow)、web lint/typecheck/build |
 | merge | push to main | pytest (not slow)、eval:regression、eval:m9:control-plane、web 构建 |
-| nightly | 02:17 UTC | migration-check、smoke-test、pytest (slow)、**eval:m8:benchmark**（此文档所记录的基线） |
+| nightly | 02:17 UTC | migration-check、smoke-test、pytest (slow，parallel)、**eval:m8:benchmark**（此文档所记录的基线） |
 
 ---
 

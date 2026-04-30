@@ -89,8 +89,20 @@ jobs:
       - name: Install Python workspace dependencies
         run: uv sync --all-packages --group dev
 
-      - name: Run slow tests (live LLM and benchmarks)
-        run: uv run pytest -m slow
+      - name: Run slow tests in parallel
+        shell: bash
+        run: |
+          set +e
+          uv run pytest -m slow -n auto --dist loadfile
+          status=$?
+          set -e
+
+          if [ "$status" -eq 5 ]; then
+            echo "No slow tests collected; treating nightly slow-tests job as a no-op."
+            exit 0
+          fi
+
+          exit "$status"
 
   benchmark:
     runs-on: ubuntu-latest

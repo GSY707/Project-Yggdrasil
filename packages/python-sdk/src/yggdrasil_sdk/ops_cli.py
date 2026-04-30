@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .ops_runtime import create_runtime_backup, latest_snapshot_dir, resolve_backup_root, restore_runtime_backup, run_compose_smoke
+from .ops_runtime import create_runtime_backup, latest_snapshot_dir, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke
 
 
 def main() -> None:
@@ -22,6 +22,14 @@ def main() -> None:
 
     smoke_parser = subparsers.add_parser("compose-smoke", help="Verify local compose dependencies.")
     smoke_parser.add_argument("--ensure-up", action="store_true", help="Run docker compose up -d before smoke checks.")
+
+    pilot_parser = subparsers.add_parser("pilot-sandbox", help="Prepare an isolated sandbox for real-user validation.")
+    pilot_subparsers = pilot_parser.add_subparsers(dest="pilot_command", required=True)
+
+    pilot_create_parser = pilot_subparsers.add_parser("create", help="Create a real-user validation sandbox.")
+    pilot_create_parser.add_argument("--output", help="Sandbox directory. Defaults to a sibling folder outside the repo.")
+    pilot_create_parser.add_argument("--workspace", help="Optional workspace root to snapshot. Defaults to the current repo root.")
+    pilot_create_parser.add_argument("--disable-live-llm", action="store_true", help="Set YGGDRASIL_DISABLE_LIVE_LLM=1 in activation scripts.")
 
     paths_parser = subparsers.add_parser("paths", help="Show runtime backup paths.")
     paths_parser.add_argument("--latest", action="store_true", help="Resolve the latest snapshot path too.")
@@ -42,6 +50,17 @@ def main() -> None:
 
     if args.command == "compose-smoke":
         result = run_compose_smoke(ensure_up=args.ensure_up)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "pilot-sandbox" and args.pilot_command == "create":
+        output_dir = Path(args.output).resolve() if args.output else None
+        workspace_root = Path(args.workspace).resolve() if args.workspace else None
+        result = prepare_real_user_validation_sandbox(
+            output_dir=output_dir,
+            workspace_root=workspace_root,
+            disable_live_llm=bool(args.disable_live_llm),
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 

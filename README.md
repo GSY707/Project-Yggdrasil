@@ -109,7 +109,12 @@ corepack pnpm infra:down
 corepack pnpm infra:smoke
 corepack pnpm ops:backup
 corepack pnpm ops:restore
+corepack pnpm real-user:prepare
 ```
+
+### 真实用户试跑准备
+
+`corepack pnpm real-user:prepare` 会在仓库外同级目录生成一个专用试跑沙箱，包含工作区快照、隔离 `.yggdrasil` 状态目录、冻结任务材料副本与激活脚本，避免内部试跑回写当前工程仓库。
 
 ## 规格入口
 
@@ -120,11 +125,11 @@ corepack pnpm ops:restore
 
 ## 当前重点
 
-当前阶段的重点已经从“补齐第二阶段模块能力”切换为“继续强化控制面、CI 门禁、真实质量评测和长期运维稳定性”。
+当前阶段的重点已经从“补齐第二阶段模块能力”切换为“真实用户验证执行与隔离试跑收口”。
 
 下一步更值得投入的是：
 
-- 把 M9 control-plane suite、Alembic 检查和 compose smoke 纳入更严格的 CI 分层门禁。
-- 给 Web 控制面补行为回归和 smoke。
-- 提升多模态 embedding 与 relation-discovery 的质量，而不只是停留在启发式基线。
-- 扩充 prompt/training/control-plane 的审计与趋势分析视图。
+- 先用 `real-user:prepare` 固化 2 到 3 次内部试跑所需的专用目录、材料副本和隔离状态根。
+- 优先执行边界更清晰、工具集合更窄的内部试跑任务，减少真实用户验证前的噪音变量。
+- 补 Core API HTTP 关键路径的实测 P50 / P95，并回写 `docs/QUALITY_BASELINE.md`。
+- 补首 token / 首次有效输出级别的首响观测，支撑真实用户体验判断。

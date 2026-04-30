@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from yggdrasil_agent_runtime.runtime import build_root_mount_package
 from yggdrasil_sdk import (
     TaskRepository,
@@ -15,6 +16,9 @@ from yggdrasil_sdk import (
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 
 import yggdrasil_sdk.mcp_bridge as mcp_bridge_module
+
+
+pytestmark = pytest.mark.slow
 
 
 def _seed_task(task_id: str, *, app_id: str = "yggdrasil.app.software-factory"):

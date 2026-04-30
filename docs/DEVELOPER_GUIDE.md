@@ -461,6 +461,7 @@ uv run pytest tests/test_m9_modules.py -v
 
 # 运行带标记的测试
 uv run pytest -m "not slow" -q
+uv run pytest -m slow -n auto --dist loadfile -q
 
 # 运行并查看覆盖率
 uv run pytest --cov=yggdrasil_sdk -q
@@ -481,7 +482,8 @@ uv run pytest --cov=yggdrasil_sdk -q
 
 - 集成测试必须连接真实数据库，**禁止** Mock 数据库层（避免 Mock/Prod 差异掩盖问题）。
 - 测试应具有自清理能力（使用事务回滚或独立测试数据库）。
-- 有副作用的慢测试用 `@pytest.mark.slow` 标记。
+- 有副作用、运行时闭环、控制面 API、评测回归这类慢测试用 `@pytest.mark.slow` 标记。
+- `slow` 用例默认留给 nightly 跑，并通过 `pytest-xdist` 以 `-n auto --dist loadfile` 并行执行。
 
 ---
 

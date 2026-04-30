@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_core_api.app import app
 from yggdrasil_sdk import PromptAssetRepository, get_persistence_runtime, resolve_workspace_root
@@ -12,6 +13,9 @@ from yggdrasil_sdk.collaboration_runtime import GitCollaborationAdapter, launch_
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID
 from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, RuntimeRepository, TaskRepository, WorkspaceBootstrapRepository
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
+
+
+pytestmark = pytest.mark.slow
 
 
 def _run_git(repo_path: Path, *args: str) -> str:

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from yggdrasil_agent_runtime.runtime import prepare_pause_snapshot
 from yggdrasil_sdk import TaskRepository, get_persistence_runtime
 from yggdrasil_sdk.contracts import ExternalRef, ModuleCatalogSnapshot, ModuleInstallRecord, ModuleManifestSummary
@@ -27,6 +28,9 @@ from yggdrasil_sdk.module import BaseModulePlugin, HookRegistration
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
 from yggdrasil_sdk.persistence.repositories import MemoryRepository, NodeRepository, WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import utc_now
+
+
+pytestmark = pytest.mark.slow
 
 
 # ---------------------------------------------------------------------------

@@ -3,9 +3,13 @@ from __future__ import annotations
 from collections import defaultdict
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_module_host.app import app as module_host_app
 from yggdrasil_sdk import EventEnvelope, HookNames, ModulePlatformService, new_id, utc_now
+
+
+pytestmark = pytest.mark.slow
 
 
 class FakeEventBus:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_core_api.app import app
 from yggdrasil_sdk import PromptAssetRepository, TaskRepository, TaskSnapshotSummary, get_persistence_runtime, new_id, run_evaluation_suite, utc_now
@@ -12,6 +13,7 @@ from yggdrasil_sdk.support import ensure_state_subdir, relative_workspace_path, 
 
 
 client = TestClient(app)
+pytestmark = pytest.mark.slow
 
 
 def test_core_api_persists_task_and_node_records() -> None:

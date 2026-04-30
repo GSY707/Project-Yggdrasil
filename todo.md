@@ -1,51 +1,38 @@
 # 世界树计划开发 TODO（执行版）
 
 ## 当前阶段
-- M1 到 M9 的正式工程主线已经落地，当前仓库不再处于”骨架占位”阶段。
-- **当前已切换为质量巩固阶段：停止新功能开发，专注修复已知 bug 与完善测试覆盖。**
-- 核心决策：规模超前于验证，在真实用户验证到来之前优先打通一条端到端核心路径并夯实测试基线。
+- M1 到 M9、CI 门禁、质量基线和真实用户验证材料冻结已经完成。
+- **当前已切换为真实用户验证执行阶段：优先验证“用户只给目标，系统在服务器侧隔离环境中完成任务”是否成立。**
+- 核心决策：先打通专用沙箱、内部试跑、性能实测和评分闭环，再决定是否继续扩功能面。
 
-## 质量巩固计划（当前执行中）
+## 顶层路线
+- 路线文档：`docs/research/final-goal-roadmap-2026-04-30.md`
+- 当前执行锚点：先完成 Gate 1，也就是“在窄路径里证明用户给目标后系统可以交付”。
+- 在 Gate 1 闭合前，不重开大规模功能扩展。
 
-### Phase 0 — 修复已知 Bug（先修再测）
-- [x] 修复 `runtime_kernel.py` pause-request 检测 race condition（L862 覆写 + L1080 不刷新）
-- [x] 为 pause-resume race condition 补充专项回归测试
+## 真实用户验证执行计划（当前执行中）
 
-### Phase 1 — 补全关键路径测试（目标：核心路径 100% 有测试）
-- [x] Pause-Resume 专项：执行中途发出 pause，worker 必须在下一轮停下
-- [x] Pause-Resume 专项：pause → resume 后上下文正确恢复
-- [x] Pause-Resume 专项：连续 pause / resume 不累积状态污染
-- [x] 权限元组验证：read-only mount 拒绝写入
-- [x] 权限元组验证：exclusive-read mount 拒绝第二挂载者
-- [x] 权限元组验证：无权限 Space 访问被拒绝
-- [x] 错误恢复：LLM provider 5xx 时 task 状态正确回滚（不卡在 `running`）
-- [x] 错误恢复：Redis 不可用时 pause 操作返回明确错误
-- [x] 错误恢复：Resume 时快照损坏/缺失返回明确错误而非崩溃
-- [x] Live LLM：将 `YGGDRASIL_DISABLE_LIVE_LLM` 改为 `slow` marker，CI nightly 跑
+### RV1 — 试跑环境与隔离
+- [x] 固化专用沙箱约束：运行时必须使用专用目录，不得回写当前工程目录。
+- [x] 新增 `corepack pnpm real-user:prepare`，生成真实用户试跑专用沙箱、隔离状态目录、冻结材料副本与激活脚本。
+- [ ] 在专用沙箱里完成 2 到 3 次内部试跑，优先选择边界清晰、工具集合更窄的任务。
+- [ ] 将 Windows / MinIO 端口覆盖与环境前提补入试跑说明，避免 E2 环境复现误配。
 
-### Phase 2 — 构建 CI 门禁
-- [x] `pytest.ini` 补充 `slow` marker 定义
-- [x] 写 `scripts/check_migrations.sh`：验证 Alembic 头与 ORM 一致
-- [x] 写 compose smoke test：启动 infra stack，调 `/health`（`scripts/smoke_test.sh`）
-- [x] 配置 GitHub Actions 三层 workflow（PR / merge / nightly）
+### RV2 — 内部试跑与评分闭环
+- [x] 冻结任务包与评分表：Pack A / Pack B / Pack C 与 scorecard 模板。
+- [x] 冻结内部试跑基线与 DeepSeek V4 调试记录。
+- [ ] 先执行 `YGG-CI-01` 与 `YGG-CG-01` 两条首轮内部试跑，收集完整工件、录屏和评分表。
+- [ ] 将前 5 个阻塞因素按“配置 / 速度 / 体验 / 能力”分类沉淀。
 
-### Phase 3 — 稳定性与边界测试
-- [x] 规模测试：1000 节点树的检索延迟基准
-- [x] 规模测试：10 万词 fragment 导入的内存和时间上界
-- [x] 并发安全：2 个 worker 同时 pause 同一 Task 不产生双重快照
-- [x] 并发安全：Sub-agent 并发写同一 Space 不产生数据竞争
-- [x] Hook 故障隔离：一个 module hook 抛异常，其他模块和主流程继续
+### RV3 — 实测性能与质量回写
+- [ ] 补 Core API HTTP 关键路径的实测 P50 / P95。
+- [ ] 回写 `docs/QUALITY_BASELINE.md`，用实测值替换当前目标值。
+- [ ] 补首 token / 首次有效输出级别的首响观测。
 
-### Phase 4 — 质量基线（持续）
-- [x] 固化 `evalsuite_benchmark_m8_memory_strategies` 结果为数字基准
-- [x] 记录关键 API 路径 P50/P95 延迟基准
-- [x] 建立 `QUALITY_BASELINE.md`
-
-### 新功能冻结（Phase 1-3 完成前不做）
-- training-lab 扩展（dataset diff / artifact promotion）
-- relation-discovery 语义质量提升
-- Prompt 控制面板新功能
-- Web 工作台统计卡片
+### RV4 — 外部真实用户准入
+- [ ] 仅在内部试跑通过率、人工接管率和评分填写流程稳定后，再扩大到 5 到 8 名内部用户。
+- [ ] 与对照组在同一材料、同一权限、同一时间盒下做首轮 A/B。
+- [ ] 产出 go / no-go 建议，决定是否扩大外部真实用户测试范围。
 
 ## 规格入口
 - docs/PRD-v0.1.md
@@ -112,11 +99,11 @@
 - 验收：M9 能力已经具备正式 API、正式 Web 页面、正式回归与验收链路，而不是停留在模块内部实现。
 
 ## 明确不该现在做的事
-- 不要在 Phase 1-3 完成前新增功能模块。
+- 不要在首轮内部试跑闭合前继续扩场景、扩应用面或引入新的大模块。
 - 不要为了追求”看起来更聪明”而在证据不足时写隐式推断逻辑。
-- 不要让模块绕过 shared SDK 和正式协议直接读写彼此内部实现。
+- 不要让世界树运行时直接读写当前工程目录；真实试跑必须走专用沙箱。
 - 不要把本地状态目录、评测 sandbox 或生成产物重新纳入正式代码盘点。
-- 不要在没有门禁和回归的前提下扩大控制面写入入口。
+- 不要在没有评分、录屏、工件和日志闭环的前提下扩大真实用户样本。
 
 ## 一句话原则
-- 当前项目已经进入”质量巩固”阶段：先修 bug、补测试、建门禁，然后再考虑扩展。
+- 当前项目已经进入”真实用户验证执行”阶段：先证明隔离试跑和任务完成率成立，再决定继续扩什么。

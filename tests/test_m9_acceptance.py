@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from yggdrasil_sdk import run_evaluation_suite
+
+
+pytestmark = pytest.mark.slow
 
 
 def test_m9_acceptance_suite_exercises_capability_chain() -> None:

@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_core_api.app import app
 
 
 client = TestClient(app)
 SAMPLE_TEXT = (Path(__file__).parent / "fixtures" / "memory_import_sample.txt").read_text(encoding="utf-8")
+pytestmark = pytest.mark.slow
 
 
 def test_core_api_materializes_memory_import_and_retrieval() -> None:

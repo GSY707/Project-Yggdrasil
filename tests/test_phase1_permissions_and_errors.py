@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import pytest
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_core_api.app import app as core_api_app
@@ -19,6 +20,9 @@ from yggdrasil_sdk.persistence.constants import DEFAULT_BRANCH_ID, DEFAULT_PROJE
 from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, WorkspaceBootstrapRepository
 from yggdrasil_shared_memory.plugin import SharedMemoryModule
 from yggdrasil_worker.registry import run_worker_once
+
+
+pytestmark = pytest.mark.slow
 
 
 runtime_client = TestClient(runtime_app)
