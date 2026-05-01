@@ -216,6 +216,21 @@ corepack pnpm infra:langfuse:up
 corepack pnpm infra:smoke
 ```
 
+### 4.1 真实用户试跑前提
+
+- 真实用户验证或内部试跑前，必须先执行 `corepack pnpm real-user:prepare`。该命令会在仓库外同级目录生成隔离工作区、冻结材料副本、独立 `.yggdrasil` 状态根与激活脚本。
+- 当前 Windows 主机若默认 `9000/9001` 被占用，请先覆盖 MinIO 宿主端口：
+
+```powershell
+$env:YGGDRASIL_MINIO_API_PORT = "19000"
+$env:YGGDRASIL_MINIO_CONSOLE_PORT = "19001"
+corepack pnpm infra:up
+corepack pnpm infra:smoke
+```
+
+- 进入试跑环境时优先使用 `real-user:prepare` 生成的激活脚本；至少要确保 `YGGDRASIL_GIT_REPO_PATH`、`YGGDRASIL_MCP_PROJECT_WORKSPACE`、`YGGDRASIL_STATE_ROOT` 都指向沙箱。仅修改 `YGGDRASIL_STATE_ROOT` 不足以阻止内置 MCP 回写真实仓库。
+- 首轮试跑提交物至少包括评分表、录屏、trace 和任务工件目录。
+
 ---
 
 ## 5. 启动服务
@@ -457,7 +472,7 @@ uv run alembic check
 uv run pytest -q
 
 # 运行特定测试文件
-uv run pytest tests/test_m9_modules.py -v
+uv run pytest tests/test_m9_shared_memory.py -v
 
 # 运行带标记的测试
 uv run pytest -m "not slow" -q
@@ -475,7 +490,7 @@ uv run pytest --cov=yggdrasil_sdk -q
 | `test_prompting_runtime.py` | PromptCompiler 链路 |
 | `test_runtime_and_pruning.py` | 运行时内核与上下文裁剪 |
 | `test_m8_runtime.py` | M8 运行时回归 |
-| `test_m9_modules.py` | M9 模块单元测试 |
+| `test_m9_shared_memory.py` 等 5 个 `test_m9_*` 文件 | M9 模块专项测试 |
 | `test_m9_acceptance.py` | M9 验收测试 |
 
 ### 10.3 编写测试规范

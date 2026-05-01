@@ -116,6 +116,13 @@ corepack pnpm real-user:prepare
 
 `corepack pnpm real-user:prepare` 会在仓库外同级目录生成一个专用试跑沙箱，包含工作区快照、隔离 `.yggdrasil` 状态目录、冻结任务材料副本与激活脚本，避免内部试跑回写当前工程仓库。
 
+### 真实用户试跑前提
+
+- 当前 Windows 主机若默认 `9000/9001` 被占用，启动 infra 前先覆盖 MinIO 端口：`YGGDRASIL_MINIO_API_PORT=19000`、`YGGDRASIL_MINIO_CONSOLE_PORT=19001`。
+- 真实试跑必须先执行 `corepack pnpm real-user:prepare`，再进入生成的专用沙箱并使用激活脚本；不要直接对当前工程仓库运行试跑任务。
+- 试跑环境至少要保证 `YGGDRASIL_GIT_REPO_PATH`、`YGGDRASIL_MCP_PROJECT_WORKSPACE`、`YGGDRASIL_STATE_ROOT` 都指向沙箱。仅切换状态目录并不够，内置 MCP 仍可能回写真实仓库。
+- 首轮内部试跑的交付物至少包括评分表、录屏、trace 与任务工件目录。
+
 ## 规格入口
 
 - docs/PRD-v0.1.md
@@ -126,6 +133,12 @@ corepack pnpm real-user:prepare
 ## 当前重点
 
 当前阶段的重点已经从“补齐第二阶段模块能力”切换为“真实用户验证执行与隔离试跑收口”。
+
+### 阶段状态（2026-05-01）
+
+- Gate 1 仍未闭合；按出口标准计当前是 **0 / 4** 项完成。
+- 已完成的前置收口包括：专用沙箱入口、验证材料冻结、看板/README/开发文档同步，以及一轮低风险大文件拆分示范（M9 聚合测试拆分）。
+- 当前最关键的缺口仍是：2 到 3 次内部试跑、Core API HTTP P50 / P95 实测，以及首 token / 首次有效输出观测。
 
 下一步更值得投入的是：
 

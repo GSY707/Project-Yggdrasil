@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/4/30 更新：DeepSeek V4 适配、真实用户验证冻结材料、内部试跑记录与专用沙箱入口）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/1 更新：真实用户验证执行看板同步、Windows / MinIO 试跑前提、M9 测试文件拆分）
 
 ---
 
@@ -358,7 +358,7 @@ docs/
 │
 ├── research/                       # 研究与探索性文档
 │   ├── final-goal-roadmap-2026-04-30.md
-│   │                               #   通向最终目标的阶段路线图：gate、并行主线、测试与研究议程
+│   │                               #   通向最终目标的阶段路线图：gate、功能开发簇、提示词成熟度与研究议程
 │   ├── prompt-engineering-and-seed-templates-v0.1.md
 │   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
@@ -483,10 +483,12 @@ tests/
 │
 ├── # ── M8/M9 里程碑测试 ─────────────────────────────────
 ├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测/真实试跑沙箱隔离）
-├── test_m9_modules.py              # M9：第二阶段模块单元测试
-│   │                               #   shared-memory、pause-resume、
-│   │                               #   multimodal-memory、relation-discovery、
-│   │                               #   memory-organizer、training-lab
+├── test_m9_shared_memory.py        # M9：shared-memory 专项测试
+├── test_m9_pause_resume.py         # M9：pause-resume 专项测试
+├── test_m9_multimodal_and_relations.py
+│                                   #   M9：multimodal-memory + relation-discovery 专项测试
+├── test_m9_memory_organizer.py     # M9：memory-organizer 专项测试
+├── test_m9_training_lab.py         # M9：training-lab 专项测试
 └── test_m9_acceptance.py           # M9：端到端验收测试 + 控制面 API 回归
 ```
 
@@ -565,7 +567,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
-| `todo.md` | 开发里程碑与当前优先事项追踪 |
+| `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
 
 ---
 
