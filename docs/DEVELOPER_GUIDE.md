@@ -110,34 +110,44 @@ Agent Runtime  Module Host     Worker        python-sdk
 
 ### 3.2 环境变量
 
-在项目根目录创建 `.env` 文件（参考 `.env.example` 若存在），最低配置如下：
+项目根目录已提供 `.env.example`。本地联调时可基于该文件准备 `.env`，最低配置如下：
 
 ```bash
-# 数据库
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/yggdrasil
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# NATS
-NATS_URL=nats://localhost:4222
-
-# MinIO
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+# 持久化与服务发现
+YGGDRASIL_DATABASE_URL=sqlite+pysqlite:///./.yggdrasil/local-dev.db
+YGGDRASIL_AUTO_CREATE_SCHEMA=1
+YGGDRASIL_REDIS_URL=redis://127.0.0.1:6379/0
+YGGDRASIL_NATS_URL=nats://127.0.0.1:4222
+YGGDRASIL_NATS_STREAM=YGGDRASIL
+YGGDRASIL_NATS_SUBJECT_PREFIX=yggdrasil.events
+YGGDRASIL_STATE_ROOT=.yggdrasil/state
+YGGDRASIL_CORE_API_BASE_URL=http://127.0.0.1:8000
+YGGDRASIL_GIT_REPO_PATH=.
+YGGDRASIL_MCP_PROJECT_WORKSPACE=.
 
 # OpenTelemetry（可选，联调建议开启）
 YGGDRASIL_OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
 
-# LLM 模型密钥（至少配置一个）
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-
 # Langfuse（可选）
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
 LANGFUSE_BASE_URL=http://127.0.0.1:3100
+
+# 可选端口覆盖（Windows 本机冲突时常用）
+YGGDRASIL_MINIO_API_PORT=9000
+YGGDRASIL_MINIO_CONSOLE_PORT=9001
+
+# 运行时建议默认值
+YGGDRASIL_RUNTIME_AUDIT_LEVEL=default
+YGGDRASIL_COORDINATION_BACKEND=auto
+
+# LLM 模型密钥（至少配置一个）
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+LONGCAT_API_KEY=
+OPENROUTER_API_KEY=
+DEEPSEEK_API_KEY=
+VECTORENGINE_API_KEY=
 ```
 
 LLM 凭据只通过环境变量注入，运行时代码不会读取仓库内的 `LLM.txt`。
@@ -260,6 +270,8 @@ corepack pnpm web:dev
 
 ## 6. 开发工作流
 
+外部贡献者进入实现前，先阅读根目录的 `CONTRIBUTING.md`、`GOVERNANCE.md`、`SECURITY.md` 与 `CODE_OF_CONDUCT.md`。如果改动会影响架构边界、协议、公共接口、模块生命周期或破坏兼容性，先按 `docs/rfcs/README.md` 提交 RFC。
+
 ### 6.1 分支策略
 
 - `main`：主干，需通过所有 CI 门禁
@@ -302,6 +314,7 @@ corepack pnpm web:build
 - [ ] `corepack pnpm web:build` 构建成功
 - [ ] 如有数据库变更：`uv run alembic check` 通过
 - [ ] 如有基础设施变更：`corepack pnpm infra:smoke` 通过
+- [ ] 如修改公共接口、协议契约、模块生命周期或架构边界：附 RFC 链接或说明为何不需要 RFC
 
 ---
 

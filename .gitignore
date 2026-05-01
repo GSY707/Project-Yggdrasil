@@ -18,6 +18,7 @@ __pycache__/
 # Local env / tooling
 .env
 .env.*
+!.env.example
 .DS_Store
 LLM.txt
 

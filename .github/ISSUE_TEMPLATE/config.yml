@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞披露流程
+    url: https://github.com/GSY707/Project-Yggdrasil/blob/main/SECURITY.md
+    about: 不要公开提交安全漏洞，请先阅读私下披露流程。
+  - name: 贡献指南
+    url: https://github.com/GSY707/Project-Yggdrasil/blob/main/CONTRIBUTING.md
+    about: 提交 PR 或准备本地环境前，先阅读贡献指南。
+  - name: RFC 流程
+    url: https://github.com/GSY707/Project-Yggdrasil/blob/main/docs/rfcs/README.md
+    about: 涉及重大设计变更时，请先走 RFC，而不是直接提功能请求。

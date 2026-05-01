@@ -1,5 +1,7 @@
 # Project Yggdrasil
 
+[English README](README.en.md)
+
 世界树计划的正式工程仓库。
 
 当前仓库已经不再是“骨架 + 占位”的早期状态，而是一个可运行、可评测、可恢复、可扩展的长期任务系统：
@@ -41,6 +43,13 @@
 - evaluation：正式评测样本、suite 定义与基线数据。
 - infra：本地依赖基础设施与观测组件。
 
+## 开源协作
+
+- 本仓库采用 AGPL-3.0 完整开源，默认认为所有已提交的源码、文档、样例和评测材料都可以公开分发；具体边界见 `docs/OPEN_SOURCE_BOUNDARY.md`。
+- 参与贡献前先阅读 `CONTRIBUTING.md`、`GOVERNANCE.md`、`SECURITY.md` 和 `CODE_OF_CONDUCT.md`。
+- 涉及架构边界、公共接口、协议契约、模块生命周期或破坏性变化的重大设计调整，必须先走 `docs/rfcs/README.md` 定义的 RFC 流程。
+- 英文入口文档见 `README.en.md`、`CONTRIBUTING.en.md`、`GOVERNANCE.en.md`、`SECURITY.en.md`、`CODE_OF_CONDUCT.en.md`、`docs/OPEN_SOURCE_BOUNDARY.en.md` 与 `docs/rfcs/README.en.md`。
+
 ## 本地开发
 
 ### 安装依赖
@@ -49,6 +58,8 @@
 uv sync
 corepack pnpm install
 ```
+
+如需本地联调，可基于 `.env.example` 准备本地 `.env`，并至少注入一个可用的模型提供方 API key；不要把真实 key 提交到仓库。
 
 ### 启动服务
 

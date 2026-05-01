@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/1 更新：真实用户验证执行看板同步、Windows / MinIO 试跑前提、M9 测试文件拆分）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/1 更新：开源协作基线、RFC 流程、环境示例与真实用户验证说明同步）
 
 ---
 
@@ -8,6 +8,16 @@
 
 ```
 世界树计划/
+├── README.en.md    # 英文版仓库入口文档
+├── .env.example    # 开源版本地环境变量示例（不含真实密钥）
+├── CONTRIBUTING.md # 外部贡献工作流、测试要求、PR 约定
+├── CONTRIBUTING.en.md # 英文版贡献指南
+├── CODE_OF_CONDUCT.md # 社区行为准则与处理流程
+├── CODE_OF_CONDUCT.en.md # 英文版社区行为准则
+├── GOVERNANCE.md  # 维护者职责、决策方式与 RFC 入口
+├── GOVERNANCE.en.md # 英文版治理说明
+├── SECURITY.md    # 漏洞披露与安全支持策略
+├── SECURITY.en.md # 英文版安全策略
 ├── apps/           # 前端应用
 ├── services/       # 后端微服务
 ├── packages/       # 共享库
@@ -22,6 +32,64 @@
 ├── tests/          # 集成测试
 └── .github/        # GitHub Actions CI 配置
 ```
+
+---
+
+## 开源协作与治理入口
+
+```
+.
+├── CONTRIBUTING.md                # 面向外部贡献者的首个入口
+├── CONTRIBUTING.en.md             # 英文版贡献指南
+├── CODE_OF_CONDUCT.md             # 社区行为规范
+├── CODE_OF_CONDUCT.en.md          # 英文版社区行为规范
+├── GOVERNANCE.md                  # 角色、评审权与 RFC 决策机制
+├── GOVERNANCE.en.md               # 英文版治理说明
+├── SECURITY.md                    # 安全问题私下披露流程
+├── SECURITY.en.md                 # 英文版安全策略
+├── .github/
+│   ├── CODEOWNERS                 # 默认代码归属人与评审路由
+│   ├── PULL_REQUEST_TEMPLATE.md   # PR 模板
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.yml         # 缺陷提报表单
+│       ├── feature_request.yml    # 功能请求表单
+│       └── config.yml             # Issue 联系入口与 blank issue 策略
+└── docs/
+    ├── OPEN_SOURCE_BOUNDARY.md    # 开源边界、支持矩阵与稳定性承诺
+    ├── OPEN_SOURCE_BOUNDARY.en.md # 英文版开源边界说明
+    └── rfcs/
+        ├── README.md              # RFC 流程说明
+        ├── README.en.md           # 英文版 RFC 流程说明
+        └── 0000-template.md       # RFC 模板
+        └── 0000-template.en.md    # 英文版 RFC 模板
+```
+
+**关键说明：**
+- 本仓库现在按“默认公开、密钥例外”的原则运行：一切提交进仓库的内容都应可公开分发，真实 API key 只能通过环境变量注入。
+- 重大设计变更不再直接靠 issue 或口头约定推进，统一通过 `docs/rfcs/` 目录下的 RFC 文档完成讨论、批准与留痕。
+- 开源协作核心文档现在提供中英文双份入口；中文仍是工程内完整说明，英文版优先服务外部协作者的仓库浏览、贡献、治理与安全理解。
+
+---
+
+## 英文版入口
+
+```
+.
+├── README.en.md                   # 英文版项目简介与快速入口
+├── CONTRIBUTING.en.md             # 英文版贡献指南
+├── CODE_OF_CONDUCT.en.md          # 英文版社区行为准则
+├── GOVERNANCE.en.md               # 英文版治理说明
+├── SECURITY.en.md                 # 英文版安全策略
+└── docs/
+    ├── OPEN_SOURCE_BOUNDARY.en.md # 英文版开源边界
+    └── rfcs/
+        ├── README.en.md           # 英文版 RFC 流程
+        └── 0000-template.en.md    # 英文版 RFC 模板
+```
+
+**关键说明：**
+- 英文版目前聚焦开源协作入口，而不是完整替代所有中文工程文档。
+- 外部协作者从 README、贡献、安全、治理和 RFC 流程即可完成首轮参与；更深的工程实现仍以中文开发文档和协议文档为主。
 
 ---
 
