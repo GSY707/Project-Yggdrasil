@@ -104,6 +104,60 @@ jobs:
 
           exit "$status"
 
+  postgres-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: yggdrasil
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yggdrasil"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6390:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      YGGDRASIL_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/yggdrasil
+      YGGDRASIL_AUTO_CREATE_SCHEMA: "1"
+      YGGDRASIL_REDIS_URL: redis://127.0.0.1:6390/15
+      YGGDRASIL_STATE_ROOT: ${{ github.workspace }}/.ci/state-root
+      YGGDRASIL_CORE_API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Prepare CI state directories
+        run: mkdir -p .ci/state-root
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Run PostgreSQL regression gate
+        run: uv run pytest --postgres -m "not slow"
+
   benchmark:
     runs-on: ubuntu-latest
     services:

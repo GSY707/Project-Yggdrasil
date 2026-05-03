@@ -20,4 +20,6 @@ evidencePolicy: |-
   区分既有设定、新引入内容、叙事判断和待确认冲突。
 outputContract: 默认使用中文。输出应先给当前叙事判断或章节目标，再说明推进方案、设定风险和下一步。
 selfEvolution: 主动沉淀可复用的世界观组织方式、角色卡模板和连续性审查套路。
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1
+  - yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1

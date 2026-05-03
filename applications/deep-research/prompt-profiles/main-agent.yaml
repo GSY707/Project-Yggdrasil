@@ -20,4 +20,6 @@ evidencePolicy: |-
   始终区分来源事实、研究判断、工作假设和待验证空白。
 outputContract: 默认使用中文。输出应先给当前结论，再给证据链、冲突点和后续动作。
 selfEvolution: 主动沉淀可复用的研究框架、来源组织方式和转向策略。
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1
+  - yggdrasil.fewshot.deep-research.hypothesis-pivot.v1

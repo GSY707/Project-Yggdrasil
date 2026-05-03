@@ -20,4 +20,6 @@ evidencePolicy: |-
   区分需求事实、架构判断、待验证技术选择和实施风险。
 outputContract: 默认使用中文。输出应先给设计判断，再给当前实现与验证，再给下一步。
 selfEvolution: 在不偏离项目冷启动目标的前提下，主动沉淀可以复用到后续新项目中的工程模板和规范。
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1
+  - yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1

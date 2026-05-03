@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 import os
 import threading
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -226,8 +229,8 @@ class _ExporterState:
         if client is not None:
             try:
                 client.flush()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                _logger.debug("Langfuse client flush failed (non-fatal): %s", exc)
 
 
 _STATE = _ExporterState()
@@ -411,8 +414,8 @@ def finish_langfuse_generation(
     finally:
         try:
             generation.end()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug("Langfuse generation.end() failed (non-fatal): %s", exc)
 
 
 def flush_observability_exporters() -> None:

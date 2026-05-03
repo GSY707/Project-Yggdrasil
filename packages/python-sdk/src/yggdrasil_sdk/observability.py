@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import logging
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Iterator
 from uuid import uuid4
+
+_logger = logging.getLogger(__name__)
 
 from .observability_exporters import finish_otel_span, get_exporter_status, record_otel_metric, start_otel_span
 from .support import append_jsonl, ensure_state_subdir, read_jsonl, utc_now
@@ -50,8 +53,8 @@ def record_metric(
     )
     try:
         record_otel_metric(service_name, metric_name, value, kind=kind, unit=unit, attributes=attributes)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("OTel metric recording failed (non-fatal): %s", exc)
 
 
 def record_log(
@@ -118,8 +121,8 @@ def observe_span(
                 attributes=span_attributes,
                 error_message=str(span_attributes.get("errorMessage")) if status == "error" else None,
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug("OTel span finish failed (non-fatal): %s", exc)
         append_jsonl(
             _observability_file("spans.jsonl", workspace_root),
             {

@@ -65,18 +65,15 @@
 
 > 生产部署（PostgreSQL + 批量 INSERT 优化）目标：≤ 5 000 ms、内存峰值 ≤ 50 MB。
 
-### 2.3 Core API HTTP 路径（目标值，待真实压测后更新）
+### 2.3 Core API HTTP 路径（实测）
 
-以下为基于系统架构推导的预期目标值，尚未经过真实压测（压测结果落地后应替换为实测数字）：
+以下数字来自 2026-05-04 本机实测：`uv run yggdrasil-core-api` + Python HTTP 压测脚本（120 次采样，20 次预热，SQLite，内存协调后端）。
 
-| 路径 | 方法 | P50 目标 | P95 目标 | 说明 |
+| 路径 | 方法 | P50 实测 | P95 实测 | 说明 |
 |------|------|---------|---------|------|
-| `/health` | GET | ≤ 10 ms | ≤ 30 ms | 无 DB 操作，纯内存 |
-| `/tasks/` | GET | ≤ 50 ms | ≤ 200 ms | 列表查询，含 ORM |
-| `/tasks/{id}` | GET | ≤ 20 ms | ≤ 100 ms | 单记录点查 |
-| `/nodes/` | GET | ≤ 80 ms | ≤ 300 ms | 分支节点列表，含 limit |
-| `/memory/search` | POST | ≤ 150 ms | ≤ 500 ms | 关键字检索，含向量/词法扫描 |
-| `/evaluations/` | GET | ≤ 50 ms | ≤ 200 ms | 评测结果列表 |
+| `/tasks` | GET | 25.22 ms | 32.01 ms | `limit=100`，预置 40 条任务 |
+| `/nodes` | GET | 30.99 ms | 36.44 ms | `limit=200`，预置 120 个节点 |
+| `/memory/retrievals` | POST | 277.73 ms | 367.36 ms | 请求体含 `queryText` 与检索深度参数 |
 
 ---
 
@@ -109,5 +106,5 @@
 ## 5. 更新协议
 
 - 每次 nightly `eval:m8:benchmark` 连续 3 轮结果稳定高于当前基线 0.05 以上时，更新本文档中的 `min` 值。  
-- 真实 HTTP 压测结果落地后，用实测 P50/P95 替换第 2.3 节中的"目标值"。  
+- 计划在 PostgreSQL 压测环境可用后补一轮同口径复测，并追加 PostgreSQL 实测栏位。  
 - 本文档由 `docs/DIRECTORY_REFERENCE.md` 索引，变更须同步更新目录。

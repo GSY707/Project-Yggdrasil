@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/1 更新：开源协作基线、RFC 流程、环境示例与真实用户验证说明同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/4 更新：P0-P2 技术债清理、研究文档归档目录同步与根目录临时文件清理）
 
 ---
 
@@ -138,7 +138,16 @@ services/
 │       ├── main.py                 # 服务启动入口（uvicorn）
 │       ├── app.py                  # FastAPI 应用实例、CORS、中间件
 │       ├── config.py               # 配置读取（环境变量）
-│       ├── services.py             # 核心业务逻辑层（77KB，主要服务实现）
+│       ├── services/               # 核心业务逻辑层（按资源域拆分）
+│       │   ├── __init__.py         # WorkspaceService 组合导出与依赖注入入口
+│       │   ├── _base.py            # 共享初始化与内部通用能力
+│       │   ├── task_service.py     # 任务与运行状态相关业务
+│       │   ├── memory_service.py   # 记忆树、导入与检索业务
+│       │   ├── evaluation_service.py # 评测业务
+│       │   ├── asset_service.py    # 资产与训练资产业务
+│       │   ├── prompting_service.py# Prompt 配置与编译预览业务
+│       │   ├── collaboration_service.py # PR 协作业务
+│       │   └── runtime_service.py  # 应用、MCP、可观测与工作台业务
 │       └── api/
 │           ├── router.py           # 聚合所有路由
 │           └── routes/             # 路由模块（每个资源一个文件）
@@ -182,7 +191,7 @@ services/
 ```
 
 **关键说明：**
-- `services.py` 是控制面最核心的文件，包含所有资源的业务逻辑实现。路由层仅做参数校验和委派。
+- `services/` 子包是控制面最核心的业务层，按资源域拆分后由 `WorkspaceService` 统一组合，路由层仅做参数校验和委派。
 - Agent Runtime 和 Core API 通过 NATS JetStream 事件总线通信，不直接 HTTP 调用。
 - Worker 运行 Temporal Activity，处理耗时异步任务（如批量记忆导入、训练触发）。
 
@@ -204,12 +213,26 @@ packages/
 │       ├── # ── 持久化层 ─────────────────────────────────
 │       ├── persistence/
 │       │   ├── models.py           # SQLAlchemy ORM 模型
-│       │   ├── repositories.py     # 仓储接口实现（CRUD 封装）
+│       │   ├── repositories/        # 仓储接口实现（按领域拆分，兼容原导入路径）
+│       │   │   ├── __init__.py      # 统一导出各 Repository
+│       │   │   ├── _common.py       # 共享记录映射与辅助函数
+│       │   │   ├── task.py          # TaskRepository
+│       │   │   ├── memory.py        # NodeRepository, MemoryRepository
+│       │   │   ├── evaluation.py    # EvaluationRepository
+│       │   │   ├── asset.py         # AssetRepository
+│       │   │   ├── prompting.py     # PromptAssetRepository
+│       │   │   ├── collaboration.py # CollaborationRepository
+│       │   │   └── platform.py      # Workspace/Runtime/Module/Outbox/Training 仓储
 │       │   ├── migrations.py       # 迁移工具函数
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel.py       # 核心运行时内核（任务状态机、执行编排，61KB）；返回 root-mount/LLM/写回分段计时
+│       ├── runtime_kernel/          # 核心运行时内核（按子能力拆分）
+│       │   ├── __init__.py          # 统一导出关键常量与执行入口
+│       │   ├── _common.py           # 共享导入与常量
+│       │   ├── root_mount.py        # root-mount 构建与预算辅助
+│       │   ├── snapshot.py          # pause/resume 快照构建
+│       │   └── execution_loop.py    # 主执行循环与写回链路
 │       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）；记录 prompt/请求/响应与 round latency / reasoningContent 分段计时
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -236,7 +259,12 @@ packages/
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime.py   # 评测 Suite 运行时（84KB）
+│       ├── evaluation_runtime/      # 评测 Suite 运行时（按职责拆分）
+│       │   ├── __init__.py          # 统一导出评测入口与环境工具
+│       │   ├── _common.py           # 共享导入与运行时依赖
+│       │   ├── bootstrap.py         # 套件装载、隔离环境与种子准备
+│       │   ├── scorer.py            # 覆盖率与评分逻辑
+│       │   └── suite_runner.py      # 各 case 执行与 run_evaluation_suite
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -254,12 +282,17 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型
+    └── src/
+        ├── index.ts                # 统一聚合导出入口
+        ├── types.ts                # 领域类型定义（Record/Response/Manifest）
+        ├── api-client.ts           # 轻量 API 客户端封装
+        ├── hooks.ts                # 通用异步状态 Hook 类型
+        └── utils.ts                # URL 参数与对象判断工具
 ```
 
 **关键说明：**
-- `runtime_kernel.py` 是系统最核心的文件，实现了任务状态机、Agent 执行编排、上下文管理等核心逻辑。
-- `evaluation_runtime.py` 体积最大（84KB），包含完整的评测框架实现。
+- `runtime_kernel/` 子包是任务状态机与执行编排核心，按 root-mount、snapshot、execution loop 拆分。
+- `evaluation_runtime/` 子包承载完整评测框架，按 bootstrap、scorer、suite runner 拆分。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 
 ---
@@ -359,9 +392,10 @@ applications/
 ```
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
-└── prompts/
-    ├── system.md           # 系统提示（定义 Agent 身份与工作方式）
-    └── seed.md             # 种子记忆（初始化上下文）
+├── prompt-profiles/
+│   └── main-agent.yaml     # 主 Agent prompt profile（含 behavior/tool/memory/evidence 策略）
+└── scenes/
+    └── generic-default.yaml# 默认场景种子（新建应用建议至少包含该文件）
 ```
 
 ---
@@ -427,18 +461,19 @@ docs/
 ├── research/                       # 研究与探索性文档
 │   ├── final-goal-roadmap-2026-04-30.md
 │   │                               #   通向最终目标的阶段路线图：gate、功能开发簇、提示词成熟度与研究议程
-│   ├── prompt-engineering-and-seed-templates-v0.1.md
-│   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
 │   │                               #   真实用户验证计划：冻结材料、时间盒、评分口径与执行顺序
 │   ├── real-user-validation-baseline-freeze-2026-04-30.md
 │   │                               #   真实用户验证基线与材料冻结记录
 │   ├── real-user-validation-internal-pilot-deepseek-2026-04-30.md
 │   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
-│   ├── runtime-optimization-plan-2026-04-29.md
-│   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
-│   └── test-suite-cpu-time-analysis-2026-04-29.md
-│                                   #   pytest CPU/等待时间拆分：Redis 超时、MCP bridge stdio、运行时与控制面热点
+│   └── 归档/
+│       ├── prompt-engineering-and-seed-templates-v0.1.md
+│       │                           #   提示词工程、PromptProfile、SeedTemplate 设计调研（归档）
+│       ├── runtime-optimization-plan-2026-04-29.md
+│       │                           #   运行时优化总计划（归档）
+│       └── test-suite-cpu-time-analysis-2026-04-29.md
+│                                   #   pytest CPU/等待时间拆分（归档）
 ```
 
 ---
@@ -608,6 +643,8 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
                     #   smoke-test：smoke_test.sh（端到端 /health 验证）
                     #   slow-tests：pytest -m slow -n auto --dist loadfile
                     #     （并行慢集成 / 评测回归；未收集到用例时 no-op）
+                    #   postgres-tests：pytest --postgres -m "not slow"
+                    #     （夜间 PostgreSQL 回归门禁，防止 SQLite 偏差）
                     #   benchmark：eval:m8:benchmark（离线基准评测）
 ```
 
@@ -635,7 +672,19 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
-| `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
+| `todo.md` | 当前执行阶段与未完成优先项追踪（工作台总览数据源） |
+
+---
+
+## docs/ 补充 · 技术治理文档
+
+```
+docs/
+├── ANTI_TECH_DEBT.md               # 防技术债开发规范：文件规模限制、异常处理规范、质量基线要求、
+│                                   #   PR 检查清单、存量技术债清理计划（TD-01 ~ TD-09）
+│                                   #   （2026-05-04 首版）
+└── ...（其他文档同上）
+```
 
 ---
 
@@ -643,11 +692,11 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 
 | 我想找… | 去哪里找 |
 |---------|---------|
-| 任务执行的核心逻辑 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel.py` |
+| 任务执行的核心逻辑 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompt_modules/compiler.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
-| 某个 API 的业务逻辑 | `services/core-api/src/yggdrasil_core_api/services.py` |
+| 某个 API 的业务逻辑 | `services/core-api/src/yggdrasil_core_api/services/<resource>_service.py` |
 | 数据库 ORM 模型 | `packages/python-sdk/src/yggdrasil_sdk/persistence/models.py` |
 | 数据契约/Pydantic 模型 | `packages/python-sdk/src/yggdrasil_sdk/contracts.py` |
 | 领域对象定义 | `packages/python-sdk/src/yggdrasil_sdk/domain.py` |

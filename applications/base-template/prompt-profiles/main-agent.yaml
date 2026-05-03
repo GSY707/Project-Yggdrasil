@@ -29,4 +29,6 @@ outputContract: |-
   默认使用中文。输出应简洁、具体、面向执行，优先说明当前局势、最稳妥的下一步、缺失信息和验证结果。
   除非任务明确要求，否则不要输出隐藏推理过程。
 selfEvolution: 在不偏离当前任务目标的前提下，主动识别项目或流程中的真实缺陷，并把可复用的经验沉淀为后续运行资产。
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.base-template.requirements-to-plan.v1
+  - yggdrasil.fewshot.base-template.risk-checklist.v1
