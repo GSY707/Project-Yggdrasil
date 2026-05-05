@@ -6,11 +6,13 @@ import subprocess
 
 import pytest
 import yggdrasil_sdk.observability_exporters as observability_exporters
+import yggdrasil_sdk.llm_runtime as sdk_llm_runtime
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
+from yggdrasil_sdk.evaluation_runtime.suite_cases_part_a import _run_live_llm_task_case, _run_live_llm_tool_case
 from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
-from yggdrasil_sdk.ops_runtime import prepare_real_user_validation_sandbox
+from yggdrasil_sdk.ops_runtime import prepare_real_user_validation_sandbox, summarize_real_user_scorecard
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import resolve_state_root
 
@@ -59,6 +61,16 @@ def test_isolated_evaluation_environment_can_allow_live_llm(monkeypatch) -> None
 
     with isolated_runtime_environment(disable_live_llm=False):
         assert os.environ.get("YGGDRASIL_DISABLE_LIVE_LLM") is None
+
+
+def test_live_llm_cases_fail_on_missing_candidate_not_bad_import(monkeypatch) -> None:
+    monkeypatch.setattr(sdk_llm_runtime, "load_runtime_candidate_models", lambda: [])
+
+    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-Flash-Lite"):
+        _run_live_llm_task_case({"requireLive": True})
+
+    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-Flash-Lite"):
+        _run_live_llm_tool_case({"requireLive": True})
 
 
 def test_isolated_evaluation_environment_redirects_workspace_writes() -> None:
@@ -116,6 +128,8 @@ def test_real_user_validation_sandbox_prepares_isolated_git_workspace(tmp_path: 
     assert "YGGDRASIL_GIT_REPO_PATH" in activation_contents
     assert "YGGDRASIL_DISABLE_LIVE_LLM" in activation_contents
     assert str(state_root.resolve()) in activation_contents
+    assert result["activationCommands"]["powershell"].startswith("pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File")
+    assert "activate.ps1" in result["activationCommands"]["powershell"]
 
 
 def test_runtime_backup_restore_round_trip(tmp_path) -> None:
@@ -161,6 +175,21 @@ def test_runtime_backup_restore_round_trip(tmp_path) -> None:
     assert state_file.read_text(encoding="utf-8") == "before-restore"
 
 
+def test_real_user_validation_sandbox_activation_command_uses_file_mode(tmp_path: Path) -> None:
+    workspace_root = _create_fake_validation_workspace(tmp_path / "source-workspace-activation")
+    sandbox_root = tmp_path / "pilot-output-activation"
+
+    result = prepare_real_user_validation_sandbox(
+        workspace_root=workspace_root,
+        output_dir=sandbox_root,
+        disable_live_llm=False,
+    )
+
+    assert result["activationCommands"]["powershell"].endswith('activate.ps1"')
+    assert result["activationCommands"]["shell"].startswith("bash ")
+    assert "activate.sh" in result["activationCommands"]["shell"]
+
+
 def test_observability_summary_reports_exporters(monkeypatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
@@ -170,6 +199,33 @@ def test_observability_summary_reports_exporters(monkeypatch) -> None:
     assert summary["exporters"]["otel"]["configured"] is False
     assert summary["exporters"]["langfuse"]["configured"] is False
     assert summary["exporters"]["langfuse"]["host"] == "http://127.0.0.1:3100"
+
+
+def test_summarize_real_user_scorecard_reports_g2_metrics(tmp_path: Path) -> None:
+    csv_path = tmp_path / "scorecard.csv"
+    csv_path.write_text(
+        "run_id,task_id,acceptance_pass_0_1,human_takeover_count,user_clarification_rounds,recovery_attempted_0_1,recovery_success_0_1,weighted_total_score_0_100,plan_quality_score_0_100,rework_count,rework_rate\n"
+        "run-1,YGG-CG-01,1,0,1,0,0,98,94,1,0.25\n"
+        "run-2,YGG-CG-01,1,1,0,0,0,96,90,2,0.50\n"
+        "run-3,YGG-CG-03,1,0,0,1,1,99,,,\n",
+        encoding="utf-8",
+    )
+
+    summary = summarize_real_user_scorecard(csv_path)
+
+    assert summary["status"] == "ok"
+    assert summary["overall"]["acceptancePassRate"] == 1.0
+    assert summary["overall"]["medianHumanTakeoverCount"] == 0.0
+    assert summary["overall"]["medianUserClarificationRounds"] == 0.0
+    assert summary["overall"]["averagePlanQualityScore"] == 92.0
+    assert summary["overall"]["planQualitySampleCount"] == 2
+    assert summary["overall"]["medianReworkCount"] == 1.5
+    assert summary["overall"]["reworkCountSampleCount"] == 2
+    assert summary["overall"]["averageReworkRate"] == 0.375
+    assert summary["overall"]["reworkRateSampleCount"] == 2
+    assert summary["tasks"]["YGG-CG-01"]["averagePlanQualityScore"] == 92.0
+    assert summary["tasks"]["YGG-CG-03"]["averagePlanQualityScore"] is None
+    assert summary["tasks"]["YGG-CG-03"]["recoverySuccessRate"] == 1.0
 
 
 def test_langfuse_client_uses_local_base_url_and_project_keys(monkeypatch) -> None:

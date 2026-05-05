@@ -9,6 +9,7 @@ def test_module_catalog_snapshot_contains_core_modules() -> None:
     assert {
         "text-memory",
         "context-pruning",
+        "task-takeover",
         "subagent-pr",
         "shared-memory",
         "pause-resume",
@@ -23,6 +24,7 @@ def test_module_catalog_snapshot_contains_core_modules() -> None:
     installs_by_module_id = {record.module_id: record for record in snapshot.installs}
     assert installs_by_module_id["text-memory"].desired_state == "enabled"
     assert installs_by_module_id["context-pruning"].lifecycle_state == "active"
+    assert installs_by_module_id["task-takeover"].lifecycle_state == "active"
     assert installs_by_module_id["shared-memory"].lifecycle_state == "active"
     assert installs_by_module_id["training-lab"].lifecycle_state == "active"
     assert installs_by_module_id["scene-learning-coach"].lifecycle_state == "active"
@@ -33,6 +35,7 @@ def test_module_catalog_snapshot_contains_core_modules() -> None:
     assert "worker.activities.register" in hook_names
     assert "agent.startup.mount-root" in hook_names
     assert "task.pause.prepare" in hook_names
+    assert "task.takeover.generate-plan" in hook_names
     assert "memory.retrieve.rerank" in hook_names
 
 

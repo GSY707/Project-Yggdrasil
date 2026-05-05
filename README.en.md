@@ -93,6 +93,7 @@ corepack pnpm infra:smoke
 corepack pnpm ops:backup
 corepack pnpm ops:restore
 corepack pnpm real-user:prepare
+corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-04.csv
 ```
 
 `real-user:prepare` creates an isolated sandbox outside the repository for pilot runs, including a copied workspace, isolated state root, frozen task materials, and activation scripts. Pilot runs should not write back into the engineering repository.
@@ -107,4 +108,4 @@ corepack pnpm real-user:prepare
 
 ## Current Focus
 
-The current project focus is still centered on validating real-user execution quality in isolated sandboxes, closing runtime latency baselines, and tightening the open collaboration surface without weakening safety boundaries.
+The current project focus is now centered on Gate 2: productizing controlled autonomy, stabilizing repeated pilot runs, and closing the remaining latency and large-file regression gaps.

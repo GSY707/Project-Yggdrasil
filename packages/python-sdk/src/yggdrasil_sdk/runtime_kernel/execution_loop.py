@@ -1,7 +1,15 @@
+import logging
+
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
 from .snapshot import *  # noqa: F403,F401
 from .execution_control import *  # noqa: F403,F401
+from .takeover import *  # noqa: F403,F401
+from ..llm_runtime import SafeShutdownInterrupt
+from .shutdown_control import is_shutdown_requested as _is_shutdown_requested
+from .snapshot import save_pending_tool_calls_snapshot
+
+_logger = logging.getLogger(__name__)
 
 def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]:
     task_id = str(work_item.get("taskId"))
@@ -38,10 +46,21 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 snapshot = task_repository.get_snapshot(task.active_snapshot_id)
             if command == "resume" and (snapshot is None or snapshot.status != "restorable"):
                 raise ValueError(f"Task {task_id} does not have a restorable snapshot.")
+            if snapshot is not None and command == "resume":
+                for pending_action in snapshot.pending_actions or []:
+                    if not isinstance(pending_action, dict) or pending_action.get("kind") != "pending-tool-calls":
+                        continue
+                    request_state = pending_action.get("requestState") if isinstance(pending_action.get("requestState"), dict) else {}
+                    for key, value in request_state.items():
+                        if key not in request or request.get(key) is None:
+                            request[key] = value
+                    break
             runtime_timings["loadTaskStateMs"] = _elapsed_ms(task_load_started_at)
 
             current_context = request.get("currentContext") if isinstance(request.get("currentContext"), list) else _load_snapshot_context(snapshot)
             protected_items = request.get("protectedItems") if isinstance(request.get("protectedItems"), list) else []
+            task_type = _infer_task_type(task, request)
+            run_type = str(request.get("runType") or "main")
             build_root_mount_started_at = perf_counter()
             root_mount = build_root_mount_package(
                 task_id,
@@ -58,6 +77,27 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 },
             )
             runtime_timings["buildRootMountMs"] = _elapsed_ms(build_root_mount_started_at)
+
+            takeover_prepare_started_at = perf_counter()
+            takeover_protocol = build_task_takeover_protocol(
+                task=task,
+                task_type=task_type,
+                run_type=run_type,
+                request=request,
+                root_mount=root_mount,
+                current_context=current_context,
+            )
+            if takeover_protocol is not None:
+                request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
+                request["taskObjective"] = takeover_protocol.objective
+                request.setdefault("currentObjective", takeover_protocol.objective)
+                if request.get("currentFocus") is None and takeover_protocol.plan:
+                    request["currentFocus"] = takeover_protocol.plan[0].title
+                root_mount["taskObjective"] = takeover_protocol.objective
+                root_mount["rootSummary"] = " ".join(
+                    item for item in [root_mount.get("rootSummary") or "", takeover_protocol.objective_summary] if item
+                ).strip()
+            runtime_timings["takeoverPrepareMs"] = _elapsed_ms(takeover_prepare_started_at)
 
             rehydration_result = None
             if snapshot is not None and command == "resume":
@@ -114,7 +154,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             input_tokens, output_tokens = _estimate_usage(task, root_mount, current_context, request)
             budget_limit = _remaining_cost_per_1k(task.budget, input_tokens + output_tokens)
             min_quality = float(request.get("minQuality", 0.0)) if request.get("minQuality") is not None else None
-            task_type = _infer_task_type(task, request)
             runtime_candidates = load_runtime_candidate_models()
             route_preview = build_model_route_decision(
                 task_type,
@@ -130,7 +169,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             )
             _enforce_budget(task.budget, input_tokens=input_tokens, output_tokens=output_tokens, estimated_cost=estimated_cost)
 
-            run_type = str(request.get("runType") or "main")
             parent_run_id = str(request["parentRunId"]) if request.get("parentRunId") is not None else None
             if parent_run_id is None and snapshot is not None and command == "resume":
                 parent_run_id = snapshot.agent_run_id
@@ -249,17 +287,82 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             execution_root_id = task.execution_root_node_id or root_mount["executionRefs"][0]["id"]
             execution_actor_id = str(request.get("executionActorId") or ("subagent" if run_type == "subagent" else "main-agent"))
             llm_invoke_started_at = perf_counter()
-            llm_result = invoke_runtime_completion(
-                session,
-                task=task,
-                run=run,
-                route_decision=route_decision,
-                task_type=task_type,
-                root_mount=root_mount,
-                current_context=pruning_result.get("retainedItems") if isinstance(pruning_result, dict) and isinstance(pruning_result.get("retainedItems"), list) else current_context,
-                request=request,
-                resume_path="snapshot" if snapshot is not None and command == "resume" else None,
-            )
+            effective_context = pruning_result.get("retainedItems") if isinstance(pruning_result, dict) and isinstance(pruning_result.get("retainedItems"), list) else current_context
+            registered_tools_override = [
+                dict(item)
+                for item in request.get("registeredTools") or []
+                if isinstance(item, dict)
+            ] if isinstance(request.get("registeredTools"), list) else None
+            try:
+                llm_result = invoke_runtime_completion(
+                    session,
+                    task=task,
+                    run=run,
+                    route_decision=route_decision,
+                    task_type=task_type,
+                    root_mount=root_mount,
+                    current_context=effective_context,
+                    request=request,
+                    resume_path="snapshot" if snapshot is not None and command == "resume" else None,
+                    registered_tools=registered_tools_override,
+                )
+            except SafeShutdownInterrupt as _shutdown_exc:
+                _logger.info(
+                    "Safe shutdown requested during tool execution for task %s (invocation %s, round %d, %d pending tool calls). Saving checkpoint.",
+                    task_id,
+                    _shutdown_exc.invocation_id,
+                    _shutdown_exc.round_index,
+                    len(_shutdown_exc.pending_tool_calls),
+                )
+                snap_result = save_pending_tool_calls_snapshot(
+                    task_id,
+                    agent_run_id=run.id,
+                    pending_tool_calls=_shutdown_exc.pending_tool_calls,
+                    conversation_messages=_shutdown_exc.conversation_messages,
+                    invocation_id=_shutdown_exc.invocation_id,
+                    round_index=_shutdown_exc.round_index,
+                    usage_totals=_shutdown_exc.usage_totals,
+                    accumulated_cost=_shutdown_exc.accumulated_cost,
+                    round_summaries=_shutdown_exc.round_summaries,
+                    round_modes=_shutdown_exc.round_modes,
+                    current_context_state=effective_context,
+                    root_mount_preview=root_mount,
+                    app_id=task.app_id,
+                    project_id=task.project_id,
+                    branch_id=task.branch_id,
+                    lock_already_held=True,
+                    session_override=session,
+                    request_state={
+                        key: request.get(key)
+                        for key in (
+                            "taskType",
+                            "runType",
+                            "currentFocus",
+                            "currentObjective",
+                            "taskObjective",
+                            "activeCapabilities",
+                            "registeredTools",
+                            "protectedItems",
+                            "allowModelFallback",
+                            "allowToolExecution",
+                            "candidateModels",
+                            "temperature",
+                            "maxTokens",
+                            "maxToolRounds",
+                            "auditLevel",
+                        )
+                        if request.get(key) is not None
+                    },
+                )
+                task_repository.update_agent_run(run.id, {"status": "paused"})
+                return {
+                    "status": "shutdown-checkpoint",
+                    "taskId": task_id,
+                    "snapshotId": snap_result.get("id"),
+                    "resumeToken": snap_result.get("resumeToken"),
+                    "persisted": snap_result.get("persisted"),
+                    "pendingToolCallCount": len(_shutdown_exc.pending_tool_calls),
+                }
             runtime_timings["llmInvocationMs"] = _elapsed_ms(llm_invoke_started_at)
             actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
             actual_output_tokens = int(llm_result["usage"].get("outputTokens", output_tokens))
@@ -293,6 +396,21 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 event_type="runtime.model-invocation.completed",
                 locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
             )
+            takeover_finalize_started_at = perf_counter()
+            takeover_protocol = finalize_task_takeover_protocol(
+                takeover_protocol,
+                task=task,
+                request=request,
+                root_mount=root_mount,
+                current_context=effective_context,
+                llm_result=llm_result,
+            )
+            takeover_protocol_ref = (
+                persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
+                if takeover_protocol is not None
+                else None
+            )
+            runtime_timings["takeoverFinalizeMs"] = _elapsed_ms(takeover_finalize_started_at)
             memory_write_started_at = perf_counter()
             write_payload = _build_execution_write_payload(
                 task=task,
@@ -304,6 +422,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 tool_executions=llm_result.get("toolExecutions"),
                 pruning_result=pruning_result,
                 resume_path="snapshot" if snapshot is not None and command == "resume" else None,
+                takeover_protocol=takeover_protocol,
+                takeover_protocol_ref=takeover_protocol_ref,
             )
             write_validation = validate_memory_write(
                 {
@@ -336,6 +456,18 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             )
             if not write_validation["allowed"]:
                 raise PermissionError("Memory write validation failed: " + "; ".join(write_validation["blockers"]))
+            if takeover_protocol is not None and takeover_protocol_ref is not None:
+                write_validation.setdefault("annotations", []).append(
+                    {
+                        "id": new_id("srcann", task.id, run.id, "takeover", stable=True),
+                        "sourceType": "system",
+                        "sourceRef": takeover_protocol_ref.model_dump(mode="json"),
+                        "excerpt": summarize_task_takeover_protocol(takeover_protocol),
+                        "inferenceSummary": "Formal task takeover protocol for this run.",
+                        "confidence": 1.0,
+                        "createdBy": {"type": "module", "id": "task-takeover"},
+                    }
+                )
             target_space_id = str(write_validation.get("targetSpaceId") or task.space_id)
             target_branch_id = str(write_validation.get("targetBranchId") or task.branch_id)
             if target_space_id != task.space_id or target_branch_id != task.branch_id:
@@ -481,6 +613,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "snapshot": pause_snapshot,
                     "pruning": pruning_result,
                     "pruningEvents": pruning_events,
+                    "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                    "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
                     "outboxRecords": {
                         "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),
                         "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
@@ -517,6 +651,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 "createdNode": created_node.model_dump(by_alias=True, mode="json"),
                 "pruning": pruning_result,
                 "pruningEvents": pruning_events,
+                "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
                 "modelInvocation": llm_result["invocation"],
                 "outboxRecords": {
                     "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),

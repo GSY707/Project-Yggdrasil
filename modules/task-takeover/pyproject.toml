@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yggdrasil-task-takeover"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "yggdrasil-sdk"
+]
+
+[project.entry-points."yggdrasil.modules"]
+task-takeover = "yggdrasil_task_takeover.plugin:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yggdrasil_task_takeover"]

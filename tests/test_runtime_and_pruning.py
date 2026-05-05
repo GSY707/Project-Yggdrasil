@@ -85,6 +85,7 @@ def test_root_mount_package_respects_application_default_capabilities() -> None:
         "context-pruning",
         "mcp-bridge",
         "pause-resume",
+        "task-takeover",
         "subagent-runtime",
         "scene-learning-coach",
     }
@@ -266,6 +267,8 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert request_payload["promptMetadata"]["promptProfileId"] == "yggdrasil.main-agent"
         assert request_payload["promptMetadata"]["seedTemplateId"] == "yggdrasil.seed.generic.default"
         assert request_payload["promptMetadata"]["runType"] == "main"
+        assert request_payload["promptMetadata"]["takeoverProtocol"]["objective"] == "完成首次执行并进入 safe-stop。"
+        assert request_payload["promptMetadata"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
         response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
         assert response_payload["localRuntimeTimings"]["compilePromptMs"] >= 0
@@ -276,6 +279,11 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
             if node.node_type == "task" and node.parent_id == task.execution_root_node_id
         ]
         assert len(execution_notes) == 1
+        assert "Task takeover protocol:" in execution_notes[0].content
+
+    assert first_run["result"]["takeoverProtocol"] is not None
+    assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
+    assert first_run["result"]["takeoverProtocolRef"] is not None
 
     resumed = client.post(
         "/runtime/tasks/task_runtime/resume",
@@ -322,6 +330,8 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
             if node.node_type == "task" and node.parent_id == task.execution_root_node_id
         ]
         assert len(execution_notes) == 2
+    assert second_run["result"]["takeoverProtocol"] is not None
+    assert second_run["result"]["takeoverProtocolRef"] is not None
 
 
 def test_main_agent_runtime_fails_when_budget_is_exhausted() -> None:

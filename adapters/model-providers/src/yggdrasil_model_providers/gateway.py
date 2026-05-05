@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
@@ -403,6 +404,14 @@ def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested
     }
 
 
+def _retry_max() -> int:
+    return int(os.environ.get("YGGDRASIL_LLM_RETRY_MAX", "3"))
+
+
+def _retry_backoff_base() -> float:
+    return float(os.environ.get("YGGDRASIL_LLM_RETRY_BACKOFF_BASE", "2.0"))
+
+
 def invoke_model(
     *,
     requested_model: str | None,
@@ -476,24 +485,49 @@ def invoke_model(
         headers["HTTP-Referer"] = os.environ.get("YGGDRASIL_OPENROUTER_REFERER", "https://yggdrasil.local")
         headers["X-Title"] = os.environ.get("YGGDRASIL_OPENROUTER_TITLE", "Project Yggdrasil")
 
-    try:
-        http_request = urllib_request.Request(endpoint, data=encoded_payload, headers=headers, method="POST")
-        with urllib_request.urlopen(http_request, timeout=timeout_seconds) as response:
-            raw_response = json.loads(response.read().decode("utf-8"))
-    except urllib_error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+    _max_retries = _retry_max()
+    _backoff_base = _retry_backoff_base()
+    _last_exc: Exception | None = None
+    _raw_response: dict | None = None
+
+    for _attempt in range(_max_retries + 1):
+        try:
+            http_request = urllib_request.Request(endpoint, data=encoded_payload, headers=headers, method="POST")
+            with urllib_request.urlopen(http_request, timeout=timeout_seconds) as response:
+                _raw_response = json.loads(response.read().decode("utf-8"))
+            break  # success
+        except urllib_error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            # Retry on 429 and 5xx
+            if exc.code == 429 or exc.code >= 500:
+                _last_exc = RuntimeError(f"Model provider HTTP error: {exc.code}: {normalize_excerpt(detail, 320)}")
+                if _attempt < _max_retries:
+                    time.sleep(min(_backoff_base ** _attempt, 60.0))
+                    continue
+            # For other HTTP errors, fall through to fallback
+            if allow_fallback:
+                return _fallback_response(
+                    messages,
+                    f"http-{exc.code}: {normalize_excerpt(detail, 320)}",
+                    requested_model=requested_model,
+                    requested_provider=requested_provider,
+                )
+            raise RuntimeError(f"Model provider HTTP error: {exc.code}: {detail}") from exc
+        except Exception as exc:
+            _last_exc = exc
+            if _attempt < _max_retries:
+                time.sleep(min(_backoff_base ** _attempt, 60.0))
+                continue
+            break
+
+    if _raw_response is None:
+        # All retries exhausted
+        exc_msg = str(_last_exc) if _last_exc is not None else "unknown-error"
         if allow_fallback:
-            return _fallback_response(
-                messages,
-                f"http-{exc.code}: {normalize_excerpt(detail, 320)}",
-                requested_model=requested_model,
-                requested_provider=requested_provider,
-            )
-        raise RuntimeError(f"Model provider HTTP error: {exc.code}: {detail}") from exc
-    except Exception as exc:
-        if allow_fallback:
-            return _fallback_response(messages, str(exc), requested_model=requested_model, requested_provider=requested_provider)
-        raise
+            return _fallback_response(messages, exc_msg, requested_model=requested_model, requested_provider=requested_provider)
+        raise RuntimeError(f"Model provider failed after {_max_retries + 1} attempts: {exc_msg}") from _last_exc
+
+    raw_response = _raw_response
 
     choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
     message = choice.get("message") or {}

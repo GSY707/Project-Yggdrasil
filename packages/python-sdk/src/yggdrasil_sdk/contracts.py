@@ -260,6 +260,89 @@ class ContextPruningPlan(BaseModel):
     created_at: datetime = Field(alias="createdAt")
 
 
+class TaskTakeoverAmbiguity(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    prompt: str
+    reason: str | None = None
+    required: bool = True
+
+
+class TaskTakeoverConstraint(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    category: Literal["objective", "scope", "budget", "runtime", "tooling", "delivery", "policy", "environment"]
+    label: str
+    value: str
+    required: bool = True
+    source: str | None = None
+
+
+class TaskTakeoverPlanStep(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    title: str
+    instructions: str
+    phase: Literal["objective", "constraints", "plan", "execute", "verify", "deliver"]
+    status: Literal["pending", "in-progress", "completed", "blocked", "skipped"] = "pending"
+    expected_evidence: list[str] = Field(default_factory=list, alias="expectedEvidence")
+    depends_on: list[str] = Field(default_factory=list, alias="dependsOn")
+
+
+class TaskTakeoverVerificationItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    label: str
+    status: Literal["passed", "warning", "failed", "not-run"]
+    detail: str | None = None
+
+
+class TaskTakeoverDeliverySection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    section: Literal["result", "evidence", "pending", "incomplete"]
+    content: str
+    status: Literal["present", "missing", "not-applicable"] = "present"
+
+
+class TaskTakeoverMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    plan_quality_score_0_100: float = Field(default=0.0, alias="planQualityScore0_100")
+    rework_count: int = Field(default=0, alias="reworkCount")
+    rework_rate: float = Field(default=0.0, alias="reworkRate")
+    clarification_needed: bool = Field(default=False, alias="clarificationNeeded")
+    delivery_completeness_score_0_100: float = Field(default=0.0, alias="deliveryCompletenessScore0_100")
+    verification_pass_rate: float = Field(default=0.0, alias="verificationPassRate")
+
+
+class TaskTakeoverProtocol(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    version: str = "0.1.0"
+    task_id: str = Field(alias="taskId")
+    task_type: str = Field(alias="taskType")
+    run_type: str = Field(alias="runType")
+    current_phase: Literal["objective", "constraints", "plan", "execute", "verify", "deliver"] = Field(alias="currentPhase")
+    status: Literal["prepared", "executing", "verified", "completed", "needs-clarification"]
+    objective: str
+    objective_summary: str = Field(alias="objectiveSummary")
+    ambiguities: list[TaskTakeoverAmbiguity] = Field(default_factory=list)
+    constraints: list[TaskTakeoverConstraint] = Field(default_factory=list)
+    plan: list[TaskTakeoverPlanStep] = Field(default_factory=list)
+    delivery_sections: list[TaskTakeoverDeliverySection] = Field(default_factory=list, alias="deliverySections")
+    verification_items: list[TaskTakeoverVerificationItem] = Field(default_factory=list, alias="verificationItems")
+    metrics: TaskTakeoverMetrics
+    applied_modules: list[str] = Field(default_factory=list, alias="appliedModules")
+    hook_trace: list[dict[str, Any]] = Field(default_factory=list, alias="hookTrace")
+
+
 class ModelRouteDecision(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

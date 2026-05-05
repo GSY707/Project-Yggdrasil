@@ -1,5 +1,9 @@
+import logging
+
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
+
+_logger = logging.getLogger(__name__)
 
 def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     request = payload or {}
@@ -194,6 +198,145 @@ def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) 
     response["moduleSummaries"] = state.get("moduleSummaries") or []
     return response
 
+
+def save_pending_tool_calls_snapshot(
+    task_id: str,
+    *,
+    agent_run_id: str,
+    pending_tool_calls: list[dict[str, Any]],
+    conversation_messages: list[dict[str, Any]],
+    invocation_id: str,
+    round_index: int,
+    usage_totals: dict[str, int],
+    accumulated_cost: float,
+    round_summaries: list[dict[str, Any]],
+    round_modes: list[str],
+    current_context_state: list[dict[str, Any]],
+    root_mount_preview: dict[str, Any] | None = None,
+    app_id: str | None = None,
+    project_id: str | None = None,
+    branch_id: str | None = None,
+    lock_already_held: bool = False,
+    session_override: Any | None = None,
+    request_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Save a restorable snapshot with pending tool calls that were interrupted by a safe shutdown."""
+    runtime = get_persistence_runtime()
+    coordinator = RedisCoordinator(runtime.settings)
+    snapshot_id = new_id("snap", task_id, agent_run_id)
+    resume_token = new_id("resume", task_id, agent_run_id)
+
+    resolved_app_id = str(app_id or DEFAULT_APP_ID)
+    resolved_project_id = str(project_id or DEFAULT_PROJECT_ID)
+    resolved_branch_id = str(branch_id or DEFAULT_BRANCH_ID)
+
+    root_mount = root_mount_preview if isinstance(root_mount_preview, dict) else build_root_mount_package(
+        task_id,
+        {
+            "appId": resolved_app_id,
+            "projectId": resolved_project_id,
+            "branchId": resolved_branch_id,
+            "spaceId": DEFAULT_SPACE_ID,
+            "resumeMessage": None,
+            "budget": {},
+        },
+    )
+    root_mount_locator = f"runtime/tasks/{task_id}/snapshots/{snapshot_id}/root-mount"
+    context_locator = f"runtime/tasks/{task_id}/snapshots/{snapshot_id}/context"
+    root_mount_cached = _cache_package_entry(coordinator, root_mount_locator, root_mount)
+    context_cached = _cache_package_entry(coordinator, context_locator, current_context_state)
+
+    pending_action: dict[str, Any] = {
+        "kind": "pending-tool-calls",
+        "invocationId": invocation_id,
+        "roundIndex": round_index,
+        "toolCalls": pending_tool_calls,
+        "conversationMessages": conversation_messages,
+        "usageTotals": usage_totals,
+        "accumulatedCost": accumulated_cost,
+        "roundSummaries": round_summaries,
+        "roundModes": round_modes,
+    }
+    if isinstance(request_state, dict) and request_state:
+        pending_action["requestState"] = request_state
+    resume_message = (
+        f"Resume task {task_id}: execute {len(pending_tool_calls)} pending tool call(s) "
+        f"from round {round_index}, then continue agent loop."
+    )
+    snapshot = TaskSnapshotSummary(
+        id=snapshot_id,
+        appId=resolved_app_id,
+        taskId=task_id,
+        agentRunId=agent_run_id,
+        projectId=resolved_project_id,
+        branchId=resolved_branch_id,
+        snapshotType="checkpoint",
+        status="restorable",
+        resumeToken=resume_token,
+        contextRef=ExternalRef(type="package-entry", locator=context_locator),
+        rootMountRef=ExternalRef(type="package-entry", locator=root_mount_locator),
+        pendingWrites=[],
+        pendingActions=[pending_action],
+        resumeMessage=normalize_excerpt(resume_message, 240),
+        safeStopReason="safe-shutdown-pending-tool-calls",
+        createdAt=utc_now(),
+        safeToPause=True,
+        blockers=[],
+    )
+
+    persisted = False
+    lock_owner = new_id("shutdown-snap", task_id)
+
+    def _persist_snapshot() -> None:
+        nonlocal persisted
+        if session_override is not None:
+            WorkspaceBootstrapRepository(session_override).ensure_default_workspace()
+            task_repository = TaskRepository(session_override)
+            task_repository.supersede_snapshots(task_id)
+            task_repository.create_snapshot(snapshot)
+            task_repository.update_task(task_id, {"activeSnapshotId": snapshot_id, "status": "paused"})
+            _persist_runtime_event(
+                session_override,
+                project_id=resolved_project_id,
+                aggregate_type="task-snapshot",
+                aggregate_id=snapshot_id,
+                event_type="task.snapshot.created",
+                locator=f"agent-runtime/tasks/{task_id}/snapshots/{snapshot_id}",
+            )
+            persisted = True
+            return
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            task_repository = TaskRepository(session)
+            task_repository.supersede_snapshots(task_id)
+            task_repository.create_snapshot(snapshot)
+            task_repository.update_task(task_id, {"activeSnapshotId": snapshot_id, "status": "paused"})
+            _persist_runtime_event(
+                session,
+                project_id=resolved_project_id,
+                aggregate_type="task-snapshot",
+                aggregate_id=snapshot_id,
+                event_type="task.snapshot.created",
+                locator=f"agent-runtime/tasks/{task_id}/snapshots/{snapshot_id}",
+            )
+            persisted = True
+
+    try:
+        if lock_already_held:
+            _persist_snapshot()
+        elif coordinator.acquire_lock(f"task:{task_id}", lock_owner, ttl_seconds=30):
+            try:
+                _persist_snapshot()
+            finally:
+                coordinator.release_lock(f"task:{task_id}", lock_owner)
+    except Exception as exc:
+        _logger.warning("Failed to save pending-tool-calls snapshot for task %s: %s", task_id, exc)
+
+    result = snapshot.model_dump(by_alias=True, mode="json")
+    result["persisted"] = persisted
+    result["rootMountCached"] = root_mount_cached
+    result["contextCached"] = context_cached
+    return result
 
 
 __all__ = [name for name in globals() if not name.startswith('__')]

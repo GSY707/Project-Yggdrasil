@@ -4,9 +4,12 @@ import argparse
 import json
 
 from .evaluation_runtime import list_evaluation_suite_definitions, run_evaluation_suite
+from .support import load_workspace_dotenv
 
 
 def main() -> None:
+    load_workspace_dotenv()
+
     parser = argparse.ArgumentParser(description="Run Project Yggdrasil evaluation suites.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

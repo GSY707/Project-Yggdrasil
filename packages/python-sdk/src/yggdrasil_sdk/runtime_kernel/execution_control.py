@@ -136,6 +136,8 @@ def _build_execution_write_payload(
     tool_executions: list[dict[str, Any]] | None,
     pruning_result: dict[str, Any] | None,
     resume_path: str | None,
+    takeover_protocol: TaskTakeoverProtocol | None,
+    takeover_protocol_ref: ExternalRef | None,
 ) -> dict[str, str]:
     lines = [model_output.strip() or "Model output was empty.", "", "Execution metadata:"]
     lines.extend(
@@ -171,6 +173,19 @@ def _build_execution_write_payload(
         lines.append(f"Resume path: {resume_path}")
     if pruning_result is not None:
         lines.append(pruning_result.get("compressedNarrative") or pruning_result["plan"]["rationale"])
+    if takeover_protocol is not None:
+        lines.extend(
+            [
+                "",
+                "Task takeover protocol:",
+                f"Objective summary: {takeover_protocol.objective_summary}",
+                f"Plan quality: {takeover_protocol.metrics.plan_quality_score_0_100}",
+                f"Verification pass rate: {takeover_protocol.metrics.verification_pass_rate}",
+                f"Delivery completeness: {takeover_protocol.metrics.delivery_completeness_score_0_100}",
+            ]
+        )
+    if takeover_protocol_ref is not None:
+        lines.append(f"Takeover artifact: {takeover_protocol_ref.locator}")
     return {
         "title": task.current_objective or task.title,
         "content": "\n".join(lines),

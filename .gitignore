@@ -30,3 +30,5 @@ LLM.txt
 .yggdrasil/evaluation-sandbox/
 .yggdrasil/local-dev.db
 .tmp*
+evaluation
+tmp

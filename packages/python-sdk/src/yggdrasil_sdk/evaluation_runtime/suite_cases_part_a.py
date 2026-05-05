@@ -185,8 +185,8 @@ def _run_main_agent_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
 def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient
     from yggdrasil_agent_runtime.app import app as runtime_app
+    from yggdrasil_sdk.llm_runtime import load_runtime_candidate_models
     from yggdrasil_worker.registry import run_worker_once
-    from .llm_runtime import load_runtime_candidate_models
 
     case_payload = dict(case or {})
     task_id = str(case_payload.get("taskId") or new_id("task", "m8-live-evaluation", stable=False))
@@ -286,8 +286,8 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
 def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient
     from yggdrasil_agent_runtime.app import app as runtime_app
+    from yggdrasil_sdk.llm_runtime import load_runtime_candidate_models
     from yggdrasil_worker.registry import run_worker_once
-    from .llm_runtime import load_runtime_candidate_models
 
     case_payload = dict(case or {})
     task_id = str(case_payload.get("taskId") or new_id("task", "m8-live-tool-evaluation", stable=False))

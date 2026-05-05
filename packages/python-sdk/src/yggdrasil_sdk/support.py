@@ -5,9 +5,13 @@ from hashlib import sha1
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 from typing import Any
 from uuid import uuid4
+
+
+_WORD_COUNT_PATTERN = re.compile(r"[A-Za-z0-9]+(?:[._'\-][A-Za-z0-9]+)*|[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 def utc_now() -> datetime:
@@ -27,6 +31,16 @@ def normalize_excerpt(value: str, limit: int) -> str:
     if len(compact) <= limit:
         return compact
     return compact[: max(limit - 1, 1)].rstrip() + "…"
+
+
+def estimate_word_count(value: str) -> int:
+    """Estimate a stable cross-language word count.
+
+    Latin text is counted by word-like tokens. Chinese Han characters are counted
+    one character per token so markdown/document indexes do not collapse to a
+    near-zero count when the text has no spaces.
+    """
+    return len(_WORD_COUNT_PATTERN.findall(value or ""))
 
 
 _RUNTIME_SANDBOX_IGNORED_NAMES = {
@@ -58,6 +72,37 @@ def resolve_workspace_root(start: Path | None = None) -> Path:
             return candidate
 
     raise FileNotFoundError("Unable to resolve Project Yggdrasil workspace root.")
+
+
+def load_workspace_dotenv(workspace_root: Path | None = None, *, override: bool = False) -> Path | None:
+    env_path = resolve_workspace_root(workspace_root) / ".env"
+    if not env_path.exists():
+        return None
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped[7:].lstrip()
+        if "=" not in stripped:
+            continue
+
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+
+        existing = os.environ.get(key)
+        if not override and existing not in {None, ""}:
+            continue
+        os.environ[key] = value
+
+    return env_path
 
 
 def prepare_runtime_workspace_sandbox(destination_root: Path, workspace_root: Path | None = None) -> Path:

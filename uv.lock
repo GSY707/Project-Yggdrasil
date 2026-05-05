@@ -17,6 +17,7 @@ members = [
     "yggdrasil-sdk",
     "yggdrasil-shared-memory",
     "yggdrasil-subagent-pr",
+    "yggdrasil-task-takeover",
     "yggdrasil-text-memory",
     "yggdrasil-training-lab",
     "yggdrasil-worker",
@@ -1183,6 +1184,17 @@ requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
 name = "yggdrasil-subagent-pr"
 version = "0.1.0"
 source = { editable = "modules/subagent-pr" }
+dependencies = [
+    { name = "yggdrasil-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "yggdrasil-sdk", editable = "packages/python-sdk" }]
+
+[[package]]
+name = "yggdrasil-task-takeover"
+version = "0.1.0"
+source = { editable = "modules/task-takeover" }
 dependencies = [
     { name = "yggdrasil-sdk" },
 ]

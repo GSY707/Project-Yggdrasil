@@ -7,6 +7,7 @@ members = [
   "services/worker",
   "modules/text-memory",
   "modules/context-pruning",
+  "modules/task-takeover",
   "modules/subagent-pr",
   "modules/shared-memory",
   "modules/pause-resume",

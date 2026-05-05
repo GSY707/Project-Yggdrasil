@@ -82,6 +82,69 @@ def test_compile_runtime_prompt_for_subagent_includes_scope_constraints() -> Non
     assert "Run type: subagent" in compiled.messages[1]["content"]
 
 
+def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["text-memory", "task-takeover", "context-pruning"]),
+        current_context=[],
+        request={
+            "takeoverProtocol": {
+                "id": "takeover_test",
+                "version": "0.1.0",
+                "taskId": "task_takeover_prompt",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "plan",
+                "status": "prepared",
+                "objective": "把 Gate 2 接管协议注入 Prompt。",
+                "objectiveSummary": "把 Gate 2 接管协议注入 Prompt。",
+                "ambiguities": [],
+                "constraints": [
+                    {
+                        "id": "constraint_delivery",
+                        "category": "delivery",
+                        "label": "交付结构",
+                        "value": "结果 / 证据 / 待确认项 / 未完成项",
+                        "required": True,
+                        "source": "gate-2",
+                    }
+                ],
+                "plan": [
+                    {
+                        "id": "step_plan",
+                        "title": "形成计划",
+                        "instructions": "生成可执行且可验证的步骤。",
+                        "phase": "plan",
+                        "status": "pending",
+                        "expectedEvidence": ["plan steps"],
+                        "dependsOn": [],
+                    }
+                ],
+                "deliverySections": [],
+                "verificationItems": [],
+                "metrics": {
+                    "planQualityScore0_100": 92.0,
+                    "reworkCount": 0,
+                    "reworkRate": 0.0,
+                    "clarificationNeeded": False,
+                    "deliveryCompletenessScore0_100": 0.0,
+                    "verificationPassRate": 0.0,
+                },
+                "appliedModules": ["task-takeover"],
+                "hookTrace": [],
+            }
+        },
+        resume_path=None,
+    )
+
+    assert compiled.takeover_protocol is not None
+    assert compiled.takeover_protocol.objective == "把 Gate 2 接管协议注入 Prompt。"
+    assert "Objective summary: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[1]["content"]
+    assert "Plan quality: 92.0" in compiled.messages[1]["content"]
+
+
 def test_compile_runtime_prompt_for_writing_selects_writing_seed() -> None:
     compiled = compile_runtime_prompt(
         task=_task(title="写作长篇章节", goal="推进剧情并维护角色一致性。", app_id="yggdrasil.app.knowledge-studio"),

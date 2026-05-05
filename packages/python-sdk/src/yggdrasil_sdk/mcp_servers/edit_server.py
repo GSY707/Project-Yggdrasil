@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,37 @@ def _resolve_path(raw_path: str) -> Path:
     return resolved
 
 
+def _allowed_edit_paths() -> set[str] | None:
+    raw = str(os.environ.get("YGGDRASIL_MCP_EDIT_ALLOWED_PATHS") or "").strip()
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("YGGDRASIL_MCP_EDIT_ALLOWED_PATHS must be valid JSON.") from exc
+    if not isinstance(payload, list):
+        raise ValueError("YGGDRASIL_MCP_EDIT_ALLOWED_PATHS must be a JSON array.")
+    normalized = {
+        Path(str(item)).as_posix().lstrip("./")
+        for item in payload
+        if str(item).strip()
+    }
+    return normalized or None
+
+
+def _assert_edit_allowed(file_path: Path) -> None:
+    allowed_paths = _allowed_edit_paths()
+    if allowed_paths is None:
+        return
+    workspace_root = _workspace_root()
+    relative_path = file_path.relative_to(workspace_root).as_posix()
+    if relative_path not in allowed_paths:
+        raise PermissionError(f"Path is outside the allowed edit set: {relative_path}")
+
+
 def _write_file(arguments: dict[str, Any]) -> dict[str, Any]:
     file_path = _resolve_path(str(arguments.get("path") or ""))
+    _assert_edit_allowed(file_path)
     content = str(arguments.get("content") or "")
     if not file_path.parent.exists():
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -33,6 +63,7 @@ def _write_file(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _replace_text(arguments: dict[str, Any]) -> dict[str, Any]:
     file_path = _resolve_path(str(arguments.get("path") or ""))
+    _assert_edit_allowed(file_path)
     if not file_path.exists() or not file_path.is_file():
         raise FileNotFoundError(str(file_path))
     old_text = str(arguments.get("oldText") or "")

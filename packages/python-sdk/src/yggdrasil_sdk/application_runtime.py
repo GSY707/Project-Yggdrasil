@@ -9,6 +9,7 @@ from .hook_runtime import active_module_ids
 
 CORE_RUNTIME_CAPABILITIES = [
     "pause-resume",
+    "task-takeover",
 ]
 
 

@@ -211,17 +211,17 @@ from yggdrasil_core_api.services import TaskService
 
 ## 9. 存量技术债清理计划
 
-### 优先级 P0（Gate 1 闭合前处理）（完成）
+### 优先级 P0（Gate 1 闭合前处理）
 
 无强制阻塞性存量债，已知配置 Bug 已修复：
 - [x] `infra/langfuse-compose.yml` `LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT` 使用 `localhost` → 已修复为 `langfuse-minio:9000`
 - [x] 6 处静默 `pass` 吞异常 → 已替换为带 logger 的日志输出
 
-### 优先级 P1（Gate 2 前，必须完成）（完成）
+### 优先级 P1（Gate 2 前，必须完成）
 
 **TD-01 · repositories.py 拆分（2831 行）**
 
-按领域拆为：
+当前状态：**已完成**。`repositories.py` 已按领域拆为 `persistence/repositories/` 子包：
 ```
 persistence/
   repositories/
@@ -234,11 +234,11 @@ persistence/
     collaboration.py   # PullRequestRepository, ReviewCommentRepository
     platform.py        # 其余平台类 Repository
 ```
-验收：`uv run pytest tests/ -x -q -m "not slow"` 全部通过。
+当前剩余工作：把“复杂文件拆分”从一次性拆包，升级为固定回归任务类型与评测样本。
 
 **TD-02 · services.py 拆分（1411 行）**
 
-按资源域拆为 `services/` 子包，每个路由对应一个 Service 文件：
+当前状态：**已完成**。已按资源域拆为 `services/` 子包，每个路由对应一个 Service 文件：
 ```
 core-api/services/
   task_service.py
@@ -249,7 +249,7 @@ core-api/services/
   collaboration_service.py
   runtime_service.py
 ```
-验收：同上 + `corepack pnpm web:typecheck` 通过。
+当前剩余工作：对这些拆包结果补正式回归任务与文档同步，而不是继续沿用旧 monolith 路径描述。
 
 **TD-03 · 补全 Core API HTTP 实测基线**
 
@@ -257,15 +257,15 @@ core-api/services/
 - 将 `docs/QUALITY_BASELINE.md` 第 2.3 节中的"目标值"替换为实测 P50/P95
 - 验收：QUALITY_BASELINE.md 中无"尚未经过真实压测"字样
 
-### 优先级 P2（Gate 3 前）（完成）
+### 优先级 P2（Gate 3 前）
 
 **TD-04 · evaluation_runtime.py 拆分（1783 行）**
 
-拆为：运行时引导（bootstrap）、评测套件执行（suite runner）、评分聚合（scorer）三个文件。
+当前状态：**已完成**。已拆为 `evaluation_runtime/` 子包，包含 bootstrap、suite runner、scorer 等独立文件。
 
 **TD-05 · runtime_kernel.py 拆分（1200 行）**
 
-拆为：根挂载构建（root_mount）、快照管理（snapshot）、LLM 调用循环（execution_loop）三个文件。
+当前状态：**已完成**。已拆为 `runtime_kernel/` 子包，包含 root_mount、snapshot、execution_loop 等独立文件。
 
 **TD-06 · 应用插件 fewShotRefs 补全**
 
@@ -275,7 +275,7 @@ core-api/services/
 
 为 coding-greenfield、coding-inherit、deep-research、epic-writing、learning-coach、maintenance-ops、scenic-guide 补充 `scenes/generic-default.yaml`。
 
-### 优先级 P3（长期持续）（完成）
+### 优先级 P3（长期持续）
 
 **TD-08 · PostgreSQL CI 层**
 

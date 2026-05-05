@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 from typing import Any
 
 from yggdrasil_sdk import get_persistence_runtime, observe_span, record_log, record_metric, sync_module_catalog_snapshot
@@ -11,6 +13,27 @@ from yggdrasil_sdk.hooks import HookNames
 from yggdrasil_sdk.persistence.coordination import RedisCoordinator
 from yggdrasil_sdk.runtime_kernel import AGENT_RUNTIME_QUEUE, execute_main_agent_work_item
 from yggdrasil_sdk.support import utc_now
+from yggdrasil_sdk.runtime_kernel.shutdown_control import request_shutdown
+
+
+def _handle_shutdown_signal(signum: int, frame: object) -> None:
+    """Handle SIGTERM/SIGINT by requesting a graceful shutdown."""
+    request_shutdown()
+
+
+def _register_shutdown_handlers() -> None:
+    """Register OS signal handlers for graceful shutdown (only in main thread)."""
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        return
+    try:
+        signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+        signal.signal(signal.SIGINT, _handle_shutdown_signal)
+    except (OSError, ValueError):
+        pass  # Not in main thread or signals unavailable on this platform
+
+
+_register_shutdown_handlers()
 
 
 CORE_ACTIVITIES = (

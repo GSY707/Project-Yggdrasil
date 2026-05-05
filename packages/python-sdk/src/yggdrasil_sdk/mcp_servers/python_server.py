@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 from .base import SimpleMCPServer, structured_tool_result
@@ -42,14 +43,27 @@ def _run_python(arguments: dict[str, Any]) -> dict[str, Any]:
     code = str(arguments.get("code") or "")
     if not code.strip():
         raise ValueError("code is required")
-    completed = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=_resolve_cwd(arguments.get("workingDirectory")),
-        capture_output=True,
-        text=True,
-        timeout=max(int(arguments.get("timeoutMs") or 10000), 1) / 1000.0,
-        check=False,
-    )
+    cwd = _resolve_cwd(arguments.get("workingDirectory"))
+    script_fd, script_path_raw = tempfile.mkstemp(prefix="yggdrasil-python-", suffix=".py", dir=str(cwd))
+    script_path = Path(script_path_raw)
+    try:
+        # Use a temporary script instead of `-c` to avoid Windows/Unicode quoting issues.
+        with os.fdopen(script_fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(code)
+        completed = subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=max(int(arguments.get("timeoutMs") or 10000), 1) / 1000.0,
+            check=False,
+        )
+    finally:
+        try:
+            script_path.unlink(missing_ok=True)
+        except TypeError:
+            if script_path.exists():
+                script_path.unlink()
     return structured_tool_result(
         {
             "exitCode": completed.returncode,

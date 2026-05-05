@@ -19,6 +19,7 @@
 ## 2. 文档列表
 
 - [通用数据约定 v0.1](common-data-conventions-v0.1.md)
+- [任务接管协议 v0.1](task-takeover-protocol-v0.1.md)
 - [记忆与建树数据规格 v0.1](memory-domain-data-spec-v0.1.md)
 - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
 - [协作与治理数据规格 v0.1](collaboration-and-governance-data-spec-v0.1.md)
@@ -29,9 +30,10 @@
 ## 3. 阅读顺序
 
 1. 先读通用数据约定。
-2. 再读你所属模块的主领域规格。
-3. 然后读协议文档，确认 manifest、hook、事件的接入方式。
-4. 最后读运行时协议，确认触发时机与上下文装配方式。
+2. 再读任务接管协议，确认目标/约束/计划/验证/交付的正式结构。
+3. 再读你所属模块的主领域规格。
+4. 然后读协议文档，确认 manifest、hook、事件的接入方式。
+5. 最后读运行时协议，确认触发时机与上下文装配方式。
 
 ## 4. 模块开发最低合规要求
 

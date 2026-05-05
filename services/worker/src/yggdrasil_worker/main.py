@@ -3,10 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 
+from yggdrasil_sdk.support import load_workspace_dotenv
+
 from .registry import build_worker_report, drain_work_queue, enqueue_work_item, pop_work_item, run_worker_once
 
 
 def main() -> None:
+    load_workspace_dotenv()
+
     parser = argparse.ArgumentParser(description="Inspect the current Yggdrasil worker activity registry.")
     parser.add_argument("--json", action="store_true", help="Print the worker report as JSON.")
     parser.add_argument("--queue", default="default", help="Queue name used by enqueue and pop operations.")

@@ -18,6 +18,19 @@ from .support import ensure_state_subdir, new_id, normalize_excerpt, relative_wo
 from .tool_runtime import build_llm_tool_specs, execute_registered_tool, tool_result_to_message_content
 
 
+def _is_shutdown_requested() -> bool:
+    """Lazy check for graceful shutdown. Avoids circular import with runtime_kernel."""
+    try:
+        from .runtime_kernel.shutdown_control import is_shutdown_requested
+        return is_shutdown_requested()
+    except ImportError:
+        return False
+
+
+def _should_checkpoint_for_pause(task: Any, request: dict[str, Any]) -> bool:
+    return _is_shutdown_requested() or bool(getattr(task, "pause_requested", False)) or bool(request.get("pauseRequested", False))
+
+
 FALLBACK_ROUTE_CANDIDATE = {
     "model": "yggdrasil-fallback",
     "provider": "fallback",
@@ -29,6 +42,37 @@ FALLBACK_ROUTE_CANDIDATE = {
 }
 
 _AUDIT_LEVELS = {"strict", "default", "lean"}
+
+_PENDING_TOOL_CALLS_KIND = "pending-tool-calls"
+_DUPLICATE_TOOL_ROUND_THRESHOLD = 2
+
+
+class SafeShutdownInterrupt(Exception):
+    """Raised when a graceful shutdown is requested while tool calls are pending."""
+
+    def __init__(
+        self,
+        *,
+        pending_tool_calls: list[dict[str, Any]],
+        conversation_messages: list[dict[str, Any]],
+        invocation_id: str,
+        round_index: int,
+        usage_totals: dict[str, int],
+        accumulated_cost: float,
+        round_summaries: list[dict[str, Any]],
+        round_modes: list[str],
+        assistant_tool_calls_payload: list[dict[str, Any]],
+    ) -> None:
+        super().__init__(f"Safe shutdown requested at round {round_index} with {len(pending_tool_calls)} pending tool call(s).")
+        self.pending_tool_calls = pending_tool_calls
+        self.conversation_messages = conversation_messages
+        self.invocation_id = invocation_id
+        self.round_index = round_index
+        self.usage_totals = usage_totals
+        self.accumulated_cost = accumulated_cost
+        self.round_summaries = round_summaries
+        self.round_modes = round_modes
+        self.assistant_tool_calls_payload = assistant_tool_calls_payload
 
 
 def load_runtime_candidate_models() -> list[dict[str, Any]] | None:
@@ -227,6 +271,52 @@ def _message_digest(message: dict[str, Any]) -> dict[str, Any]:
             for tool_call in tool_calls
             if isinstance(tool_call, dict)
         ],
+    }
+
+
+def _tool_call_signature(call: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": str(call.get("name") or ""),
+        "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else str(call.get("argumentsText") or ""),
+    }
+
+
+def _tool_round_signature(tool_calls: list[dict[str, Any]]) -> str:
+    return _json_hash([_tool_call_signature(call) for call in tool_calls if isinstance(call, dict) and call.get("name")])
+
+
+def _is_idempotent_tool_round(tool_calls: list[dict[str, Any]], registered_tools_by_name: dict[str, dict[str, Any]]) -> bool:
+    if not tool_calls:
+        return False
+    for call in tool_calls:
+        if not isinstance(call, dict) or not call.get("name"):
+            return False
+        descriptor = registered_tools_by_name.get(str(call.get("name") or "")) or {}
+        if not bool(descriptor.get("idempotent")):
+            return False
+    return True
+
+
+def _duplicate_tool_loop_result(result: dict[str, Any], invocation_id: str, *, duplicate_streak: int) -> dict[str, Any]:
+    return {
+        "mode": result.get("mode") or "live",
+        "provider": result.get("provider"),
+        "model": result.get("model"),
+        "outputText": (
+            "Detected a repeated idempotent tool loop and stopped further duplicate tool execution. "
+            "Hand off to external verification using the files already written in the workspace."
+        ),
+        "finishReason": "duplicate-tool-loop-short-circuit",
+        "usage": dict(result.get("usage") or {}),
+        "costUsed": float(result.get("costUsed", 0.0) or 0.0),
+        "error": None,
+        "toolCalls": [],
+        "rawResponse": {
+            "status": "short-circuited",
+            "reason": "duplicate-tool-loop",
+            "duplicateStreak": duplicate_streak,
+            "invocationId": invocation_id,
+        },
     }
 
 
@@ -466,6 +556,11 @@ def _persist_prompt_assets(
             "registeredTools": compiled_prompt.registered_tools,
             "systemSections": compiled_prompt.system_sections,
             "userSections": compiled_prompt.user_sections,
+            "takeoverProtocol": (
+                compiled_prompt.takeover_protocol.model_dump(by_alias=True, mode="json")
+                if compiled_prompt.takeover_protocol is not None
+                else None
+            ),
             "messages": compiled_prompt.messages,
         }
     )
@@ -502,6 +597,7 @@ def invoke_runtime_completion(
     current_context: list[dict[str, Any]],
     request: dict[str, Any],
     resume_path: str | None,
+    registered_tools: list[dict[str, Any]] | None = None,
     service_name: str = "agent-runtime",
 ) -> dict[str, Any]:
     try:
@@ -526,6 +622,7 @@ def invoke_runtime_completion(
         current_context=current_context,
         request=request,
         resume_path=resume_path,
+        registered_tools=registered_tools,
     )
     local_runtime_timings["compilePromptMs"] = _elapsed_ms(compile_prompt_started_at)
     prompt_metadata = compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"})
@@ -538,6 +635,11 @@ def invoke_runtime_completion(
     allow_tool_execution = bool(request.get("allowToolExecution", True))
     build_tool_specs_started_at = perf_counter()
     tool_specs = build_llm_tool_specs(compiled_prompt.registered_tools) if allow_tool_execution else []
+    registered_tools_by_name = {
+        str(tool.get("name") or ""): dict(tool)
+        for tool in compiled_prompt.registered_tools
+        if isinstance(tool, dict) and tool.get("name")
+    }
     local_runtime_timings["buildToolSpecsMs"] = _elapsed_ms(build_tool_specs_started_at)
     max_tool_rounds = max(0, int(request.get("maxToolRounds") or 4))
     now = utc_now()
@@ -646,9 +748,77 @@ def invoke_runtime_completion(
             round_summaries: list[dict[str, Any]] = []
             round_modes: list[str] = []
             final_result: dict[str, Any] | None = None
+            last_tool_round_signature: str | None = None
+            duplicate_tool_round_streak = 0
+
+            # Check for pending tool calls from a safe-shutdown checkpoint
+            _resume_tool_calls: list[dict[str, Any]] | None = None
+            _resume_conversation_messages: list[dict[str, Any]] | None = None
+            _resume_round_state: dict[str, Any] = {}
+            for _pending_action in list(request.get("pendingActions") or []):
+                if isinstance(_pending_action, dict) and _pending_action.get("kind") == _PENDING_TOOL_CALLS_KIND:
+                    _resume_tool_calls = _pending_action.get("toolCalls") if isinstance(_pending_action.get("toolCalls"), list) else None
+                    _resume_conversation_messages = _pending_action.get("conversationMessages") if isinstance(_pending_action.get("conversationMessages"), list) else None
+                    _resume_round_state = _pending_action if isinstance(_pending_action, dict) else {}
+                    break
+
+            # Restore state from pending-tool-calls checkpoint if present
+            if _resume_conversation_messages is not None:
+                conversation_messages = [m for m in _resume_conversation_messages if isinstance(m, dict)]
+            if isinstance(_resume_round_state.get("usageTotals"), dict):
+                usage_totals = dict(_resume_round_state["usageTotals"])
+            if isinstance(_resume_round_state.get("accumulatedCost"), (int, float)):
+                accumulated_cost = float(_resume_round_state["accumulatedCost"])
+            if isinstance(_resume_round_state.get("roundSummaries"), list):
+                round_summaries = [s for s in _resume_round_state["roundSummaries"] if isinstance(s, dict)]
+            if isinstance(_resume_round_state.get("roundModes"), list):
+                round_modes = [str(m) for m in _resume_round_state["roundModes"]]
+            _resume_starting_round = int(_resume_round_state.get("roundIndex", -1)) + 1 if _resume_tool_calls is not None else 0
 
             model_tool_loop_started_at = perf_counter()
-            for round_index in range(max_tool_rounds + 1):
+
+            # If resuming from pending tool calls, execute them before the first LLM call
+            if _resume_tool_calls is not None:
+                _resume_round_started_at = perf_counter()
+                for call in _resume_tool_calls:
+                    if not isinstance(call, dict) or not call.get("name"):
+                        continue
+                    _tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), "resume"))
+                    try:
+                        _exec = execute_registered_tool(
+                            str(call["name"]),
+                            call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                            task=task,
+                            run=run,
+                            root_mount=root_mount,
+                            current_context=current_context,
+                        )
+                        _exec["success"] = True
+                    except Exception as _exec_exc:
+                        _exec = {
+                            "tool": {"name": str(call["name"])},
+                            "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                            "result": {"status": "error", "error": str(_exec_exc)},
+                            "success": False,
+                        }
+                    _exec["toolCallId"] = _tool_call_id
+                    tool_executions.append(_exec)
+                    conversation_messages.append({
+                        "role": "tool",
+                        "tool_call_id": _tool_call_id,
+                        "name": str(call["name"]),
+                        "content": tool_result_to_message_content(_exec),
+                    })
+                round_summaries.append({
+                    "index": _resume_starting_round - 1,
+                    "mode": "checkpoint-resume",
+                    "finishReason": "tool-execution-resumed",
+                    "latencyMs": _elapsed_ms(_resume_round_started_at),
+                    "toolCalls": [str(c.get("name")) for c in _resume_tool_calls if isinstance(c, dict)],
+                })
+                round_modes.append("checkpoint-resume")
+
+            for round_index in range(_resume_starting_round, max_tool_rounds + 1):
                 round_started_at = perf_counter()
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
@@ -670,6 +840,12 @@ def invoke_runtime_completion(
                 accumulated_cost += float(result.get("costUsed", 0.0) or 0.0)
                 round_modes.append(str(result.get("mode") or "unknown"))
                 tool_calls = [call for call in result.get("toolCalls") or [] if isinstance(call, dict) and call.get("name")]
+                current_tool_round_signature = _tool_round_signature(tool_calls) if tool_calls else None
+                if tool_calls and current_tool_round_signature == last_tool_round_signature and _is_idempotent_tool_round(tool_calls, registered_tools_by_name):
+                    duplicate_tool_round_streak += 1
+                else:
+                    duplicate_tool_round_streak = 0
+                last_tool_round_signature = current_tool_round_signature
                 round_summaries.append(
                     {
                         "index": round_index,
@@ -678,13 +854,44 @@ def invoke_runtime_completion(
                         "latencyMs": _elapsed_ms(round_started_at),
                         "reasoningContentPresent": bool(result.get("reasoningContent")),
                         "toolCalls": [str(call.get("name")) for call in tool_calls],
+                        "duplicateToolRoundStreak": duplicate_tool_round_streak,
                     }
                 )
                 if not tool_calls:
                     final_result = result
                     break
+                if duplicate_tool_round_streak >= _DUPLICATE_TOOL_ROUND_THRESHOLD:
+                    round_summaries[-1]["finishReason"] = "duplicate-tool-loop-short-circuit"
+                    round_summaries[-1]["duplicateToolRoundShortCircuited"] = True
+                    final_result = _duplicate_tool_loop_result(result, invocation.id, duplicate_streak=duplicate_tool_round_streak)
+                    break
                 if round_index >= max_tool_rounds:
                     raise RuntimeError(f"Tool round limit exceeded for invocation {invocation.id}.")
+
+                # Graceful shutdown checkpoint: if shutdown requested and there are tool calls,
+                # save state and raise SafeShutdownInterrupt instead of executing them.
+                if tool_calls and _should_checkpoint_for_pause(task, request):
+                    raise SafeShutdownInterrupt(
+                        pending_tool_calls=tool_calls,
+                        conversation_messages=conversation_messages,
+                        invocation_id=invocation.id,
+                        round_index=round_index,
+                        usage_totals=dict(usage_totals),
+                        accumulated_cost=accumulated_cost,
+                        round_summaries=list(round_summaries),
+                        round_modes=list(round_modes),
+                        assistant_tool_calls_payload=[
+                            {
+                                "id": str(call.get("id") or new_id("toolcall", call.get("name"), round_index)),
+                                "type": "function",
+                                "function": {
+                                    "name": str(call.get("name")),
+                                    "arguments": str(call.get("argumentsText") or json.dumps(call.get("arguments") or {}, ensure_ascii=False)),
+                                },
+                            }
+                            for call in tool_calls
+                        ],
+                    )
 
                 assistant_tool_calls = [
                     {
@@ -893,6 +1100,81 @@ def invoke_runtime_completion(
             }
     except Exception as exc:
         latency_ms = round((perf_counter() - started_counter) * 1000.0, 2)
+        failure_messages = conversation_messages if "conversation_messages" in locals() and isinstance(conversation_messages, list) else None
+        failure_tool_executions = tool_executions if "tool_executions" in locals() and isinstance(tool_executions, list) else []
+        failure_round_summaries = round_summaries if "round_summaries" in locals() and isinstance(round_summaries, list) else []
+        failure_usage_totals = usage_totals if "usage_totals" in locals() and isinstance(usage_totals, dict) else {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+        failure_cost_used = float(accumulated_cost) if "accumulated_cost" in locals() else 0.0
+        failure_prompt_artifact_id = prompt_artifact.id if "prompt_artifact" in locals() else None
+        failure_result = {
+            "mode": (round_modes[-1] if "round_modes" in locals() and round_modes else None),
+            "provider": route_payload.get("selectedProvider"),
+            "model": route_payload.get("selectedModel"),
+            "finishReason": "error",
+            "error": str(exc),
+        }
+        response_ref_payload = None
+        try:
+            rewrite_request_started_at = perf_counter()
+            write_json(
+                request_path,
+                _request_file_payload(
+                    audit_level,
+                    task=task,
+                    run=run,
+                    invocation_id=invocation.id,
+                    route_payload=route_payload,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    thinking_mode=thinking_mode,
+                    reasoning_effort=reasoning_effort,
+                    prompt_artifact_id=str(failure_prompt_artifact_id or prompt_metadata.get("id") or ""),
+                    prompt_metadata=prompt_metadata,
+                    messages=messages,
+                    tool_specs=tool_specs,
+                    conversation_messages=failure_messages,
+                    tool_executions=failure_tool_executions,
+                    round_summaries=failure_round_summaries,
+                ),
+            )
+            local_runtime_timings["rewriteRequestTranscriptMs"] = _elapsed_ms(rewrite_request_started_at)
+
+            response_path = ensure_state_subdir("llm/responses", workspace_root) / f"{invocation.id}.json"
+            response_ref_payload = _invocation_file_ref(response_path, workspace_root).model_dump(mode="json")
+            write_response_started_at = perf_counter()
+            write_json(
+                response_path,
+                _response_file_payload(
+                    audit_level,
+                    task=task,
+                    run=run,
+                    invocation_id=invocation.id,
+                    prompt_artifact_id=str(failure_prompt_artifact_id or prompt_metadata.get("id") or ""),
+                    final_result=failure_result,
+                    usage_totals=failure_usage_totals,
+                    accumulated_cost=failure_cost_used,
+                    tool_executions=failure_tool_executions,
+                    round_summaries=failure_round_summaries,
+                    local_runtime_timings={
+                        **local_runtime_timings,
+                        "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
+                    },
+                ),
+            )
+            local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+        except Exception as persist_exc:
+            record_log(
+                service_name,
+                "warning",
+                "Failed to persist model invocation failure artifacts.",
+                attributes={
+                    "taskId": task.id,
+                    "agentRunId": run.id,
+                    "invocationId": invocation.id,
+                    "errorMessage": str(persist_exc),
+                },
+                workspace_root=workspace_root,
+            )
         finish_langfuse_generation(
             langfuse_generation,
             metadata={
@@ -908,6 +1190,12 @@ def invoke_runtime_completion(
             invocation.id,
             {
                 "status": "failed",
+                "resolvedModel": str(route_payload.get("selectedModel") or invocation.requested_model),
+                "resolvedProvider": str(route_payload.get("selectedProvider") or invocation.requested_provider or "") or None,
+                "responseRef": response_ref_payload,
+                "inputTokensUsed": int(failure_usage_totals.get("inputTokens") or 0),
+                "outputTokensUsed": int(failure_usage_totals.get("outputTokens") or 0),
+                "costUsed": round(failure_cost_used, 6),
                 "latencyMs": latency_ms,
                 "errorSummary": str(exc),
                 "endedAt": utc_now(),

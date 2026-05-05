@@ -100,6 +100,11 @@ class PauseResumeModule(BaseModulePlugin):
                 "safeStopReason": task_snapshot.get("safeStopReason"),
             }
         ]
+        # Forward pending-tool-calls actions so the execution loop can replay them
+        snapshot_pending_actions = task_snapshot.get("pendingActions") if isinstance(task_snapshot.get("pendingActions"), list) else []
+        for action in snapshot_pending_actions:
+            if isinstance(action, dict) and action.get("kind") == "pending-tool-calls":
+                followup_actions.append(action)
         return {
             "restoredState": {
                 "currentContext": restored_context,

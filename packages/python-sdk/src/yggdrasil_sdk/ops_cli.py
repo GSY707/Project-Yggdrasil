@@ -4,10 +4,13 @@ import argparse
 import json
 from pathlib import Path
 
-from .ops_runtime import create_runtime_backup, latest_snapshot_dir, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke
+from .ops_runtime import create_runtime_backup, latest_snapshot_dir, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
+from .support import load_workspace_dotenv
 
 
 def main() -> None:
+    load_workspace_dotenv()
+
     parser = argparse.ArgumentParser(description="Project Yggdrasil runtime backup and infra smoke tools.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -30,6 +33,25 @@ def main() -> None:
     pilot_create_parser.add_argument("--output", help="Sandbox directory. Defaults to a sibling folder outside the repo.")
     pilot_create_parser.add_argument("--workspace", help="Optional workspace root to snapshot. Defaults to the current repo root.")
     pilot_create_parser.add_argument("--disable-live-llm", action="store_true", help="Set YGGDRASIL_DISABLE_LIVE_LLM=1 in activation scripts.")
+
+    scorecard_parser = subparsers.add_parser("pilot-scorecard", help="Summarize real-user validation scorecards.")
+    scorecard_subparsers = scorecard_parser.add_subparsers(dest="scorecard_command", required=True)
+
+    scorecard_summarize_parser = scorecard_subparsers.add_parser("summarize", help="Summarize a scorecard CSV for G2 metrics.")
+    scorecard_summarize_parser.add_argument("--csv", required=True, help="Path to the scorecard CSV file.")
+
+    live_parser = subparsers.add_parser("pilot-live", help="Run the frozen real-user live task pack inside an isolated sandbox.")
+    live_subparsers = live_parser.add_subparsers(dest="live_command", required=True)
+
+    live_run_parser = live_subparsers.add_parser("run-pack", help="Run YGG-CI-01 / YGG-CG-01 / YGG-CG-03 with a real live provider.")
+    live_run_parser.add_argument("--sandbox-root", required=True, help="Path to the isolated real-user validation sandbox root.")
+    live_run_parser.add_argument("--tasks", help="Comma-separated task ids. Defaults to YGG-CI-01,YGG-CG-01,YGG-CG-03.")
+    live_run_parser.add_argument("--provider", default="longcat", help="Requested live provider. Defaults to longcat.")
+    live_run_parser.add_argument("--model", default="LongCat-Flash-Lite", help="Requested live model. Defaults to LongCat-Flash-Lite.")
+    live_run_parser.add_argument("--scorecard-csv", help="Optional scorecard CSV to append generated rows to.")
+    live_run_parser.add_argument("--output", help="Optional JSON output path for the structured run summary.")
+    live_run_parser.add_argument("--batch-id", help="Optional batch id written into generated scorecard rows.")
+    live_run_parser.add_argument("--environment-id", help="Optional environment id written into generated scorecard rows.")
 
     paths_parser = subparsers.add_parser("paths", help="Show runtime backup paths.")
     paths_parser.add_argument("--latest", action="store_true", help="Resolve the latest snapshot path too.")
@@ -60,6 +82,26 @@ def main() -> None:
             output_dir=output_dir,
             workspace_root=workspace_root,
             disable_live_llm=bool(args.disable_live_llm),
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "pilot-scorecard" and args.scorecard_command == "summarize":
+        result = summarize_real_user_scorecard(Path(args.csv).resolve())
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "pilot-live" and args.live_command == "run-pack":
+        task_ids = [item.strip() for item in str(args.tasks or "YGG-CI-01,YGG-CG-01,YGG-CG-03").split(",") if item.strip()]
+        result = run_real_user_live_task_pack(
+            sandbox_root=Path(args.sandbox_root).resolve(),
+            tasks=task_ids,
+            provider=str(args.provider),
+            model=str(args.model),
+            scorecard_csv=Path(args.scorecard_csv).resolve() if args.scorecard_csv else None,
+            output_path=Path(args.output).resolve() if args.output else None,
+            batch_id=str(args.batch_id) if args.batch_id else None,
+            environment_id=str(args.environment_id) if args.environment_id else None,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return

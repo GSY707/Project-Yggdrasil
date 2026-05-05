@@ -67,6 +67,7 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     installs_by_module_id = {record.module_id: record for record in snapshot.installs}
     assert installs_by_module_id["text-memory"].lifecycle_state == "active"
     assert installs_by_module_id["context-pruning"].lifecycle_state == "active"
+    assert installs_by_module_id["task-takeover"].lifecycle_state == "active"
     assert installs_by_module_id["subagent-pr"].lifecycle_state == "active"
     assert installs_by_module_id["shared-memory"].lifecycle_state == "active"
     assert installs_by_module_id["pause-resume"].lifecycle_state == "active"
@@ -82,6 +83,7 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     assert HookNames.MODULE_HEALTH_REPORT in hook_names
     assert HookNames.AGENT_STARTUP_MOUNT_ROOT in hook_names
     assert HookNames.TASK_PAUSE_PREPARE in hook_names
+    assert HookNames.TASK_TAKEOVER_GENERATE_PLAN in hook_names
     assert HookNames.MEMORY_RETRIEVE_RERANK in hook_names
 
     subscriptions = {(record.event_type, record.status) for record in snapshot.subscriptions}
@@ -93,6 +95,7 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     assert {record["moduleId"] for record in config_bindings} >= {
         "text-memory",
         "context-pruning",
+        "task-takeover",
         "subagent-pr",
         "shared-memory",
         "pause-resume",
@@ -107,6 +110,7 @@ def test_module_platform_reconciles_registry_runtime_state() -> None:
     health_reports = service.list_health_reports()["health"]
     health_by_module_id = {record["moduleId"]: record for record in health_reports}
     assert health_by_module_id["text-memory"]["status"] == "healthy"
+    assert health_by_module_id["task-takeover"]["status"] == "healthy"
     assert health_by_module_id["subagent-pr"]["status"] == "healthy"
     assert health_by_module_id["shared-memory"]["status"] == "healthy"
     assert health_by_module_id["training-lab"]["status"] == "healthy"

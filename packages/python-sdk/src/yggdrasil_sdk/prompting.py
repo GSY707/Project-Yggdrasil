@@ -9,6 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from .app_catalog import active_application_id, build_application_catalog_snapshot, get_application_manifest
+from .contracts import TaskTakeoverProtocol
 from .catalog import build_module_catalog_snapshot
 from .hook_runtime import collect_hook_results
 from .hooks import HookNames
@@ -94,6 +95,7 @@ class CompiledPrompt(BaseModel):
     registered_tools: list[dict[str, Any]] = Field(default_factory=list, alias="registeredTools")
     system_sections: dict[str, str] = Field(default_factory=dict, alias="systemSections")
     user_sections: dict[str, str] = Field(default_factory=dict, alias="userSections")
+    takeover_protocol: TaskTakeoverProtocol | None = Field(default=None, alias="takeoverProtocol")
     messages: list[dict[str, str]]
 
 
@@ -433,7 +435,8 @@ def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int =
     lines: list[str] = []
     for index, item in enumerate(current_context[:limit], start=1):
         title = str(item.get("title") or item.get("kind") or f"context-{index}")
-        content = normalize_excerpt(str(item.get("content") or item), 240)
+        raw_content = str(item.get("content") or item)
+        content = raw_content if bool(item.get("verbatim")) else normalize_excerpt(raw_content, 240)
         root_branch = str(item.get("rootBranch") or item.get("mode") or "context")
         lines.append(f"{index}. [{root_branch}] {title}: {content}")
     return "\n".join(lines) if lines else "当前没有额外挂载的上下文切片。"
@@ -484,6 +487,51 @@ def _format_response_requirements(request: dict[str, Any], seed_template: SeedTe
     return "\n".join(lines)
 
 
+def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProtocol | None:
+    candidate = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else None
+    if candidate is None:
+        return None
+    try:
+        return TaskTakeoverProtocol.model_validate(candidate)
+    except Exception:
+        return None
+
+
+def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
+    lines = [
+        f"Objective summary: {protocol.objective_summary}",
+        f"Current phase: {protocol.current_phase}",
+        f"Status: {protocol.status}",
+        "Constraints:",
+    ]
+    if protocol.constraints:
+        lines.extend(f"- [{item.category}] {item.label}: {item.value}" for item in protocol.constraints)
+    else:
+        lines.append("- none")
+    lines.append("Plan:")
+    if protocol.plan:
+        lines.extend(
+            f"{index}. [{step.phase}] {step.title}: {step.instructions}"
+            for index, step in enumerate(protocol.plan, start=1)
+        )
+    else:
+        lines.append("1. No formal plan was generated.")
+    if protocol.delivery_sections:
+        lines.append("Delivery checkpoints:")
+        lines.extend(
+            f"- {section.section}: {normalize_excerpt(section.content or section.status, 120)}"
+            for section in protocol.delivery_sections
+        )
+    lines.extend(
+        [
+            f"Plan quality: {protocol.metrics.plan_quality_score_0_100}",
+            f"Rework rate: {protocol.metrics.rework_rate}",
+            f"Delivery completeness: {protocol.metrics.delivery_completeness_score_0_100}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def compile_runtime_prompt(
     *,
     task: Any,
@@ -503,6 +551,7 @@ def compile_runtime_prompt(
     profile = _select_prompt_profile(run_type, request, app_manifest, resolved_registry["promptProfiles"])
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
+    takeover_protocol = _takeover_protocol_from_request(request)
 
     system_sections = {
         "system_role": profile.system_role,
@@ -534,6 +583,8 @@ def compile_runtime_prompt(
         "mounted_context_items": _format_context_lines(current_context),
         "response_requirements": _format_response_requirements(request, seed_template),
     }
+    if takeover_protocol is not None:
+        user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
     resume_message = str(request.get("resumeMessage") or task.resume_message or "").strip()
     if resume_message:
         user_sections["resume_message"] = resume_message
@@ -566,6 +617,7 @@ def compile_runtime_prompt(
         registeredTools=resolved_registered_tools,
         systemSections=system_sections,
         userSections=user_sections,
+        takeoverProtocol=takeover_protocol,
         messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message},

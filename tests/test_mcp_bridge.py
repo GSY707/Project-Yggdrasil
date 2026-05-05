@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -127,6 +128,32 @@ def test_mcp_bridge_builtin_servers_default_to_keepalive() -> None:
 
     assert builtin_servers
     assert all(server["keepAlive"] is True for server in builtin_servers.values())
+
+
+def test_workspace_python_run_python_uses_temp_script_for_unicode_workspace(tmp_path) -> None:
+    workspace = tmp_path / "世界树-workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    original_cwd = os.environ.get("YGGDRASIL_MCP_WORKSPACE")
+    os.environ["YGGDRASIL_MCP_WORKSPACE"] = str(workspace)
+    try:
+        from yggdrasil_sdk.mcp_servers.python_server import _run_python
+
+        result = _run_python(
+            {
+                "code": "print('你好，世界树')",
+                "workingDirectory": ".",
+                "timeoutMs": 5000,
+            }
+        )
+    finally:
+        if original_cwd is None:
+            os.environ.pop("YGGDRASIL_MCP_WORKSPACE", None)
+        else:
+            os.environ["YGGDRASIL_MCP_WORKSPACE"] = original_cwd
+
+    assert result["isError"] is False
+    assert "你好，世界树" in result["structuredContent"]["stdout"]
+    assert not any(path.name.startswith("yggdrasil-python-") for path in workspace.iterdir())
 
 
 def test_mcp_bridge_missing_binding_does_not_force_sync(monkeypatch) -> None:

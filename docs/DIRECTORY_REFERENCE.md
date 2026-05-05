@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/4 更新：P0-P2 技术债清理、研究文档归档目录同步与根目录临时文件清理）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/5 更新：G1/G2 推进整理、工作树/超图推理研究草案、应用插件数据轴、试跑沙箱与评测隔离说明同步）
 
 ---
 
@@ -8,8 +8,7 @@
 
 ```
 世界树计划/
-├── README.en.md    # 英文版仓库入口文档
-├── .env.example    # 开源版本地环境变量示例（不含真实密钥）
+├── .env.example    # 开源版本地环境变量示例（不含真实密钥；CLI/服务入口会自动加载）
 ├── CONTRIBUTING.md # 外部贡献工作流、测试要求、PR 约定
 ├── CONTRIBUTING.en.md # 英文版贡献指南
 ├── CODE_OF_CONDUCT.md # 社区行为准则与处理流程
@@ -66,6 +65,7 @@
 
 **关键说明：**
 - 本仓库现在按“默认公开、密钥例外”的原则运行：一切提交进仓库的内容都应可公开分发，真实 API key 只能通过环境变量注入。
+- `.env.example` 中的 `YGGDRASIL_STATE_ROOT` 指向状态根目录本身（例如 `.yggdrasil`）；运行时会自动在其下创建 `state/` 子目录。
 - 重大设计变更不再直接靠 issue 或口头约定推进，统一通过 `docs/rfcs/` 目录下的 RFC 文档完成讨论、批准与留痕。
 - 开源协作核心文档现在提供中英文双份入口；中文仍是工程内完整说明，英文版优先服务外部协作者的仓库浏览、贡献、治理与安全理解。
 
@@ -138,16 +138,12 @@ services/
 │       ├── main.py                 # 服务启动入口（uvicorn）
 │       ├── app.py                  # FastAPI 应用实例、CORS、中间件
 │       ├── config.py               # 配置读取（环境变量）
-│       ├── services/               # 核心业务逻辑层（按资源域拆分）
-│       │   ├── __init__.py         # WorkspaceService 组合导出与依赖注入入口
-│       │   ├── _base.py            # 共享初始化与内部通用能力
-│       │   ├── task_service.py     # 任务与运行状态相关业务
-│       │   ├── memory_service.py   # 记忆树、导入与检索业务
-│       │   ├── evaluation_service.py # 评测业务
-│       │   ├── asset_service.py    # 资产与训练资产业务
-│       │   ├── prompting_service.py# Prompt 配置与编译预览业务
-│       │   ├── collaboration_service.py # PR 协作业务
-│       │   └── runtime_service.py  # 应用、MCP、可观测与工作台业务
+│       ├── services/               # 核心业务逻辑层（按资源域拆分的 Service 子包）
+│       │   ├── task_service.py     # 任务生命周期相关业务逻辑
+│       │   ├── memory_service.py   # 记忆树与检索相关业务逻辑
+│       │   ├── runtime_service.py  # 运行时状态与执行记录查询
+│       │   ├── evaluation_service.py # 评测结果与套件查询
+│       │   └── ...                 # 其余资源域 Service
 │       └── api/
 │           ├── router.py           # 聚合所有路由
 │           └── routes/             # 路由模块（每个资源一个文件）
@@ -191,7 +187,7 @@ services/
 ```
 
 **关键说明：**
-- `services/` 子包是控制面最核心的业务层，按资源域拆分后由 `WorkspaceService` 统一组合，路由层仅做参数校验和委派。
+- `services/` 子包是控制面的业务逻辑层，已按资源域拆分；路由层仅做参数校验和委派。
 - Agent Runtime 和 Core API 通过 NATS JetStream 事件总线通信，不直接 HTTP 调用。
 - Worker 运行 Temporal Activity，处理耗时异步任务（如批量记忆导入、训练触发）。
 
@@ -213,27 +209,13 @@ packages/
 │       ├── # ── 持久化层 ─────────────────────────────────
 │       ├── persistence/
 │       │   ├── models.py           # SQLAlchemy ORM 模型
-│       │   ├── repositories/        # 仓储接口实现（按领域拆分，兼容原导入路径）
-│       │   │   ├── __init__.py      # 统一导出各 Repository
-│       │   │   ├── _common.py       # 共享记录映射与辅助函数
-│       │   │   ├── task.py          # TaskRepository
-│       │   │   ├── memory.py        # NodeRepository, MemoryRepository
-│       │   │   ├── evaluation.py    # EvaluationRepository
-│       │   │   ├── asset.py         # AssetRepository
-│       │   │   ├── prompting.py     # PromptAssetRepository
-│       │   │   ├── collaboration.py # CollaborationRepository
-│       │   │   └── platform.py      # Workspace/Runtime/Module/Outbox/Training 仓储
+│       │   ├── repositories/       # 仓储实现子包（task/memory/evaluation 等）
 │       │   ├── migrations.py       # 迁移工具函数
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/          # 核心运行时内核（按子能力拆分）
-│       │   ├── __init__.py          # 统一导出关键常量与执行入口
-│       │   ├── _common.py           # 共享导入与常量
-│       │   ├── root_mount.py        # root-mount 构建与预算辅助
-│       │   ├── snapshot.py          # pause/resume 快照构建
-│       │   └── execution_loop.py    # 主执行循环与写回链路
-│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、重试、记录，29KB）；记录 prompt/请求/响应与 round latency / reasoningContent 分段计时
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管）
+│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、指数退避重试、安全关闭中断）；`SafeShutdownInterrupt` + pending-tool-calls 断点续跑
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
@@ -259,12 +241,7 @@ packages/
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime/      # 评测 Suite 运行时（按职责拆分）
-│       │   ├── __init__.py          # 统一导出评测入口与环境工具
-│       │   ├── _common.py           # 共享导入与运行时依赖
-│       │   ├── bootstrap.py         # 套件装载、隔离环境与种子准备
-│       │   ├── scorer.py            # 覆盖率与评分逻辑
-│       │   └── suite_runner.py      # 各 case 执行与 run_evaluation_suite
+│       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner）
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -272,9 +249,15 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime.py      # 备份/恢复、compose smoke、真实用户试跑沙箱准备
-│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox）
-│           └── support.py          # 通用工具函数（含隔离工作区复制）
+│           ├── ops_runtime.py      # 运维兼容门面，保持 CLI 与外部导入路径稳定
+│           ├── ops_runtime_backup.py # runtime 备份与恢复实现
+│           ├── ops_runtime_compose.py # compose smoke 检查实现
+│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、token 预算、工具/交付约束与 pause/resume 约束
+│           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现；供 `real-user:prepare` / `pilot-sandbox create` 调用
+│           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
+│           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-scorecard）
+│           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算）
 │
 ├── contracts/                      # 跨语言共享类型定义
 │   ├── package.json
@@ -282,18 +265,14 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/
-        ├── index.ts                # 统一聚合导出入口
-        ├── types.ts                # 领域类型定义（Record/Response/Manifest）
-        ├── api-client.ts           # 轻量 API 客户端封装
-        ├── hooks.ts                # 通用异步状态 Hook 类型
-        └── utils.ts                # URL 参数与对象判断工具
+    └── src/                        # React Hooks、API 客户端、前端类型
 ```
 
 **关键说明：**
-- `runtime_kernel/` 子包是任务状态机与执行编排核心，按 root-mount、snapshot、execution loop 拆分。
-- `evaluation_runtime/` 子包承载完整评测框架，按 bootstrap、scorer、suite runner 拆分。
+- `runtime_kernel.py` 是系统最核心的文件，实现了任务状态机、Agent 执行编排、上下文管理等核心逻辑。
+- `evaluation_runtime.py` 体积最大（84KB），包含完整的评测框架实现。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
+- 真实用户试跑必须通过 `corepack pnpm real-user:prepare` 生成专用沙箱；仅切换 `YGGDRASIL_STATE_ROOT` 不足以隔离运行，还必须同时切换 `YGGDRASIL_GIT_REPO_PATH` 与 `YGGDRASIL_MCP_PROJECT_WORKSPACE`。
 
 ---
 
@@ -329,6 +308,9 @@ modules/
 ├── # ── 任务能力模块 ─────────────────────────────────────
 ├── pause-resume/                   # 任务暂停/恢复与快照管理
 │   └── src/pause_resume/
+│
+├── task-takeover/                  # Gate 2 任务接管协议（目标解析、约束、计划、验证、交付）
+│   └── src/yggdrasil_task_takeover/
 │
 ├── subagent-runtime/               # Sub-Agent 独立分支执行框架
 │   └── src/subagent_runtime/
@@ -392,11 +374,14 @@ applications/
 ```
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
-├── prompt-profiles/
-│   └── main-agent.yaml     # 主 Agent prompt profile（含 behavior/tool/memory/evidence 策略）
-└── scenes/
-    └── generic-default.yaml# 默认场景种子（新建应用建议至少包含该文件）
+└── prompts/
+    ├── system.md           # 系统提示（定义 Agent 身份与工作方式）
+    └── seed.md             # 种子记忆（初始化上下文）
 ```
+
+**关键说明：**
+- `applications/*/yggdrasil.app.yaml` 现在是正式装配入口，决定默认 prompt profile、seed template、dashboard 和 important config 合并方式。
+- `appId` 已成为正式数据轴：Task、AgentRun、TaskSnapshot、ModelInvocation、PromptCompileArtifact 都会持久化该字段，控制面查询与应用隔离依赖这条轴。
 
 ---
 
@@ -456,24 +441,36 @@ docs/
 ├── specs/                          # 数据与 API 规格
 │   ├── README.md                   # 规格索引
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
+│   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │
 ├── research/                       # 研究与探索性文档
 │   ├── final-goal-roadmap-2026-04-30.md
 │   │                               #   通向最终目标的阶段路线图：gate、功能开发簇、提示词成熟度与研究议程
+│   ├── work-tree-protocol-draft-2026-05-05.md
+│   │                               #   工作树研究草案：任务分解、优先图、熵增控制与阶段性重启的结构化定义
+│   ├── hypergraph-reasoning-protocol-draft-2026-05-05.md
+│   │                               #   超图推理研究草案：关系平铺、关系原因升维与模式识别的高阶推理方向
+│   ├── protocol-integration-plan-2026-05-05.md
+│   │                               #   G1/G2 推进与新协议纳入整理：当前瓶颈、优先级、Gate 2 / Gate 3 边界与协议修改顺序
+│   ├── prompt-engineering-and-seed-templates-v0.1.md
+│   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
 │   │                               #   真实用户验证计划：冻结材料、时间盒、评分口径与执行顺序
 │   ├── real-user-validation-baseline-freeze-2026-04-30.md
 │   │                               #   真实用户验证基线与材料冻结记录
 │   ├── real-user-validation-internal-pilot-deepseek-2026-04-30.md
 │   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
-│   └── 归档/
-│       ├── prompt-engineering-and-seed-templates-v0.1.md
-│       │                           #   提示词工程、PromptProfile、SeedTemplate 设计调研（归档）
-│       ├── runtime-optimization-plan-2026-04-29.md
-│       │                           #   运行时优化总计划（归档）
-│       └── test-suite-cpu-time-analysis-2026-04-29.md
-│                                   #   pytest CPU/等待时间拆分（归档）
+│   ├── g1-stage-assessment-2026-05-04.md
+│   │                               #   Gate 1 闭合评估：真实任务复核状态、live 证据恢复与最小补齐动作
+│   ├── g2-stage-progress-2026-05-04.md
+│   │                               #   Gate 2 推进记录：出口标准、阻塞项清理状态、下一步最小动作
+│   ├── g2-gap-assessment-2026-05-04.md
+│   │                               #   Gate 2 差距评估：现时测试结果、差距矩阵、成因分析与达标路径
+│   ├── runtime-optimization-plan-2026-04-29.md
+│   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
+│   └── test-suite-cpu-time-analysis-2026-04-29.md
+│                                   #   pytest CPU/等待时间拆分：Redis 超时、MCP bridge stdio、运行时与控制面热点
 ```
 
 ---
@@ -486,7 +483,7 @@ evaluation/
 │   ├── memory-tree/                # 记忆树操作的标准样本
 │   ├── retrieval/                  # 检索质量评测样本
 │   ├── task-execution/             # 任务执行的端到端样本
-│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表等；由 pilot-sandbox 命令复制到专用目录）
+│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板含计划质量/返工字段，由 `real-user:prepare` / `pilot-sandbox create` 复制到专用目录）
 │
 └── suites/                         # 评测套件定义
     ├── regression/                 # M4-M6 回归套件
@@ -504,6 +501,10 @@ evaluation/
 | `eval:m8:benchmark` | `suites/m8-benchmark/` |
 | `eval:m8:live` | `suites/m8-live/` |
 | `eval:m9:control-plane` | `suites/m9-control-plane/` |
+
+**关键说明：**
+- 非 live suite 会在隔离运行环境中强制 `YGGDRASIL_DISABLE_LIVE_LLM=1`；只有 case 标记 `requireLive=true` 时才允许真实 provider，避免回归评测误入真实模型调用。
+- `real-user-validation/` 冻结材料必须配合专用沙箱使用；仅切换状态目录不足以隔离 builtin MCP 对真实工作区的写入。
 
 ---
 
@@ -565,6 +566,7 @@ tests/
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
 ├── test_mcp_bridge.py              # MCP 协议桥接回归
+├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径）
 ├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
 ├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成
@@ -611,9 +613,11 @@ scripts/
 ├── check_migrations.sh             # 验证 Alembic 迁移头与 ORM 模型一致
 │                                   #   启动临时 pgvector 容器 → alembic upgrade head
 │                                   #   → alembic check（检测 ORM 漂移）
-└── smoke_test.sh                   # Compose 冒烟测试：启动 infra stack，调 core-api /health
-                                    #   启动 postgres/redis/nats/minio → alembic upgrade head
-                                    #   → 启动 core-api → GET /health
+├── smoke_test.sh                   # Compose 冒烟测试：启动 infra stack，调 core-api /health
+│                                   #   启动 postgres/redis/nats/minio → alembic upgrade head
+│                                   #   → 启动 core-api → GET /health
+├── safe_shutdown.sh                # 向 worker 进程发送 SIGTERM，等待安全关闭检查点保存（Linux/macOS）
+└── safe_shutdown.ps1               # 同上，Windows PowerShell 版本
 ```
 
 **运行方式：**
@@ -643,8 +647,6 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
                     #   smoke-test：smoke_test.sh（端到端 /health 验证）
                     #   slow-tests：pytest -m slow -n auto --dist loadfile
                     #     （并行慢集成 / 评测回归；未收集到用例时 no-op）
-                    #   postgres-tests：pytest --postgres -m "not slow"
-                    #     （夜间 PostgreSQL 回归门禁，防止 SQLite 偏差）
                     #   benchmark：eval:m8:benchmark（离线基准评测）
 ```
 
@@ -672,7 +674,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
-| `todo.md` | 当前执行阶段与未完成优先项追踪（工作台总览数据源） |
+| `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
 
 ---
 
