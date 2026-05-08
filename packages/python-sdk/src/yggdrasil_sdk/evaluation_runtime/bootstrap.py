@@ -1,4 +1,5 @@
 from ._common import *  # noqa: F403,F401
+from ..domain import PromptProfileVersionRecord
 
 _SCHEMA_TEMPLATE_LOCK = threading.Lock()
 _SCHEMA_TEMPLATE_DIR: tempfile.TemporaryDirectory[str] | None = None
@@ -414,6 +415,18 @@ def _seed_training_prompt_assets(case_name: str) -> dict[str, Any]:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
+        prompt_repository.upsert_prompt_profile_version(
+            PromptProfileVersionRecord(
+                id=f"prompt_profile_{case_name}",
+                promptProfileId=f"evaluation.{case_name}",
+                name=f"evaluation.{case_name}",
+                version="v1",
+                runScope="any",
+                body={"id": f"evaluation.{case_name}", "version": "v1"},
+                contentHash=f"prompt-profile-{case_name}",
+                createdAt=utc_now(),
+            )
+        )
         artifact = prompt_repository.create_prompt_compile_artifact(
             {
                 "projectId": DEFAULT_PROJECT_ID,

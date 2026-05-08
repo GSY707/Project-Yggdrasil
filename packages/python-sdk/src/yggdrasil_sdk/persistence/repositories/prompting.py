@@ -114,6 +114,10 @@ class PromptAssetRepository:
             contentHash=str(payload.get("contentHash")),
             createdAt=payload.get("createdAt") or utc_now(),
         )
+        if self.session.get(PromptProfileVersionORM, record.prompt_profile_version_id) is None:
+            raise KeyError(f"Prompt profile version {record.prompt_profile_version_id} not found.")
+        if record.seed_template_version_id is not None and self.session.get(SeedTemplateVersionORM, record.seed_template_version_id) is None:
+            raise KeyError(f"Seed template version {record.seed_template_version_id} not found.")
         model = PromptCompileArtifactORM(
             id=record.id,
             app_id=record.app_id,

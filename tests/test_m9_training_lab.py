@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from yggdrasil_training_lab.plugin import TrainingLabModule
+from yggdrasil_sdk import PromptProfileVersionRecord, utc_now
 from yggdrasil_sdk.persistence import get_persistence_runtime
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID
 from yggdrasil_sdk.persistence.repositories import (
@@ -22,6 +23,21 @@ def _resolve_locator_path(locator: str) -> Path:
     return resolve_workspace_root() / locator
 
 
+def _seed_training_lab_prompt_profile(prompt_assets: PromptAssetRepository) -> None:
+    prompt_assets.upsert_prompt_profile_version(
+        PromptProfileVersionRecord(
+            id="profile_v1",
+            promptProfileId="yggdrasil.training-lab.fixture",
+            name="Training Lab Fixture",
+            version="v1",
+            runScope="any",
+            body={"id": "yggdrasil.training-lab.fixture", "version": "v1"},
+            contentHash="training-lab-profile-v1",
+            createdAt=utc_now(),
+        )
+    )
+
+
 def test_training_lab_creates_dataset_and_validated_model_artifact() -> None:
     workspace_root = resolve_workspace_root()
     state_dir = ensure_state_subdir("training-lab-fixtures", workspace_root)
@@ -37,6 +53,7 @@ def test_training_lab_creates_dataset_and_validated_model_artifact() -> None:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         prompt_assets = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
+        _seed_training_lab_prompt_profile(prompt_assets)
         artifact = prompt_assets.create_prompt_compile_artifact(
             {
                 "projectId": DEFAULT_PROJECT_ID,

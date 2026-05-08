@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/5 更新：G1/G2 推进整理、工作树/超图推理研究草案、应用插件数据轴、试跑沙箱与评测隔离说明同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/5 更新：G1/G2 推进整理、工作树/超图推理研究草案与协议纳入计划同步）
 
 ---
 
@@ -8,6 +8,7 @@
 
 ```
 世界树计划/
+├── README.en.md    # 英文版仓库入口文档
 ├── .env.example    # 开源版本地环境变量示例（不含真实密钥；CLI/服务入口会自动加载）
 ├── CONTRIBUTING.md # 外部贡献工作流、测试要求、PR 约定
 ├── CONTRIBUTING.en.md # 英文版贡献指南
@@ -253,7 +254,7 @@ packages/
 │           ├── ops_runtime_backup.py # runtime 备份与恢复实现
 │           ├── ops_runtime_compose.py # compose smoke 检查实现
 │           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、token 预算、工具/交付约束与 pause/resume 约束
-│           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现；供 `real-user:prepare` / `pilot-sandbox create` 调用
+│           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现
 │           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
 │           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
 │           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-scorecard）
@@ -272,7 +273,7 @@ packages/
 - `runtime_kernel.py` 是系统最核心的文件，实现了任务状态机、Agent 执行编排、上下文管理等核心逻辑。
 - `evaluation_runtime.py` 体积最大（84KB），包含完整的评测框架实现。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
-- 真实用户试跑必须通过 `corepack pnpm real-user:prepare` 生成专用沙箱；仅切换 `YGGDRASIL_STATE_ROOT` 不足以隔离运行，还必须同时切换 `YGGDRASIL_GIT_REPO_PATH` 与 `YGGDRASIL_MCP_PROJECT_WORKSPACE`。
+- `PromptAssetRepository.create_prompt_compile_artifact()` 依赖已存在的 `prompt_profile_versions` / `seed_template_versions` 记录；测试夹具与评测 bootstrap 若手工构造 artifact，必须先 upsert 对应版本记录，避免 SQLite 与 PostgreSQL 的约束表现分叉。
 
 ---
 
@@ -379,10 +380,6 @@ applications/<name>/
     └── seed.md             # 种子记忆（初始化上下文）
 ```
 
-**关键说明：**
-- `applications/*/yggdrasil.app.yaml` 现在是正式装配入口，决定默认 prompt profile、seed template、dashboard 和 important config 合并方式。
-- `appId` 已成为正式数据轴：Task、AgentRun、TaskSnapshot、ModelInvocation、PromptCompileArtifact 都会持久化该字段，控制面查询与应用隔离依赖这条轴。
-
 ---
 
 ## adapters/ · 外部系统适配器
@@ -483,7 +480,7 @@ evaluation/
 │   ├── memory-tree/                # 记忆树操作的标准样本
 │   ├── retrieval/                  # 检索质量评测样本
 │   ├── task-execution/             # 任务执行的端到端样本
-│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板含计划质量/返工字段，由 `real-user:prepare` / `pilot-sandbox create` 复制到专用目录）
+│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板含计划质量/返工字段，由 pilot-sandbox 命令复制到专用目录）
 │
 └── suites/                         # 评测套件定义
     ├── regression/                 # M4-M6 回归套件
@@ -501,10 +498,6 @@ evaluation/
 | `eval:m8:benchmark` | `suites/m8-benchmark/` |
 | `eval:m8:live` | `suites/m8-live/` |
 | `eval:m9:control-plane` | `suites/m9-control-plane/` |
-
-**关键说明：**
-- 非 live suite 会在隔离运行环境中强制 `YGGDRASIL_DISABLE_LIVE_LLM=1`；只有 case 标记 `requireLive=true` 时才允许真实 provider，避免回归评测误入真实模型调用。
-- `real-user-validation/` 冻结材料必须配合专用沙箱使用；仅切换状态目录不足以隔离 builtin MCP 对真实工作区的写入。
 
 ---
 

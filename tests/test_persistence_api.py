@@ -6,10 +6,51 @@ from fastapi.testclient import TestClient
 import pytest
 
 from yggdrasil_core_api.app import app
-from yggdrasil_sdk import PromptAssetRepository, TaskRepository, TaskSnapshotSummary, get_persistence_runtime, new_id, run_evaluation_suite, utc_now
+from yggdrasil_sdk import (
+    PromptAssetRepository,
+    PromptProfileVersionRecord,
+    SeedTemplateVersionRecord,
+    TaskRepository,
+    TaskSnapshotSummary,
+    get_persistence_runtime,
+    new_id,
+    run_evaluation_suite,
+    utc_now,
+)
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.repositories import RuntimeRepository, WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import ensure_state_subdir, relative_workspace_path, resolve_workspace_root, write_json
+
+
+def _seed_prompt_profile_version(prompt_repository: PromptAssetRepository, *, version_id: str, prompt_profile_id: str) -> None:
+    prompt_repository.upsert_prompt_profile_version(
+        PromptProfileVersionRecord(
+            id=version_id,
+            promptProfileId=prompt_profile_id,
+            name=prompt_profile_id,
+            version="v1",
+            runScope="any",
+            body={"id": prompt_profile_id, "version": "v1"},
+            contentHash=f"{version_id}-hash",
+            createdAt=utc_now(),
+        )
+    )
+
+
+def _seed_seed_template_version(prompt_repository: PromptAssetRepository, *, version_id: str, seed_template_id: str) -> None:
+    prompt_repository.upsert_seed_template_version(
+        SeedTemplateVersionRecord(
+            id=version_id,
+            seedTemplateId=seed_template_id,
+            name=seed_template_id,
+            version="v1",
+            domain="generic",
+            scenario="control-plane",
+            body={"id": seed_template_id, "version": "v1", "domain": "generic", "scenario": "control-plane"},
+            contentHash=f"{version_id}-hash",
+            createdAt=utc_now(),
+        )
+    )
 
 
 client = TestClient(app)
@@ -534,6 +575,16 @@ def test_core_api_exposes_m9_resource_and_prompt_control_planes() -> None:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
+        _seed_prompt_profile_version(
+            prompt_repository,
+            version_id="prompt_profile_api_control_plane",
+            prompt_profile_id="yggdrasil.prompt-control-plane.fixture",
+        )
+        _seed_seed_template_version(
+            prompt_repository,
+            version_id="seed_api_control_plane",
+            seed_template_id="yggdrasil.seed.control-plane.fixture",
+        )
         artifact = prompt_repository.create_prompt_compile_artifact(
             {
                 "projectId": "project_default",
@@ -725,6 +776,11 @@ def test_core_api_filters_app_scoped_records() -> None:
         task_repository = TaskRepository(session)
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
+        _seed_prompt_profile_version(
+            prompt_repository,
+            version_id="prompt_profile_app_scope",
+            prompt_profile_id="yggdrasil.app-scope.fixture",
+        )
         task = task_repository.create_task(
             {
                 "id": "task_api_app_scope",
