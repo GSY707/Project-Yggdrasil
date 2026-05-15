@@ -80,8 +80,8 @@
 | 任务接管协议 | 已有正式 contracts、task-takeover 模块、主循环接线与 Prompt/工件注入，并已进入 scorecard schema / 汇总 CLI；但重复执行样本与更多场景覆盖仍不足 | **部分达成** |
 | 交付模板 / 自检模板 | Prompt profile 已补规则，但无独立模板资产与运行时约束 | **部分达成** |
 | Sub-Agent 可见性策略 | Prompt profile 已补约束，但缺正式运行时策略与专项验证 | **部分达成** |
-| 复杂文件拆分正式能力 | 实际代码已部分拆包，但尚未形成“复杂文件拆分任务 + 固定回归集” | **未达标** |
-| Core API 性能实测 | `QUALITY_BASELINE.md` 已有 HTTP P50/P95 实测 | **部分达成** |
+| 复杂文件拆分正式能力 | 已新增 `evalsuite_regression_g2_controlled_autonomy` / `corepack pnpm eval:g2:regression`，固定检查 repositories 与 core-api services 两个真实拆分样本 | **已达标** |
+| Core API 性能实测 | `QUALITY_BASELINE.md` 已有 HTTP P50/P95 实测 | **已达成** |
 | 首 token / 首响观测 | TODO 仍显示缺失，仓库中未见正式采集实现 | **未达标** |
 | 计划质量 / 返工率 | 已有正式协议字段、scorecard 列与汇总逻辑；当前冻结样本未回填，自动采集仍待补 | **部分达成** |
 
@@ -110,7 +110,7 @@
    - `prompting.py` 与 LLM request transcript 已携带 `takeoverProtocol`。
 - 当前剩余缺口不再是“没有实现”，而是“现有冻结样本尚未回填计划质量 / 返工率，且重复执行证据仍不足”。
 
-#### C. 复杂文件拆分能力未进入正式回归
+#### C. 复杂文件拆分能力已进入正式回归
 
 - 实际代码形态显示 `repositories` 和 `services` 已经按子包拆分，而不是单个大文件：
   - `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/`
@@ -125,8 +125,11 @@
   - `memory_service.py`：472 行
   - `repositories/task.py`：250 行
   - `repositories/memory.py`：404 行
-- 但 TODO 和技术债文档仍把 `repositories.py` / `services.py` 标为未拆分，见 [todo.md](todo.md#L53)、[todo.md](todo.md#L65)、[docs/ANTI_TECH_DEBT.md](docs/ANTI_TECH_DEBT.md#L222)。
-- 这说明当前真正的缺口不是“完全没拆”，而是“复杂文件拆分能力没有被纳入正式任务卡、评测样本和固定回归集”。
+- 当前已新增 `evaluation/suites/g2-regression.json`，并通过 `g2.complex_file_split_regression` 场景固定验证：
+  - 旧 `repositories.py` / `services.py` monolith 不复活。
+  - 拆分子文件保持在 600 行以内。
+  - API route 层不绕过 Service 直接导入 Repository。
+  - TODO / 技术债文档持续承认该能力是固定回归，而不是一次性拆包。
 
 #### D. 观测指标仍有关键空洞
 
@@ -221,7 +224,7 @@
 
 1. **没有重复执行的稳定性证据**
 2. **任务接管协议虽已进入评分链，但尚未积累足够正式样本**
-3. **没有复杂文件拆分固定回归集**
+3. **复杂文件拆分固定回归集已补齐，但仍需持续执行**
 4. **没有完整的 G2 质量指标体系**
 5. **文档/待办与实际代码状态存在漂移，影响判断与排程**
 
@@ -273,7 +276,7 @@
 - 能输出结构化计划与交付摘要。
 - 能分离“未确认项”和“未完成项”。
 
-#### 第 3 步：把复杂文件拆分能力正式化
+#### 第 3 步：把复杂文件拆分能力正式化（已落地）
 
 目标：闭合 G2 出口标准第 3 条。
 
@@ -289,7 +292,7 @@
 
 验收：
 
-- 仓库中出现固定回归任务，而不是手工一次性拆分。
+- 仓库中已出现固定回归任务，而不是手工一次性拆分。
 - 能验证拆分后的：
   - 语义一致性
   - 测试通过率
@@ -352,7 +355,7 @@
 - 当前项目也**还没有**达到 Gate 2。
 - 当前状态最准确的描述是：
 
-> **基础设施已基本具备，核心缺口集中在“重复执行证据”“任务接管样本沉淀”“复杂文件拆分回归化”“G2 指标体系完整化”四项。**
+> **基础设施已基本具备，复杂文件拆分回归化已落地；核心缺口集中在“重复执行证据”“任务接管样本沉淀”“G2 指标体系完整化”三项。**
 
 ### 是否可以继续冲 G2
 
@@ -370,7 +373,7 @@
 只有当下面三件事同时发生时：
 
 1. `YGG-CG-01` / `YGG-CG-03` 形成 3 轮以上重复执行样本，并显示稳定通过率与低接管中位数。
-2. 至少一个复杂文件拆分任务进入固定回归集。
+2. 至少一个复杂文件拆分任务进入固定回归集。当前已由 `evalsuite_regression_g2_controlled_autonomy` 覆盖，后续需持续纳入复跑清单。
 3. 任务接管协议与关键观测指标变成正式实现，而不是仅停留在 Prompt / TODO / 口头约定层。
 
 在此之前，项目状态应保持为：

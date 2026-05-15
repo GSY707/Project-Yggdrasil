@@ -4,7 +4,7 @@
 
 世界树计划的正式工程仓库。
 
-当前仓库已经不再是“骨架 + 占位”的早期状态，而是一个可运行、可评测、可恢复、可扩展的长期任务系统：
+当前仓库是一个长期任务系统，具体目标见 docs\research\系统概念：
 
 - 后端以 FastAPI、SQLAlchemy、Alembic、Redis 为核心，承载任务运行、记忆树持久化、模块控制面和评测链路。
 - 前端以 Next.js 15 + React 19 为核心，直接消费 core-api 的正式数据面，而不是扫描仓库文件。
@@ -111,6 +111,7 @@ corepack pnpm eval:m8:benchmark
 corepack pnpm eval:m8:live
 corepack pnpm eval:m9:control-plane
 corepack pnpm eval:m9:acceptance
+corepack pnpm eval:g2:regression
 ```
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-Flash-Lite`；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
@@ -124,7 +125,7 @@ corepack pnpm infra:smoke
 corepack pnpm ops:backup
 corepack pnpm ops:restore
 corepack pnpm real-user:prepare
-corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-04.csv
+corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-15-g2-complete.csv
 ```
 
 ### 真实用户试跑准备
@@ -149,17 +150,17 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 
 ## 当前重点
 
-当前阶段的重点已经从“补齐第二阶段模块能力”切换为“Gate 2 受控自治产品化与复跑基线固化”。
+当前阶段的重点已经从“Gate 2 受控自治产品化与复跑基线固化”切换为“维持 Gate 2 已闭环基线，并准备 Gate 3 的协议化升级与质量样本扩展”。
 
-### 阶段状态（2026-05-04）
+### 阶段状态（2026-05-15）
 
-- Gate 1 的原闭合声明已转为“待真实任务复核”；当前 live smoke 已恢复真实供应商调用证据，但 `YGG-CI-01` / `YGG-CG-01` / `YGG-CG-03` 仍待在同一 provider 下重跑。
-- 已完成的关键前置包括：专用沙箱入口、真实试跑证据闭环、LLM 指数退避重试、安全关闭与自动恢复链路、G2 指标口径补齐。
-- 当前最关键的缺口是：3 张真实任务卡的 live 复跑与任务级 supplier-side 证据、复跑通过率/接管中位数基线、复杂文件拆分固定回归集、Core API HTTP P50 / P95 与首响观测。
+- Gate 1 已闭合：在 `deepseek_direct` / `deepseek-v4-pro` 下完成 `YGG-CI-01`、`YGG-CG-01`、`YGG-CG-03` 官方复跑，3 张任务卡全部验收通过。
+- Gate 2 已闭合：完成 1 轮全量官方复跑 + 2 轮稳定性复跑；`YGG-CG-01` / `YGG-CG-03` 连续 3 轮全部通过，人工接管中位数 0，用户澄清回合中位数 0，恢复成功率 100%。
+- 当前正式闭环证据见 `docs/research/g2-closeout-2026-05-15.md` 与 `evaluation/fixtures/real-user-validation/scorecard-2026-05-15-g2-complete.csv`。
 
 下一步更值得投入的是：
 
-- 连续复跑 `YGG-CG-01` 与 `YGG-CG-03`，并用 `pilot-scorecard summarize` 统计通过率、接管中位数和澄清回合。
-- 优先把复杂文件拆分任务纳入固定回归集，避免 Gate 2 只靠快任务证明稳定性。
-- 补 Core API HTTP 关键路径的实测 P50 / P95，并回写 `docs/QUALITY_BASELINE.md`。
-- 补首 token / 首次有效输出级别的首响观测，支撑真实用户体验判断。
+- 持续运行 `corepack pnpm eval:g2:regression`，把复杂文件拆分能力保持为固定回归而不是一次性任务。
+- 回填 `planQualityScore0_100`、`reworkCount`、`reworkRate` 的真实样本，补齐 Gate 2 的过程质量口径。
+- 补首 token / 首次有效输出级别的首响观测，作为 Gate 3 体验基线。
+- 继续收紧任务接管、工作树和质量指标之间的正式协议边界，为 Gate 3 升级做准备。

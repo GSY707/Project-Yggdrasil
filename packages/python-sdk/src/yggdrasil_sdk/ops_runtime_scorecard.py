@@ -140,7 +140,14 @@ def _append_scorecard_rows(csv_path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         return
     fieldnames = _scorecard_fieldnames(csv_path)
+    needs_newline = False
+    if csv_path.exists() and csv_path.stat().st_size > 0:
+        with csv_path.open("rb") as probe:
+            probe.seek(-1, 2)
+            needs_newline = probe.read(1) not in {b"\n", b"\r"}
     with csv_path.open("a", encoding="utf-8", newline="") as handle:
+        if needs_newline:
+            handle.write("\n")
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         for row in rows:
             payload = {name: row.get(name, "") for name in fieldnames}
@@ -247,6 +254,13 @@ def _weighted_total_score(
     return int(round(total))
 
 
+def _aggregate_pause_resume(execution: dict[str, Any]) -> tuple[bool, bool]:
+    attempts = [execution, *[item for item in execution.get("repairAttempts") or [] if isinstance(item, dict)]]
+    attempted = any(bool(item.get("pauseResumeAttempted")) for item in attempts)
+    success = any(bool(item.get("pauseResumeSuccess")) for item in attempts)
+    return attempted, success
+
+
 def _build_scorecard_row(
     *,
     task_key: str,
@@ -268,7 +282,8 @@ def _build_scorecard_row(
     response_speed = _response_speed_score(first_useful_seconds, fastest_first_useful)
     config_quality = 100 if not execution.get("issues") else 80
     human_effort = 100
-    continuity = 100 if execution.get("pauseResumeAttempted") or task_key != "YGG-CG-03" else 100
+    pause_resume_attempted, pause_resume_success = _aggregate_pause_resume(execution)
+    continuity = 100 if task_key != "YGG-CG-03" else 100 if pause_resume_success else 0
     task_completed = 1 if str(task_record.get("status") or execution.get("finalStatus") or "") == "completed" else 0
     acceptance_pass = 1 if verification_results and all(int(item.get("returncode") or 0) == 0 for item in verification_results) else 0
     outcome_score = _task_outcome_score(task_completed, acceptance_pass)
@@ -313,10 +328,10 @@ def _build_scorecard_row(
         "human_takeover_count": 0,
         "user_clarification_rounds": 0,
         "human_edit_minutes": 0,
-        "pause_resume_attempted_0_1": 1 if execution.get("pauseResumeAttempted") else 0,
-        "pause_resume_success_0_1": 1 if execution.get("pauseResumeSuccess") else 0,
-        "recovery_attempted_0_1": 1 if execution.get("pauseResumeAttempted") else 0,
-        "recovery_success_0_1": 1 if execution.get("pauseResumeSuccess") else 0,
+        "pause_resume_attempted_0_1": 1 if pause_resume_attempted else 0,
+        "pause_resume_success_0_1": 1 if pause_resume_success else 0,
+        "recovery_attempted_0_1": 1 if pause_resume_attempted else 0,
+        "recovery_success_0_1": 1 if pause_resume_success else 0,
         "configuration_issues_count": len(execution.get("issues") or []),
         "major_issues_count": 0 if acceptance_pass else 1,
         "blocking_issues_count": 0 if acceptance_pass else 1,

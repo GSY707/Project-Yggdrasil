@@ -156,6 +156,59 @@ def test_workspace_python_run_python_uses_temp_script_for_unicode_workspace(tmp_
     assert not any(path.name.startswith("yggdrasil-python-") for path in workspace.iterdir())
 
 
+def test_workspace_edit_coerces_raw_windows_style_path_arguments() -> None:
+    from yggdrasil_sdk.mcp_servers.edit_server import _coerce_arguments
+
+    raw_arguments = {
+        "_raw": r'{"path": "C:\skzy\sandbox\note_index.py", "content": "token_re = re.compile(r\"[A-Za-z0-9]+(?:\.\d+)*\")\n", "encoding": "utf-8"}'
+    }
+
+    parsed = _coerce_arguments(raw_arguments)
+
+    assert parsed["path"] == r"C:\skzy\sandbox\note_index.py"
+    assert parsed["content"] == 'token_re = re.compile(r"[A-Za-z0-9]+(?:\\.\\d+)*")\n'
+    assert parsed["encoding"] == "utf-8"
+
+
+def test_workspace_edit_write_file_accepts_raw_json_with_invalid_backslashes(tmp_path, monkeypatch) -> None:
+    from yggdrasil_sdk.mcp_servers.edit_server import _write_file
+
+    workspace = tmp_path / "project"
+    workspace.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("YGGDRASIL_MCP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("YGGDRASIL_MCP_EDIT_ALLOWED_PATHS", json.dumps(["note_index.py"]))
+
+    result = _write_file(
+        {
+            "_raw": r'{"path": "note_index.py", "content": "token_re = re.compile(r\"[A-Za-z0-9]+(?:\.\d+)*\")\n", "encoding": "utf-8"}'
+        }
+    )
+
+    written = (workspace / "note_index.py").read_text(encoding="utf-8")
+    assert written == 'token_re = re.compile(r"[A-Za-z0-9]+(?:\\.\\d+)*")\n'
+    assert result["structuredContent"]["path"].endswith("note_index.py")
+
+
+def test_workspace_edit_write_file_accepts_live_style_multiline_raw_payload(tmp_path, monkeypatch) -> None:
+    from yggdrasil_sdk.mcp_servers.edit_server import _write_file
+
+    workspace = tmp_path / "project-live"
+    workspace.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("YGGDRASIL_MCP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("YGGDRASIL_MCP_EDIT_ALLOWED_PATHS", json.dumps(["note_index.py"]))
+
+    live_style_raw = '''{"path": "note_index.py", "content": "#!/usr/bin/env python3
+\"\"\"Note Index CLI\"\"\"
+token_re = re.compile(r\"[A-Za-z0-9]+(?:\\.\\d+)*\")
+", "encoding": "utf-8"}'''
+
+    result = _write_file({"_raw": live_style_raw})
+
+    written = (workspace / "note_index.py").read_text(encoding="utf-8")
+    assert written == '#!/usr/bin/env python3\n\"\"\"Note Index CLI\"\"\"\ntoken_re = re.compile(r\"[A-Za-z0-9]+(?:\\.\\d+)*\")\n'
+    assert result["structuredContent"]["path"].endswith("note_index.py")
+
+
 def test_mcp_bridge_missing_binding_does_not_force_sync(monkeypatch) -> None:
     sync_calls = {"count": 0}
 

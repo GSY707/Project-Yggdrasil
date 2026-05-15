@@ -19,16 +19,14 @@
 
 | 文件 | 当前行数 | 拆分截止里程碑 |
 |------|---------|--------------|
-| `packages/python-sdk/.../persistence/repositories.py` | 2831 | Gate 2 前 |
-| `packages/python-sdk/.../evaluation_runtime.py` | 1783 | Gate 2 前 |
-| `services/core-api/.../services.py` | 1411 | Gate 2 前 |
-| `packages/python-sdk/.../runtime_kernel.py` | 1200 | Gate 2 前 |
 | `packages/python-sdk/.../collaboration_runtime.py` | 957 | Gate 2 前 |
 | `packages/python-sdk/.../llm_runtime.py` | 853 | Gate 3 前 |
 | `packages/python-sdk/.../persistence/module_platform.py` | 847 | Gate 3 前 |
 | `packages/python-sdk/.../mcp_bridge.py` | 716 | Gate 3 前 |
 
 新增文件不得进入豁免名单；豁免名单只减不增。
+
+> 2026-05-15 更新：`repositories.py`、`evaluation_runtime.py`、`services.py`、`runtime_kernel.py` 已完成拆分并从豁免名单移除。
 
 ### [应当] TypeScript/TSX 文件不超过 400 行
 
@@ -234,7 +232,7 @@ persistence/
     collaboration.py   # PullRequestRepository, ReviewCommentRepository
     platform.py        # 其余平台类 Repository
 ```
-当前剩余工作：把“复杂文件拆分”从一次性拆包，升级为固定回归任务类型与评测样本。
+当前状态：已进入固定回归任务类型与评测样本。运行 `corepack pnpm eval:g2:regression` 会检查旧 monolith 文件未复活、拆分子文件仍在 600 行以内、路由层没有绕过 Service 直接导入 Repository。
 
 **TD-02 · services.py 拆分（1411 行）**
 
@@ -249,13 +247,13 @@ core-api/services/
   collaboration_service.py
   runtime_service.py
 ```
-当前剩余工作：对这些拆包结果补正式回归任务与文档同步，而不是继续沿用旧 monolith 路径描述。
+当前状态：已纳入 `evalsuite_regression_g2_controlled_autonomy`，作为 G2 “复杂文件拆分正式能力”的固定回归样本。
 
 **TD-03 · 补全 Core API HTTP 实测基线**
 
-- 对 `/tasks/`、`/nodes/`、`/memory/search` 使用真实 PostgreSQL 压测（wrk）
-- 将 `docs/QUALITY_BASELINE.md` 第 2.3 节中的"目标值"替换为实测 P50/P95
-- 验收：QUALITY_BASELINE.md 中无"尚未经过真实压测"字样
+当前状态：**已完成 SQLite / in-process Core API 实测基线**。`docs/QUALITY_BASELINE.md` 第 2.3 节已经记录 `/tasks`、`/nodes`、`/memory/retrievals` 的 P50 / P95 实测值。
+
+后续 PostgreSQL / wrk 压测作为 Gate 3 前的生产化补测，不再阻塞 Gate 2 本地回归。
 
 ### 优先级 P2（Gate 3 前）
 

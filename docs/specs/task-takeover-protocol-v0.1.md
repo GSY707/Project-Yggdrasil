@@ -6,7 +6,8 @@
 - 关联文档：
   - [Agent 运行时协议 v0.1](agent-runtime-protocol-v0.1.md)
   - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
-  - [Gate 2 差距测试与成因分析](../research/g2-gap-assessment-2026-05-04.md)
+  - [Gate 2 闭环报告（2026-05-15）](../research/g2-closeout-2026-05-15.md)
+  - [Gate 2 差距测试与成因分析（归档）](../research/归档/g2-gap-assessment-2026-05-04.md)
 
 ## 1. 目标
 
@@ -121,8 +122,8 @@ Gate 2 的“任务接管协议”闭合，至少要求以下 5 条同时成立�
 
 当前仍未闭合的部分：
 
-- 协议指标尚未接入 real-user scorecard 汇总
-- 复杂文件拆分回归样本尚未进入固定回归集
+- live 任务卡中的协议指标仍需通过同一 provider 复跑补足真实样本
+- 复杂文件拆分回归样本已进入固定回归集：`evalsuite_regression_g2_controlled_autonomy`
 - 重复执行样本仍不足以证明稳定复现
 
 ## 7. 后续扩展约束

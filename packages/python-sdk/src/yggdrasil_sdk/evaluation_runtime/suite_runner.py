@@ -4,6 +4,7 @@ from .scorer import *  # noqa: F403,F401
 
 from .suite_cases_part_a import *  # noqa: F403,F401
 from .suite_cases_part_b import *  # noqa: F403,F401
+from .suite_cases_g2 import *  # noqa: F403,F401
 
 SCENARIO_HANDLERS: dict[str, Any] = {
     "m4.memory_import_retrieval": _run_memory_import_case,
@@ -16,6 +17,7 @@ SCENARIO_HANDLERS: dict[str, Any] = {
     "m9.pause_resume_memory_tree": _run_m9_pause_resume_memory_tree_case,
     "m9.control_plane_resource_surface": _run_m9_control_plane_resource_surface_case,
     "m9.prompt_control_plane": _run_m9_prompt_control_plane_case,
+    "g2.complex_file_split_regression": _run_g2_complex_file_split_regression_case,
 }
 
 def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> dict[str, Any]:

@@ -205,6 +205,7 @@ def save_pending_tool_calls_snapshot(
     agent_run_id: str,
     pending_tool_calls: list[dict[str, Any]],
     conversation_messages: list[dict[str, Any]],
+    assistant_message: dict[str, Any] | None,
     invocation_id: str,
     round_index: int,
     usage_totals: dict[str, int],
@@ -257,6 +258,8 @@ def save_pending_tool_calls_snapshot(
         "roundSummaries": round_summaries,
         "roundModes": round_modes,
     }
+    if isinstance(assistant_message, dict):
+        pending_action["assistantMessage"] = assistant_message
     if isinstance(request_state, dict) and request_state:
         pending_action["requestState"] = request_state
     resume_message = (

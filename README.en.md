@@ -82,6 +82,8 @@ corepack pnpm eval:regression
 corepack pnpm eval:m8:benchmark
 corepack pnpm eval:m8:live
 corepack pnpm eval:m9:control-plane
+corepack pnpm eval:m9:acceptance
+corepack pnpm eval:g2:regression
 ```
 
 Operations commands:
@@ -93,7 +95,7 @@ corepack pnpm infra:smoke
 corepack pnpm ops:backup
 corepack pnpm ops:restore
 corepack pnpm real-user:prepare
-corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-04.csv
+corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-15-g2-complete.csv
 ```
 
 `real-user:prepare` creates an isolated sandbox outside the repository for pilot runs, including a copied workspace, isolated state root, frozen task materials, and activation scripts. Pilot runs should not write back into the engineering repository.
@@ -104,8 +106,15 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - Full directory map: `docs/DIRECTORY_REFERENCE.md`
 - Protocol index: `docs/protocols/README.md`
 - Specs index: `docs/specs/README.md`
+- Gate 2 closeout summary: `docs/research/g2-closeout-2026-05-15.md`
 - Open source boundary and governance entry points are available in English
 
 ## Current Focus
 
-The current project focus is now centered on Gate 2: productizing controlled autonomy, stabilizing repeated pilot runs, and closing the remaining latency and large-file regression gaps.
+The current focus has moved from closing Gate 2 to maintaining the now-closed Gate 2 baseline and preparing the next Gate 3 protocol upgrades.
+
+As of 2026-05-15:
+
+- Gate 1 is closed with official live reruns for `YGG-CI-01`, `YGG-CG-01`, and `YGG-CG-03`.
+- Gate 2 is closed with one full official rerun and two additional stability rounds on the same provider/model baseline.
+- The current engineering priorities are keeping `eval:g2:regression` green, backfilling plan quality and rework samples, and adding first-token latency instrumentation.

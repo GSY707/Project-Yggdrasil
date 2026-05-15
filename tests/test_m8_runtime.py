@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import os
 from pathlib import Path
 import subprocess
@@ -7,6 +8,7 @@ import subprocess
 import pytest
 import yggdrasil_sdk.observability_exporters as observability_exporters
 import yggdrasil_sdk.llm_runtime as sdk_llm_runtime
+import yggdrasil_sdk.ops_runtime_scorecard as ops_runtime_scorecard
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
@@ -190,6 +192,53 @@ def test_real_user_validation_sandbox_activation_command_uses_file_mode(tmp_path
     assert "activate.sh" in result["activationCommands"]["shell"]
 
 
+def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_mapping(tmp_path: Path, monkeypatch) -> None:
+    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+
+    source_workspace = tmp_path / "source-workspace-ci01"
+    target_workspace = tmp_path / "target-workspace-ci01"
+    (source_workspace / "docs").mkdir(parents=True, exist_ok=True)
+    (target_workspace / "docs").mkdir(parents=True, exist_ok=True)
+
+    package_text = (
+        "{\n"
+        '  "scripts": {\n'
+        '    "eval:m9:control-plane": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_regression_m9_control_plane",\n'
+        '    "eval:m9:acceptance": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_acceptance_m9_capabilities"\n'
+        "  }\n"
+        "}\n"
+    )
+    readme_text = (
+        "corepack pnpm eval:m9:control-plane\n"
+        "corepack pnpm eval:m9:acceptance\n"
+    )
+    directory_text = (
+        "| `eval:m9:control-plane` | `suites/m9-control-plane.json` |\n"
+        "| `eval:m9:acceptance` | `suites/m9-acceptance.json` |\n"
+    )
+
+    (source_workspace / "package.json").write_text(package_text, encoding="utf-8")
+    (source_workspace / "README.md").write_text(readme_text, encoding="utf-8")
+    (source_workspace / "docs" / "DIRECTORY_REFERENCE.md").write_text(directory_text, encoding="utf-8")
+
+    monkeypatch.setattr(ops_runtime_live, "resolve_workspace_root", lambda: source_workspace)
+    monkeypatch.setattr(ops_runtime_live, "_run_git_command", lambda *args: "")
+
+    ops_runtime_live._prepare_ci01_baseline(target_workspace)
+
+    prepared_package = (target_workspace / "package.json").read_text(encoding="utf-8")
+    prepared_readme = (target_workspace / "README.md").read_text(encoding="utf-8")
+    prepared_directory = (target_workspace / "docs" / "DIRECTORY_REFERENCE.md").read_text(encoding="utf-8")
+    runtime_context = ops_runtime_live._build_ci01_runtime_context(target_workspace)
+    direct_replacements = runtime_context[0]["content"]
+
+    assert '"eval:m9:acceptance"' not in prepared_package
+    assert "corepack pnpm eval:m9:acceptance" not in prepared_readme
+    assert "| `eval:m9:acceptance` | `suites/m9-acceptance.json` |" not in prepared_directory
+    assert "| `eval:m9:control-plane` | `suites/m9-control-plane.json` |" in direct_replacements
+    assert "| `eval:m9:acceptance` | `suites/m9-acceptance.json` |" in direct_replacements
+
+
 def test_observability_summary_reports_exporters(monkeypatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
@@ -226,6 +275,63 @@ def test_summarize_real_user_scorecard_reports_g2_metrics(tmp_path: Path) -> Non
     assert summary["tasks"]["YGG-CG-01"]["averagePlanQualityScore"] == 92.0
     assert summary["tasks"]["YGG-CG-03"]["averagePlanQualityScore"] is None
     assert summary["tasks"]["YGG-CG-03"]["recoverySuccessRate"] == 1.0
+
+
+def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -> None:
+    row = ops_runtime_scorecard._build_scorecard_row(
+        task_key="YGG-CG-03",
+        task_def={"appLabel": "coding-inherit", "taskType": "coding-resume", "workspaceProfile": "pack-a-live-sandbox"},
+        execution={
+            "verification": [{"returncode": 0}],
+            "taskRuntime": {"task": {"status": "completed"}, "invocations": []},
+            "firstUsefulOutputSeconds": 10.0,
+            "issues": [],
+            "traceIds": [],
+            "toolExecutionNames": [],
+            "diffSummary": {},
+            "taskWorkspace": "C:/tmp/pack-a",
+            "auditLevel": "strict",
+            "startAt": "2026-05-15T08:31:06Z",
+            "firstUsefulOutputAt": "2026-05-15T08:31:17Z",
+            "endAt": "2026-05-15T08:33:04Z",
+            "totalDurationSeconds": 118.0,
+            "pauseResumeAttempted": False,
+            "pauseResumeSuccess": False,
+            "repairAttempts": [
+                {
+                    "pauseResumeAttempted": True,
+                    "pauseResumeSuccess": True,
+                }
+            ],
+        },
+        fastest_first_useful=10.0,
+        provider="deepseek_direct",
+        model="deepseek-v4-pro",
+        batch_id="G2-LIVE-TEST",
+        environment_id="sandbox-live-test",
+        coordination_backend="memory",
+    )
+
+    assert row["pause_resume_attempted_0_1"] == 1
+    assert row["pause_resume_success_0_1"] == 1
+    assert row["recovery_attempted_0_1"] == 1
+    assert row["recovery_success_0_1"] == 1
+    assert row["continuity_recovery_score_0_100"] == 100
+
+
+def test_append_scorecard_rows_inserts_newline_after_header(tmp_path: Path) -> None:
+    csv_path = tmp_path / "scorecard.csv"
+    csv_path.write_text("run_id,task_id,acceptance_pass_0_1", encoding="utf-8")
+
+    ops_runtime_scorecard._append_scorecard_rows(
+        csv_path,
+        [{"run_id": "run-1", "task_id": "YGG-CG-03", "acceptance_pass_0_1": 1}],
+    )
+
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows == [{"run_id": "run-1", "task_id": "YGG-CG-03", "acceptance_pass_0_1": "1"}]
 
 
 def test_langfuse_client_uses_local_base_url_and_project_keys(monkeypatch) -> None:

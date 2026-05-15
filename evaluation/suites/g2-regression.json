@@ -1,0 +1,22 @@
+{
+  "id": "evalsuite_regression_g2_controlled_autonomy",
+  "name": "G2 Controlled Autonomy Regression Guard",
+  "domain": "coding",
+  "metricRefs": [
+    "pass-rate",
+    "duration-ms",
+    "complex-file-split"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "regression:g2-controlled-autonomy",
+  "cases": [
+    {
+      "id": "evalcase_g2_complex_file_split",
+      "title": "G2 Complex File Split Regression",
+      "scenario": "g2.complex_file_split_regression",
+      "tags": ["g2", "complex-file-split", "technical-debt"],
+      "difficulty": "medium",
+      "maxLinesPerSplitFile": 600
+    }
+  ]
+}

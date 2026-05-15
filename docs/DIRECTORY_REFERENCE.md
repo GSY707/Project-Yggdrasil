@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/5 更新：G1/G2 推进整理、工作树/超图推理研究草案与协议纳入计划同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 2 闭环证据、阶段文档归档与目录索引同步）
 
 ---
 
@@ -270,10 +270,9 @@ packages/
 ```
 
 **关键说明：**
-- `runtime_kernel.py` 是系统最核心的文件，实现了任务状态机、Agent 执行编排、上下文管理等核心逻辑。
-- `evaluation_runtime.py` 体积最大（84KB），包含完整的评测框架实现。
+- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
+- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
-- `PromptAssetRepository.create_prompt_compile_artifact()` 依赖已存在的 `prompt_profile_versions` / `seed_template_versions` 记录；测试夹具与评测 bootstrap 若手工构造 artifact，必须先 upsert 对应版本记录，避免 SQLite 与 PostgreSQL 的约束表现分叉。
 
 ---
 
@@ -448,8 +447,6 @@ docs/
 │   │                               #   工作树研究草案：任务分解、优先图、熵增控制与阶段性重启的结构化定义
 │   ├── hypergraph-reasoning-protocol-draft-2026-05-05.md
 │   │                               #   超图推理研究草案：关系平铺、关系原因升维与模式识别的高阶推理方向
-│   ├── protocol-integration-plan-2026-05-05.md
-│   │                               #   G1/G2 推进与新协议纳入整理：当前瓶颈、优先级、Gate 2 / Gate 3 边界与协议修改顺序
 │   ├── prompt-engineering-and-seed-templates-v0.1.md
 │   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
@@ -458,12 +455,31 @@ docs/
 │   │                               #   真实用户验证基线与材料冻结记录
 │   ├── real-user-validation-internal-pilot-deepseek-2026-04-30.md
 │   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
-│   ├── g1-stage-assessment-2026-05-04.md
-│   │                               #   Gate 1 闭合评估：真实任务复核状态、live 证据恢复与最小补齐动作
+│   ├── g2-closeout-2026-05-15.md
+│   │                               #   Gate 2 正式闭环报告：官方复跑 3 轮、scorecard 汇总与后续非阻塞动作
 │   ├── g2-stage-progress-2026-05-04.md
-│   │                               #   Gate 2 推进记录：出口标准、阻塞项清理状态、下一步最小动作
-│   ├── g2-gap-assessment-2026-05-04.md
-│   │                               #   Gate 2 差距评估：现时测试结果、差距矩阵、成因分析与达标路径
+│   │                               #   Gate 2 推进记录：现已补录 2026-05-15 官方复跑闭环、稳定性复跑与出口判定
+│   ├── 系统核心理念.md
+│   │                               #   记忆树系统的核心设计哲学说明
+│   ├── 系统概念/
+│   │   ├── Agent 核心设计.md
+│   │   ├── Agent 其他设计.md
+│   │   ├── Agent行为模式建议组.md
+│   │   ├── 记忆树核心设计.md
+│   │   └── 记忆树其他设计.md
+│   │                               #   中文系统设计文档集合：Agent/记忆树的核心与扩展设计草案
+│   ├── future/
+│   │   └── Project-Yggdrasil 未来多模态潜空间智能体架构.md
+│   │                               #   面向远期能力的前瞻研究草案，不纳入当前 Gate 承诺范围
+│   ├── 归档/
+│   │   ├── g1-stage-assessment-2026-05-04.md
+│   │   │                           #   G1 待真实任务复核版历史评估；2026-05-15 起由正式闭环结果覆盖
+│   │   ├── g2-gap-assessment-2026-05-04.md
+│   │   │                           #   G2 未闭环阶段的差距分析归档
+│   │   ├── protocol-integration-plan-2026-05-05.md
+│   │   │                           #   G1/G2 过渡期的协议纳入计划归档
+│   │   └── note-legacy-2026-05-15.md
+│   │                               #   根目录旧开发者笔记归档
 │   ├── runtime-optimization-plan-2026-04-29.md
 │   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
 │   └── test-suite-cpu-time-analysis-2026-04-29.md
@@ -481,23 +497,34 @@ evaluation/
 │   ├── retrieval/                  # 检索质量评测样本
 │   ├── task-execution/             # 任务执行的端到端样本
 │   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板含计划质量/返工字段，由 pilot-sandbox 命令复制到专用目录）
+│       ├── live-task-pack-g2-r2.json
+│       │                           #   2026-05-15 官方 G2 第 1 轮：YGG-CI-01 / YGG-CG-01 / YGG-CG-03 全量通过
+│       ├── live-task-pack-g2-r3-stability.json
+│       │                           #   2026-05-15 稳定性复跑第 2 轮：YGG-CG-01 / YGG-CG-03 通过
+│       ├── live-task-pack-g2-r4-stability.json
+│       │                           #   2026-05-15 稳定性复跑第 3 轮：YGG-CG-01 / YGG-CG-03 通过
+│       └── scorecard-2026-05-15-g2-complete.csv
+│                                   #   2026-05-15 官方 G2 汇总评分表：7 条 live 样本，CG-03 恢复成功率 100%
 │
 └── suites/                         # 评测套件定义
-    ├── regression/                 # M4-M6 回归套件
-    ├── m8-benchmark/               # M8 离线基准套件
-    ├── m8-live/                    # M8 真实 LLM 评测套件
-    ├── m9-acceptance/              # M9 验收套件
-    └── m9-control-plane/           # M9 控制面回归套件
+    ├── regression-m4-m6.json       # M4-M6 回归套件
+    ├── m8-benchmark-memory-strategies.json # M8 离线基准套件
+    ├── m8-live-llm.json            # M8 真实 LLM 评测套件
+    ├── m9-acceptance.json          # M9 验收套件
+    ├── m9-control-plane.json       # M9 控制面回归套件
+    └── g2-regression.json          # G2 受控自治回归套件（复杂文件拆分固定样本）
 ```
 
 **评测命令映射：**
 
 | 命令 | 对应套件 |
 |------|---------|
-| `eval:regression` | `suites/regression/` |
-| `eval:m8:benchmark` | `suites/m8-benchmark/` |
-| `eval:m8:live` | `suites/m8-live/` |
-| `eval:m9:control-plane` | `suites/m9-control-plane/` |
+| `eval:regression` | `suites/regression-m4-m6.json` |
+| `eval:m8:benchmark` | `suites/m8-benchmark-memory-strategies.json` |
+| `eval:m8:live` | `suites/m8-live-llm.json` |
+| `eval:m9:control-plane` | `suites/m9-control-plane.json` |
+| `eval:m9:acceptance` | `suites/m9-acceptance.json` |
+| `eval:g2:regression` | `suites/g2-regression.json` |
 
 ---
 
@@ -666,7 +693,9 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `uv.lock` | Python 依赖锁定文件（不要手动修改） |
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
-| `系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
+| `docs/research/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
+| `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
+| `docs/research/future/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
 | `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
 
 ---
@@ -700,7 +729,7 @@ docs/
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
-| 评测套件定义 | `evaluation/suites/<suite>/` |
+| 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
 | 架构决策理由 | `docs/adr/ADR-<number>-*.md` |
 | CI 工作流定义 | `.github/workflows/{pr,ci,nightly}.yml` |

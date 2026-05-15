@@ -10,6 +10,7 @@
     "eval:m8:live": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_live_m8_llm",
     "eval:m9:control-plane": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_regression_m9_control_plane",
     "eval:m9:acceptance": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_acceptance_m9_capabilities",
+    "eval:g2:regression": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_regression_g2_controlled_autonomy",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "infra:smoke": "uv run python -m yggdrasil_sdk.ops_cli compose-smoke",

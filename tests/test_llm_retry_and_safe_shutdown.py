@@ -237,3 +237,100 @@ class TestSafeShutdownInterrupt:
         )
         assert isinstance(exc, Exception)
         assert "round 0" in str(exc).lower() or "pending" in str(exc).lower()
+
+
+def test_execute_resumed_tool_calls_inserts_assistant_tool_bridge_message(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok", "path": arguments.get("path")},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    conversation_messages = [{"role": "user", "content": "resume pending tools"}]
+    tool_executions: list[dict[str, Any]] = []
+    pending_tool_calls = [
+        {
+            "id": "call_resume_readme",
+            "name": "mcp.read.read_file",
+            "arguments": {"path": "README.md"},
+            "argumentsText": '{"path": "README.md"}',
+        }
+    ]
+
+    llm_runtime._execute_resumed_tool_calls(
+        tool_calls=pending_tool_calls,
+        conversation_messages=conversation_messages,
+        tool_executions=tool_executions,
+        assistant_message=None,
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+    )
+
+    assert conversation_messages[1]["role"] == "assistant"
+    assert conversation_messages[1]["tool_calls"][0]["id"] == "call_resume_readme"
+    assert conversation_messages[1]["tool_calls"][0]["function"]["name"] == "mcp.read.read_file"
+    assert conversation_messages[2]["role"] == "tool"
+    assert conversation_messages[2]["tool_call_id"] == "call_resume_readme"
+    assert len(tool_executions) == 1
+    assert tool_executions[0]["toolCallId"] == "call_resume_readme"
+
+
+def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_assistant_message(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok", "path": arguments.get("path")},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    conversation_messages = [{"role": "user", "content": "resume pending tools"}]
+    tool_executions: list[dict[str, Any]] = []
+    pending_tool_calls = [
+        {
+            "id": "call_resume_note_index",
+            "name": "mcp.read.read_file",
+            "arguments": {"path": "note_index.py"},
+            "argumentsText": '{"path": "note_index.py"}',
+        }
+    ]
+    assistant_message = {
+        "role": "assistant",
+        "content": "",
+        "reasoning_content": "先恢复上轮 thinking，再执行 pending tool calls。",
+        "tool_calls": [
+            {
+                "id": "call_resume_note_index",
+                "type": "function",
+                "function": {
+                    "name": "mcp.read.read_file",
+                    "arguments": '{"path": "note_index.py"}',
+                },
+            }
+        ],
+    }
+
+    llm_runtime._execute_resumed_tool_calls(
+        tool_calls=pending_tool_calls,
+        conversation_messages=conversation_messages,
+        tool_executions=tool_executions,
+        assistant_message=assistant_message,
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+    )
+
+    assert conversation_messages[1]["reasoning_content"] == "先恢复上轮 thinking，再执行 pending tool calls。"
+    assert conversation_messages[1]["tool_calls"][0]["id"] == "call_resume_note_index"
+    assert conversation_messages[2]["tool_call_id"] == "call_resume_note_index"

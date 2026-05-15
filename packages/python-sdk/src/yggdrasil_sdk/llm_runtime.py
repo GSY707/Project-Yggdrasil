@@ -62,6 +62,7 @@ class SafeShutdownInterrupt(Exception):
         round_summaries: list[dict[str, Any]],
         round_modes: list[str],
         assistant_tool_calls_payload: list[dict[str, Any]],
+        assistant_message: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(f"Safe shutdown requested at round {round_index} with {len(pending_tool_calls)} pending tool call(s).")
         self.pending_tool_calls = pending_tool_calls
@@ -73,6 +74,7 @@ class SafeShutdownInterrupt(Exception):
         self.round_summaries = round_summaries
         self.round_modes = round_modes
         self.assistant_tool_calls_payload = assistant_tool_calls_payload
+        self.assistant_message = dict(assistant_message) if isinstance(assistant_message, dict) else None
 
 
 def load_runtime_candidate_models() -> list[dict[str, Any]] | None:
@@ -252,6 +254,70 @@ def _assistant_tool_round_message(result: dict[str, Any], assistant_tool_calls: 
     if reasoning_content:
         message["reasoning_content"] = str(reasoning_content)
     return message
+
+
+def _assistant_tool_calls_payload(tool_calls: list[dict[str, Any]], round_marker: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(call.get("id") or new_id("toolcall", call.get("name"), round_marker)),
+            "type": "function",
+            "function": {
+                "name": str(call.get("name")),
+                "arguments": str(call.get("argumentsText") or json.dumps(call.get("arguments") or {}, ensure_ascii=False)),
+            },
+        }
+        for call in tool_calls
+        if isinstance(call, dict) and call.get("name")
+    ]
+
+
+def _execute_resumed_tool_calls(
+    *,
+    tool_calls: list[dict[str, Any]],
+    conversation_messages: list[dict[str, Any]],
+    tool_executions: list[dict[str, Any]],
+    assistant_message: dict[str, Any] | None,
+    task: Any,
+    run: Any,
+    root_mount: dict[str, Any],
+    current_context: list[dict[str, Any]],
+) -> None:
+    assistant_tool_calls = _assistant_tool_calls_payload(tool_calls, "resume")
+    if isinstance(assistant_message, dict):
+        conversation_messages.append(dict(assistant_message))
+    elif assistant_tool_calls:
+        conversation_messages.append(_assistant_tool_round_message({}, assistant_tool_calls))
+    for call in tool_calls:
+        if not isinstance(call, dict) or not call.get("name"):
+            continue
+        tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), "resume"))
+        try:
+            execution = execute_registered_tool(
+                str(call["name"]),
+                call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                task=task,
+                run=run,
+                root_mount=root_mount,
+                current_context=current_context,
+            )
+            execution["success"] = True
+        except Exception as exc:
+            execution = {
+                "tool": {"name": str(call["name"])},
+                "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                "result": {"status": "error", "error": str(exc)},
+                "success": False,
+            }
+        execution["toolCallId"] = tool_call_id
+        tool_executions.append(execution)
+        conversation_messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "name": str(call["name"]),
+                "content": tool_result_to_message_content(execution),
+            }
+        )
 
 
 def _message_digest(message: dict[str, Any]) -> dict[str, Any]:
@@ -754,11 +820,13 @@ def invoke_runtime_completion(
             # Check for pending tool calls from a safe-shutdown checkpoint
             _resume_tool_calls: list[dict[str, Any]] | None = None
             _resume_conversation_messages: list[dict[str, Any]] | None = None
+            _resume_assistant_message: dict[str, Any] | None = None
             _resume_round_state: dict[str, Any] = {}
             for _pending_action in list(request.get("pendingActions") or []):
                 if isinstance(_pending_action, dict) and _pending_action.get("kind") == _PENDING_TOOL_CALLS_KIND:
                     _resume_tool_calls = _pending_action.get("toolCalls") if isinstance(_pending_action.get("toolCalls"), list) else None
                     _resume_conversation_messages = _pending_action.get("conversationMessages") if isinstance(_pending_action.get("conversationMessages"), list) else None
+                    _resume_assistant_message = _pending_action.get("assistantMessage") if isinstance(_pending_action.get("assistantMessage"), dict) else None
                     _resume_round_state = _pending_action if isinstance(_pending_action, dict) else {}
                     break
 
@@ -780,35 +848,16 @@ def invoke_runtime_completion(
             # If resuming from pending tool calls, execute them before the first LLM call
             if _resume_tool_calls is not None:
                 _resume_round_started_at = perf_counter()
-                for call in _resume_tool_calls:
-                    if not isinstance(call, dict) or not call.get("name"):
-                        continue
-                    _tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), "resume"))
-                    try:
-                        _exec = execute_registered_tool(
-                            str(call["name"]),
-                            call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
-                            task=task,
-                            run=run,
-                            root_mount=root_mount,
-                            current_context=current_context,
-                        )
-                        _exec["success"] = True
-                    except Exception as _exec_exc:
-                        _exec = {
-                            "tool": {"name": str(call["name"])},
-                            "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
-                            "result": {"status": "error", "error": str(_exec_exc)},
-                            "success": False,
-                        }
-                    _exec["toolCallId"] = _tool_call_id
-                    tool_executions.append(_exec)
-                    conversation_messages.append({
-                        "role": "tool",
-                        "tool_call_id": _tool_call_id,
-                        "name": str(call["name"]),
-                        "content": tool_result_to_message_content(_exec),
-                    })
+                _execute_resumed_tool_calls(
+                    tool_calls=_resume_tool_calls,
+                    conversation_messages=conversation_messages,
+                    tool_executions=tool_executions,
+                    assistant_message=_resume_assistant_message,
+                    task=task,
+                    run=run,
+                    root_mount=root_mount,
+                    current_context=current_context,
+                )
                 round_summaries.append({
                     "index": _resume_starting_round - 1,
                     "mode": "checkpoint-resume",
@@ -871,6 +920,8 @@ def invoke_runtime_completion(
                 # Graceful shutdown checkpoint: if shutdown requested and there are tool calls,
                 # save state and raise SafeShutdownInterrupt instead of executing them.
                 if tool_calls and _should_checkpoint_for_pause(task, request):
+                    assistant_tool_calls_payload = _assistant_tool_calls_payload(tool_calls, round_index)
+                    assistant_message = _assistant_tool_round_message(result, assistant_tool_calls_payload)
                     raise SafeShutdownInterrupt(
                         pending_tool_calls=tool_calls,
                         conversation_messages=conversation_messages,
@@ -880,30 +931,11 @@ def invoke_runtime_completion(
                         accumulated_cost=accumulated_cost,
                         round_summaries=list(round_summaries),
                         round_modes=list(round_modes),
-                        assistant_tool_calls_payload=[
-                            {
-                                "id": str(call.get("id") or new_id("toolcall", call.get("name"), round_index)),
-                                "type": "function",
-                                "function": {
-                                    "name": str(call.get("name")),
-                                    "arguments": str(call.get("argumentsText") or json.dumps(call.get("arguments") or {}, ensure_ascii=False)),
-                                },
-                            }
-                            for call in tool_calls
-                        ],
+                        assistant_tool_calls_payload=assistant_tool_calls_payload,
+                        assistant_message=assistant_message,
                     )
 
-                assistant_tool_calls = [
-                    {
-                        "id": str(call.get("id") or new_id("toolcall", call.get("name"), round_index)),
-                        "type": "function",
-                        "function": {
-                            "name": str(call.get("name")),
-                            "arguments": str(call.get("argumentsText") or json.dumps(call.get("arguments") or {}, ensure_ascii=False)),
-                        },
-                    }
-                    for call in tool_calls
-                ]
+                assistant_tool_calls = _assistant_tool_calls_payload(tool_calls, round_index)
                 conversation_messages.append(_assistant_tool_round_message(result, assistant_tool_calls))
                 for call in tool_calls:
                     tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), round_index))
