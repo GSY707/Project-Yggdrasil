@@ -292,6 +292,32 @@ class TaskTakeoverPlanStep(BaseModel):
     depends_on: list[str] = Field(default_factory=list, alias="dependsOn")
 
 
+class WorkTreeNode(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    title: str
+    phase: Literal["planning", "executing", "recovering", "restarting", "verification", "delivery"]
+    status: Literal["pending", "in-progress", "completed", "blocked", "skipped"] = "pending"
+    plan_step_ids: list[str] = Field(default_factory=list, alias="planStepIds")
+    constraint_ids: list[str] = Field(default_factory=list, alias="constraintIds")
+    depends_on: list[str] = Field(default_factory=list, alias="dependsOn")
+    expected_evidence: list[str] = Field(default_factory=list, alias="expectedEvidence")
+    recovery_anchor: str | None = Field(default=None, alias="recoveryAnchor")
+
+
+class WorkTreeProtocol(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    version: str = "0.1.0"
+    root_objective: str = Field(alias="rootObjective")
+    status: Literal["planned", "active", "paused", "verified", "completed"]
+    current_node_id: str | None = Field(default=None, alias="currentNodeId")
+    nodes: list[WorkTreeNode] = Field(default_factory=list)
+    recovery_anchor: str | None = Field(default=None, alias="recoveryAnchor")
+    entropy_budget_remaining: int = Field(default=0, alias="entropyBudgetRemaining")
+
+
 class TaskTakeoverVerificationItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -336,6 +362,7 @@ class TaskTakeoverProtocol(BaseModel):
     ambiguities: list[TaskTakeoverAmbiguity] = Field(default_factory=list)
     constraints: list[TaskTakeoverConstraint] = Field(default_factory=list)
     plan: list[TaskTakeoverPlanStep] = Field(default_factory=list)
+    work_tree: WorkTreeProtocol | None = Field(default=None, alias="workTree")
     delivery_sections: list[TaskTakeoverDeliverySection] = Field(default_factory=list, alias="deliverySections")
     verification_items: list[TaskTakeoverVerificationItem] = Field(default_factory=list, alias="verificationItems")
     metrics: TaskTakeoverMetrics

@@ -15,6 +15,8 @@ from typing import Any
 from .ops_runtime_scorecard import (
     _append_scorecard_rows,
     _build_scorecard_row,
+    _first_token_at,
+    _first_token_seconds,
     _first_useful_output_at,
     _first_useful_output_seconds,
     _format_timestamp,
@@ -293,6 +295,23 @@ def _restore_env(previous: dict[str, str | None]) -> None:
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
+
+
+def _live_task_token_budget(task_def: dict[str, Any]) -> int | None:
+    raw_value = task_def.get("budgetTokenTotal")
+    if raw_value in {None, ""}:
+        return None
+    return max(int(raw_value), 1)
+
+
+def _drain_worker_attempts(run_worker_once, queue: str = "agent-runtime", *, max_attempts: int = 4) -> list[dict[str, Any]]:
+    attempts: list[dict[str, Any]] = []
+    for _ in range(max_attempts):
+        result = run_worker_once(queue)
+        attempts.append(result)
+        if str(result.get("status") or "") != "requeued":
+            return attempts
+    raise RuntimeError(f"worker remained requeued after {max_attempts} attempts")
 
 
 def _prepare_ci01_baseline(workspace_root: Path) -> dict[str, Any]:
@@ -1295,6 +1314,13 @@ def _run_task_sequence(
         if task_key == "YGG-CG-03":
             current_context.extend(_build_cg03_runtime_context(task_workspace))
         registered_tools = _filter_registered_tools(active_capabilities, task_def.get("allowedToolNames"))
+        budget_state: dict[str, Any] = {
+            "costBudgetTotal": 5.0,
+        }
+        token_budget_total = _live_task_token_budget(task_def)
+        if token_budget_total is not None:
+            budget_state["tokenBudgetTotal"] = token_budget_total
+
         task_payload = {
             "id": task_id,
             "appId": task_def["appId"],
@@ -1304,10 +1330,7 @@ def _run_task_sequence(
             "status": "draft",
             "currentObjective": task_def["currentObjective"],
             "currentFocus": task_def["currentFocus"],
-            "budgetState": {
-                "tokenBudgetTotal": 4000,
-                "costBudgetTotal": 5.0,
-            },
+            "budgetState": budget_state,
         }
         if initial_resume_message is not None:
             task_payload["resumeMessage"] = initial_resume_message
@@ -1347,8 +1370,9 @@ def _run_task_sequence(
             pause_response = client.post(f"/runtime/tasks/{task['id']}/pause-request", json=pause_payload)
             if pause_response.status_code != 202:
                 raise RuntimeError(f"{task_key} pause request failed: {pause_response.text}")
-            first = run_worker_once("agent-runtime")
-            worker_results.append(first)
+            first_attempts = _drain_worker_attempts(run_worker_once)
+            worker_results.extend(first_attempts)
+            first = first_attempts[-1]
             first_result = first.get("result") or {}
             first_status = str(first_result.get("status") or "")
             snapshot = (first_result.get("snapshot") or {}) if isinstance(first_result.get("snapshot"), dict) else {}
@@ -1369,13 +1393,15 @@ def _run_task_sequence(
             )
             if resume_response.status_code != 202:
                 raise RuntimeError(f"{task_key} resume request failed: {resume_response.text}")
-            second = run_worker_once("agent-runtime")
-            worker_results.append(second)
+            second_attempts = _drain_worker_attempts(run_worker_once)
+            worker_results.extend(second_attempts)
+            second = second_attempts[-1]
             final_result = second
             pause_resume_success = (second.get("result") or {}).get("status") == "completed"
         else:
-            final_result = run_worker_once("agent-runtime")
-            worker_results.append(final_result)
+            final_attempts = _drain_worker_attempts(run_worker_once)
+            worker_results.extend(final_attempts)
+            final_result = final_attempts[-1]
 
         if (final_result.get("result") or {}).get("status") != "completed":
             raise RuntimeError(f"{task_key} worker failed: {json.dumps(final_result, ensure_ascii=False)}")
@@ -1383,6 +1409,7 @@ def _run_task_sequence(
         task_runtime = _collect_task_runtime_artifacts(task_id, Path(sandbox_manifest["workspaceRoot"]))
         verification = _run_verifications(task_def.get("verification") or [], task_workspace)
         diff_summary = _git_diff_summary(task_workspace)
+        first_token_seconds = _first_token_seconds(task_runtime.get("invocations") or [])
         first_useful_seconds = _first_useful_output_seconds(task_runtime.get("invocations") or [])
         end_at_raw = (task_runtime.get("task") or {}).get("endedAt")
         start_at_raw = (task_runtime.get("task") or {}).get("startedAt")
@@ -1413,6 +1440,8 @@ def _run_task_sequence(
             "issues": issues,
             "traceIds": trace_ids,
             "toolExecutionNames": _tool_execution_names(task_runtime.get("invocations") or []),
+            "firstTokenSeconds": first_token_seconds,
+            "firstTokenAt": _first_token_at(task_runtime.get("invocations") or [], first_token_seconds),
             "firstUsefulOutputSeconds": first_useful_seconds,
             "firstUsefulOutputAt": _first_useful_output_at(task_runtime.get("invocations") or [], first_useful_seconds),
             "startAt": _format_timestamp(persisted_start_at),

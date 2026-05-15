@@ -2,12 +2,13 @@
 
 - 文档状态：Candidate
 - 版本：v0.1
-- 日期：2026-05-04
+- 日期：2026-05-15
 - 关联文档：
   - [Agent 运行时协议 v0.1](agent-runtime-protocol-v0.1.md)
+  - [工作树协议 v0.1](work-tree-protocol-v0.1.md)
   - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
   - [Gate 2 闭环报告（2026-05-15）](../research/g2-closeout-2026-05-15.md)
-  - [Gate 2 差距测试与成因分析（归档）](../research/归档/g2-gap-assessment-2026-05-04.md)
+  - [Gate 3 正式闭环报告（2026-05-15）](../research/g3-closeout-2026-05-15.md)
 
 ## 1. 目标
 
@@ -36,6 +37,10 @@
   - 显式约束，覆盖 objective / scope / budget / runtime / tooling / delivery / policy / environment。
 - `TaskTakeoverPlanStep`
   - 正式计划步骤，带 phase、status、依赖关系和预期证据。
+- `WorkTreeNode`
+  - 计划步骤在 runtime 中的正式执行节点投影，带 phase、status、约束引用和 recovery anchor。
+- `WorkTreeProtocol`
+  - 正式工作树对象，记录 root objective、当前节点、整体状态和 entropy budget。
 - `TaskTakeoverDeliverySection`
   - 结构化交付片段，固定为 `result`、`evidence`、`pending`、`incomplete` 四类。
 - `TaskTakeoverVerificationItem`
@@ -68,7 +73,7 @@
 1. 在 RootMount 建立之后、模型路由决策之前，生成 `TaskTakeoverProtocol`。
 2. 将协议对象注入 request，并作为 Prompt 编译输入的一部分。
 3. 在模型完成后、执行记录写入前，对交付内容进行结构化格式化与验证。
-4. 将最终协议落盘为独立工件，并将其摘要挂到执行记录的来源注解里。
+4. 将最终协议与 work tree 一起落盘为独立工件，并将其摘要挂到执行记录的来源注解里。
 
 ### 3.3 工件要求
 
@@ -79,6 +84,14 @@
 3. 运行时返回结果
 4. `runtime/takeover/*.json` 工件
 5. 执行记录节点的 source annotation
+
+## 3.4 Work tree 约束
+
+Gate 3 以后，`TaskTakeoverProtocol` 不再只有 plan 文本，而是必须同时带上 `workTree`：
+
+1. work tree 必须由 objective / constraints / plan 派生，而不是临时自由生成。
+2. runtime 完成时必须把 work tree 状态同步到 `completed`。
+3. 若任务进入 pause/resume 或 repair，work tree 必须保留可恢复锚点。
 
 ## 4. 与 Prompt 的分工
 
@@ -98,15 +111,15 @@ Prompt 负责：
 
 因此，Prompt 可以影响表现形式，但不能替代协议对象。
 
-## 5. Gate 2 出口标准
+## 5. Gate 3 增量出口标准
 
-Gate 2 的“任务接管协议”闭合，至少要求以下 5 条同时成立：
+在 Gate 2 已闭合的基础上，Gate 3 额外要求以下 5 条同时成立：
 
-1. 协议覆盖：主 Agent coding 窄路径任务每次运行都能生成 `TaskTakeoverProtocol`，其中必须包含 objective、constraints、plan 三部分。
-2. 工件覆盖：编译 Prompt、request transcript、运行时结果和执行记录都能引用同一份协议对象或其工件。
-3. 交付覆盖：每次运行都能产出 `result / evidence / pending / incomplete` 四类交付段，并给出验证项和协议指标。
-4. 复跑覆盖：同一批窄路径任务至少重复执行 3 轮，能够观察通过率、人工接管中位数、澄清回合和协议指标是否稳定。
-5. 回归覆盖：至少一个“复杂文件拆分”样本进入固定回归集，并要求协议对象全程可追踪。
+1. `TaskTakeoverProtocol` 必须正式包含 `workTree`，且 `workTree` 能在 prompt、request、result 和 artifact 中被同一版本追踪。
+2. runtime 完成或恢复后，work tree 状态必须和任务正式状态同步。
+3. work tree 必须为 pause/resume 或 repair 提供恢复锚点，而不是只靠自然语言续跑。
+4. 协议指标与 work tree 状态必须能在正式 live task pack 中被观测，而不是只在离线测试中存在。
+5. 协议对象扩展不能破坏既有 Gate 2 回归与复杂文件拆分固定样本。
 
 ## 6. 当前实现边界
 
@@ -119,12 +132,9 @@ Gate 2 的“任务接管协议”闭合，至少要求以下 5 条同时成立�
 - Prompt 注入
 - 协议工件落盘
 - 协议摘要挂入执行记录
+- work tree 正式对象与 completed 状态同步
 
-当前仍未闭合的部分：
-
-- live 任务卡中的协议指标仍需通过同一 provider 复跑补足真实样本
-- 复杂文件拆分回归样本已进入固定回归集：`evalsuite_regression_g2_controlled_autonomy`
-- 重复执行样本仍不足以证明稳定复现
+Gate 3 已闭合；后续扩展不再是“是否有正式对象”，而是“如何把 work tree、返工率和跨 provider 质量纳入更固定的 nightly / release baseline”。
 
 ## 7. 后续扩展约束
 

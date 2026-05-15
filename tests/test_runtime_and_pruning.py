@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
+import yggdrasil_model_providers
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
@@ -10,6 +11,7 @@ from yggdrasil_context_pruning.plugin import ContextPruningModule
 from yggdrasil_sdk import PromptAssetRepository, TaskRepository, get_persistence_runtime, resolve_workspace_root
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
+import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -269,6 +271,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert request_payload["promptMetadata"]["runType"] == "main"
         assert request_payload["promptMetadata"]["takeoverProtocol"]["objective"] == "完成首次执行并进入 safe-stop。"
         assert request_payload["promptMetadata"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
+        assert request_payload["promptMetadata"]["takeoverProtocol"]["workTree"]["status"] == "planned"
         response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
         assert response_payload["localRuntimeTimings"]["compilePromptMs"] >= 0
@@ -283,6 +286,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
 
     assert first_run["result"]["takeoverProtocol"] is not None
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
+    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] == "verified"
     assert first_run["result"]["takeoverProtocolRef"] is not None
 
     resumed = client.post(
@@ -331,6 +335,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         ]
         assert len(execution_notes) == 2
     assert second_run["result"]["takeoverProtocol"] is not None
+    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "completed"
     assert second_run["result"]["takeoverProtocolRef"] is not None
 
 
@@ -379,6 +384,111 @@ def test_main_agent_runtime_fails_when_budget_is_exhausted() -> None:
         assert task.status == "failed"
         assert task_repository.list_agent_runs("task_budget_fail") == []
         assert runtime_repository.list_model_route_decisions(task_id="task_budget_fail") == []
+
+
+def test_main_agent_runtime_fails_when_actual_usage_exceeds_budget(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "budget-model",
+                "provider": "budget-provider",
+                "quality": 0.8,
+                "costPer1k": 0.001,
+                "latencyMs": 50,
+                "contextWindow": 8192,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "budget-provider",
+            "model": "budget-model",
+            "outputText": "已输出一份超预算结果。",
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 260,
+                "outputTokens": 120,
+                "totalTokens": 380,
+            },
+            "costUsed": 0.05,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "已输出一份超预算结果。"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 260,
+                    "completion_tokens": 120,
+                    "total_tokens": 380,
+                },
+            },
+            "requestPayload": {
+                "model": "budget-model",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 120.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_budget_actual_fail",
+                "title": "预算后置校验",
+                "goal": "验证实际 token/cost 超支后任务会失败。",
+                "status": "draft",
+                "budgetState": {
+                    "tokenBudgetTotal": 500,
+                    "costBudgetTotal": 0.03,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_budget_actual_fail/start",
+        json={
+            "currentContext": [
+                {
+                    "id": "ctx_budget_actual",
+                    "title": "小上下文",
+                    "content": "让预估通过，但让实际用量超支。",
+                    "importance": 0.5,
+                }
+            ]
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "failed"
+    assert "budget exceeded after model invocation" in processed["result"]["detail"].lower()
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        task = task_repository.get_task("task_budget_actual_fail")
+        assert task is not None
+        assert task.status == "failed"
+        runs = task_repository.list_agent_runs("task_budget_actual_fail")
+        assert len(runs) == 1
+        assert runs[0].status == "failed"
+        assert len(runtime_repository.list_model_route_decisions(task_id="task_budget_actual_fail")) == 1
+        assert len(runtime_repository.list_model_invocations(task_id="task_budget_actual_fail")) == 1
 
 
 def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:

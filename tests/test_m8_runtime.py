@@ -239,6 +239,29 @@ def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_ma
     assert "| `eval:m9:acceptance` | `suites/m9-acceptance.json` |" in direct_replacements
 
 
+def test_live_task_token_budget_defaults_to_unbounded_without_override() -> None:
+    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+
+    assert ops_runtime_live._live_task_token_budget({"maxTokens": 900, "maxToolRounds": 12}) is None
+    assert ops_runtime_live._live_task_token_budget({"maxTokens": 2200, "maxToolRounds": 36}) is None
+    assert ops_runtime_live._live_task_token_budget({"budgetTokenTotal": 24000, "maxTokens": 900}) == 24000
+
+
+def test_drain_worker_attempts_consumes_requeued_results_before_returning() -> None:
+    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+
+    attempts = iter(
+        [
+            {"status": "requeued", "result": {"status": "failed"}},
+            {"status": "processed", "result": {"status": "completed"}},
+        ]
+    )
+
+    results = ops_runtime_live._drain_worker_attempts(lambda _queue: next(attempts))
+
+    assert [item["status"] for item in results] == ["requeued", "processed"]
+
+
 def test_observability_summary_reports_exporters(monkeypatch) -> None:
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
@@ -253,10 +276,10 @@ def test_observability_summary_reports_exporters(monkeypatch) -> None:
 def test_summarize_real_user_scorecard_reports_g2_metrics(tmp_path: Path) -> None:
     csv_path = tmp_path / "scorecard.csv"
     csv_path.write_text(
-        "run_id,task_id,acceptance_pass_0_1,human_takeover_count,user_clarification_rounds,recovery_attempted_0_1,recovery_success_0_1,weighted_total_score_0_100,plan_quality_score_0_100,rework_count,rework_rate\n"
-        "run-1,YGG-CG-01,1,0,1,0,0,98,94,1,0.25\n"
-        "run-2,YGG-CG-01,1,1,0,0,0,96,90,2,0.50\n"
-        "run-3,YGG-CG-03,1,0,0,1,1,99,,,\n",
+        "run_id,task_id,acceptance_pass_0_1,human_takeover_count,user_clarification_rounds,recovery_attempted_0_1,recovery_success_0_1,weighted_total_score_0_100,first_token_seconds,plan_quality_score_0_100,rework_count,rework_rate\n"
+        "run-1,YGG-CG-01,1,0,1,0,0,98,1.25,94,1,0.25\n"
+        "run-2,YGG-CG-01,1,1,0,0,0,96,1.75,90,2,0.50\n"
+        "run-3,YGG-CG-03,1,0,0,1,1,99,,,,\n",
         encoding="utf-8",
     )
 
@@ -266,15 +289,37 @@ def test_summarize_real_user_scorecard_reports_g2_metrics(tmp_path: Path) -> Non
     assert summary["overall"]["acceptancePassRate"] == 1.0
     assert summary["overall"]["medianHumanTakeoverCount"] == 0.0
     assert summary["overall"]["medianUserClarificationRounds"] == 0.0
+    assert summary["overall"]["averageFirstTokenSeconds"] == 1.5
+    assert summary["overall"]["firstTokenSampleCount"] == 2
     assert summary["overall"]["averagePlanQualityScore"] == 92.0
     assert summary["overall"]["planQualitySampleCount"] == 2
     assert summary["overall"]["medianReworkCount"] == 1.5
     assert summary["overall"]["reworkCountSampleCount"] == 2
     assert summary["overall"]["averageReworkRate"] == 0.375
     assert summary["overall"]["reworkRateSampleCount"] == 2
+    assert summary["tasks"]["YGG-CG-01"]["averageFirstTokenSeconds"] == 1.5
     assert summary["tasks"]["YGG-CG-01"]["averagePlanQualityScore"] == 92.0
+    assert summary["tasks"]["YGG-CG-03"]["averageFirstTokenSeconds"] is None
     assert summary["tasks"]["YGG-CG-03"]["averagePlanQualityScore"] is None
     assert summary["tasks"]["YGG-CG-03"]["recoverySuccessRate"] == 1.0
+
+
+def test_first_token_helpers_read_response_payload() -> None:
+    invocations = [
+        {
+            "record": {"startedAt": "2026-05-15T08:31:06Z"},
+            "responsePayload": {
+                "firstTokenLatencyMs": 1250.0,
+                "rounds": [{"latencyMs": 3750.0}],
+            },
+        }
+    ]
+
+    first_token_seconds = ops_runtime_scorecard._first_token_seconds(invocations)
+
+    assert first_token_seconds == 1.25
+    assert ops_runtime_scorecard._first_token_at(invocations, first_token_seconds) == "2026-05-15T08:31:07.250000Z"
+    assert ops_runtime_scorecard._first_useful_output_seconds(invocations) == 3.75
 
 
 def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -> None:
@@ -284,6 +329,7 @@ def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -
         execution={
             "verification": [{"returncode": 0}],
             "taskRuntime": {"task": {"status": "completed"}, "invocations": []},
+            "firstTokenSeconds": 1.5,
             "firstUsefulOutputSeconds": 10.0,
             "issues": [],
             "traceIds": [],
@@ -292,6 +338,7 @@ def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -
             "taskWorkspace": "C:/tmp/pack-a",
             "auditLevel": "strict",
             "startAt": "2026-05-15T08:31:06Z",
+            "firstTokenAt": "2026-05-15T08:31:07.500000Z",
             "firstUsefulOutputAt": "2026-05-15T08:31:17Z",
             "endAt": "2026-05-15T08:33:04Z",
             "totalDurationSeconds": 118.0,
@@ -317,6 +364,9 @@ def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -
     assert row["recovery_attempted_0_1"] == 1
     assert row["recovery_success_0_1"] == 1
     assert row["continuity_recovery_score_0_100"] == 100
+    assert row["first_token_at"] == "2026-05-15T08:31:07.500000Z"
+    assert row["first_token_seconds"] == 1.5
+    assert row["agent_system"] == "yggdrasil-deepseek-direct-live"
 
 
 def test_append_scorecard_rows_inserts_newline_after_header(tmp_path: Path) -> None:

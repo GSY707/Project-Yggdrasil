@@ -370,6 +370,16 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
             actual_output_tokens = int(llm_result["usage"].get("outputTokens", output_tokens))
             actual_cost = float(llm_result.get("costUsed", estimated_cost))
+            budget_overrun: str | None = None
+            try:
+                _enforce_consumed_budget(
+                    task.budget,
+                    input_tokens=actual_input_tokens,
+                    output_tokens=actual_output_tokens,
+                    cost_used=actual_cost,
+                )
+            except ValueError as exc:
+                budget_overrun = str(exc)
             run = task_repository.update_agent_run(
                 run.id,
                 {
@@ -389,6 +399,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         output_tokens=actual_output_tokens,
                         cost_used=actual_cost,
                     ),
+                    "status": "failed" if budget_overrun is not None else task.status,
+                    "currentFocus": f"execution-failed: {budget_overrun}" if budget_overrun is not None else task.current_focus,
                 },
             )
             model_invocation_event = _persist_runtime_event(
@@ -399,6 +411,24 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 event_type="runtime.model-invocation.completed",
                 locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
             )
+            if budget_overrun is not None:
+                run = task_repository.update_agent_run(run.id, {"status": "failed"})
+                runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                return {
+                    "status": "failed",
+                    "taskId": task_id,
+                    "task": task.model_dump(by_alias=True, mode="json"),
+                    "run": run.model_dump(by_alias=True, mode="json"),
+                    "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                    "modelInvocation": llm_result["invocation"],
+                    "outboxRecords": {
+                        "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),
+                        "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
+                        "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                    },
+                    "detail": budget_overrun,
+                    "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
+                }
             takeover_finalize_started_at = perf_counter()
             takeover_protocol = finalize_task_takeover_protocol(
                 takeover_protocol,
@@ -643,6 +673,14 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 },
             )
             run = task_repository.update_agent_run(run.id, {"status": "completed"})
+            if takeover_protocol is not None and takeover_protocol.work_tree is not None:
+                takeover_protocol = takeover_protocol.model_copy(
+                    update={
+                        "status": "completed",
+                        "work_tree": takeover_protocol.work_tree.model_copy(update={"status": "completed"}),
+                    }
+                )
+                takeover_protocol_ref = persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
             runtime_timings["completeTransitionMs"] = _elapsed_ms(complete_transition_started_at)
             runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
             return {

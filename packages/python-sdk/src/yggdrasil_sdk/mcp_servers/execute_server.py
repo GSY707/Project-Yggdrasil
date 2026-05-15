@@ -6,6 +6,7 @@ import subprocess
 from typing import Any
 
 from .base import SimpleMCPServer, structured_tool_result
+from .permission_layer import assert_command_allowed
 
 
 def _workspace_root() -> Path:
@@ -29,6 +30,7 @@ def _run_command(arguments: dict[str, Any]) -> dict[str, Any]:
     command = str(arguments.get("command") or "").strip()
     if not command:
         raise ValueError("command is required")
+    assert_command_allowed(command)
     completed = subprocess.run(
         command,
         cwd=_resolve_cwd(arguments.get("cwd")),

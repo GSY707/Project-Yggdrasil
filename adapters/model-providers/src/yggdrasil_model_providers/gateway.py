@@ -362,6 +362,189 @@ def _extract_text_content(payload: Any) -> str:
     return str(payload or "")
 
 
+def _merge_stream_tool_call(tool_calls: dict[int, dict[str, Any]], raw_call: dict[str, Any]) -> None:
+    raw_index = raw_call.get("index")
+    try:
+        index = int(raw_index)
+    except (TypeError, ValueError):
+        index = len(tool_calls)
+    entry = tool_calls.setdefault(
+        index,
+        {
+            "id": None,
+            "type": "function",
+            "function": {"name": "", "arguments": ""},
+        },
+    )
+    if raw_call.get("id"):
+        entry["id"] = str(raw_call["id"])
+    if raw_call.get("type"):
+        entry["type"] = str(raw_call["type"])
+    function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
+    entry_function = entry["function"]
+    name_part = str(function_payload.get("name") or "")
+    if name_part:
+        entry_function["name"] += name_part
+    arguments_part = function_payload.get("arguments")
+    if arguments_part is not None:
+        entry_function["arguments"] += str(arguments_part)
+
+
+def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[dict[str, Any], float | None]:
+    request_started_at = time.perf_counter()
+    first_token_latency_ms: float | None = None
+    response_id: str | None = None
+    response_model: str | None = None
+    finish_reason: str | None = None
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    usage: dict[str, Any] | None = None
+    tool_calls: dict[int, dict[str, Any]] = {}
+
+    with urllib_request.urlopen(http_request, timeout=timeout_seconds) as response:
+        while True:
+            raw_line = response.readline()
+            if not raw_line:
+                break
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            if not stripped.startswith(b"data:"):
+                body = raw_line + response.read()
+                return json.loads(body.decode("utf-8")), None
+
+            event_payload = stripped[len(b"data:") :].strip()
+            if not event_payload:
+                continue
+            if event_payload == b"[DONE]":
+                break
+
+            chunk = json.loads(event_payload.decode("utf-8"))
+            if response_id is None and chunk.get("id"):
+                response_id = str(chunk["id"])
+            if response_model is None and chunk.get("model"):
+                response_model = str(chunk["model"])
+            if isinstance(chunk.get("usage"), dict):
+                usage = dict(chunk["usage"])
+
+            choice = ((chunk.get("choices") or [{}])[0]) if isinstance(chunk, dict) else {}
+            delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+            message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+            payload = delta or message
+
+            content_fragment = _extract_text_content(payload.get("content"))
+            reasoning_fragment = (
+                _extract_text_content(payload.get("reasoning_content"))
+                if payload.get("reasoning_content") is not None
+                else ""
+            )
+            raw_tool_calls = payload.get("tool_calls") if isinstance(payload.get("tool_calls"), list) else []
+            if first_token_latency_ms is None and (content_fragment or reasoning_fragment or raw_tool_calls):
+                first_token_latency_ms = round((time.perf_counter() - request_started_at) * 1000.0, 2)
+            if content_fragment:
+                content_parts.append(content_fragment)
+            if reasoning_fragment:
+                reasoning_parts.append(reasoning_fragment)
+            for raw_call in raw_tool_calls:
+                if isinstance(raw_call, dict):
+                    _merge_stream_tool_call(tool_calls, raw_call)
+            if choice.get("finish_reason") is not None:
+                finish_reason = str(choice.get("finish_reason") or "stop")
+
+    serialized_tool_calls = [tool_calls[index] for index in sorted(tool_calls)]
+    message_payload: dict[str, Any] = {
+        "role": "assistant",
+        "content": "".join(content_parts),
+    }
+    if reasoning_parts:
+        message_payload["reasoning_content"] = "".join(reasoning_parts)
+    if serialized_tool_calls:
+        message_payload["tool_calls"] = serialized_tool_calls
+
+    return (
+        {
+            "id": response_id or new_id("stream", "chat-completion"),
+            "object": "chat.completion",
+            "model": response_model,
+            "choices": [
+                {
+                    "finish_reason": finish_reason or "stop",
+                    "message": message_payload,
+                }
+            ],
+            "usage": usage or {},
+            "stream": True,
+        },
+        first_token_latency_ms,
+    )
+
+
+def _result_from_raw_response(
+    raw_response: dict[str, Any],
+    *,
+    resolved_model: str,
+    config: ProviderConfig,
+    messages: list[dict[str, Any]],
+    model_profile: dict[str, Any],
+    request_payload: dict[str, Any],
+    tool_name_aliases: dict[str, str],
+    first_token_latency_ms: float | None,
+) -> dict[str, Any]:
+    choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
+    message = choice.get("message") or {}
+    output_text = _extract_text_content(message.get("content"))
+    reasoning_content = _extract_text_content(message.get("reasoning_content")) if message.get("reasoning_content") is not None else ""
+    tool_calls: list[dict[str, Any]] = []
+    for raw_call in message.get("tool_calls") or []:
+        if not isinstance(raw_call, dict):
+            continue
+        function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
+        name = str(function_payload.get("name") or "").strip()
+        original_name = tool_name_aliases.get(name, name)
+        arguments_text = str(function_payload.get("arguments") or "{}").strip() or "{}"
+        try:
+            arguments = json.loads(arguments_text)
+            if not isinstance(arguments, dict):
+                arguments = {"value": arguments}
+        except Exception:
+            arguments = {"_raw": arguments_text}
+        tool_calls.append(
+            {
+                "id": str(raw_call.get("id") or new_id("toolcall", original_name or resolved_model)),
+                "type": str(raw_call.get("type") or "function"),
+                "name": original_name,
+                "arguments": arguments,
+                "argumentsText": arguments_text,
+            }
+        )
+    usage = raw_response.get("usage") if isinstance(raw_response, dict) else {}
+    input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or sum(_estimate_tokens(str(item.get("content") or "")) for item in messages))
+    output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or _estimate_tokens(output_text))
+    total_tokens = int(usage.get("total_tokens") or input_tokens + output_tokens)
+    cost_per_1k_input = float(model_profile.get("cost_per_1k_input", config.cost_per_1k_input))
+    cost_per_1k_output = float(model_profile.get("cost_per_1k_output", config.cost_per_1k_output))
+    cost_used = round((input_tokens * cost_per_1k_input + output_tokens * cost_per_1k_output) / 1000.0, 6)
+    return {
+        "mode": "live",
+        "provider": config.provider,
+        "model": resolved_model,
+        "outputText": output_text,
+        "reasoningContent": reasoning_content or None,
+        "finishReason": choice.get("finish_reason") or "stop",
+        "usage": {
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "totalTokens": total_tokens,
+        },
+        "costUsed": cost_used,
+        "error": None,
+        "toolCalls": tool_calls,
+        "rawResponse": raw_response,
+        "requestPayload": request_payload,
+        "firstTokenLatencyMs": first_token_latency_ms,
+    }
+
+
 def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested_model: str | None, requested_provider: str | None) -> dict[str, Any]:
     user_message = next((message for message in reversed(messages) if message.get("role") == "user"), {"content": ""})
     summarized_prompt = normalize_excerpt(str(user_message.get("content") or ""), 400)
@@ -455,7 +638,7 @@ def invoke_model(
     request_payload: dict[str, Any] = {
         "model": resolved_model,
         "messages": messages,
-        "stream": False,
+        "stream": True,
     }
     if config.provider == "deepseek_direct" and bool(model_profile.get("supports_thinking")):
         thinking_type = _normalize_thinking_type(thinking)
@@ -493,8 +676,7 @@ def invoke_model(
     for _attempt in range(_max_retries + 1):
         try:
             http_request = urllib_request.Request(endpoint, data=encoded_payload, headers=headers, method="POST")
-            with urllib_request.urlopen(http_request, timeout=timeout_seconds) as response:
-                _raw_response = json.loads(response.read().decode("utf-8"))
+            _raw_response, first_token_latency_ms = _assemble_stream_response(http_request, timeout_seconds=timeout_seconds)
             break  # success
         except urllib_error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -528,56 +710,13 @@ def invoke_model(
         raise RuntimeError(f"Model provider failed after {_max_retries + 1} attempts: {exc_msg}") from _last_exc
 
     raw_response = _raw_response
-
-    choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
-    message = choice.get("message") or {}
-    output_text = _extract_text_content(message.get("content"))
-    reasoning_content = _extract_text_content(message.get("reasoning_content")) if message.get("reasoning_content") is not None else ""
-    tool_calls: list[dict[str, Any]] = []
-    for raw_call in message.get("tool_calls") or []:
-        if not isinstance(raw_call, dict):
-            continue
-        function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
-        name = str(function_payload.get("name") or "").strip()
-        original_name = tool_name_aliases.get(name, name)
-        arguments_text = str(function_payload.get("arguments") or "{}").strip() or "{}"
-        try:
-            arguments = json.loads(arguments_text)
-            if not isinstance(arguments, dict):
-                arguments = {"value": arguments}
-        except Exception:
-            arguments = {"_raw": arguments_text}
-        tool_calls.append(
-            {
-                "id": str(raw_call.get("id") or new_id("toolcall", original_name or resolved_model)),
-                "type": str(raw_call.get("type") or "function"),
-                "name": original_name,
-                "arguments": arguments,
-                "argumentsText": arguments_text,
-            }
-        )
-    usage = raw_response.get("usage") if isinstance(raw_response, dict) else {}
-    input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or sum(_estimate_tokens(str(item.get("content") or "")) for item in messages))
-    output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or _estimate_tokens(output_text))
-    total_tokens = int(usage.get("total_tokens") or input_tokens + output_tokens)
-    cost_per_1k_input = float(model_profile.get("cost_per_1k_input", config.cost_per_1k_input))
-    cost_per_1k_output = float(model_profile.get("cost_per_1k_output", config.cost_per_1k_output))
-    cost_used = round((input_tokens * cost_per_1k_input + output_tokens * cost_per_1k_output) / 1000.0, 6)
-    return {
-        "mode": "live",
-        "provider": config.provider,
-        "model": resolved_model,
-        "outputText": output_text,
-        "reasoningContent": reasoning_content or None,
-        "finishReason": choice.get("finish_reason") or "stop",
-        "usage": {
-            "inputTokens": input_tokens,
-            "outputTokens": output_tokens,
-            "totalTokens": total_tokens,
-        },
-        "costUsed": cost_used,
-        "error": None,
-        "toolCalls": tool_calls,
-        "rawResponse": raw_response,
-        "requestPayload": request_payload,
-    }
+    return _result_from_raw_response(
+        raw_response,
+        resolved_model=resolved_model,
+        config=config,
+        messages=messages,
+        model_profile=model_profile,
+        request_payload=request_payload,
+        tool_name_aliases=tool_name_aliases,
+        first_token_latency_ms=first_token_latency_ms,
+    )

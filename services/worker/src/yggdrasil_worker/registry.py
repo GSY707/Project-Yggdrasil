@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from time import perf_counter
 import signal
 from typing import Any
 
@@ -149,6 +150,14 @@ def build_worker_report() -> dict[str, object]:
     }
 
 
+def _activity_by_name() -> dict[str, WorkerActivityDescriptor]:
+    return {activity.name: activity for activity in discover_worker_activities()}
+
+
+def _max_retry_attempts() -> int:
+    return max(int(os.environ.get("YGGDRASIL_WORKER_RETRY_MAX") or 2), 0)
+
+
 def enqueue_work_item(queue: str, payload: dict[str, Any]) -> dict[str, object]:
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
@@ -221,15 +230,54 @@ def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) 
                 "detail": "Worker payload must be a JSON object.",
                 "payload": payload,
             }
-        span["attributes"]["activity"] = str(payload.get("activity") or "")
+        activity_name = str(payload.get("activity") or "")
+        span["attributes"]["activity"] = activity_name
+        activity_descriptor = _activity_by_name().get(activity_name)
+        attempt = max(int(payload.get("attempt") or 1), 1)
+        dispatch_started_at = perf_counter()
         result = dispatch_work_item(payload)
+        duration_ms = round((perf_counter() - dispatch_started_at) * 1000.0, 2)
+        if isinstance(result, dict):
+            result.setdefault("durationMs", duration_ms)
+            if activity_descriptor is not None and duration_ms > activity_descriptor.timeout_ms:
+                result["timeoutExceeded"] = True
+        if (
+            isinstance(result, dict)
+            and result.get("status") == "failed"
+            and bool(result.get("retryable"))
+            and activity_descriptor is not None
+            and activity_descriptor.retryable
+            and attempt <= _max_retry_attempts()
+        ):
+            retry_payload = {
+                **payload,
+                "attempt": attempt + 1,
+                "lastFailure": str(result.get("detail") or result.get("status") or "failed"),
+                "lastDurationMs": duration_ms,
+                "retriedAt": utc_now().isoformat(),
+            }
+            retry = enqueue_work_item(queue, retry_payload)
+            record_metric(
+                "worker",
+                "work-item.requeued",
+                1,
+                kind="counter",
+                attributes={"queue": queue, "activity": activity_name},
+            )
+            return {
+                "status": "requeued",
+                "queue": queue,
+                "payload": payload,
+                "result": result,
+                "retry": retry,
+            }
         worker_status = "processed" if result.get("status") not in {"error"} else "error"
         record_metric(
             "worker",
             "work-item.processed",
             1,
             kind="counter",
-            attributes={"queue": queue, "activity": str(payload.get("activity") or "unknown"), "status": worker_status},
+            attributes={"queue": queue, "activity": activity_name or "unknown", "status": worker_status},
         )
         if worker_status == "error":
             record_log(

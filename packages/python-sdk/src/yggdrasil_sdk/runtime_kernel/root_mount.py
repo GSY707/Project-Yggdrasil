@@ -134,6 +134,14 @@ def _enforce_budget(budget: BudgetState, *, input_tokens: int, output_tokens: in
     if budget.cost_budget_total is not None and budget.cost_budget_used + estimated_cost > budget.cost_budget_total:
         raise ValueError("Cost budget exceeded before the next execution step.")
 
+
+def _enforce_consumed_budget(budget: BudgetState, *, input_tokens: int, output_tokens: int, cost_used: float) -> None:
+    consumed_total_tokens = input_tokens + output_tokens
+    if budget.token_budget_total is not None and budget.token_budget_used + consumed_total_tokens > budget.token_budget_total:
+        raise ValueError("Token budget exceeded after model invocation.")
+    if budget.cost_budget_total is not None and budget.cost_budget_used + cost_used > budget.cost_budget_total:
+        raise ValueError("Cost budget exceeded after model invocation.")
+
 def _updated_budget_state(budget: BudgetState, *, input_tokens: int, output_tokens: int, cost_used: float) -> BudgetState:
     return budget.model_copy(
         update={

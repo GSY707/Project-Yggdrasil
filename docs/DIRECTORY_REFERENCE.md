@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 2 闭环证据、阶段文档归档与目录索引同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 3 闭环证据、work tree 规格、execute-server 权限层与 paid-provider live rerun 同步）
 
 ---
 
@@ -184,12 +184,13 @@ services/
     ├── pyproject.toml
     └── src/yggdrasil_worker/
         ├── main.py                 # Worker 启动入口
-        └── activities.py           # Temporal Activity 实现
+        └── registry.py             # Worker 活动注册、队列消费、retry/requeue 与 graceful shutdown
 ```
 
 **关键说明：**
 - `services/` 子包是控制面的业务逻辑层，已按资源域拆分；路由层仅做参数校验和委派。
 - Agent Runtime 和 Core API 通过 NATS JetStream 事件总线通信，不直接 HTTP 调用。
+- Worker 当前通过 `registry.py` 统一管理活动目录、Redis 队列消费和 retry/requeue，不再依赖独立 `activities.py` 实现文件。
 - Worker 运行 Temporal Activity，处理耗时异步任务（如批量记忆导入、训练触发）。
 
 ---
@@ -238,7 +239,7 @@ packages/
 │       ├── # ── MCP 集成 ─────────────────────────────────
 │       ├── mcp_bridge.py           # MCP 协议桥接实现（32KB）
 │       ├── mcp_bridge_module.py    # MCP 模块封装
-│       ├── mcp_servers/            # 内置 MCP Server 实现
+│       ├── mcp_servers/            # 内置 MCP Server 实现（含 execute_server 默认拒绝网络命令的 permission layer）
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
@@ -253,11 +254,11 @@ packages/
 │           ├── ops_runtime.py      # 运维兼容门面，保持 CLI 与外部导入路径稳定
 │           ├── ops_runtime_backup.py # runtime 备份与恢复实现
 │           ├── ops_runtime_compose.py # compose smoke 检查实现
-│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、token 预算、工具/交付约束与 pause/resume 约束
+│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、worker requeue drain、paid-provider 门控与 pause/resume 约束
 │           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现
 │           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
 │           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
-│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-scorecard）
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算）
 │
 ├── contracts/                      # 跨语言共享类型定义
@@ -399,6 +400,7 @@ adapters/
 
 **关键说明：**
 - `gateway.py` 现在维护实时 provider catalog，并按当前可用凭证暴露候选模型。
+- paid provider（如 `deepseek_direct`）只有在显式设置 `YGGDRASIL_ALLOW_PAID_MODELS=1` 时才会进入 runtime candidate catalog。
 - DeepSeek 直连 profile 已切换到 `deepseek-v4-flash` / `deepseek-v4-pro`，并兼容 thinking mode、`reasoning_effort` 与 `reasoning_content` 回传。
 - `packages/python-sdk/model_routing.py` 实现路由策略，适配器负责具体 API 调用和 provider 兼容性差异吸收。
 
@@ -438,6 +440,8 @@ docs/
 │   ├── README.md                   # 规格索引
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
+│   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格
+│   ├── work-tree-protocol-v0.1.md           # Gate 3 工作树正式协议：执行节点、恢复锚点与完成态同步
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │
 ├── research/                       # 研究与探索性文档
@@ -457,6 +461,8 @@ docs/
 │   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
 │   ├── g2-closeout-2026-05-15.md
 │   │                               #   Gate 2 正式闭环报告：官方复跑 3 轮、scorecard 汇总与后续非阻塞动作
+│   ├── g3-closeout-2026-05-15.md
+│   │                               #   Gate 3 正式闭环报告：首 token、work tree、execute-server 隔离、worker retry 与 DeepSeek paid live batch
 │   ├── g2-stage-progress-2026-05-04.md
 │   │                               #   Gate 2 推进记录：现已补录 2026-05-15 官方复跑闭环、稳定性复跑与出口判定
 │   ├── 系统核心理念.md
@@ -496,7 +502,7 @@ evaluation/
 │   ├── memory-tree/                # 记忆树操作的标准样本
 │   ├── retrieval/                  # 检索质量评测样本
 │   ├── task-execution/             # 任务执行的端到端样本
-│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板含计划质量/返工字段，由 pilot-sandbox 命令复制到专用目录）
+│   └── real-user-validation/       # 真实用户验证冻结材料（任务包、评分表、provider 可用性矩阵等；scorecard 模板现含 first_token_at/first_token_seconds、计划质量与返工字段，由 pilot-sandbox 命令复制到专用目录）
 │       ├── live-task-pack-g2-r2.json
 │       │                           #   2026-05-15 官方 G2 第 1 轮：YGG-CI-01 / YGG-CG-01 / YGG-CG-03 全量通过
 │       ├── live-task-pack-g2-r3-stability.json

@@ -9,11 +9,43 @@ from yggdrasil_sdk.llm_runtime import _assistant_tool_round_message
 class _FakeResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self._payload = payload
+        self._consumed = False
 
     def read(self) -> bytes:
+        if self._consumed:
+            return b""
+        self._consumed = True
+        return json.dumps(self._payload).encode("utf-8")
+
+    def readline(self) -> bytes:
+        if self._consumed:
+            return b""
+        self._consumed = True
         return json.dumps(self._payload).encode("utf-8")
 
     def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class _FakeStreamingResponse:
+    def __init__(self, events: list[dict[str, object]]) -> None:
+        self._lines = [f"data: {json.dumps(event, ensure_ascii=False)}\n".encode("utf-8") for event in events]
+        self._lines.append(b"data: [DONE]\n")
+
+    def readline(self) -> bytes:
+        if not self._lines:
+            return b""
+        return self._lines.pop(0)
+
+    def read(self) -> bytes:
+        remaining = b"".join(self._lines)
+        self._lines.clear()
+        return remaining
+
+    def __enter__(self) -> _FakeStreamingResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -152,3 +184,63 @@ def test_provider_catalog_ignores_llm_txt_documentation_file(tmp_path, monkeypat
     )
 
     assert gateway.get_provider_catalog(workspace_root=tmp_path) == []
+
+
+def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    captured: dict[str, object] = {}
+
+    def _fake_urlopen(request, timeout=90):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return _FakeStreamingResponse(
+            [
+                {
+                    "id": "chatcmpl-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-Flash-Lite",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "你好"},
+                            "finish_reason": None,
+                        }
+                    ],
+                },
+                {
+                    "id": "chatcmpl-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-Flash-Lite",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": "，世界"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 8,
+                        "total_tokens": 20,
+                    },
+                },
+            ]
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-Flash-Lite",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "打个招呼"}],
+        allow_fallback=False,
+    )
+
+    request_payload = captured["payload"]
+    assert request_payload["stream"] is True
+    assert result["outputText"] == "你好，世界"
+    assert result["firstTokenLatencyMs"] is not None
+    assert result["firstTokenLatencyMs"] >= 0
+    assert result["rawResponse"]["stream"] is True
+    assert result["usage"]["totalTokens"] == 20

@@ -3,23 +3,24 @@
 ## 当前阶段
 
 - M1 到 M9、CI 门禁、质量基线、真实用户验证沙箱链路与 Gate 2 官方复跑已经完成。
-- **Gate 1 已闭合，Gate 2 已闭合；当前执行锚点切换为“维持 G2 基线 + 准备 Gate 3 协议化升级”。**
-- 当前正式基线见 `docs/research/g2-closeout-2026-05-15.md` 与 `evaluation/fixtures/real-user-validation/scorecard-2026-05-15-g2-complete.csv`。
+- **Gate 1、Gate 2、Gate 3 已闭合；当前执行锚点切换为“维持 G3 基线 + 推进 Gate 4 provider/质量扩展”。**
+- 当前正式基线见 `docs/research/g2-closeout-2026-05-15.md` 与 `docs/research/g3-closeout-2026-05-15.md`。
 
 ## 当前优先级
 
-1. 把 `corepack pnpm eval:g2:regression` 纳入固定发布前检查或 nightly，持续守住复杂文件拆分能力。
-2. 在后续真实样本中补录 `planQualityScore0_100`、`reworkCount`、`reworkRate`，把 Gate 2 质量口径从“结果闭环”扩展到“过程质量可比较”。
-3. 补首 token / 首次有效输出级别的首响观测，作为 Gate 3 的体验基线。
-4. 推进工作树 / 任务接管 / 运行时数据规格之间的正式收口，为 Gate 3 做最小协议升级。
+1. 把 `corepack pnpm eval:g2:regression` 与 Gate 3 paid-provider live rerun 纳入固定发布前检查或 nightly。
+2. 补录跨 provider 的 `planQualityScore0_100`、`reworkCount`、`reworkRate`、`first_token_seconds` 样本，形成正式对比口径。
+3. 完成 Gate 3 后遗留技术债：应用插件 fewShotRefs、缺失 `scenes/`、PostgreSQL nightly、`packages/frontend-sdk/src/index.ts` 拆分。
 
 ## 阶段状态
 
 - Gate 1：已闭合。
 - Gate 2：已闭合。
+- Gate 3：已闭合。
 - 2026-05-15 官方复跑：`YGG-CI-01` 1 轮、`YGG-CG-01` 3 轮、`YGG-CG-03` 3 轮全部验收通过。
 - `YGG-CG-03`：3/3 `pause_resume_success_0_1 = 1`，恢复成功率 100%。
 - `corepack pnpm eval:g2:regression`：已通过。
+- `G3-LIVE-2026-05-15-DEEPSEEK-PAID`：`YGG-CI-01`、`YGG-CG-01`、`YGG-CG-03` 全部 `completed` 且验收通过，`YGG-CG-03` 的 `pauseResumeSuccess=True`。
 
 ## 技术债清理进度
 
@@ -47,6 +48,7 @@
 - `docs/specs/README.md`
 - `docs/specs/agent-runtime-protocol-v0.1.md`
 - `docs/research/g2-closeout-2026-05-15.md`
+- `docs/research/g3-closeout-2026-05-15.md`
 
 ## 明确不该现在做的事
 
@@ -57,4 +59,4 @@
 
 ## 一句话原则
 
-- Gate 2 已经证明“窄路径可稳定复现”；Gate 3 的工作应该围绕“正式对象升级、质量口径补齐、固定回归守住”展开。
+- Gate 3 已经证明“正式对象、恢复路径和服务器隔离可以一起闭环”；Gate 4 的工作应该围绕“跨 provider 质量、固定回归和技术债清理”展开。

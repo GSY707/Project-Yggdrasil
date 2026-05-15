@@ -10,8 +10,10 @@ import pytest
 from yggdrasil_core_api.app import app
 from yggdrasil_sdk import PromptAssetRepository, get_persistence_runtime, resolve_workspace_root
 from yggdrasil_sdk.collaboration_runtime import GitCollaborationAdapter, launch_subagent_task
+from yggdrasil_sdk.contracts import WorkerActivityDescriptor
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID
 from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, RuntimeRepository, TaskRepository, WorkspaceBootstrapRepository
+import yggdrasil_worker.registry as worker_registry
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
 
 
@@ -100,6 +102,53 @@ def test_worker_queue_operations_return_structured_status() -> None:
 
     popped = pop_work_item("activity")
     assert popped["status"] in {"received", "empty", "error"}
+
+
+def test_run_worker_once_requeues_retryable_failed_activity(monkeypatch) -> None:
+    monkeypatch.setattr(
+        worker_registry,
+        "pop_work_item",
+        lambda queue, timeout_seconds=0: {
+            "status": "received",
+            "queue": queue,
+            "payload": {"activity": "core.agent.main.execute", "taskId": "task_retry", "attempt": 1},
+        },
+    )
+    monkeypatch.setattr(
+        worker_registry,
+        "discover_worker_activities",
+        lambda: [
+            WorkerActivityDescriptor(
+                name="core.agent.main.execute",
+                moduleId="kernel",
+                description="retryable test",
+                implementationRef="tests",
+                timeoutMs=1,
+                retryable=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        worker_registry,
+        "dispatch_work_item",
+        lambda payload: {"status": "failed", "detail": "transient", "retryable": True},
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_enqueue(queue: str, payload: dict[str, object]) -> dict[str, object]:
+        captured["queue"] = queue
+        captured["payload"] = payload
+        return {"status": "enqueued", "queue": queue, "queueDepth": 1, "payload": payload}
+
+    monkeypatch.setattr(worker_registry, "enqueue_work_item", _fake_enqueue)
+
+    result = run_worker_once()
+
+    assert result["status"] == "requeued"
+    assert captured["queue"] == "agent-runtime"
+    assert captured["payload"]["attempt"] == 2
+    assert result["result"]["status"] == "failed"
 
 
 def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_path: Path) -> None:

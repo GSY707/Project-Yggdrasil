@@ -206,6 +206,14 @@ def _elapsed_ms(started_at: float) -> float:
     return round((perf_counter() - started_at) * 1000.0, 2)
 
 
+def _first_token_latency_ms_from_round_summaries(round_summaries: list[dict[str, Any]]) -> float | None:
+    for summary in round_summaries:
+        value = summary.get("firstTokenLatencyMs") if isinstance(summary, dict) else None
+        if value is not None:
+            return float(value)
+    return None
+
+
 def _runtime_audit_level(request: dict[str, Any]) -> str:
     explicit = request.get("auditLevel") if isinstance(request, dict) else None
     candidate = str(explicit or os.getenv("YGGDRASIL_RUNTIME_AUDIT_LEVEL") or "default").strip().lower()
@@ -516,6 +524,7 @@ def _response_file_payload(
     tool_executions: list[dict[str, Any]],
     round_summaries: list[dict[str, Any]],
     local_runtime_timings: dict[str, Any],
+    first_token_latency_ms: float | None,
 ) -> dict[str, Any]:
     payload = {
         "appId": getattr(task, "app_id", None),
@@ -533,6 +542,8 @@ def _response_file_payload(
         "auditLevel": audit_level,
         "localRuntimeTimings": dict(local_runtime_timings),
     }
+    if first_token_latency_ms is not None:
+        payload["firstTokenLatencyMs"] = first_token_latency_ms
     if audit_level == "strict":
         payload["toolExecutions"] = tool_executions
         payload["rounds"] = round_summaries
@@ -906,6 +917,8 @@ def invoke_runtime_completion(
                         "duplicateToolRoundStreak": duplicate_tool_round_streak,
                     }
                 )
+                if result.get("firstTokenLatencyMs") is not None:
+                    round_summaries[-1]["firstTokenLatencyMs"] = float(result["firstTokenLatencyMs"])
                 if not tool_calls:
                     final_result = result
                     break
@@ -971,6 +984,9 @@ def invoke_runtime_completion(
                 raise RuntimeError(f"Invocation {invocation.id} finished without a terminal model result.")
 
             local_runtime_timings["modelToolLoopMs"] = _elapsed_ms(model_tool_loop_started_at)
+            first_token_latency_ms = _first_token_latency_ms_from_round_summaries(round_summaries)
+            if first_token_latency_ms is not None:
+                local_runtime_timings["firstTokenLatencyMs"] = first_token_latency_ms
 
             rewrite_request_started_at = perf_counter()
             write_json(
@@ -1113,6 +1129,7 @@ def invoke_runtime_completion(
                     **local_runtime_timings,
                     "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
                 },
+                first_token_latency_ms=first_token_latency_ms,
             )
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
@@ -1138,6 +1155,7 @@ def invoke_runtime_completion(
         failure_usage_totals = usage_totals if "usage_totals" in locals() and isinstance(usage_totals, dict) else {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
         failure_cost_used = float(accumulated_cost) if "accumulated_cost" in locals() else 0.0
         failure_prompt_artifact_id = prompt_artifact.id if "prompt_artifact" in locals() else None
+        failure_first_token_latency_ms = _first_token_latency_ms_from_round_summaries(failure_round_summaries)
         failure_result = {
             "mode": (round_modes[-1] if "round_modes" in locals() and round_modes else None),
             "provider": route_payload.get("selectedProvider"),
@@ -1191,6 +1209,7 @@ def invoke_runtime_completion(
                         **local_runtime_timings,
                         "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
                     },
+                    first_token_latency_ms=failure_first_token_latency_ms,
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)

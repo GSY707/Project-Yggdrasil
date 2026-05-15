@@ -116,6 +116,8 @@ corepack pnpm eval:g2:regression
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-Flash-Lite`；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
 
+如果要在 live suite 或 `pilot-live` 中使用付费 provider（例如 `deepseek_direct / deepseek-v4-pro`），除了配置 API key 之外，还必须显式设置 `YGGDRASIL_ALLOW_PAID_MODELS=1`；否则 paid candidate 不会进入 runtime catalog。
+
 ### 运维命令
 
 ```powershell
@@ -150,17 +152,17 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 
 ## 当前重点
 
-当前阶段的重点已经从“Gate 2 受控自治产品化与复跑基线固化”切换为“维持 Gate 2 已闭环基线，并准备 Gate 3 的协议化升级与质量样本扩展”。
+当前阶段的重点已经从“维持 Gate 2 已闭环基线，并准备 Gate 3 的协议化升级”切换为“维持 Gate 3 正式基线，并推进 Gate 4 的 provider/质量扩展与技术债清理”。
 
 ### 阶段状态（2026-05-15）
 
 - Gate 1 已闭合：在 `deepseek_direct` / `deepseek-v4-pro` 下完成 `YGG-CI-01`、`YGG-CG-01`、`YGG-CG-03` 官方复跑，3 张任务卡全部验收通过。
 - Gate 2 已闭合：完成 1 轮全量官方复跑 + 2 轮稳定性复跑；`YGG-CG-01` / `YGG-CG-03` 连续 3 轮全部通过，人工接管中位数 0，用户澄清回合中位数 0，恢复成功率 100%。
-- 当前正式闭环证据见 `docs/research/g2-closeout-2026-05-15.md` 与 `evaluation/fixtures/real-user-validation/scorecard-2026-05-15-g2-complete.csv`。
+- Gate 3 已闭合：首 token 观测、work tree 正式对象、post-invocation budget hard fail、`execute_server` 默认拒绝网络命令、worker retry/requeue 与 paid-provider live batch 已全部落下正式证据。
+- 当前正式闭环证据见 `docs/research/g2-closeout-2026-05-15.md`、`docs/research/g3-closeout-2026-05-15.md` 与外部沙箱中的 `G3-LIVE-2026-05-15-DEEPSEEK-PAID` 工件。
 
 下一步更值得投入的是：
 
-- 持续运行 `corepack pnpm eval:g2:regression`，把复杂文件拆分能力保持为固定回归而不是一次性任务。
-- 回填 `planQualityScore0_100`、`reworkCount`、`reworkRate` 的真实样本，补齐 Gate 2 的过程质量口径。
-- 补首 token / 首次有效输出级别的首响观测，作为 Gate 3 体验基线。
-- 继续收紧任务接管、工作树和质量指标之间的正式协议边界，为 Gate 3 升级做准备。
+- 把 `corepack pnpm eval:g2:regression` 与 Gate 3 live rerun 一起固化为发布前/夜间基线。
+- 继续补录 `planQualityScore0_100`、`reworkCount`、`reworkRate` 与 first-token 样本，形成跨 provider 可比口径。
+- 补齐应用插件装配与 few-shot 资产技术债，避免 Gate 4 再次被非协议问题阻塞。

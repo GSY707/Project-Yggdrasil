@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timedelta, timezone
 import json
+import re
 import statistics
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,11 @@ def summarize_real_user_scorecard(csv_path: Path) -> dict[str, Any]:
         recovery_attempts = [_parse_int(row, "recovery_attempted_0_1") for row in group]
         recovery_successes = [_parse_int(row, "recovery_success_0_1") for row in group]
         weighted_scores = [_parse_int(row, "weighted_total_score_0_100") for row in group]
+        first_token_seconds = [
+            value
+            for row in group
+            if (value := _parse_optional_float(row, "first_token_seconds")) is not None
+        ]
         plan_quality_scores = [
             value
             for row in group
@@ -76,6 +82,8 @@ def summarize_real_user_scorecard(csv_path: Path) -> dict[str, Any]:
             "medianHumanTakeoverCount": _median(takeovers),
             "medianUserClarificationRounds": _median(clarifications),
             "averageWeightedScore": (sum(weighted_scores) / row_count) if weighted_scores else 0.0,
+            "averageFirstTokenSeconds": (sum(first_token_seconds) / len(first_token_seconds)) if first_token_seconds else None,
+            "firstTokenSampleCount": len(first_token_seconds),
             "averagePlanQualityScore": (sum(plan_quality_scores) / len(plan_quality_scores)) if plan_quality_scores else None,
             "planQualitySampleCount": len(plan_quality_scores),
             "medianReworkCount": float(statistics.median(rework_counts)) if rework_counts else None,
@@ -169,6 +177,29 @@ def _task_pack_output_path(output_path: Path | None, workspace_root: Path) -> Pa
     return (workspace_root / "evaluation" / "fixtures" / "real-user-validation" / f"live-task-pack-{date_slug}.json").resolve()
 
 
+def _first_token_latency_ms(invocations: list[dict[str, Any]]) -> float | None:
+    for item in invocations:
+        response_payload = item.get("responsePayload") or {}
+        if not isinstance(response_payload, dict):
+            continue
+        value = response_payload.get("firstTokenLatencyMs")
+        if value is not None:
+            return float(value)
+        rounds = response_payload.get("rounds")
+        if isinstance(rounds, list) and rounds:
+            first_round = rounds[0] if isinstance(rounds[0], dict) else {}
+            if first_round.get("firstTokenLatencyMs") is not None:
+                return float(first_round["firstTokenLatencyMs"])
+    return None
+
+
+def _first_token_seconds(invocations: list[dict[str, Any]]) -> float | None:
+    latency_ms = _first_token_latency_ms(invocations)
+    if latency_ms is None:
+        return None
+    return round(latency_ms / 1000.0, 2)
+
+
 def _first_useful_output_seconds(invocations: list[dict[str, Any]]) -> float | None:
     for item in invocations:
         response_payload = item.get("responsePayload") or {}
@@ -183,6 +214,16 @@ def _first_useful_output_seconds(invocations: list[dict[str, Any]]) -> float | N
 def _first_useful_output_at(invocations: list[dict[str, Any]], seconds: float | None) -> str | None:
     if seconds is None:
         return None
+    return _observation_at(invocations, seconds)
+
+
+def _first_token_at(invocations: list[dict[str, Any]], seconds: float | None) -> str | None:
+    if seconds is None:
+        return None
+    return _observation_at(invocations, seconds)
+
+
+def _observation_at(invocations: list[dict[str, Any]], seconds: float) -> str | None:
     for item in invocations:
         record = item.get("record") or {}
         started_at_raw = record.get("startedAt")
@@ -261,6 +302,11 @@ def _aggregate_pause_resume(execution: dict[str, Any]) -> tuple[bool, bool]:
     return attempted, success
 
 
+def _agent_system(provider: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", str(provider).strip().lower()).strip("-") or "unknown"
+    return f"yggdrasil-{slug}-live"
+
+
 def _build_scorecard_row(
     *,
     task_key: str,
@@ -278,6 +324,7 @@ def _build_scorecard_row(
     invocations = task_payload.get("invocations") or []
     task_record = task_payload.get("task") or {}
     takeover_metrics = _takeover_metrics(invocations)
+    first_token_seconds = execution.get("firstTokenSeconds")
     first_useful_seconds = execution.get("firstUsefulOutputSeconds")
     response_speed = _response_speed_score(first_useful_seconds, fastest_first_useful)
     config_quality = 100 if not execution.get("issues") else 80
@@ -302,7 +349,7 @@ def _build_scorecard_row(
         "participant_id": "internal-reviewer",
         "participant_segment": "developer",
         "reviewer_id": "internal-reviewer",
-        "agent_system": "yggdrasil-longcat-live",
+        "agent_system": _agent_system(provider),
         "baseline_system": "none",
         "app_id": task_def["appLabel"],
         "task_id": task_key,
@@ -316,8 +363,10 @@ def _build_scorecard_row(
         "used_full_infra_0_1": 0,
         "session_count": 1,
         "start_at": execution.get("startAt") or "",
+        "first_token_at": execution.get("firstTokenAt") or "",
         "first_useful_output_at": execution.get("firstUsefulOutputAt") or "",
         "end_at": execution.get("endAt") or "",
+        "first_token_seconds": first_token_seconds if first_token_seconds is not None else "",
         "first_useful_output_seconds": first_useful_seconds if first_useful_seconds is not None else "",
         "total_duration_seconds": execution.get("totalDurationSeconds") if execution.get("totalDurationSeconds") is not None else "",
         "task_completed_0_1": task_completed,

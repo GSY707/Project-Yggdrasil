@@ -2,7 +2,7 @@
 
 - 文档状态：Candidate
 - 版本：v0.1
-- 日期：2026-04-16
+- 日期：2026-05-15
 
 ## 1. 范围
 
@@ -13,11 +13,13 @@
 - Task
 - AgentRun
 - TaskSnapshot
+- WorkTreeProtocol
 - RootMountPackage
 - ContextPruningPlan
 - ToolDescriptor
 - ToolInvocationRecord
 - ModelRouteDecision
+- WorkerActivityDescriptor
 
 ## 2. AgentIdentityProfile
 
@@ -110,6 +112,38 @@ Task:
 
 - paused 不是异常态，而是正式可恢复态。
 - Task 必须始终可映射到一个 execution root 或等价的工作树入口。
+
+### 4.4 Work tree 投影
+
+Task 的 execution root 负责承载运行时写入，而正式的执行分解由 `TaskTakeoverProtocol.workTree` 提供。
+
+```yaml
+WorkTreeProtocol:
+  version: string
+  rootObjective: string
+  status: planned | active | paused | verified | completed
+  currentNodeId: string|null
+  nodes: [WorkTreeNode]
+  recoveryAnchor: string|null
+  entropyBudgetRemaining: integer
+
+WorkTreeNode:
+  id: string
+  title: string
+  phase: planning | executing | recovering | restarting | verification | delivery
+  status: pending | in-progress | completed | blocked | skipped
+  planStepIds: [string]
+  constraintIds: [string]
+  dependsOn: [string]
+  expectedEvidence: [string]
+  recoveryAnchor: string|null
+```
+
+约束：
+
+- work tree 必须从 takeover plan 派生。
+- 任务完成时 work tree 必须同步为 `completed`。
+- pause/resume 或 repair 只能通过正式 recovery anchor 续跑。
 
 ## 5. AgentRun
 
@@ -270,6 +304,23 @@ ModelRouteDecision:
   routePolicyVersion: string
   createdAt: datetime
 ```
+
+## 12. WorkerActivityDescriptor
+
+```yaml
+WorkerActivityDescriptor:
+  name: string
+  moduleId: string
+  description: string
+  implementationRef: string
+  timeoutMs: integer
+  retryable: boolean
+```
+
+约束：
+
+- worker 只能对 `retryable=true` 的 activity 执行自动重入队列。
+- `timeoutMs` 是正式活动 SLA/观测字段；当前版本不承诺用进程级 kill 强制中断同步 Python 执行。
 
 ### 11.3 约束
 
