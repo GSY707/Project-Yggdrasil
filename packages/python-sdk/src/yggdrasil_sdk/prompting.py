@@ -516,6 +516,16 @@ def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
         )
     else:
         lines.append("1. No formal plan was generated.")
+    if protocol.work_tree is not None:
+        lines.append("Work tree:")
+        lines.append(
+            f"- status={protocol.work_tree.status}; currentNode={protocol.work_tree.current_node_id or 'none'}; entropyBudgetRemaining={protocol.work_tree.entropy_budget_remaining}"
+        )
+        if protocol.work_tree.nodes:
+            lines.extend(
+                f"- [{node.phase}/{node.status}] {node.title}"
+                for node in protocol.work_tree.nodes[:6]
+            )
     if protocol.delivery_sections:
         lines.append("Delivery checkpoints:")
         lines.extend(

@@ -3,7 +3,78 @@ from __future__ import annotations
 from typing import Any
 
 from ._common import *  # noqa: F403,F401
-from ..contracts import TaskTakeoverDeliverySection, TaskTakeoverMetrics, TaskTakeoverPlanStep, TaskTakeoverVerificationItem
+from ..contracts import TaskTakeoverDeliverySection, TaskTakeoverMetrics, TaskTakeoverPlanStep, TaskTakeoverVerificationItem, WorkTreeNode, WorkTreeProtocol
+
+
+_WORK_TREE_PHASE_MAP = {
+    "objective": "planning",
+    "constraints": "planning",
+    "plan": "planning",
+    "execute": "executing",
+    "verify": "verification",
+    "deliver": "delivery",
+}
+
+
+def _work_tree_status(protocol_status: str) -> str:
+    if protocol_status == "completed":
+        return "completed"
+    if protocol_status == "verified":
+        return "verified"
+    if protocol_status == "executing":
+        return "active"
+    return "planned"
+
+
+def _work_tree_from_protocol_parts(
+    *,
+    task_id: str,
+    objective: str,
+    constraints: list[Any],
+    plan: list[Any],
+    protocol_status: str,
+) -> WorkTreeProtocol:
+    constraint_ids = []
+    for item in constraints:
+        if hasattr(item, "id"):
+            constraint_ids.append(str(item.id))
+        elif isinstance(item, dict) and item.get("id"):
+            constraint_ids.append(str(item["id"]))
+
+    nodes: list[WorkTreeNode] = []
+    first_active_index: int | None = None
+    for index, step in enumerate(plan):
+        normalized = step.model_dump(by_alias=True, mode="json") if hasattr(step, "model_dump") else dict(step)
+        step_id = str(normalized.get("id") or new_id("work-tree-step", task_id, index, stable=True))
+        status = str(normalized.get("status") or "pending")
+        if status == "pending" and first_active_index is None:
+            status = "in-progress"
+            first_active_index = index
+        elif status == "in-progress" and first_active_index is None:
+            first_active_index = index
+        node = WorkTreeNode(
+            id=new_id("work-tree-node", task_id, step_id, stable=True),
+            title=str(normalized.get("title") or f"step-{index + 1}"),
+            phase=_WORK_TREE_PHASE_MAP.get(str(normalized.get("phase") or "plan"), "planning"),
+            status=status,
+            planStepIds=[step_id],
+            constraintIds=constraint_ids,
+            dependsOn=[str(item) for item in normalized.get("dependsOn") or []],
+            expectedEvidence=[str(item) for item in normalized.get("expectedEvidence") or []],
+            recoveryAnchor=f"resume:{step_id}" if str(normalized.get("phase") or "") == "execute" else None,
+        )
+        nodes.append(node)
+
+    current_node = next((node for node in nodes if node.status in {"in-progress", "blocked", "pending"}), None)
+    entropy_budget_remaining = max(0, 12 - len(nodes) - len(constraint_ids))
+    return WorkTreeProtocol(
+        rootObjective=objective,
+        status=_work_tree_status(protocol_status),
+        currentNodeId=current_node.id if current_node is not None else None,
+        nodes=nodes,
+        recoveryAnchor=current_node.recovery_anchor if current_node is not None else None,
+        entropyBudgetRemaining=entropy_budget_remaining,
+    )
 
 
 def _task_payload(task: Any) -> dict[str, Any]:
@@ -133,6 +204,17 @@ def build_task_takeover_protocol(
         appliedModules=list(dict.fromkeys([*objective_modules, *constraint_modules, *plan_modules])),
         hookTrace=[*_trace_entries(objective_results), *_trace_entries(constraints_results), *_trace_entries(plan_results)],
     )
+    protocol = protocol.model_copy(
+        update={
+            "work_tree": _work_tree_from_protocol_parts(
+                task_id=str(task.id),
+                objective=protocol.objective,
+                constraints=protocol.constraints,
+                plan=protocol.plan,
+                protocol_status=protocol.status,
+            )
+        }
+    )
     return protocol
 
 
@@ -193,6 +275,13 @@ def finalize_task_takeover_protocol(
             "currentPhase": "deliver",
             "status": "completed" if completed else "verified",
             "plan": [TaskTakeoverPlanStep.model_validate(item) for item in updated_plan],
+            "work_tree": _work_tree_from_protocol_parts(
+                task_id=str(task.id),
+                objective=protocol.objective,
+                constraints=protocol.constraints,
+                plan=updated_plan,
+                protocol_status="completed" if completed else "verified",
+            ),
             "deliverySections": delivery_sections,
             "verificationItems": verification_items,
             "metrics": metrics,

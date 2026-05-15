@@ -122,6 +122,27 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
                         "dependsOn": [],
                     }
                 ],
+                "workTree": {
+                    "version": "0.1.0",
+                    "rootObjective": "把 Gate 2 接管协议注入 Prompt。",
+                    "status": "planned",
+                    "currentNodeId": "worktree-node-1",
+                    "nodes": [
+                        {
+                            "id": "worktree-node-1",
+                            "title": "形成计划",
+                            "phase": "planning",
+                            "status": "in-progress",
+                            "planStepIds": ["step_plan"],
+                            "constraintIds": ["constraint_delivery"],
+                            "dependsOn": [],
+                            "expectedEvidence": ["plan steps"],
+                            "recoveryAnchor": None
+                        }
+                    ],
+                    "recoveryAnchor": None,
+                    "entropyBudgetRemaining": 9
+                },
                 "deliverySections": [],
                 "verificationItems": [],
                 "metrics": {
@@ -142,6 +163,7 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
     assert compiled.takeover_protocol is not None
     assert compiled.takeover_protocol.objective == "把 Gate 2 接管协议注入 Prompt。"
     assert "Objective summary: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[1]["content"]
+    assert "Work tree:" in compiled.messages[1]["content"]
     assert "Plan quality: 92.0" in compiled.messages[1]["content"]
 
 

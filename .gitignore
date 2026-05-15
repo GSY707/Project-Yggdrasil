@@ -31,4 +31,8 @@ LLM.txt
 .yggdrasil/local-dev.db
 .tmp*
 evaluation
+!evaluation/
+evaluation/*
+!evaluation/suites/
+!evaluation/suites/*.json
 tmp
