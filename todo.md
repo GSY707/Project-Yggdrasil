@@ -8,9 +8,10 @@
 
 ## 当前优先级
 
-1. 把 `corepack pnpm eval:g2:regression` 与 Gate 3 paid-provider live rerun 纳入固定发布前检查或 nightly。
-2. 补录跨 provider 的 `planQualityScore0_100`、`reworkCount`、`reworkRate`、`first_token_seconds` 样本，形成正式对比口径。
-3. 完成 Gate 3 后遗留技术债：应用插件 fewShotRefs、缺失 `scenes/`、PostgreSQL nightly、`packages/frontend-sdk/src/index.ts` 拆分。
+1. 固化“按改动跑受影响测试、发布前才跑全量”的测试原则：日常不再跑 nightly，全量检查统一走手动 `release-check`。
+2. 把 `corepack pnpm eval:g2:regression`、PostgreSQL 回归与 Gate 3 paid-provider live rerun 收口到固定发布前检查入口。
+3. 补录跨 provider 的 `planQualityScore0_100`、`reworkCount`、`reworkRate`、`first_token_seconds` 样本，形成正式对比口径。
+4. 完成 Gate 3 后遗留技术债：应用插件 fewShotRefs、缺失 `scenes/`、`packages/frontend-sdk/src/index.ts` 拆分。
 
 ## 阶段状态
 
@@ -38,7 +39,7 @@
 
 - [ ] 应用插件 fewShotRefs 补全（`base-template`、`coding-greenfield`、`deep-research`、`epic-writing`）。
 - [ ] 补全缺少 `scenes/` 的应用插件。
-- [ ] PostgreSQL CI 层（nightly `pytest --postgres`）。
+- [x] 发布前 PostgreSQL 回归入口已收口到手动 `release-check` workflow（`pytest --postgres -m "not slow"`）。
 - [ ] `packages/frontend-sdk/src/index.ts` 拆分。
 
 ## 规格入口
@@ -59,4 +60,4 @@
 
 ## 一句话原则
 
-- Gate 3 已经证明“正式对象、恢复路径和服务器隔离可以一起闭环”；Gate 4 的工作应该围绕“跨 provider 质量、固定回归和技术债清理”展开。
+- 日常开发按改动跑受影响测试；PR / merge 只保留低成本 smoke；发布前再走手动全量检查与必要的 live provider 复核。

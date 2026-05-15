@@ -1,10 +1,13 @@
-name: nightly
+name: release-check
 
 on:
-  schedule:
-    # 02:17 UTC daily — offset from :00/:30 to avoid fleet congestion
-    - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      run_live_provider_smoke:
+        description: "Run eval:m8:live (requires provider secrets and may incur cost)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   migration-check:
@@ -51,7 +54,7 @@ jobs:
       - name: Run compose smoke test
         run: bash scripts/smoke_test.sh
 
-  slow-tests:
+  full-regression:
     runs-on: ubuntu-latest
     services:
       redis:
@@ -73,6 +76,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.8.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -89,22 +104,13 @@ jobs:
       - name: Install Python workspace dependencies
         run: uv sync --all-packages --group dev
 
-      - name: Run slow tests in parallel
-        shell: bash
-        run: |
-          set +e
-          uv run pytest -m slow -n auto --dist loadfile
-          status=$?
-          set -e
+      - name: Install web workspace dependencies
+        run: pnpm install --frozen-lockfile
 
-          if [ "$status" -eq 5 ]; then
-            echo "No slow tests collected; treating nightly slow-tests job as a no-op."
-            exit 0
-          fi
+      - name: Run full offline release check
+        run: pnpm run release:check
 
-          exit "$status"
-
-  postgres-tests:
+  postgres-regression:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -158,7 +164,8 @@ jobs:
       - name: Run PostgreSQL regression gate
         run: uv run pytest --postgres -m "not slow"
 
-  benchmark:
+  live-provider-smoke:
+    if: ${{ inputs.run_live_provider_smoke }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -180,6 +187,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.8.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -196,5 +215,8 @@ jobs:
       - name: Install Python workspace dependencies
         run: uv sync --all-packages --group dev
 
-      - name: Run M8 benchmark evaluation suite
-        run: uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_benchmark_m8_memory_strategies
+      - name: Install web workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run live provider smoke
+        run: pnpm run eval:m8:live

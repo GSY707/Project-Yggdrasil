@@ -1,4 +1,4 @@
-name: merge
+name: merge-smoke
 
 on:
   push:
@@ -9,22 +9,6 @@ on:
 jobs:
   full:
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6390:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      YGGDRASIL_DATABASE_URL: sqlite+pysqlite:///${{ github.workspace }}/.ci/yggdrasil.db
-      YGGDRASIL_AUTO_CREATE_SCHEMA: "1"
-      YGGDRASIL_REDIS_URL: redis://127.0.0.1:6390/15
-      YGGDRASIL_STATE_ROOT: ${{ github.workspace }}/.ci/state-root
-      YGGDRASIL_CORE_API_BASE_URL: http://127.0.0.1:8000
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -51,26 +35,14 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Prepare CI state directories
-        run: mkdir -p .ci/state-root
-
       - name: Install Python workspace dependencies
         run: uv sync --all-packages --group dev
 
+      - name: Python syntax smoke
+        run: pnpm run check:python:syntax
+
       - name: Install web workspace dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Run Python tests (excludes slow marker)
-        run: uv run pytest -m "not slow"
-
-      - name: List evaluation suites
-        run: pnpm run eval:list
-
-      - name: Run regression evaluation suite
-        run: pnpm run eval:regression
-
-      - name: Run M9 control-plane evaluation suite
-        run: pnpm run eval:m9:control-plane
 
       - name: Lint web workbench
         run: pnpm run web:lint

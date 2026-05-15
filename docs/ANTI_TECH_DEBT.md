@@ -79,7 +79,7 @@ _logger = logging.getLogger(__name__)
 `docs/QUALITY_BASELINE.md` 中所有数字必须由真实测量产出：
 - HTTP 延迟：来自真实压测（wrk / locust / k6）
 - 内存峰值：来自 `tracemalloc` 或 `memory_profiler` 测量
-- 评测分数：来自 nightly CI 实跑，连续 3 轮稳定后更新
+- 评测分数：来自发布前全量检查或相关改动后的手动复测，连续 3 轮稳定后更新
 
 **禁止以下做法：**
 ```markdown
@@ -277,7 +277,7 @@ core-api/services/
 
 **TD-08 · PostgreSQL CI 层**
 
-在 nightly 流水线中新增 `pytest --postgres` job，防止 SQLite 门禁值漂移导致生产问题。
+当前状态：**已完成并收口为发布前手动门禁**。不再依赖定时 nightly；`release-check` workflow 已包含 `pytest --postgres -m "not slow"`，用于发布前捕捉 SQLite 与 PostgreSQL 之间的门禁漂移。
 
 **TD-09 · 前端 frontend-sdk/src/index.ts 拆分（551 行）**
 

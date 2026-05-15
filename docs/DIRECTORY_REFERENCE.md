@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 3 闭环证据、work tree 规格、execute-server 权限层与 paid-provider live rerun 同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 3 闭环证据、Gate 4 评估路线图、work tree 规格、execute-server 权限层与 paid-provider live rerun 同步）
 
 ---
 
@@ -463,6 +463,8 @@ docs/
 │   │                               #   Gate 2 正式闭环报告：官方复跑 3 轮、scorecard 汇总与后续非阻塞动作
 │   ├── g3-closeout-2026-05-15.md
 │   │                               #   Gate 3 正式闭环报告：首 token、work tree、execute-server 隔离、worker retry 与 DeepSeek paid live batch
+│   ├── g4-assessment-and-roadmap-2026-05-15.md
+│   │                               #   Gate 4 评估与完美实现路线图：多场景官方范围、few-shot 执行链、provider 矩阵与 CI 门禁
 │   ├── g2-stage-progress-2026-05-04.md
 │   │                               #   Gate 2 推进记录：现已补录 2026-05-15 官方复跑闭环、稳定性复跑与出口判定
 │   ├── 系统核心理念.md
@@ -628,7 +630,7 @@ tests/
 | 标记 | 含义 | 运行时机 |
 |------|------|---------|
 | （无标记） | 快速单元 / 集成测试，使用 SQLite | PR、merge |
-| `slow` | 慢的运行时闭环 / 控制面 API / 评测回归测试；nightly 以 `pytest -m slow -n auto --dist loadfile` 并行执行 | nightly 仅 |
+| `slow` | 慢的运行时闭环 / 控制面 API / 评测回归测试 | 仅在相关改动需要时手动执行，或发布前全量检查中统一处理 |
 
 ---
 
@@ -659,30 +661,30 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 ```
 .github/
 └── workflows/
-    ├── pr.yml      # PR 门禁（触发：pull_request）
-    │               #   pytest -m "not slow" + web lint/typecheck/build
-    │               #   目标：快速反馈，约 5 min
+    ├── pr.yml      # PR smoke（触发：pull_request）
+    │               #   Python syntax smoke + web lint/typecheck/build
+    │               #   目标：只拦明显语法/构建损坏，约 3-5 min
     │
-    ├── ci.yml      # merge 门禁（触发：push to main）
-    │               #   pytest -m "not slow" + eval:regression
-    │               #   + eval:m9:control-plane + web lint/typecheck/build
-    │               #   目标：完整验证，约 15 min
+    ├── ci.yml      # merge smoke（触发：push to main）
+    │               #   Python syntax smoke + web lint/typecheck/build
+    │               #   目标：主干低成本冒烟，约 3-5 min
     │
-    └── nightly.yml # 每日夜间（02:17 UTC，workflow_dispatch 可手动触发）
-                    #   migration-check：check_migrations.sh（ORM 漂移检测）
-                    #   smoke-test：smoke_test.sh（端到端 /health 验证）
-                    #   slow-tests：pytest -m slow -n auto --dist loadfile
-                    #     （并行慢集成 / 评测回归；未收集到用例时 no-op）
-                    #   benchmark：eval:m8:benchmark（离线基准评测）
+    └── release-check.yml # 发布前手动全量检查（触发：workflow_dispatch）
+                          #   migration-check：check_migrations.sh（ORM 漂移检测）
+                          #   smoke-test：smoke_test.sh（端到端 /health 验证）
+                          #   full-regression：release:check（SQLite 全量回归 + 评测 + web）
+                          #   postgres-regression：pytest --postgres -m "not slow"
+                          #   live-provider-smoke：可选输入，按需触发 eval:m8:live
 ```
 
-**CI 三层策略：**
+**当前测试/门禁策略：**
 
 | 层级 | 触发 | 跳过内容 | 耗时 |
 |------|------|---------|------|
-| PR | pull_request | slow 测试、回归评测、docker | ~5 min |
-| merge | push to main | slow 测试、docker | ~15 min |
-| nightly | 定时 / 手动 | — | ~30-60 min |
+| 本地开发 | 每次改动后 | 全仓回归、PostgreSQL、benchmark、live smoke | 按受影响测试而定 |
+| PR | pull_request | 全仓 Python 测试、评测、docker | ~3-5 min |
+| merge | push to main | 全仓 Python 测试、评测、docker | ~3-5 min |
+| release-check | 手动 | 默认不跑 live provider smoke（可选开启） | ~30-60 min |
 
 ---
 
@@ -738,6 +740,6 @@ docs/
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
 | 架构决策理由 | `docs/adr/ADR-<number>-*.md` |
-| CI 工作流定义 | `.github/workflows/{pr,ci,nightly}.yml` |
+| CI 工作流定义 | `.github/workflows/{pr,ci,release-check}.yml` |
 | Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |
 | 端到端冒烟测试 | `scripts/smoke_test.sh` |

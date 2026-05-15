@@ -163,6 +163,6 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 
 下一步更值得投入的是：
 
-- 把 `corepack pnpm eval:g2:regression` 与 Gate 3 live rerun 一起固化为发布前/夜间基线。
+- 把 `corepack pnpm eval:g2:regression` 与 Gate 3 live rerun 一起固化为发布前手动基线；日常开发按改动只跑受影响测试。
 - 继续补录 `planQualityScore0_100`、`reworkCount`、`reworkRate` 与 first-token 样本，形成跨 provider 可比口径。
 - 补齐应用插件装配与 few-shot 资产技术债，避免 Gate 4 再次被非协议问题阻塞。

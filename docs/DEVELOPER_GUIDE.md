@@ -482,16 +482,32 @@ uv run alembic check
 > **重要**：本项目使用 UV 工作区管理 Python 依赖，`yggdrasil_sdk` 等包仅在工作区虚拟环境中可用。
 > 必须通过 `uv run pytest` 运行测试，**直接调用 `pytest` 会因找不到模块而报错**。
 
-```bash
-# 运行所有测试
-uv run pytest -q
+当前默认测试原则：
 
+1. 日常开发只跑**受影响的测试与检查**，不要把全仓回归当成每次改动后的默认动作。
+2. `slow`、PostgreSQL、benchmark、固定评测回归和 live provider smoke 都不属于“每次改动后必跑”。
+3. 发布前再执行全量检查；如果改动触及 provider / runtime / prompt / live harness，再额外手动开启 live provider smoke。
+
+```bash
 # 运行特定测试文件
 uv run pytest tests/test_m9_shared_memory.py -v
 
-# 运行带标记的测试
-uv run pytest -m "not slow" -q
-uv run pytest -m slow -n auto --dist loadfile -q
+# 运行受影响的 Python 测试
+uv run pytest tests/test_prompting_runtime.py -q
+uv run pytest tests/test_persistence_api.py tests/test_memory_pipeline_api.py -q
+uv run pytest tests/test_runtime_and_pruning.py tests/test_m8_runtime.py -q
+
+# 运行受影响的前端检查
+corepack pnpm web:typecheck
+corepack pnpm web:lint
+corepack pnpm web:build
+
+# 运行定向固定回归
+corepack pnpm eval:g2:regression
+
+# 发布前全量检查
+corepack pnpm release:check
+uv run pytest --postgres -m "not slow" -q
 
 # 运行并查看覆盖率
 uv run pytest --cov=yggdrasil_sdk -q
@@ -513,7 +529,7 @@ uv run pytest --cov=yggdrasil_sdk -q
 - 集成测试必须连接真实数据库，**禁止** Mock 数据库层（避免 Mock/Prod 差异掩盖问题）。
 - 测试应具有自清理能力（使用事务回滚或独立测试数据库）。
 - 有副作用、运行时闭环、控制面 API、评测回归这类慢测试用 `@pytest.mark.slow` 标记。
-- `slow` 用例默认留给 nightly 跑，并通过 `pytest-xdist` 以 `-n auto --dist loadfile` 并行执行。
+- `slow` 用例默认不进入日常开发回合；只在相关改动需要时手动运行，或在发布前全量检查中统一处理。
 
 ---
 
@@ -544,26 +560,28 @@ corepack pnpm eval:m9:control-plane
 
 ## 12. CI 门禁
 
-CI 配置位于 `.github/workflows/ci.yml`，采用分层门禁策略：
+当前 CI 配置位于 `.github/workflows/pr.yml`、`.github/workflows/ci.yml` 与 `.github/workflows/release-check.yml`，采用“日常按改动收缩、发布前手动全量”的策略。
 
-### 第一层：基础质量门禁（每次 Push）
+### 第一层：本地开发默认规则
 
-- Python 语法检查 (Ruff)
-- TypeScript 类型检查
-- 单元测试 (`uv run pytest -q`)
-- 前端构建验证
+1. 改完就跑受影响的测试文件或定向评测，不跑全仓回归。
+2. 若改动只影响前端、文档或单个模块，只跑该切面的检查。
+3. 若改动触及 runtime、provider、prompt、数据库边界，再扩大到对应定向测试。
 
-### 第二层：集成门禁（PR 合并前）
+### 第二层：PR / merge smoke
 
-- 完整测试套件
-- Alembic 迁移检查 (`alembic check`)
-- Compose smoke 测试
-- M9 控制面回归评测
+- Python 语法 smoke：`corepack pnpm check:python:syntax`
+- Web lint / typecheck / build
 
-### 第三层：质量趋势（定期）
+这一层只负责拦住明显的语法或构建损坏，不替代本地定向测试。
 
-- M8 benchmark 与 live 评测
-- 长期趋势指标记录
+### 第三层：发布前手动全量检查
+
+- `corepack pnpm release:check`
+- `uv run pytest --postgres -m "not slow" -q`
+- 如改动触及 provider / runtime / prompt / live harness，再手动启用 `release-check` workflow 的 live provider smoke
+
+这才是当前仓库的正式全量门禁入口；不再保留定时 nightly。
 
 ---
 

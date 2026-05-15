@@ -10,13 +10,13 @@
 
 **套件 ID：** `evalsuite_benchmark_m8_memory_strategies`  
 **定义文件：** `evaluation/suites/m8-benchmark-memory-strategies.json`  
-**运行命令：** `pnpm eval:m8:benchmark`（nightly CI）
+**运行命令：** `pnpm eval:m8:benchmark`（发布前全量检查或基线相关改动后手动执行）
 
 ### 1.1 Pass Rate
 
 | 指标 | 最低合格线 | 说明 |
 |------|-----------|------|
-| passRate | **1.0** | 所有 case 的 `combinedScore` ≥ 0.5 才算通过；nightly 跑零失败 |
+| passRate | **1.0** | 所有 case 的 `combinedScore` ≥ 0.5 才算通过；发布前全量检查不得出现失败 |
 
 ### 1.2 策略排行榜（Strategy Leaderboard）
 
@@ -40,7 +40,7 @@
 | `vector-flat` | 0.70 | 0.45 |
 | `no-memory`   | 0.10 | 0.05 |
 
-> **注意：** CI 中 fallback 模式（无真实 LLM）的基线偏保守；nightly `slow` 任务现在承载并行慢集成/回归测试，真实 LLM 目标值应通过专门的 live 评测与人工验证单独核对。
+> **注意：** CI 中 fallback 模式（无真实 LLM）的基线偏保守；当前仓库不再依赖定时 nightly 维持基线。真实 LLM 目标值应在相关改动后通过专门的 live 评测与人工验证单独核对。
 
 ---
 
@@ -79,7 +79,7 @@
 
 ## 3. Phase 3 稳定性与并发安全门禁
 
-以下阈值已固化为 `tests/test_phase3_stability_and_scale.py` 中的 `assert` 语句，CI merge 层每次运行。
+以下阈值已固化为 `tests/test_phase3_stability_and_scale.py` 中的 `assert` 语句，发布前全量检查必须通过。
 
 | 测试项 | 指标 | 门禁值 |
 |--------|------|-------|
@@ -97,14 +97,14 @@
 
 | 层级 | 触发 | 包含质量门禁 |
 |------|------|------------|
-| PR | pull_request | pytest (not slow)、web lint/typecheck/build |
-| merge | push to main | pytest (not slow)、eval:regression、eval:m9:control-plane、web 构建 |
-| nightly | 02:17 UTC | migration-check、smoke-test、pytest (slow，parallel)、**eval:m8:benchmark**（此文档所记录的基线） |
+| PR | pull_request | Python 语法 smoke、web lint/typecheck/build |
+| merge | push to main | Python 语法 smoke、web lint/typecheck/build |
+| release-check | workflow_dispatch | migration-check、smoke-test、`pytest -q`、`pytest --postgres -m "not slow"`、`eval:regression`、`eval:m8:benchmark`、`eval:m9:control-plane`、`eval:g2:regression`、web lint/typecheck/build |
 
 ---
 
 ## 5. 更新协议
 
-- 每次 nightly `eval:m8:benchmark` 连续 3 轮结果稳定高于当前基线 0.05 以上时，更新本文档中的 `min` 值。  
+- 仅在 benchmark 相关实现发生变更时，才需要手动复跑 `eval:m8:benchmark`；若连续 3 轮结果稳定高于当前基线 0.05 以上，再更新本文档中的 `min` 值。  
 - 计划在 PostgreSQL 压测环境可用后补一轮同口径复测，并追加 PostgreSQL 实测栏位。  
 - 本文档由 `docs/DIRECTORY_REFERENCE.md` 索引，变更须同步更新目录。
