@@ -1,0 +1,348 @@
+{
+  "id": "evalsuite_g4_multiscene",
+  "name": "G4 Official Multiscene Regression",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "few-shot-coverage",
+    "pause-resume",
+    "scene-isolation"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:multiscene",
+  "cases": [
+    {
+      "id": "evalcase_g4_coding_fast",
+      "title": "G4 Coding Fast Task Contract",
+      "scenario": "g4.scene_prompt_contract",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "request": {"codingMode": "new-project"},
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedMarkers": [
+        "模块化实施计划",
+        "先骨架、后能力、再扩展",
+        "范围、模块边界和主链路",
+        "同一套 contract"
+      ],
+      "expectedSourceModuleId": "scene-coding-new-project",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "coding", "fast-task"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_coding_cross_session",
+      "title": "G4 Coding Cross-Session Contract",
+      "scenario": "g4.scene_resume_contract",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "request": {"codingMode": "new-project"},
+      "resumePath": "g4/coding/session-1",
+      "resumeMessage": "continue the coding handoff from session 1",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedMarkers": [
+        "模块化实施计划",
+        "同一套 contract"
+      ],
+      "expectedSourceModuleId": "scene-coding-new-project",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "coding", "cross-session"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_coding_recovery",
+      "title": "G4 Coding Recovery Flow",
+      "scenario": "g4.scene_runtime_recovery",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "resumeMessage": "continue the coding recovery validation",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedScenario": "coding.new-project",
+      "tags": ["g4", "coding", "recovery"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_research_fast",
+      "title": "G4 Research Fast Task Contract",
+      "scenario": "g4.scene_prompt_contract",
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "expectedMarkers": [
+        "结论 / 证据 / 冲突 / 待验证空白",
+        "新的研究方向",
+        "多源交叉验证",
+        "重新给出可执行的校准路径"
+      ],
+      "expectedSourceModuleId": "scene-research-deep",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "research", "fast-task"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_research_cross_session",
+      "title": "G4 Research Cross-Session Contract",
+      "scenario": "g4.scene_resume_contract",
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "resumePath": "g4/research/session-1",
+      "resumeMessage": "continue the research handoff from session 1",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "expectedMarkers": [
+        "多源交叉验证",
+        "重新给出可执行的校准路径"
+      ],
+      "expectedSourceModuleId": "scene-research-deep",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "research", "cross-session"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_research_recovery",
+      "title": "G4 Research Recovery Flow",
+      "scenario": "g4.scene_runtime_recovery",
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "resumeMessage": "continue the research recovery validation",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "expectedScenario": "research.deep",
+      "tags": ["g4", "research", "recovery"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_writing_fast",
+      "title": "G4 Writing Fast Task Contract",
+      "scenario": "g4.scene_prompt_contract",
+      "appId": "yggdrasil.app.epic-writing",
+      "taskType": "writing",
+      "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "expectedMarkers": [
+        "章节目标、角色状态和时间线锚点",
+        "最小破坏方案",
+        "回收 canon",
+        "章节连续性审查风险"
+      ],
+      "expectedSourceModuleId": "scene-writing-epic",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "writing", "fast-task"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_writing_cross_session",
+      "title": "G4 Writing Cross-Session Contract",
+      "scenario": "g4.scene_resume_contract",
+      "appId": "yggdrasil.app.epic-writing",
+      "taskType": "writing",
+      "resumePath": "g4/writing/session-1",
+      "resumeMessage": "continue the writing handoff from session 1",
+      "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
+      "expectedProfileFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1"
+      ],
+      "expectedSeedFewShotRefs": [
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "expectedMarkers": [
+        "回收 canon",
+        "章节连续性审查风险"
+      ],
+      "expectedSourceModuleId": "scene-writing-epic",
+      "expectedMessageCount": 10,
+      "tags": ["g4", "writing", "cross-session"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_writing_recovery",
+      "title": "G4 Writing Recovery Flow",
+      "scenario": "g4.scene_runtime_recovery",
+      "appId": "yggdrasil.app.epic-writing",
+      "taskType": "writing",
+      "resumeMessage": "continue the writing recovery validation",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "expectedScenario": "writing.epic",
+      "tags": ["g4", "writing", "recovery"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_scene_switch_isolation",
+      "title": "G4 Official Scene Switch Isolation",
+      "scenario": "g4.scene_switch_isolation",
+      "sequence": [
+        {
+          "appId": "yggdrasil.app.coding-greenfield",
+          "taskType": "coding",
+          "request": {"codingMode": "new-project"},
+          "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+          "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+          "expectedProfileFewShotRefs": [
+            "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+            "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1"
+          ],
+          "expectedSeedFewShotRefs": [
+            "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+          ],
+          "expectedCompiledFewShotRefs": [
+            "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+            "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+          ],
+          "expectedMarkers": ["模块化实施计划"],
+          "expectedSourceModuleId": "scene-coding-new-project",
+          "expectedMessageCount": 10,
+          "forbiddenMarkers": []
+        },
+        {
+          "appId": "yggdrasil.app.deep-research",
+          "taskType": "research",
+          "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+          "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+          "expectedProfileFewShotRefs": [
+            "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+            "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1"
+          ],
+          "expectedSeedFewShotRefs": [
+            "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+            "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+          ],
+          "expectedCompiledFewShotRefs": [
+            "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+            "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+            "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+            "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+          ],
+          "expectedMarkers": ["多源交叉验证"],
+          "expectedSourceModuleId": "scene-research-deep",
+          "expectedMessageCount": 10,
+          "forbiddenMarkers": ["模块化实施计划", "同一套 contract"]
+        },
+        {
+          "appId": "yggdrasil.app.epic-writing",
+          "taskType": "writing",
+          "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
+          "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
+          "expectedProfileFewShotRefs": [
+            "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+            "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1"
+          ],
+          "expectedSeedFewShotRefs": [
+            "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+            "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+          ],
+          "expectedCompiledFewShotRefs": [
+            "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+            "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+            "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+            "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+          ],
+          "expectedMarkers": ["章节连续性审查风险"],
+          "expectedSourceModuleId": "scene-writing-epic",
+          "expectedMessageCount": 10,
+          "forbiddenMarkers": ["多源交叉验证", "重新给出可执行的校准路径"]
+        }
+      ],
+      "tags": ["g4", "multiscene", "isolation"],
+      "difficulty": "hard"
+    }
+  ]
+}

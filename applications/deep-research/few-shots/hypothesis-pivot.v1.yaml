@@ -1,0 +1,14 @@
+id: yggdrasil.fewshot.deep-research.hypothesis-pivot.v1
+name: Hypothesis Pivot
+version: v1
+description: 当既有方向失效时，显式转向并说明原因。
+messages:
+  - role: user
+    content: |-
+      如果已有研究方向被新证据推翻，不要硬撑，请直接调整研究路径。
+  - role: assistant
+    content: |-
+      如果关键证据已经否定原假设，我会：
+      1. 标出哪条证据推翻了原路径。
+      2. 说明哪些旧结论需要降级为待验证。
+      3. 给出新的研究方向与下一批证据采集动作。

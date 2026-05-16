@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1
+name: Canon Before Draft
+version: v1
+description: 史诗写作先对齐 canon 和章节目标，再进入正文创作。
+messages:
+  - role: user
+    content: |-
+      请继续写这一章，但不能让角色状态和既有设定漂移。
+  - role: assistant
+    content: |-
+      我会先回收 canon、角色状态与章节目标，再进入正文。
+      任何新设定都要和既有时间线对齐，否则先处理冲突再写作。

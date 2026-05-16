@@ -162,9 +162,9 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
 
     assert compiled.takeover_protocol is not None
     assert compiled.takeover_protocol.objective == "把 Gate 2 接管协议注入 Prompt。"
-    assert "Objective summary: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[1]["content"]
-    assert "Work tree:" in compiled.messages[1]["content"]
-    assert "Plan quality: 92.0" in compiled.messages[1]["content"]
+    assert "Objective summary: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[-1]["content"]
+    assert "Work tree:" in compiled.messages[-1]["content"]
+    assert "Plan quality: 92.0" in compiled.messages[-1]["content"]
 
 
 def test_compile_runtime_prompt_for_writing_selects_writing_seed() -> None:
@@ -182,7 +182,7 @@ def test_compile_runtime_prompt_for_writing_selects_writing_seed() -> None:
     assert compiled.prompt_profile_id == "yggdrasil.knowledge-studio.main-agent"
     assert compiled.seed_template_id == "yggdrasil.seed.writing.epic"
     assert "史诗叙事架构师" in compiled.messages[0]["content"]
-    assert "narrative" in compiled.messages[1]["content"]
+    assert "narrative" in compiled.messages[-1]["content"]
 
 
 def test_compile_runtime_prompt_for_dedicated_apps_selects_expected_scene() -> None:
@@ -260,3 +260,61 @@ def test_compile_runtime_prompt_for_dedicated_apps_selects_expected_scene() -> N
         assert compiled.prompt_profile_id == case["prompt_profile_id"]
         assert compiled.seed_template_id == case["seed_template_id"]
         assert case["content_marker"] in compiled.messages[0]["content"]
+
+
+def test_compile_runtime_prompt_injects_declared_few_shots_into_messages() -> None:
+    cases = [
+        {
+            "app_id": "yggdrasil.app.coding-greenfield",
+            "task_type": "coding",
+            "request": {"codingMode": "new-project"},
+            "expected_refs": [
+                "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+                "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+                "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+                "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1",
+            ],
+            "expected_markers": ["模块化实施计划", "先骨架、后能力、再扩展", "范围、模块边界和主链路", "同一套 contract"],
+        },
+        {
+            "app_id": "yggdrasil.app.deep-research",
+            "task_type": "research",
+            "request": {},
+            "expected_refs": [
+                "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+                "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+                "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+                "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1",
+            ],
+            "expected_markers": ["结论 / 证据 / 冲突 / 待验证空白", "新的研究方向", "多源交叉验证", "重新给出可执行的校准路径"],
+        },
+        {
+            "app_id": "yggdrasil.app.epic-writing",
+            "task_type": "writing",
+            "request": {},
+            "expected_refs": [
+                "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+                "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+                "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+                "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1",
+            ],
+            "expected_markers": ["章节目标、角色状态和时间线锚点", "最小破坏方案", "回收 canon", "章节连续性审查风险"],
+        },
+    ]
+
+    for case in cases:
+        compiled = compile_runtime_prompt(
+            task=_task(title=f"{case['app_id']} few-shot", goal="验证 few-shot 已进入运行时消息。", app_id=case["app_id"]),
+            run_type="main",
+            task_type=case["task_type"],
+            root_mount=_root_mount(),
+            current_context=[],
+            request={"appId": case["app_id"], **case["request"]},
+            resume_path=None,
+        )
+
+        assert compiled.few_shot_refs == case["expected_refs"]
+        assert [message["role"] for message in compiled.messages] == ["system", *(["user", "assistant"] * 4), "user"]
+        few_shot_payload = "\n\n".join(message["content"] for message in compiled.messages[1:-1])
+        for marker in case["expected_markers"]:
+            assert marker in few_shot_payload

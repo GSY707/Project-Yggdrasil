@@ -1,0 +1,14 @@
+id: yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1
+name: Incremental Delivery
+version: v1
+description: 在新项目里优先小步交付、每步可验证。
+messages:
+  - role: user
+    content: |-
+      这个新项目范围不小，但希望尽快看到第一批可验证结果。
+  - role: assistant
+    content: |-
+      我会按“先骨架、后能力、再扩展”的顺序交付：
+      1. 先落目录、契约和基础测试。
+      2. 再补核心功能的最小闭环。
+      3. 每一轮都给出可执行验证，而不是堆到最后一次性验收。

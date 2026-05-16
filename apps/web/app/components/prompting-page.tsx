@@ -21,7 +21,7 @@ type PromptProfilesResponse = { appId?: string; promptProfiles: PromptProfileDef
 type SeedTemplatesResponse = { appId?: string; seedTemplates: SeedTemplateDefinition[] };
 type RegisteredToolsResponse = { appId?: string; activeCapabilities: string[]; registeredTools: Array<Record<string, unknown>> };
 type PromptCompileArtifactsResponse = { promptCompileArtifacts: PromptCompileArtifactRecord[] };
-type PromptPreviewResponse = { appId?: string; compiledPrompt: { appId: string; messages: Array<{ role: string; content: string }>; systemSections: Record<string, string>; userSections: Record<string, string>; registeredTools: Array<Record<string, unknown>>; promptProfileId: string; seedTemplateId?: string | null; runType: string; taskType: string; scenario?: string | null }; registeredTools: Array<Record<string, unknown>> };
+type PromptPreviewResponse = { appId?: string; compiledPrompt: { appId: string; messages: Array<{ role: string; content: string }>; systemSections: Record<string, string>; userSections: Record<string, string>; registeredTools: Array<Record<string, unknown>>; promptProfileId: string; seedTemplateId?: string | null; runType: string; taskType: string; scenario?: string | null; fewShotRefs: string[] }; registeredTools: Array<Record<string, unknown>> };
 
 export function PromptingPage() {
   const searchParams = useSearchParams();
@@ -306,8 +306,12 @@ export function PromptingPage() {
                   <span className="inline-chip">run {preview.compiledPrompt.runType}</span>
                   <span className="inline-chip">task {preview.compiledPrompt.taskType}</span>
                   <span className="inline-chip">scenario {String(preview.compiledPrompt.scenario ?? "-")}</span>
+                  <span className="inline-chip">few-shot {preview.compiledPrompt.fewShotRefs.length}</span>
                   <span className="inline-chip">tools {preview.compiledPrompt.registeredTools.length}</span>
                 </div>
+                {preview.compiledPrompt.fewShotRefs.length > 0 ? (
+                  <pre className="meta-copy mono">{preview.compiledPrompt.fewShotRefs.join("\n")}</pre>
+                ) : null}
               </article>
               {preview.compiledPrompt.messages.map((message, index) => (
                 <article className="record-card" key={`${message.role}-${index}`}>
@@ -340,8 +344,10 @@ export function PromptingPage() {
                 <div className="pill-row">
                   <span className="inline-chip">scope {profile.runScope}</span>
                   <span className="inline-chip">version {profile.version}</span>
+                  <span className="inline-chip">few-shot {profile.fewShotRefs.length}</span>
                   <span className="inline-chip">source {profile.sourceModuleId ?? profile.sourceAppId ?? "-"}</span>
                 </div>
+                {profile.fewShotRefs.length > 0 ? <pre className="meta-copy mono">{profile.fewShotRefs.join("\n")}</pre> : null}
               </article>
             ))}
           </div>
@@ -363,8 +369,10 @@ export function PromptingPage() {
                   <span className="inline-chip">domain {template.domain}</span>
                   <span className="inline-chip">scenario {template.scenario}</span>
                   <span className="inline-chip">version {template.version}</span>
+                  <span className="inline-chip">few-shot {template.fewShotRefs.length}</span>
                   <span className="inline-chip">source {template.sourceModuleId ?? template.sourceAppId ?? "-"}</span>
                 </div>
+                {template.fewShotRefs.length > 0 ? <pre className="meta-copy mono">{template.fewShotRefs.join("\n")}</pre> : null}
               </article>
             ))}
           </div>

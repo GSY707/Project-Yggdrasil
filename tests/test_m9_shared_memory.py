@@ -122,3 +122,72 @@ def test_shared_memory_mounts_expand_retrieval_and_redirect_copy_on_write() -> N
     assert validation["allowed"] is True
     assert validation["targetSpaceId"] == DEFAULT_SPACE_ID
     assert "Copy-on-write" in validation["summary"]
+
+
+def test_shared_memory_permission_can_scope_writes_by_work_tree_node() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        collaboration = CollaborationRepository(session)
+        mounted_space = collaboration.create_space(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceType": "shared",
+                "ownerSubject": "profile:architect",
+            }
+        )
+        mounted_branch = collaboration.create_branch(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "spaceId": mounted_space.id,
+                "name": "shared-work-tree-scope",
+            }
+        )
+        collaboration.create_space_mount(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "hostSpaceId": DEFAULT_SPACE_ID,
+                "mountedSpaceId": mounted_space.id,
+                "mountMode": "bidirectional",
+            }
+        )
+        collaboration.create_permission_tuple(
+            {
+                "projectId": DEFAULT_PROJECT_ID,
+                "subject": "profile:architect",
+                "relation": "write",
+                "resource": f"space:{mounted_space.id}",
+                "condition": {"sourceWorkTreeNodeId": "wt-node-allowed"},
+            }
+        )
+
+    shared_memory = SharedMemoryModule()
+    allowed = shared_memory.validate_memory_write(
+        {
+            "projectId": DEFAULT_PROJECT_ID,
+            "subject": "profile:architect",
+            "hostSpaceId": DEFAULT_SPACE_ID,
+            "spaceId": DEFAULT_SPACE_ID,
+            "branchId": DEFAULT_BRANCH_ID,
+            "targetSpaceId": mounted_space.id,
+            "targetBranchId": mounted_branch.id,
+            "candidateNodes": [{"id": "cand-node", "sourceWorkTreeNodeId": "wt-node-allowed"}],
+        }
+    )
+    denied = shared_memory.validate_memory_write(
+        {
+            "projectId": DEFAULT_PROJECT_ID,
+            "subject": "profile:architect",
+            "hostSpaceId": DEFAULT_SPACE_ID,
+            "spaceId": DEFAULT_SPACE_ID,
+            "branchId": DEFAULT_BRANCH_ID,
+            "targetSpaceId": mounted_space.id,
+            "targetBranchId": mounted_branch.id,
+            "candidateNodes": [{"id": "cand-node", "sourceWorkTreeNodeId": "wt-node-blocked"}],
+        }
+    )
+
+    assert allowed["allowed"] is True
+    assert allowed["targetSpaceId"] == mounted_space.id
+    assert denied["allowed"] is False
+    assert "write-denied" in denied["blockers"][0]

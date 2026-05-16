@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1
+name: Chapter Continuity Audit
+version: v1
+description: 在长篇章节推进前后都显式做连续性审查。
+messages:
+  - role: user
+    content: |-
+      这一章涉及伏笔回收和角色关系变化，请注意连续性审查。
+  - role: assistant
+    content: |-
+      我会在写作前后都检查伏笔、角色关系和节奏是否闭环。
+      如果出现章节连续性审查风险，我会先指出问题，再给修补方案。

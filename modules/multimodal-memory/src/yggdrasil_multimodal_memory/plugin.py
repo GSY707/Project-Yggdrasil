@@ -133,6 +133,7 @@ class MultimodalMemoryModule(BaseModulePlugin):
         project_id = str(execution_context.get("projectId") or payload.get("projectId") or DEFAULT_PROJECT_ID)
         space_id = str(payload.get("spaceId") or execution_context.get("spaceId") or DEFAULT_SPACE_ID)
         branch_id = str(payload.get("branchId") or execution_context.get("branchId") or DEFAULT_BRANCH_ID)
+        source_work_tree_node_id = str(execution_context.get("sourceWorkTreeNodeId") or "").strip() or None
         media_type = str(payload.get("mediaType") or "document")
         source_text = _normalize_text(payload.get("sourceText") or payload.get("transcript") or payload.get("captions") or payload.get("sourceUri"))
         if not source_text:
@@ -180,6 +181,7 @@ class MultimodalMemoryModule(BaseModulePlugin):
                     "storageKey": asset_storage_key,
                     "checksum": checksum,
                     "sourceRef": {"type": "file", "locator": asset_storage_key},
+                    "relatedWorkTreeNodeIds": [source_work_tree_node_id] if source_work_tree_node_id is not None else [],
                     "createdBy": actor,
                 }
             )
@@ -241,6 +243,7 @@ class MultimodalMemoryModule(BaseModulePlugin):
                             f"Excerpt: {normalize_excerpt(source_text, 180)}",
                         ]
                     ),
+                    "sourceWorkTreeNodeId": source_work_tree_node_id,
                     "createdBy": actor,
                     "updatedBy": actor,
                     "changeReason": "multimodal-asset-ingest",

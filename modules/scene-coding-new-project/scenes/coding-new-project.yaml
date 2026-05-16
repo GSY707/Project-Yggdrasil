@@ -22,4 +22,6 @@ selectionRules:
     - new-project
     - from-scratch
     - cold-start
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1
+  - yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1

@@ -16,4 +16,6 @@ selectionRules:
   priority: 110
   taskTypes:
     - writing
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1
+  - yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1

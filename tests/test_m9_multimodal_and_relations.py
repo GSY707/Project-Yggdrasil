@@ -54,6 +54,7 @@ def test_multimodal_ingest_and_relation_discovery_materialize_assets_and_edges()
             "mediaType": "audio",
             "sourceText": "multimodal memory shared-space training-lab runtime recovery knowledge graph transcript",
             "ownerNodeId": owner_node_id,
+            "executionContext": {"sourceWorkTreeNodeId": "wt-node-multimodal"},
         }
     )
     assert ingest_result["segmentCount"] >= 1
@@ -61,17 +62,27 @@ def test_multimodal_ingest_and_relation_discovery_materialize_assets_and_edges()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         assets = AssetRepository(session)
+        nodes = NodeRepository(session)
         asset = assets.get_asset(ingest_result["asset"]["id"])
         segments = assets.list_asset_segments(ingest_result["asset"]["id"])
+        summary_node = nodes.get_node(ingest_result["summaryNode"]["id"])
         assert asset is not None
         assert asset.media_type == "audio"
+        assert asset.related_work_tree_node_ids == ["wt-node-multimodal"]
         assert segments
         assert all(segment.embedding_id for segment in segments)
+        assert summary_node is not None
+        assert summary_node.source_work_tree_node_id == "wt-node-multimodal"
 
     relation_module = RelationDiscoveryModule()
     scan_result = relation_module.scan_branch_relations({"branchId": DEFAULT_BRANCH_ID})
     assert any(
         {edge["fromNodeId"], edge["toNodeId"]} == {related_node_id, ingest_result["summaryNode"]["id"]}
+        for edge in scan_result["createdEdges"]
+    )
+    assert any(
+        {edge["fromNodeId"], edge["toNodeId"]} == {related_node_id, ingest_result["summaryNode"]["id"]}
+        and "source-work-tree:wt-node-multimodal" in str(edge.get("reason") or "")
         for edge in scan_result["createdEdges"]
     )
 

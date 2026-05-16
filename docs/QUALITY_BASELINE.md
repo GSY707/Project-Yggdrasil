@@ -108,3 +108,39 @@
 - 仅在 benchmark 相关实现发生变更时，才需要手动复跑 `eval:m8:benchmark`；若连续 3 轮结果稳定高于当前基线 0.05 以上，再更新本文档中的 `min` 值。  
 - 计划在 PostgreSQL 压测环境可用后补一轮同口径复测，并追加 PostgreSQL 实测栏位。  
 - 本文档由 `docs/DIRECTORY_REFERENCE.md` 索引，变更须同步更新目录。
+
+---
+
+## 6. 长任务与伪无限上下文评测口径（2026-05-16 规划）
+
+> 本节是当前项目第一优先级方向的正式评测规划，不代表这些指标已经达成；它定义的是接下来应冻结的官方测量口径。
+
+### 6.1 评测原则
+
+1. 无法直接评测“无限次上下文窗口重启”，因此正式评测采用“受控多次”逼近。
+2. 评测不以单次 prompt 更长为目标，而以“短窗口路径与长窗口路径的最终效果是否一致”为目标。
+3. official stress path 应通过运行时显式限制 `effectiveContextWindow`，强制系统经历大量 context pruning / window restart。
+4. official reference path 使用更长上下文窗口或更宽松阈值，在同一任务、同一 acceptance contract 下提供质量对照。
+
+### 6.2 官方 stress 口径
+
+| 指标 | 目标口径 | 说明 |
+|------|----------|------|
+| `effectiveContextWindow` | 固定写入 artifact | 人工限制后的有效窗口大小，用于制造稳定压力 |
+| `restartCount` | `100` | 官方 stress path 要求同一任务链完成 100 次窗口重启或等价窗口轮换 |
+| `compressionCount` | 强制记录 | 不允许通过只压缩不重启来隐藏窗口轮换成本 |
+| `cumulativeWindowSpanTokens` | `>= 100 × effectiveContextWindow` | 证明这不是单窗口内的伪长任务 |
+| `maxContextLengthTokens` | 持续低于 hard restart 阈值 | 防止 silent overflow |
+| `restartSuccessRate0_1` | `1.0` 目标 | 每次 restart 都必须成功接续到下一窗口 |
+| `finalAcceptanceParity0_1` | `1` 目标 | short-window 与 long-window 在同一任务上得到相同验收结论 |
+| `deliveryEquivalence0_1` | `1` 目标 | 两条路径满足相同的交付 contract |
+| `qualityDeltaToLongWindow0_100` | 越接近 `0` 越好 | 正式数值门槛在 restart loop 实装后的 3 轮稳定复跑中冻结 |
+| `carryForwardLossCount` | `0` 目标 | 不允许因为摘要、引用或状态丢失而出现显式断裂 |
+
+### 6.3 通过标准的核心定义
+
+“伪无限上下文窗口”方向的正式目标不是总 token 更大，而是：
+
+1. 短窗口路径与长窗口路径在同一任务上得到相同 acceptance 结论。
+2. 差异主要允许出现在时延与成本，而不是最终质量、证据完整性和交付连续性。
+3. 只要这三条成立，就可以认为系统正在逼近“记忆树为主体、上下文窗口为工作集”的正式工程能力。

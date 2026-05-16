@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
+import sqlalchemy as sa
 import yggdrasil_model_providers
 
 from yggdrasil_agent_runtime.app import app as runtime_app
@@ -10,6 +11,7 @@ from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pa
 from yggdrasil_context_pruning.plugin import ContextPruningModule
 from yggdrasil_sdk import PromptAssetRepository, TaskRepository, get_persistence_runtime, resolve_workspace_root
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
+from yggdrasil_sdk.persistence.orm import RetrievalRequestORM
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 from yggdrasil_worker.registry import run_worker_once
@@ -169,6 +171,293 @@ def test_context_pruning_retains_protected_refs() -> None:
     assert executed["plan"]["status"] == "executed"
 
 
+def test_main_agent_materializes_runtime_context_into_memory_tree_before_prompt() -> None:
+    runtime = get_persistence_runtime()
+    task_id = "task_memory_tree_runtime"
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": task_id,
+                "title": "记忆树主导上下文装配",
+                "goal": "让运行时在模型调用前先把外来上下文写入记忆树，再从记忆树检索工作集。",
+                "status": "draft",
+                "currentObjective": "验证当前 prompt 使用的是记忆树检索结果。",
+                "currentFocus": "memory-tree-runtime",
+                "budgetState": {
+                    "tokenBudgetTotal": 2000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        f"/runtime/tasks/{task_id}/start",
+        json={
+            "auditLevel": "strict",
+            "currentFocus": "memory-tree-runtime",
+            "currentObjective": "验证当前 prompt 使用的是记忆树检索结果。",
+            "currentContext": [
+                {
+                    "id": "ctx_memory_tree_1",
+                    "title": "持久记忆检索入口",
+                    "content": "运行时必须先把上下文写成记忆节点，再从记忆树读取节点与关联关系。",
+                    "importance": 0.95,
+                },
+                {
+                    "id": "ctx_memory_tree_2",
+                    "title": "共享挂载检索",
+                    "content": "共享空间节点应和本地节点一起进入统一 retrieval，再由 text-memory 输出自然语言摘要。",
+                    "importance": 0.85,
+                },
+            ],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "completed"
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        prompt_repository = PromptAssetRepository(session)
+        temporary_nodes = [
+            node
+            for node in node_repository.list_nodes(branch_id="branch_main", limit=500)
+            if node.status == "temporary"
+            and node.title in {"持久记忆检索入口", "共享挂载检索"}
+        ]
+        assert len(temporary_nodes) >= 2
+
+        invocations = runtime_repository.list_model_invocations(task_id=task_id)
+        assert len(invocations) == 1
+        invocation = invocations[0]
+        artifact = prompt_repository.get_prompt_compile_artifact(str(invocation.prompt_compile_artifact_id))
+        assert artifact is not None
+        assert artifact.compiled_messages_ref is not None
+        assert invocation.request_ref is not None
+
+        compiled_path = Path(resolve_workspace_root()) / artifact.compiled_messages_ref.locator
+        compiled_payload = json.loads(compiled_path.read_text(encoding="utf-8"))
+        messages = compiled_payload.get("messages") or []
+        assert messages
+        user_message = str(messages[-1].get("content") or "")
+        assert "Memory retrieval summary" in user_message
+        assert "Materialized 2 runtime context items into the memory tree before retrieval." in user_message
+        assert "持久记忆检索入口" in user_message
+
+
+def test_main_agent_applies_memory_write_tags_without_interrupting_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    task_id = "task_memory_tag_write"
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": task_id,
+                "title": "标签写入记忆树",
+                "goal": "让主 Agent 可以在回答中用标签写入记忆树而不触发额外工具回合。",
+                "status": "draft",
+                "currentObjective": "验证 assistant 输出标签会在停止点落入记忆树。",
+                "currentFocus": "memory-tag-write",
+                "budgetState": {
+                    "tokenBudgetTotal": 2000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        return {
+            "assistantText": (
+                "已记录本轮运行记忆。\n"
+                '<memory-write title="运行时记忆策略" rootBranch="context" importance="0.93">'
+                "模型必须始终先从记忆树检索，再决定当前工作集。"
+                "</memory-write>"
+            ),
+            "invocation": {
+                "id": "inv_memory_tag_write",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_memory_tag_write",
+                "traceId": "trace_memory_tag_write",
+            },
+            "usage": {
+                "inputTokens": 64,
+                "outputTokens": 24,
+                "totalTokens": 88,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    started = client.post(
+        f"/runtime/tasks/{task_id}/start",
+        json={
+            "currentFocus": "memory-tag-write",
+            "currentObjective": "验证 assistant 输出标签会在停止点落入记忆树。",
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["memoryTagWrites"]["detectedCount"] == 1
+    assert len(processed["result"]["memoryTagWrites"]["applied"]) == 1
+    assert processed["result"]["memoryTagWrites"]["blocked"] == []
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        node_repository = NodeRepository(session)
+        task = task_repository.get_task(task_id)
+        assert task is not None
+
+        memory_nodes = [
+            node
+            for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
+            if node.title == "运行时记忆策略" and node.node_type == "detail"
+        ]
+        assert len(memory_nodes) == 1
+        assert "模型必须始终先从记忆树检索，再决定当前工作集。" in memory_nodes[0].content
+
+        execution_notes = [
+            node
+            for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
+            if node.node_type == "task" and node.parent_id == task.execution_root_node_id
+        ]
+        assert len(execution_notes) == 1
+        assert "已记录本轮运行记忆。" in execution_notes[0].content
+        assert "<memory-write" not in execution_notes[0].content
+
+
+def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_window_restart",
+                "title": "伪无限上下文窗口闭环",
+                "goal": "当工作集超过人工限制的有效窗口时，自动生成 carry-forward package 并切换到下一窗口继续执行。",
+                "status": "draft",
+                "currentObjective": "验证自动窗口重启和续跑闭环。",
+                "currentFocus": "window-restart",
+                "resumeMessage": "继续执行下一窗口。",
+                "budgetState": {
+                    "tokenBudgetTotal": 2000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append({
+            "resumeMessage": request_payload.get("resumeMessage"),
+            "restartMetrics": request_payload.get("runtimeMetrics"),
+        })
+        return {
+            "assistantText": "已根据 carry-forward package 继续执行并完成当前窗口目标。",
+            "invocation": {
+                "id": f"inv_window_restart_{len(invoke_calls)}",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_window_restart",
+                "traceId": "trace_window_restart",
+            },
+            "usage": {
+                "inputTokens": 64,
+                "outputTokens": 24,
+                "totalTokens": 88,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    started = client.post(
+        "/runtime/tasks/task_window_restart/start",
+        json={
+            "currentFocus": "执行人工受限窗口压力路径",
+            "currentObjective": "验证超过 effectiveContextWindow 后自动切换窗口。",
+            "currentContext": [
+                {
+                    "id": "ctx_window_large",
+                    "title": "长任务主工作集",
+                    "content": "正式上下文窗口压力样本。" * 80,
+                    "importance": 0.99,
+                }
+            ],
+            "protectedItems": [{"kind": "node", "id": "ctx_window_large"}],
+            "effectiveContextWindow": 120,
+            "windowRestartRatio": 0.75,
+            "restartMessage": "窗口已满，请基于 carry-forward package 在下一窗口继续执行。",
+        },
+    )
+    assert started.status_code == 202
+
+    first_run = run_worker_once("agent-runtime")
+    assert first_run["status"] == "processed"
+    assert first_run["result"]["status"] == "restarting"
+    assert first_run["result"]["snapshot"]["snapshotType"] == "restart"
+    assert first_run["result"]["queuedWorkItem"]["command"] == "resume"
+    restart_request_state = next(
+        action["requestState"]
+        for action in first_run["result"]["snapshot"]["pendingActions"]
+        if isinstance(action, dict) and action.get("kind") == "runtime-request-state"
+    )
+    assert restart_request_state["memoryRetrievalState"]["requestId"]
+    assert restart_request_state["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
+    assert invoke_calls == []
+
+    second_run = run_worker_once("agent-runtime")
+    assert second_run["status"] == "processed"
+    assert second_run["result"]["status"] == "completed"
+    assert len(invoke_calls) == 1
+    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["memoryRetrievalState"]["requestId"]
+    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task = task_repository.get_task("task_window_restart")
+        runs = task_repository.list_agent_runs("task_window_restart")
+        assert task is not None
+        assert task.status == "completed"
+        assert task.restart_count == 1
+        assert task.window_index == 2
+        assert task.cumulative_window_span_tokens >= 120
+        assert len(runs) == 2
+        run_by_window_index = {run.window_index: run for run in runs}
+        previous_run = run_by_window_index[1]
+        latest_run = run_by_window_index[2]
+        assert latest_run.parent_run_id == previous_run.id
+        assert latest_run.window_index == 2
+        assert previous_run.window_index == 1
+
+
 def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -228,6 +517,13 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     assert first_run["result"]["runtimeTimings"]["buildRootMountMs"] >= 0
     assert first_run["result"]["runtimeTimings"]["llm"]["compilePromptMs"] >= 0
     snapshot = first_run["result"]["snapshot"]
+    pause_request_state = next(
+        action["requestState"]
+        for action in snapshot["pendingActions"]
+        if isinstance(action, dict) and action.get("kind") == "runtime-request-state"
+    )
+    assert pause_request_state["memoryRetrievalState"]["requestId"]
+    assert pause_request_state["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
 
     cached_root_mount = client.get(
         "/runtime/package-entry",
@@ -260,8 +556,13 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert artifact.app_id == DEFAULT_APP_ID
         assert artifact.prompt_profile_version_id
         assert artifact.compiled_messages_ref is not None
+        assert artifact.work_tree_snapshot is not None
+        assert artifact.takeover_protocol_snapshot is not None
+        assert artifact.work_tree_snapshot["currentNodeId"] is not None
         assert invocations[0].request_ref is not None
         assert invocations[0].response_ref is not None
+        assert invocations[0].assistant_text_summary is not None
+        assert any(label.startswith("work-tree:") for label in invocations[0].output_labels)
         request_path = Path(resolve_workspace_root()) / invocations[0].request_ref.locator
         request_payload = json.loads(request_path.read_text(encoding="utf-8"))
         assert request_payload["appId"] == DEFAULT_APP_ID
@@ -283,6 +584,10 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         ]
         assert len(execution_notes) == 1
         assert "Task takeover protocol:" in execution_notes[0].content
+        retrieval_requests = session.execute(sa.select(RetrievalRequestORM).order_by(RetrievalRequestORM.created_at.asc())).scalars().all()
+        assert retrieval_requests
+        assert any(record.work_tree_node_id is not None for record in retrieval_requests)
+        assert any(record.reverse_trace_mode for record in retrieval_requests)
 
     assert first_run["result"]["takeoverProtocol"] is not None
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
@@ -306,11 +611,13 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
     assert second_run["result"]["resume"] is not None
     assert second_run["result"]["rehydration"] is not None
     assert any("Rehydrated" in summary for summary in second_run["result"]["rehydration"]["summaries"])
+    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         task_repository = TaskRepository(session)
         runtime_repository = RuntimeRepository(session)
+        prompt_repository = PromptAssetRepository(session)
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
         assert task is not None
@@ -328,6 +635,13 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert len(invocations) == 2
         assert {invocation.app_id for invocation in invocations} == {DEFAULT_APP_ID}
         assert {invocation.status for invocation in invocations} == {"fallback"}
+        assert all(invocation.assistant_text_summary for invocation in invocations)
+        assert all(any(label.startswith("work-tree:") for label in invocation.output_labels) for invocation in invocations)
+        for invocation in invocations:
+            artifact = prompt_repository.get_prompt_compile_artifact(str(invocation.prompt_compile_artifact_id))
+            assert artifact is not None
+            assert artifact.work_tree_snapshot is not None
+            assert artifact.takeover_protocol_snapshot is not None
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
@@ -565,6 +879,136 @@ def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
         assert "rawResponse" not in response_payload
         assert "toolExecutions" not in response_payload
         assert "toolExecutionCount" in response_payload
+
+
+def test_runtime_response_payload_tracks_token_usage_and_context_lengths(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "metrics-model",
+                "provider": "metrics-provider",
+                "quality": 0.8,
+                "costPer1k": 0.001,
+                "latencyMs": 50,
+                "contextWindow": 1_000_000,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "metrics-provider",
+            "model": "metrics-model",
+            "outputText": "已生成一份长任务实现计划。",
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 3200,
+                "outputTokens": 400,
+                "totalTokens": 3600,
+                "cacheHitInputTokens": 2400,
+                "cacheWriteInputTokens": 300,
+                "nonCacheInputTokens": 800,
+                "reasoningTokens": 120,
+            },
+            "costUsed": 0.05,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "已生成一份长任务实现计划。"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 3200,
+                    "completion_tokens": 400,
+                    "total_tokens": 3600,
+                },
+            },
+            "requestPayload": {
+                "model": "metrics-model",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 250.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_metrics_trace",
+                "title": "runtime metrics trace",
+                "goal": "验证 token 用量和上下文长度会写入 response artifact。",
+                "status": "draft",
+                "currentObjective": "完成一轮 metrics 落盘。",
+                "currentFocus": "metrics-trace",
+                "budgetState": {
+                    "tokenBudgetTotal": 10000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_metrics_trace/start",
+        json={
+            "currentFocus": "metrics-trace",
+            "maxRetainedTokens": 24,
+            "currentContext": [
+                {
+                    "id": "ctx_keep_metrics",
+                    "title": "核心约束",
+                    "content": "必须把 token 开销拆成缓存命中、非缓存命中、输出数，并记录长任务上下文长度。" * 4,
+                    "importance": 0.95,
+                },
+                {
+                    "id": "ctx_drop_metrics",
+                    "title": "次要细节",
+                    "content": "这段上下文用于触发 pruning，让 before/after 长度都能被记录。" * 4,
+                    "importance": 0.1,
+                },
+            ],
+            "protectedItems": [{"kind": "node", "id": "ctx_keep_metrics"}],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "completed"
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        runtime_repository = RuntimeRepository(session)
+        invocations = runtime_repository.list_model_invocations(task_id="task_metrics_trace")
+        assert len(invocations) == 1
+        response_path = Path(resolve_workspace_root()) / str(invocations[0].response_ref.locator)
+        response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+
+    assert response_payload["usage"] == {
+        "inputTokens": 3200,
+        "outputTokens": 400,
+        "totalTokens": 3600,
+        "cacheHitInputTokens": 2400,
+        "cacheWriteInputTokens": 300,
+        "nonCacheInputTokens": 800,
+        "reasoningTokens": 120,
+    }
+    observations = response_payload["contextLengthObservations"]
+    phases = {item["phase"] for item in observations}
+    assert {"beforeContextPruning", "afterContextPruning", "beforeModelInvocation", "taskEnd"}.issubset(phases)
+    before_pruning = next(item for item in observations if item["phase"] == "beforeContextPruning")
+    after_pruning = next(item for item in observations if item["phase"] == "afterContextPruning")
+    assert before_pruning["estimatedTokens"] >= after_pruning["estimatedTokens"]
 
 
 def test_pause_request_not_overwritten_on_worker_startup() -> None:

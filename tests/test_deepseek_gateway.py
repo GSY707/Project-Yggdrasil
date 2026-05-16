@@ -106,6 +106,7 @@ def test_invoke_model_includes_deepseek_thinking_and_returns_reasoning_content(m
                     "prompt_tokens": 1000,
                     "completion_tokens": 500,
                     "total_tokens": 1500,
+                    "completion_tokens_details": {"reasoning_tokens": 120},
                 },
             }
         )
@@ -139,6 +140,56 @@ def test_invoke_model_includes_deepseek_thinking_and_returns_reasoning_content(m
     assert result["reasoningContent"] == "先获取时间，再查询天气。"
     assert result["toolCalls"][0]["name"] == "text_memory.retrieve"
     assert result["costUsed"] == 0.006
+    assert result["usage"]["cacheHitInputTokens"] == 0
+    assert result["usage"]["cacheWriteInputTokens"] == 0
+    assert result["usage"]["nonCacheInputTokens"] == 1000
+    assert result["usage"]["reasoningTokens"] == 120
+
+
+def test_invoke_model_normalizes_cache_token_usage(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": "已完成。",
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 3200,
+                    "completion_tokens": 400,
+                    "total_tokens": 3600,
+                    "cache_read_input_tokens": 2400,
+                    "cache_creation_input_tokens": 300,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-Flash-Lite",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "输出执行计划。"}],
+        allow_fallback=False,
+    )
+
+    assert result["usage"] == {
+        "inputTokens": 3200,
+        "outputTokens": 400,
+        "totalTokens": 3600,
+        "cacheHitInputTokens": 2400,
+        "cacheWriteInputTokens": 300,
+        "nonCacheInputTokens": 800,
+        "reasoningTokens": 0,
+    }
 
 
 def test_assistant_tool_round_message_preserves_reasoning_content() -> None:

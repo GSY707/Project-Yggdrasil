@@ -302,6 +302,47 @@ def _aggregate_pause_resume(execution: dict[str, Any]) -> tuple[bool, bool]:
     return attempted, success
 
 
+def _aggregate_token_usage(invocations: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "cacheHitInputTokens": 0,
+        "cacheWriteInputTokens": 0,
+        "nonCacheInputTokens": 0,
+        "reasoningTokens": 0,
+    }
+    for invocation in invocations:
+        if not isinstance(invocation, dict):
+            continue
+        record = invocation.get("record") if isinstance(invocation.get("record"), dict) else {}
+        response_payload = invocation.get("responsePayload") if isinstance(invocation.get("responsePayload"), dict) else {}
+        usage = response_payload.get("usage") if isinstance(response_payload.get("usage"), dict) else {}
+        input_tokens = int(usage.get("inputTokens", record.get("inputTokensUsed", 0)) or 0)
+        output_tokens = int(usage.get("outputTokens", record.get("outputTokensUsed", 0)) or 0)
+        totals["inputTokens"] += input_tokens
+        totals["outputTokens"] += output_tokens
+        totals["totalTokens"] += int(usage.get("totalTokens", input_tokens + output_tokens) or (input_tokens + output_tokens))
+        totals["cacheHitInputTokens"] += int(usage.get("cacheHitInputTokens", 0) or 0)
+        totals["cacheWriteInputTokens"] += int(usage.get("cacheWriteInputTokens", 0) or 0)
+        totals["nonCacheInputTokens"] += int(usage.get("nonCacheInputTokens", max(input_tokens - int(usage.get("cacheHitInputTokens", 0) or 0), 0)) or 0)
+        totals["reasoningTokens"] += int(usage.get("reasoningTokens", 0) or 0)
+    return totals
+
+
+def _context_length_observations(invocations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    observations: list[dict[str, Any]] = []
+    for invocation in invocations:
+        if not isinstance(invocation, dict):
+            continue
+        response_payload = invocation.get("responsePayload") if isinstance(invocation.get("responsePayload"), dict) else {}
+        raw = response_payload.get("contextLengthObservations") if isinstance(response_payload.get("contextLengthObservations"), list) else []
+        for item in raw:
+            if isinstance(item, dict):
+                observations.append(dict(item))
+    return observations
+
+
 def _agent_system(provider: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", str(provider).strip().lower()).strip("-") or "unknown"
     return f"yggdrasil-{slug}-live"
@@ -324,6 +365,12 @@ def _build_scorecard_row(
     invocations = task_payload.get("invocations") or []
     task_record = task_payload.get("task") or {}
     takeover_metrics = _takeover_metrics(invocations)
+    token_usage = _aggregate_token_usage(invocations)
+    context_length_observations = _context_length_observations(invocations)
+    max_context_length_tokens = max(
+        (int(item.get("estimatedTokens") or 0) for item in context_length_observations if item.get("estimatedTokens") is not None),
+        default=None,
+    )
     first_token_seconds = execution.get("firstTokenSeconds")
     first_useful_seconds = execution.get("firstUsefulOutputSeconds")
     response_speed = _response_speed_score(first_useful_seconds, fastest_first_useful)
@@ -369,6 +416,15 @@ def _build_scorecard_row(
         "first_token_seconds": first_token_seconds if first_token_seconds is not None else "",
         "first_useful_output_seconds": first_useful_seconds if first_useful_seconds is not None else "",
         "total_duration_seconds": execution.get("totalDurationSeconds") if execution.get("totalDurationSeconds") is not None else "",
+        "input_tokens_used": token_usage["inputTokens"],
+        "output_tokens_used": token_usage["outputTokens"],
+        "total_tokens_used": token_usage["totalTokens"],
+        "cache_hit_input_tokens": token_usage["cacheHitInputTokens"],
+        "non_cache_input_tokens": token_usage["nonCacheInputTokens"],
+        "cache_write_input_tokens": token_usage["cacheWriteInputTokens"],
+        "reasoning_tokens": token_usage["reasoningTokens"],
+        "max_context_length_tokens": max_context_length_tokens if max_context_length_tokens is not None else "",
+        "context_length_observations_json": json.dumps(context_length_observations, ensure_ascii=False, separators=(",", ":")) if context_length_observations else "",
         "task_completed_0_1": task_completed,
         "acceptance_pass_0_1": acceptance_pass,
         "completion_quality_0_5": 5 if acceptance_pass else 3 if task_completed else 0,

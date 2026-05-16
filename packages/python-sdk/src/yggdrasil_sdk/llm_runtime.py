@@ -45,6 +45,15 @@ _AUDIT_LEVELS = {"strict", "default", "lean"}
 
 _PENDING_TOOL_CALLS_KIND = "pending-tool-calls"
 _DUPLICATE_TOOL_ROUND_THRESHOLD = 2
+_USAGE_COUNTER_FIELDS = (
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cacheHitInputTokens",
+    "cacheWriteInputTokens",
+    "nonCacheInputTokens",
+    "reasoningTokens",
+)
 
 
 class SafeShutdownInterrupt(Exception):
@@ -176,6 +185,10 @@ def _local_fallback_result(messages: list[dict[str, Any]], route_payload: dict[s
             "inputTokens": input_tokens,
             "outputTokens": 24,
             "totalTokens": input_tokens + 24,
+            "cacheHitInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "nonCacheInputTokens": input_tokens,
+            "reasoningTokens": 0,
         },
         "costUsed": 0.0,
         "error": "adapter-unavailable",
@@ -195,15 +208,86 @@ def _local_fallback_result(messages: list[dict[str, Any]], route_payload: dict[s
     }
 
 
+def _empty_usage_totals() -> dict[str, int]:
+    return {field: 0 for field in _USAGE_COUNTER_FIELDS}
+
+
 def _merge_usage(total: dict[str, int], usage: dict[str, Any]) -> dict[str, int]:
-    total["inputTokens"] += int(usage.get("inputTokens", 0) or 0)
-    total["outputTokens"] += int(usage.get("outputTokens", 0) or 0)
-    total["totalTokens"] += int(usage.get("totalTokens", 0) or 0)
+    for field in _USAGE_COUNTER_FIELDS:
+        total.setdefault(field, 0)
+    for key, value in usage.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        total[key] = int(total.get(key, 0) or 0) + int(value)
     return total
 
 
 def _elapsed_ms(started_at: float) -> float:
     return round((perf_counter() - started_at) * 1000.0, 2)
+
+
+def _estimate_text_tokens(text: str) -> int:
+    compact = " ".join(str(text).split())
+    return max(1, len(compact) // 4) if compact else 0
+
+
+def _estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
+    total = 0
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        parts: list[str] = []
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, str) and item.strip():
+                    parts.append(item)
+                elif isinstance(item, dict) and item.get("text"):
+                    parts.append(str(item["text"]))
+        reasoning_content = message.get("reasoning_content")
+        if isinstance(reasoning_content, str) and reasoning_content.strip():
+            parts.append(reasoning_content)
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list):
+            for call in tool_calls:
+                if not isinstance(call, dict):
+                    continue
+                function_payload = call.get("function") if isinstance(call.get("function"), dict) else {}
+                if function_payload.get("name"):
+                    parts.append(str(function_payload["name"]))
+                if function_payload.get("arguments"):
+                    parts.append(str(function_payload["arguments"]))
+        total += sum(_estimate_text_tokens(part) for part in parts if part)
+    return total
+
+
+def _append_context_length_observation(
+    observations: list[dict[str, Any]],
+    *,
+    phase: str,
+    source: str,
+    estimated_tokens: int,
+    message_count: int | None = None,
+    item_count: int | None = None,
+    round_index: int | None = None,
+    trigger: str | None = None,
+) -> None:
+    observation: dict[str, Any] = {
+        "phase": phase,
+        "source": source,
+        "estimatedTokens": max(int(estimated_tokens), 0),
+    }
+    if message_count is not None:
+        observation["messageCount"] = int(message_count)
+    if item_count is not None:
+        observation["itemCount"] = int(item_count)
+    if round_index is not None:
+        observation["roundIndex"] = int(round_index)
+    if trigger:
+        observation["trigger"] = trigger
+    observations.append(observation)
 
 
 def _first_token_latency_ms_from_round_summaries(round_summaries: list[dict[str, Any]]) -> float | None:
@@ -525,6 +609,8 @@ def _response_file_payload(
     round_summaries: list[dict[str, Any]],
     local_runtime_timings: dict[str, Any],
     first_token_latency_ms: float | None,
+    context_length_observations: list[dict[str, Any]] | None = None,
+    runtime_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
         "appId": getattr(task, "app_id", None),
@@ -544,6 +630,10 @@ def _response_file_payload(
     }
     if first_token_latency_ms is not None:
         payload["firstTokenLatencyMs"] = first_token_latency_ms
+    if context_length_observations:
+        payload["contextLengthObservations"] = [dict(item) for item in context_length_observations if isinstance(item, dict)]
+    if runtime_metrics:
+        payload["runtimeMetrics"] = dict(runtime_metrics)
     if audit_level == "strict":
         payload["toolExecutions"] = tool_executions
         payload["rounds"] = round_summaries
@@ -623,6 +713,14 @@ def _persist_prompt_assets(
     compiled_messages_path = ensure_state_subdir("prompt/compiled", workspace_root) / f"{invocation_id}.json"
     write_json(compiled_messages_path, _compiled_prompt_file_payload(audit_level, compiled_prompt, invocation_id))
     compiled_messages_ref = _invocation_file_ref(compiled_messages_path, workspace_root)
+    takeover_protocol_snapshot = (
+        compiled_prompt.takeover_protocol.model_dump(by_alias=True, mode="json")
+        if compiled_prompt.takeover_protocol is not None
+        else None
+    )
+    work_tree_snapshot = (
+        dict(takeover_protocol_snapshot.get("workTree") or {}) if isinstance(takeover_protocol_snapshot, dict) else None
+    )
     artifact_hash = _json_hash(
         {
             "promptProfileId": compiled_prompt.prompt_profile_id,
@@ -633,11 +731,7 @@ def _persist_prompt_assets(
             "registeredTools": compiled_prompt.registered_tools,
             "systemSections": compiled_prompt.system_sections,
             "userSections": compiled_prompt.user_sections,
-            "takeoverProtocol": (
-                compiled_prompt.takeover_protocol.model_dump(by_alias=True, mode="json")
-                if compiled_prompt.takeover_protocol is not None
-                else None
-            ),
+            "takeoverProtocol": takeover_protocol_snapshot,
             "messages": compiled_prompt.messages,
         }
     )
@@ -656,6 +750,8 @@ def _persist_prompt_assets(
             "registeredTools": compiled_prompt.registered_tools,
             "systemSections": compiled_prompt.system_sections,
             "userSections": compiled_prompt.user_sections,
+            "workTreeSnapshot": work_tree_snapshot,
+            "takeoverProtocolSnapshot": takeover_protocol_snapshot,
             "compiledMessagesRef": compiled_messages_ref.model_dump(mode="json"),
             "contentHash": artifact_hash,
             "createdAt": utc_now(),
@@ -819,11 +915,16 @@ def invoke_runtime_completion(
                 },
             )
             conversation_messages = [dict(message) for message in messages]
-            usage_totals = {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+            usage_totals = _empty_usage_totals()
             accumulated_cost = 0.0
             tool_executions: list[dict[str, Any]] = []
             round_summaries: list[dict[str, Any]] = []
             round_modes: list[str] = []
+            context_length_observations = [
+                dict(item)
+                for item in request.get("contextLengthObservations") or []
+                if isinstance(item, dict)
+            ]
             final_result: dict[str, Any] | None = None
             last_tool_round_signature: str | None = None
             duplicate_tool_round_streak = 0
@@ -880,6 +981,14 @@ def invoke_runtime_completion(
 
             for round_index in range(_resume_starting_round, max_tool_rounds + 1):
                 round_started_at = perf_counter()
+                _append_context_length_observation(
+                    context_length_observations,
+                    phase="beforeModelInvocation",
+                    source="promptMessages",
+                    estimated_tokens=_estimate_message_tokens(conversation_messages),
+                    message_count=len(conversation_messages),
+                    round_index=round_index,
+                )
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
                 else:
@@ -987,6 +1096,21 @@ def invoke_runtime_completion(
             first_token_latency_ms = _first_token_latency_ms_from_round_summaries(round_summaries)
             if first_token_latency_ms is not None:
                 local_runtime_timings["firstTokenLatencyMs"] = first_token_latency_ms
+
+            final_message = {
+                "role": "assistant",
+                "content": str(final_result.get("outputText") or ""),
+            }
+            if final_result.get("reasoningContent"):
+                final_message["reasoning_content"] = str(final_result.get("reasoningContent") or "")
+            _append_context_length_observation(
+                context_length_observations,
+                phase="taskEnd",
+                source="conversationMessages",
+                estimated_tokens=_estimate_message_tokens([*conversation_messages, final_message]),
+                message_count=len(conversation_messages) + 1,
+                round_index=(int(round_summaries[-1].get("index")) if round_summaries else 0),
+            )
 
             rewrite_request_started_at = perf_counter()
             write_json(
@@ -1130,6 +1254,8 @@ def invoke_runtime_completion(
                     "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
                 },
                 first_token_latency_ms=first_token_latency_ms,
+                context_length_observations=context_length_observations,
+                runtime_metrics=request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else None,
             )
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
@@ -1145,6 +1271,8 @@ def invoke_runtime_completion(
                 "costUsed": float(accumulated_cost or 0.0),
                 "status": invocation.status,
                 "auditLevel": audit_level,
+                "contextLengthObservations": list(context_length_observations),
+                "runtimeMetrics": dict(request.get("runtimeMetrics") or {}),
                 "timings": dict(local_runtime_timings),
             }
     except Exception as exc:
@@ -1152,10 +1280,15 @@ def invoke_runtime_completion(
         failure_messages = conversation_messages if "conversation_messages" in locals() and isinstance(conversation_messages, list) else None
         failure_tool_executions = tool_executions if "tool_executions" in locals() and isinstance(tool_executions, list) else []
         failure_round_summaries = round_summaries if "round_summaries" in locals() and isinstance(round_summaries, list) else []
-        failure_usage_totals = usage_totals if "usage_totals" in locals() and isinstance(usage_totals, dict) else {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0}
+        failure_usage_totals = usage_totals if "usage_totals" in locals() and isinstance(usage_totals, dict) else _empty_usage_totals()
         failure_cost_used = float(accumulated_cost) if "accumulated_cost" in locals() else 0.0
         failure_prompt_artifact_id = prompt_artifact.id if "prompt_artifact" in locals() else None
         failure_first_token_latency_ms = _first_token_latency_ms_from_round_summaries(failure_round_summaries)
+        failure_context_length_observations = (
+            list(context_length_observations)
+            if "context_length_observations" in locals() and isinstance(context_length_observations, list)
+            else []
+        )
         failure_result = {
             "mode": (round_modes[-1] if "round_modes" in locals() and round_modes else None),
             "provider": route_payload.get("selectedProvider"),
@@ -1210,6 +1343,8 @@ def invoke_runtime_completion(
                         "preResponseWriteTotalMs": _elapsed_ms(local_started_at),
                     },
                     first_token_latency_ms=failure_first_token_latency_ms,
+                    context_length_observations=failure_context_length_observations,
+                    runtime_metrics=request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else None,
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)

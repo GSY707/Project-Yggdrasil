@@ -9,6 +9,7 @@
   - `docs/research/final-goal-roadmap-2026-04-30.md`
   - `docs/research/g2-closeout-2026-05-15.md`
   - `docs/research/g3-closeout-2026-05-15.md`
+  - `docs/research/g4-closeout-2026-05-15.md`
   - `docs/protocols/yggdrasil-application-manifest-v0.1.md`
   - `docs/specs/task-takeover-protocol-v0.1.md`
   - `todo.md`
@@ -17,7 +18,7 @@
 
 ## 1. 先给结论
 
-当前仓库已经具备进入 Gate 4 的基础，但距离“完美实现 Gate 4”还有一段明确且不短的路。
+本路线图中的主要实现项已经完成；正式闭环证据见 `docs/research/g4-closeout-2026-05-15.md`。
 
 最重要的判断有 4 条：
 
@@ -451,6 +452,16 @@ Gate 4 的“泛化”必须包含 provider 维度，否则很容易把模型特
 9. `eval:g2:regression` 与至少 1 个 Gate 4 suite 已进入正式 `release-check` 流水线。
 
 这组标准已经足够严格，同时又建立在当前仓库已有 scorecard 和运行时能力之上，因此是可执行的。
+
+### 8.1 2026-05-16 优先级补充
+
+Gate 4 基础闭环完成后，当前最关键的下一步已经不是继续扩应用数量，而是把“伪无限上下文窗口 / 长任务多次窗口重启”补成 Gate 4 的完美实现要求。
+
+当前建议新增 3 条强约束：
+
+1. 把“记忆树是主体、上下文窗口只是工作集”明确为当前正式工程口径。
+2. 把 `restart protocol + restart controller + carry-forward package + work tree continuity` 提升为 Gate 4 后续第一优先级。
+3. 新增长任务 stress 评测：手动限制有效窗口，要求同一任务经历 100 次上下文窗口重启/压缩，并与更长上下文窗口 reference 路径比较最终效果。
 
 ---
 

@@ -207,10 +207,67 @@ def _score_strategy(
         "answerPreview": normalize_excerpt(answer_text, 240),
     }
 
+
+def _provider_matrix_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def _average(field: str, bucket: list[dict[str, Any]]) -> float | None:
+        values = [
+            float(item[field])
+            for item in bucket
+            if isinstance(item.get(field), (int, float)) and item.get(field) is not None
+        ]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 4)
+
+    provider_buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = (str(row.get("provider") or "unknown"), str(row.get("model") or "unknown"))
+        provider_buckets.setdefault(key, []).append(row)
+
+    provider_summary: list[dict[str, Any]] = []
+    for (provider, model), bucket in provider_buckets.items():
+        provider_summary.append(
+            {
+                "provider": provider,
+                "model": model,
+                "caseCount": len(bucket),
+                "passRate": round(sum(1 for item in bucket if bool(item.get("pass"))) / len(bucket), 4) if bucket else 0.0,
+                "avgFirstTokenSeconds": _average("firstTokenSeconds", bucket),
+                "avgFirstUsefulOutputSeconds": _average("firstUsefulOutputSeconds", bucket),
+                "avgPlanQualityScore0_100": _average("planQualityScore0_100", bucket),
+                "avgReworkRate": _average("reworkRate", bucket),
+                "avgTotalTokens": _average("totalTokens", bucket),
+                "avgOutputTokens": _average("outputTokens", bucket),
+                "avgCacheHitInputTokens": _average("cacheHitInputTokens", bucket),
+                "avgNonCacheInputTokens": _average("nonCacheInputTokens", bucket),
+                "avgCacheWriteInputTokens": _average("cacheWriteInputTokens", bucket),
+                "avgReasoningTokens": _average("reasoningTokens", bucket),
+                "avgMaxContextLengthTokens": _average("maxContextLengthTokens", bucket),
+                "avgRestartCount": _average("restartCount", bucket),
+                "avgCompressionCount": _average("compressionCount", bucket),
+                "avgCumulativeWindowSpanTokens": _average("cumulativeWindowSpanTokens", bucket),
+                "avgCarryForwardLossCount": _average("carryForwardLossCount", bucket),
+                "avgEffectiveContextWindow": _average("effectiveContextWindow", bucket),
+            }
+        )
+    provider_summary.sort(
+        key=lambda item: (
+            -(item["passRate"]),
+            -(item["avgPlanQualityScore0_100"] or -1.0),
+            item["avgReworkRate"] if item["avgReworkRate"] is not None else 999.0,
+            item["avgFirstUsefulOutputSeconds"] if item["avgFirstUsefulOutputSeconds"] is not None else 999.0,
+        )
+    )
+    return {
+        "providerMatrix": rows,
+        "providerSummary": provider_summary,
+    }
+
 def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     strategy_totals: dict[str, dict[str, float]] = {}
     baseline_comparisons: list[dict[str, Any]] = []
     live_scenarios: list[dict[str, Any]] = []
+    provider_matrix_rows: list[dict[str, Any]] = []
 
     for case in case_results:
         detail = case.get("detail")
@@ -246,6 +303,10 @@ def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any
         if isinstance(live_scenario, dict):
             live_scenarios.append(live_scenario)
 
+        provider_matrix_entry = detail.get("providerMatrixEntry")
+        if isinstance(provider_matrix_entry, dict):
+            provider_matrix_rows.append(provider_matrix_entry)
+
     payload: dict[str, Any] = {}
     if baseline_comparisons:
         leaderboard = [
@@ -264,6 +325,8 @@ def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any
         payload["strategyLeaderboard"] = leaderboard
     if live_scenarios:
         payload["liveScenarios"] = live_scenarios
+    if provider_matrix_rows:
+        payload.update(_provider_matrix_summary(provider_matrix_rows))
     return payload
 
 

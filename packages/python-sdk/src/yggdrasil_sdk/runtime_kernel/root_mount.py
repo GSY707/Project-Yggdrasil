@@ -90,12 +90,15 @@ def _infer_task_type(task, payload: dict[str, Any]) -> str:
         return "maintenance"
     return "generic"
 
-def _estimate_context_tokens(current_context: list[dict[str, Any]]) -> int:
+def _estimate_context_tokens(current_context: list[dict[str, Any]], *, limit: int = 10) -> int:
     total = 0
-    for item in current_context:
+    for index, item in enumerate(current_context[:limit], start=1):
         if not isinstance(item, dict):
             continue
-        total += max(1, len(f"{item.get('title', '')} {item.get('content', '')}".strip()) // 4)
+        title = str(item.get("title") or item.get("kind") or f"context-{index}")
+        raw_content = str(item.get("content") or item)
+        content = raw_content if bool(item.get("verbatim")) else normalize_excerpt(raw_content, 240)
+        total += max(1, len(f"{title} {content}".strip()) // 4)
     return total
 
 def _estimate_usage(task, root_mount: dict[str, Any], current_context: list[dict[str, Any]], payload: dict[str, Any]) -> tuple[int, int]:
@@ -106,12 +109,12 @@ def _estimate_usage(task, root_mount: dict[str, Any], current_context: list[dict
     source_text = " ".join(
         str(value)
         for value in [
-            task.goal,
-            task.current_objective,
-            task.current_focus,
-            root_mount.get("rootSummary"),
+            normalize_excerpt(task.goal or "", 240),
+            normalize_excerpt(task.current_objective or "", 240),
+            normalize_excerpt(task.current_focus or "", 160),
+            normalize_excerpt(str(root_mount.get("rootSummary") or ""), 240),
         ]
-        if value is not None
+        if value is not None and str(value).strip()
     )
     input_tokens = max(48, len(source_text) // 4 + _estimate_context_tokens(current_context))
     output_tokens = max(24, min(256, input_tokens // 2))

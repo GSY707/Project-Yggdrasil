@@ -16,6 +16,18 @@ def _summarize_pending_actions(pending_actions: list[dict[str, Any]]) -> str:
     return "Pending actions: " + ", ".join(labels)
 
 
+def _restored_request_state(snapshot_pending_actions: list[dict[str, Any]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for action in snapshot_pending_actions:
+        if not isinstance(action, dict):
+            continue
+        request_state = action.get("requestState") if isinstance(action.get("requestState"), dict) else None
+        if request_state is None:
+            continue
+        merged.update(request_state)
+    return merged
+
+
 class PauseResumeModule(BaseModulePlugin):
     module_id = "pause-resume"
 
@@ -82,9 +94,14 @@ class PauseResumeModule(BaseModulePlugin):
         task_snapshot = payload.get("taskSnapshot") if isinstance(payload.get("taskSnapshot"), dict) else {}
         root_mounts = payload.get("rootMounts") if isinstance(payload.get("rootMounts"), dict) else {}
         context_ref = task_snapshot.get("contextRef") if isinstance(task_snapshot.get("contextRef"), dict) else None
+        root_mount_ref = task_snapshot.get("rootMountRef") if isinstance(task_snapshot.get("rootMountRef"), dict) else None
         restored_context = load_package_entry(str(context_ref.get("locator"))) if context_ref is not None else []
         if not isinstance(restored_context, list):
             restored_context = []
+        restored_root_mount = dict(root_mounts)
+        snapshot_root_mount = load_package_entry(str(root_mount_ref.get("locator"))) if root_mount_ref is not None else None
+        if isinstance(snapshot_root_mount, dict):
+            restored_root_mount.update(snapshot_root_mount)
         max_context_items = 12
         restored_context = [item for item in restored_context[:max_context_items] if isinstance(item, dict)]
         protected_items = [
@@ -102,6 +119,7 @@ class PauseResumeModule(BaseModulePlugin):
         ]
         # Forward pending-tool-calls actions so the execution loop can replay them
         snapshot_pending_actions = task_snapshot.get("pendingActions") if isinstance(task_snapshot.get("pendingActions"), list) else []
+        request_updates = _restored_request_state([action for action in snapshot_pending_actions if isinstance(action, dict)])
         for action in snapshot_pending_actions:
             if isinstance(action, dict) and action.get("kind") == "pending-tool-calls":
                 followup_actions.append(action)
@@ -109,13 +127,14 @@ class PauseResumeModule(BaseModulePlugin):
             "restoredState": {
                 "currentContext": restored_context,
                 "protectedItems": protected_items,
-                "rootMount": root_mounts,
+                "rootMount": restored_root_mount,
+                "requestUpdates": request_updates,
             },
             "resumeMessage": task_snapshot.get("resumeMessage") or f"Resume task {task_snapshot.get('taskId') or 'unknown'} from the last safe stop.",
             "followupActions": followup_actions,
             "summary": (
                 f"Rehydrated {len(restored_context)} context items from snapshot "
-                f"{task_snapshot.get('id') or 'unknown'}."
+                f"{task_snapshot.get('id') or 'unknown'} and restored {len(request_updates)} runtime request fields."
             ),
         }
 

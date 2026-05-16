@@ -81,6 +81,25 @@ class SeedTemplate(BaseModel):
     source_module_id: str | None = Field(default=None, alias="sourceModuleId")
 
 
+class FewShotMessage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class FewShotAsset(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    name: str
+    version: str
+    description: str | None = None
+    messages: list[FewShotMessage] = Field(default_factory=list)
+    source_app_id: str | None = Field(default=None, alias="sourceAppId")
+    source_module_id: str | None = Field(default=None, alias="sourceModuleId")
+
+
 class CompiledPrompt(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -95,8 +114,24 @@ class CompiledPrompt(BaseModel):
     registered_tools: list[dict[str, Any]] = Field(default_factory=list, alias="registeredTools")
     system_sections: dict[str, str] = Field(default_factory=dict, alias="systemSections")
     user_sections: dict[str, str] = Field(default_factory=dict, alias="userSections")
+    few_shot_refs: list[str] = Field(default_factory=list, alias="fewShotRefs")
     takeover_protocol: TaskTakeoverProtocol | None = Field(default=None, alias="takeoverProtocol")
     messages: list[dict[str, str]]
+
+
+def _format_memory_retrieval_state(state: dict[str, Any]) -> str:
+    lines = [
+        f"Summary: {state.get('summary') or 'No retrieval summary was recorded.'}",
+        f"Request id: {state.get('requestId') or 'unknown'}",
+        f"Window index: {state.get('windowIndex') or 'unknown'}",
+        f"Matched refs: {len(state.get('matchedNodeRefs') or [])}",
+        f"Materialized refs: {len(state.get('materializedNodeIds') or [])}",
+    ]
+    if state.get("workTreeNodeId") is not None:
+        lines.append(f"Work tree node: {state['workTreeNodeId']}")
+    if state.get("reverseTraceMode") is not None:
+        lines.append(f"Reverse trace mode: {bool(state.get('reverseTraceMode'))}")
+    return "\n".join(lines)
 
 
 def _load_structured_payload(path: Path) -> dict[str, Any]:
@@ -130,6 +165,32 @@ def _load_seed_templates_from_application(app_manifest: Any) -> list[SeedTemplat
         payload.setdefault("sourceAppId", app_manifest.app_id)
         templates.append(SeedTemplate.model_validate(payload))
     return templates
+
+
+def _load_few_shot_assets_from_directory(
+    directory: Path,
+    *,
+    source_app_id: str | None = None,
+    source_module_id: str | None = None,
+) -> list[FewShotAsset]:
+    assets_dir = directory / "few-shots"
+    if not assets_dir.exists():
+        return []
+    assets: list[FewShotAsset] = []
+    for asset_path in sorted(assets_dir.rglob("*")):
+        if not asset_path.is_file() or asset_path.suffix.lower() not in {".yaml", ".yml", ".json"}:
+            continue
+        payload = _load_structured_payload(asset_path)
+        payload.setdefault("sourceAppId", source_app_id)
+        payload.setdefault("sourceModuleId", source_module_id)
+        assets.append(FewShotAsset.model_validate(payload))
+    return assets
+
+
+def _load_few_shot_assets_from_application(app_manifest: Any) -> list[FewShotAsset]:
+    workspace_root = resolve_workspace_root()
+    manifest_dir = (workspace_root / app_manifest.manifest_path).parent
+    return _load_few_shot_assets_from_directory(manifest_dir, source_app_id=app_manifest.app_id)
 
 
 def _allowed_module_ids(app_manifest: Any, active_capabilities: list[str] | None) -> list[str]:
@@ -190,6 +251,33 @@ def _collect_module_seed_templates(app_id: str, module_ids: list[str]) -> list[S
     return templates
 
 
+def _collect_module_few_shot_assets(app_id: str, module_ids: list[str]) -> list[FewShotAsset]:
+    if not module_ids:
+        return []
+    workspace_root = resolve_workspace_root()
+    snapshot = build_module_catalog_snapshot(workspace_root)
+    manifests_by_id = {manifest.module_id: manifest for manifest in snapshot.manifests}
+    assets: list[FewShotAsset] = []
+    seen_module_dirs: set[str] = set()
+    for module_id in module_ids:
+        manifest = manifests_by_id.get(module_id)
+        if manifest is None:
+            continue
+        module_dir = (workspace_root / manifest.manifest_path).parent
+        module_dir_key = str(module_dir)
+        if module_dir_key in seen_module_dirs:
+            continue
+        seen_module_dirs.add(module_dir_key)
+        assets.extend(
+            _load_few_shot_assets_from_directory(
+                module_dir,
+                source_app_id=app_id,
+                source_module_id=module_id,
+            )
+        )
+    return assets
+
+
 def assemble_prompt_registry(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
@@ -219,11 +307,19 @@ def assemble_prompt_registry(
     ]:
         templates_by_id[template.id] = template
 
+    few_shot_assets_by_id: dict[str, FewShotAsset] = {}
+    for asset in [
+        *_load_few_shot_assets_from_application(app_manifest),
+        *_collect_module_few_shot_assets(resolved_app_id, selected_module_ids),
+    ]:
+        few_shot_assets_by_id[asset.id] = asset
+
     registry = {
         "application": app_manifest,
         "selectedModuleIds": selected_module_ids,
         "promptProfiles": [profiles_by_id[key] for key in sorted(profiles_by_id)],
         "seedTemplates": [templates_by_id[key] for key in sorted(templates_by_id)],
+        "fewShotAssets": [few_shot_assets_by_id[key] for key in sorted(few_shot_assets_by_id)],
     }
     with _PROMPT_REGISTRY_CACHE_LOCK:
         _PROMPT_REGISTRY_CACHE[cache_key] = (registry, time.monotonic())
@@ -476,14 +572,19 @@ def _format_task_contract(task: Any, run_type: str, task_type: str, request: dic
 def _format_response_requirements(request: dict[str, Any], seed_template: SeedTemplate | None) -> str:
     style = seed_template.output_style if seed_template is not None else "concise"
     additional = request.get("responseRequirements")
+    has_delivery_contract = isinstance(additional, str) and additional.strip()
     lines = [
-        "1. 先总结当前局势，再给出最稳妥的下一步。",
+        "1. 直接产出以下要求指定的最终交付物，不要停在计划或下一步总结。" if has_delivery_contract else "1. 先总结当前局势，再给出最稳妥的下一步。",
         "2. 若证据不足，明确说明缺失信息，不要补空白。",
         "3. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
         f"4. 默认采用 {style} 风格，除非任务另有明确要求。",
     ]
-    if isinstance(additional, str) and additional.strip():
-        lines.append(f"5. Additional requirement: {additional.strip()}")
+    if bool(request.get("memoryWriteTagsEnabled", True)):
+        lines.append(
+            '5. 如需在不中断回答的情况下修改记忆树，可插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
+        )
+    if has_delivery_contract:
+        lines.append(f"{len(lines) + 1}. Additional requirement: {additional.strip()}")
     return "\n".join(lines)
 
 
@@ -542,6 +643,36 @@ def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     return "\n".join(lines)
 
 
+def _merged_few_shot_refs(profile: PromptProfile, seed_template: SeedTemplate) -> list[str]:
+    refs: list[str] = []
+    for candidate in [*profile.few_shot_refs, *seed_template.few_shot_refs]:
+        normalized = str(candidate).strip()
+        if normalized and normalized not in refs:
+            refs.append(normalized)
+    return refs
+
+
+def _resolve_few_shot_assets(
+    profile: PromptProfile,
+    seed_template: SeedTemplate,
+    registry: dict[str, Any],
+) -> list[FewShotAsset]:
+    refs = _merged_few_shot_refs(profile, seed_template)
+    if not refs:
+        return []
+    assets_by_id = {
+        asset.id: asset
+        for asset in registry.get("fewShotAssets") or []
+        if isinstance(asset, FewShotAsset)
+    }
+    missing_refs = [ref for ref in refs if ref not in assets_by_id]
+    if missing_refs:
+        raise KeyError(
+            "Missing few-shot assets for refs: " + ", ".join(missing_refs)
+        )
+    return [assets_by_id[ref] for ref in refs]
+
+
 def compile_runtime_prompt(
     *,
     task: Any,
@@ -562,6 +693,13 @@ def compile_runtime_prompt(
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
     takeover_protocol = _takeover_protocol_from_request(request)
+    few_shot_assets = _resolve_few_shot_assets(profile, seed_template, resolved_registry)
+    few_shot_refs = [asset.id for asset in few_shot_assets]
+    few_shot_messages = [
+        message.model_dump(mode="json")
+        for asset in few_shot_assets
+        for message in asset.messages
+    ]
 
     system_sections = {
         "system_role": profile.system_role,
@@ -595,6 +733,9 @@ def compile_runtime_prompt(
     }
     if takeover_protocol is not None:
         user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
+    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
+    if memory_retrieval_state is not None:
+        user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
     resume_message = str(request.get("resumeMessage") or task.resume_message or "").strip()
     if resume_message:
         user_sections["resume_message"] = resume_message
@@ -627,9 +768,11 @@ def compile_runtime_prompt(
         registeredTools=resolved_registered_tools,
         systemSections=system_sections,
         userSections=user_sections,
+        fewShotRefs=few_shot_refs,
         takeoverProtocol=takeover_protocol,
         messages=[
             {"role": "system", "content": system_message},
+            *few_shot_messages,
             {"role": "user", "content": user_message},
         ],
     )

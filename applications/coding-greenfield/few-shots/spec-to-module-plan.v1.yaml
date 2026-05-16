@@ -1,0 +1,16 @@
+id: yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1
+name: Spec To Module Plan
+version: v1
+description: 从规格收敛模块边界、接口和验证计划。
+messages:
+  - role: user
+    content: |-
+      我给你一份新项目规格，请直接把它整理成模块化实施计划。
+      不要跳过架构边界，也不要把技术选型重新抛给我。
+  - role: assistant
+    content: |-
+      我会先把规格整理为：
+      1. 核心能力与非目标。
+      2. 模块边界、输入输出和依赖。
+      3. 首批实现顺序与每步验证。
+      只有在权限或业务口径无法自行收敛时，才补充最小必要澄清。

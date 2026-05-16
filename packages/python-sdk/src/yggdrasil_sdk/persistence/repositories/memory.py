@@ -106,6 +106,8 @@ class NodeRepository:
             children_count=0,
             edge_count=0,
             tree_path=tree_path,
+            window_index=max(int(payload.get("windowIndex", 1)), 1),
+            source_work_tree_node_id=str(payload.get("sourceWorkTreeNodeId")) if payload.get("sourceWorkTreeNodeId") is not None else None,
             created_at=now,
             created_by=actor.model_dump(mode="json"),
             updated_at=now,
@@ -189,6 +191,10 @@ class NodeRepository:
             node.content = str(payload["content"])
         if "parentId" in payload:
             node.parent_id = str(payload["parentId"]) if payload["parentId"] is not None else None
+        if "windowIndex" in payload:
+            node.window_index = max(int(payload["windowIndex"]), 1)
+        if "sourceWorkTreeNodeId" in payload:
+            node.source_work_tree_node_id = str(payload["sourceWorkTreeNodeId"]) if payload["sourceWorkTreeNodeId"] is not None else None
         for field_name, attribute in (
             ("importance", "importance"),
             ("stability", "stability"),
@@ -423,6 +429,9 @@ class MemoryRepository:
             include_natural_language_summary=bool(payload.get("includeNaturalLanguageSummary", True)),
             include_child_names=bool(payload.get("includeChildNames", True)),
             include_related_names=bool(payload.get("includeRelatedNames", True)),
+            reverse_trace_mode=bool(payload.get("reverseTraceMode", False)),
+            work_tree_node_id=str(payload.get("workTreeNodeId")) if payload.get("workTreeNodeId") is not None else None,
+            window_index=int(payload["windowIndex"]) if payload.get("windowIndex") is not None else None,
             token_budget=int(payload["tokenBudget"]) if payload.get("tokenBudget") is not None else None,
             created_at=now,
         )

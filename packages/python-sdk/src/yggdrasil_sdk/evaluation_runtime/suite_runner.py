@@ -5,6 +5,7 @@ from .scorer import *  # noqa: F403,F401
 from .suite_cases_part_a import *  # noqa: F403,F401
 from .suite_cases_part_b import *  # noqa: F403,F401
 from .suite_cases_g2 import *  # noqa: F403,F401
+from .suite_cases_g4 import *  # noqa: F403,F401
 
 SCENARIO_HANDLERS: dict[str, Any] = {
     "m4.memory_import_retrieval": _run_memory_import_case,
@@ -18,11 +19,17 @@ SCENARIO_HANDLERS: dict[str, Any] = {
     "m9.control_plane_resource_surface": _run_m9_control_plane_resource_surface_case,
     "m9.prompt_control_plane": _run_m9_prompt_control_plane_case,
     "g2.complex_file_split_regression": _run_g2_complex_file_split_regression_case,
+    "g4.scene_prompt_contract": _run_g4_scene_prompt_contract_case,
+    "g4.scene_resume_contract": _run_g4_scene_resume_contract_case,
+    "g4.scene_runtime_recovery": _run_g4_scene_runtime_recovery_case,
+    "g4.scene_switch_isolation": _run_g4_scene_switch_isolation_case,
+    "g4.live_provider_matrix": _run_g4_live_provider_matrix_case,
 }
 
 def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> dict[str, Any]:
     definition = get_evaluation_suite_definition(suite_id, workspace_root)
     fallback_context = None
+    runtime = None
     try:
         runtime, run = _prepare_suite_run(definition, suite_id, workspace_root)
     except Exception:
@@ -135,6 +142,8 @@ def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> d
             "metrics": metrics_payload,
         }
     finally:
+        if runtime is not None:
+            runtime.dispose()
         if fallback_context is not None:
             fallback_context.__exit__(None, None, None)
 

@@ -1,0 +1,238 @@
+{
+  "id": "evalsuite_g4_provider_matrix",
+  "name": "G4 Official Provider Matrix",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "first-token-seconds",
+    "first-useful-output-seconds",
+    "plan-quality",
+    "rework-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:provider-matrix",
+  "cases": [
+    {
+      "id": "evalcase_g4_matrix_coding_deepseek",
+      "title": "G4 Coding Provider Matrix - DeepSeek",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-coding-quick",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Coding Provider Matrix",
+      "taskGoal": "Validate the official coding scene on the acceptance provider.",
+      "currentFocus": "g4-coding-provider-matrix",
+      "currentObjective": "Convert a new-project spec into a modular first delivery plan with explicit verification steps.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_coding",
+          "title": "coding matrix context",
+          "content": "The response should keep architecture-first planning, contract-first bootstrap, and incremental verification visible.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "coding", "deepseek"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_coding_longcat",
+      "title": "G4 Coding Provider Matrix - LongCat",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-coding-quick",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Coding Provider Matrix",
+      "taskGoal": "Validate the official coding scene on the cost-control provider.",
+      "currentFocus": "g4-coding-provider-matrix",
+      "currentObjective": "Convert a new-project spec into a modular first delivery plan with explicit verification steps.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_coding",
+          "title": "coding matrix context",
+          "content": "The response should keep architecture-first planning, contract-first bootstrap, and incremental verification visible.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "coding", "longcat"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_research_deepseek",
+      "title": "G4 Research Provider Matrix - DeepSeek",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-research-quick",
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "G4 Research Provider Matrix",
+      "taskGoal": "Validate the official research scene on the acceptance provider.",
+      "currentFocus": "g4-research-provider-matrix",
+      "currentObjective": "Build a short conclusion from conflicting evidence while preserving uncertainty and next evidence steps.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_research",
+          "title": "research matrix context",
+          "content": "The response should preserve claim-evidence structure, source triangulation, and direction recalibration.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "research", "deepseek"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_research_longcat",
+      "title": "G4 Research Provider Matrix - LongCat",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-research-quick",
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "G4 Research Provider Matrix",
+      "taskGoal": "Validate the official research scene on the cost-control provider.",
+      "currentFocus": "g4-research-provider-matrix",
+      "currentObjective": "Build a short conclusion from conflicting evidence while preserving uncertainty and next evidence steps.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_research",
+          "title": "research matrix context",
+          "content": "The response should preserve claim-evidence structure, source triangulation, and direction recalibration.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "research", "longcat"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_writing_deepseek",
+      "title": "G4 Writing Provider Matrix - DeepSeek",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-writing-quick",
+      "appId": "yggdrasil.app.epic-writing",
+      "taskType": "writing",
+      "taskTitle": "G4 Writing Provider Matrix",
+      "taskGoal": "Validate the official writing scene on the acceptance provider.",
+      "currentFocus": "g4-writing-provider-matrix",
+      "currentObjective": "Draft the next chapter beat while preserving canon, chapter goal, and continuity audit expectations.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_writing",
+          "title": "writing matrix context",
+          "content": "The response should preserve canon-before-draft, continuity repair, and chapter audit discipline.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "writing", "deepseek"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_writing_longcat",
+      "title": "G4 Writing Provider Matrix - LongCat",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-writing-quick",
+      "appId": "yggdrasil.app.epic-writing",
+      "taskType": "writing",
+      "taskTitle": "G4 Writing Provider Matrix",
+      "taskGoal": "Validate the official writing scene on the cost-control provider.",
+      "currentFocus": "g4-writing-provider-matrix",
+      "currentObjective": "Draft the next chapter beat while preserving canon, chapter goal, and continuity audit expectations.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_matrix_writing",
+          "title": "writing matrix context",
+          "content": "The response should preserve canon-before-draft, continuity repair, and chapter audit discipline.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 320,
+      "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
+        "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
+        "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
+        "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "writing", "longcat"],
+      "difficulty": "hard"
+    }
+  ]
+}

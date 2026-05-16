@@ -1,0 +1,688 @@
+{
+  "suite": {
+    "id": "evalsuite_g4_window_restart_stress",
+    "name": "G4 Window Restart Stress",
+    "domain": "generic",
+    "metricRefs": [
+      "pass-rate",
+      "restart-count",
+      "context-window-span",
+      "restart-success-rate"
+    ],
+    "subjectKind": "workflow",
+    "subjectRef": "g4:window-restart:stress",
+    "cases": [
+      {
+        "id": "evalcase_g4_window_restart_stress_deepseek",
+        "title": "G4 Window Restart Stress - DeepSeek",
+        "scenario": "g4.live_provider_matrix",
+        "matrixKey": "g4-window-stress",
+        "appId": "yggdrasil.app.coding-greenfield",
+        "taskType": "coding",
+        "taskTitle": "G4 Window Restart Stress",
+        "taskGoal": "Turn a dense engineering brief into a final implementation plan that stays architecture-first, milestone-aware, and contract-driven even after 100 artificial window handoffs. The final answer must still include architecture summary, module and contract map, phased implementation plan, verification matrix, risks and mitigations, and open questions.",
+        "currentFocus": "g4-window-restart-stress",
+        "currentObjective": "Preserve the same delivery contract while repeatedly handing the task across many constrained context windows.",
+        "currentContext": [
+          {
+            "id": "ctx_g4_window_stress_brief",
+            "title": "stress brief",
+            "content": "Delivery Hub must keep a shared domain model across CLI, REST API, and worker layers; preserve auditability; and leave room for resumable jobs, batch imports, and operator diagnostics without rewriting milestone 1.",
+            "importance": 0.99
+          },
+          {
+            "id": "ctx_g4_window_stress_constraints",
+            "title": "stress constraints",
+            "content": "The answer must stay implementation-oriented, explicitly separate what is shipped in milestone 1 from what is deferred, and keep Windows-safe local workflows visible. Schema drift, duplicate execution, partial failure, release gates, and documentation sync must all be covered. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window.",
+            "importance": 0.99
+          },
+          {
+            "id": "ctx_g4_window_stress_output",
+            "title": "output contract",
+            "content": "The final structure must be: architecture summary, module and contract map, phased implementation plan, verification matrix, risks and mitigations, and open questions. Keep the plan detailed enough for a follow-up coding session to execute directly.",
+            "importance": 0.99
+          }
+        ],
+        "requestedProvider": "deepseek_direct",
+        "requestedModel": "deepseek-v4-pro",
+        "allowFallback": false,
+        "allowToolExecution": false,
+        "requireLive": true,
+        "temperature": 0.1,
+        "maxTokens": 900,
+        "costBudgetTotal": 8.0,
+        "effectiveContextWindow": 120,
+        "windowRestartRatio": 0.75,
+        "forcedWindowRestartBudget": 100,
+        "maxWindowCycles": 120,
+        "workspaceProfile": "g4-window-restart-stress",
+        "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+        "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+        "expectedCompiledFewShotRefs": [
+          "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+          "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+        ],
+        "tags": [
+          "g4",
+          "window-restart",
+          "stress",
+          "deepseek"
+        ],
+        "difficulty": "hard"
+      },
+      {
+        "id": "evalcase_g4_window_restart_stress_longcat",
+        "title": "G4 Window Restart Stress - LongCat",
+        "scenario": "g4.live_provider_matrix",
+        "matrixKey": "g4-window-stress",
+        "appId": "yggdrasil.app.coding-greenfield",
+        "taskType": "coding",
+        "taskTitle": "G4 Window Restart Stress",
+        "taskGoal": "Turn a dense engineering brief into a final implementation plan that stays architecture-first, milestone-aware, and contract-driven even after 100 artificial window handoffs. The final answer must still include architecture summary, module and contract map, phased implementation plan, verification matrix, risks and mitigations, and open questions.",
+        "currentFocus": "g4-window-restart-stress",
+        "currentObjective": "Preserve the same delivery contract while repeatedly handing the task across many constrained context windows.",
+        "currentContext": [
+          {
+            "id": "ctx_g4_window_stress_brief",
+            "title": "stress brief",
+            "content": "Delivery Hub must keep a shared domain model across CLI, REST API, and worker layers; preserve auditability; and leave room for resumable jobs, batch imports, and operator diagnostics without rewriting milestone 1. ",
+            "importance": 0.99
+          },
+          {
+            "id": "ctx_g4_window_stress_constraints",
+            "title": "stress constraints",
+            "content": "The answer must stay implementation-oriented, explicitly separate what is shipped in milestone 1 from what is deferred, and keep Windows-safe local workflows visible. Schema drift, duplicate execution, partial failure, release gates, and documentation sync must all be covered. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window. Repeat this constraint block until the working set is obviously larger than a single small synthetic window.",
+            "importance": 0.99
+          },
+          {
+            "id": "ctx_g4_window_stress_output",
+            "title": "output contract",
+            "content": "The final structure must be: architecture summary, module and contract map, phased implementation plan, verification matrix, risks and mitigations, and open questions. Keep the plan detailed enough for a follow-up coding session to execute directly.",
+            "importance": 0.99
+          }
+        ],
+        "requestedProvider": "longcat",
+        "requestedModel": "LongCat-Flash-Lite",
+        "allowFallback": false,
+        "allowToolExecution": false,
+        "requireLive": true,
+        "temperature": 0.1,
+        "maxTokens": 900,
+        "costBudgetTotal": 8.0,
+        "effectiveContextWindow": 120,
+        "windowRestartRatio": 0.75,
+        "forcedWindowRestartBudget": 100,
+        "maxWindowCycles": 120,
+        "workspaceProfile": "g4-window-restart-stress",
+        "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+        "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+        "expectedCompiledFewShotRefs": [
+          "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+          "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+        ],
+        "tags": [
+          "g4",
+          "window-restart",
+          "stress",
+          "longcat"
+        ],
+        "difficulty": "hard"
+      }
+    ]
+  },
+  "run": {
+    "id": "evalrun_94101d89782f4882b753",
+    "suiteId": "evalsuite_g4_window_restart_stress",
+    "projectId": "project_default",
+    "subjectKind": "workflow",
+    "subjectRef": "g4:window-restart:stress",
+    "status": "failed",
+    "metricsRef": {
+      "type": "file",
+      "locator": "C:\\skzy\\QuickFileTransport\\世界树计划\\.yggdrasil\\state\\evaluations\\evalrun_94101d89782f4882b753.json",
+      "checksum": null
+    },
+    "startedAt": "2026-05-15T17:10:40",
+    "endedAt": "2026-05-15T17:11:21Z",
+    "createdAt": "2026-05-15T17:10:40"
+  },
+  "metrics": {
+    "suiteId": "evalsuite_g4_window_restart_stress",
+    "suiteName": "G4 Window Restart Stress",
+    "runId": "evalrun_94101d89782f4882b753",
+    "status": "failed",
+    "caseCount": 2,
+    "passedCount": 1,
+    "failedCount": 1,
+    "failedCaseCount": 1,
+    "passRate": 0.5,
+    "totalDurationMs": 41356.65,
+    "cases": [
+      {
+        "id": "evalcase_g4_window_restart_stress_deepseek",
+        "title": "G4 Window Restart Stress - DeepSeek",
+        "scenario": "g4.live_provider_matrix",
+        "status": "failed",
+        "durationMs": 1435.97,
+        "detail": {
+          "error": "requested live candidate is unavailable: deepseek_direct/deepseek-v4-pro",
+          "errorType": "RuntimeError"
+        },
+        "tags": [
+          "g4",
+          "window-restart",
+          "stress",
+          "deepseek"
+        ],
+        "difficulty": "hard"
+      },
+      {
+        "id": "evalcase_g4_window_restart_stress_longcat",
+        "title": "G4 Window Restart Stress - LongCat",
+        "scenario": "g4.live_provider_matrix",
+        "status": "passed",
+        "durationMs": 39920.68,
+        "detail": {
+          "matrixKey": "g4-window-stress",
+          "appId": "yggdrasil.app.coding-greenfield",
+          "taskType": "coding",
+          "provider": "longcat",
+          "model": "LongCat-Flash-Lite",
+          "scenario": "coding.new-project",
+          "promptProfileId": "yggdrasil.coding-greenfield.main-agent",
+          "seedTemplateId": "yggdrasil.seed.coding.new-project",
+          "fewShotRefs": [
+            "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+            "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+          ],
+          "firstTokenSeconds": 2.0,
+          "firstUsefulOutputSeconds": 2.11,
+          "humanTakeoverCount": 0,
+          "userClarificationRounds": 0,
+          "planQualityScore0_100": 96.0,
+          "reworkCount": 0,
+          "reworkRate": 0.0,
+          "inputTokens": 2545,
+          "outputTokens": 283,
+          "totalTokens": 2828,
+          "cacheHitInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "nonCacheInputTokens": 2545,
+          "reasoningTokens": 0,
+          "tokenUsage": {
+            "inputTokens": 2545,
+            "outputTokens": 283,
+            "totalTokens": 2828,
+            "cacheHitInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "nonCacheInputTokens": 2545,
+            "reasoningTokens": 0
+          },
+          "contextLengthObservations": [
+            {
+              "phase": "afterWindowRestart",
+              "source": "carryForwardContext",
+              "estimatedTokens": 53,
+              "itemCount": 1,
+              "trigger": "restartSnapshot"
+            },
+            {
+              "phase": "beforeContextPruning",
+              "source": "currentContext",
+              "estimatedTokens": 53,
+              "itemCount": 1
+            },
+            {
+              "phase": "afterContextPruning",
+              "source": "currentContext",
+              "estimatedTokens": 53,
+              "itemCount": 1
+            },
+            {
+              "phase": "beforeModelInvocation",
+              "source": "promptMessages",
+              "estimatedTokens": 1957,
+              "messageCount": 10,
+              "roundIndex": 0
+            },
+            {
+              "phase": "taskEnd",
+              "source": "conversationMessages",
+              "estimatedTokens": 2073,
+              "messageCount": 11,
+              "roundIndex": 0
+            }
+          ],
+          "maxContextLengthTokens": 2073,
+          "windowIndex": 101,
+          "restartCount": 100,
+          "compressionCount": 101,
+          "cumulativeWindowSpanTokens": 5540,
+          "carryForwardLossCount": 0,
+          "effectiveContextWindow": 120,
+          "windowRestartThreshold": 90,
+          "restartSuccessRate0_1": 1.0,
+          "windowTransitionCount": 100,
+          "pass": true,
+          "promptCompileArtifactId": "promptcmp_e41347fd00024c53a2d7",
+          "liveScenario": {
+            "taskId": "task_0644a49bdcfd419e9a3a",
+            "invocationId": "llm_07bf0372752047449e5d",
+            "invocationStatus": "completed",
+            "provider": "longcat",
+            "model": "LongCat-Flash-Lite",
+            "traceId": "07448d37dcb894fdc823bb7058d03312",
+            "latencyMs": 2112.31,
+            "totalTokens": 2828,
+            "costUsed": 0.0,
+            "tokenUsage": {
+              "inputTokens": 2545,
+              "outputTokens": 283,
+              "totalTokens": 2828,
+              "cacheHitInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "nonCacheInputTokens": 2545,
+              "reasoningTokens": 0
+            },
+            "contextLengthObservations": [
+              {
+                "phase": "afterWindowRestart",
+                "source": "carryForwardContext",
+                "estimatedTokens": 53,
+                "itemCount": 1,
+                "trigger": "restartSnapshot"
+              },
+              {
+                "phase": "beforeContextPruning",
+                "source": "currentContext",
+                "estimatedTokens": 53,
+                "itemCount": 1
+              },
+              {
+                "phase": "afterContextPruning",
+                "source": "currentContext",
+                "estimatedTokens": 53,
+                "itemCount": 1
+              },
+              {
+                "phase": "beforeModelInvocation",
+                "source": "promptMessages",
+                "estimatedTokens": 1957,
+                "messageCount": 10,
+                "roundIndex": 0
+              },
+              {
+                "phase": "taskEnd",
+                "source": "conversationMessages",
+                "estimatedTokens": 2073,
+                "messageCount": 11,
+                "roundIndex": 0
+              }
+            ],
+            "maxContextLengthTokens": 2073,
+            "runtimeMetrics": {
+              "windowIndex": 101,
+              "restartCount": 100,
+              "compressionCount": 101,
+              "cumulativeWindowSpanTokens": 5540,
+              "carryForwardLossCount": 0,
+              "effectiveContextWindow": 120,
+              "windowRestartThreshold": 90,
+              "forcedWindowRestartBudget": 0,
+              "windowSpanTokens": 53
+            },
+            "windowTransitionCount": 100,
+            "promptCompileArtifactId": "promptcmp_e41347fd00024c53a2d7"
+          },
+          "providerMatrixEntry": {
+            "matrixKey": "g4-window-stress",
+            "appId": "yggdrasil.app.coding-greenfield",
+            "taskType": "coding",
+            "provider": "longcat",
+            "model": "LongCat-Flash-Lite",
+            "scenario": "coding.new-project",
+            "promptProfileId": "yggdrasil.coding-greenfield.main-agent",
+            "seedTemplateId": "yggdrasil.seed.coding.new-project",
+            "fewShotRefs": [
+              "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+              "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+              "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+              "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+            ],
+            "firstTokenSeconds": 2.0,
+            "firstUsefulOutputSeconds": 2.11,
+            "humanTakeoverCount": 0,
+            "userClarificationRounds": 0,
+            "planQualityScore0_100": 96.0,
+            "reworkCount": 0,
+            "reworkRate": 0.0,
+            "inputTokens": 2545,
+            "outputTokens": 283,
+            "totalTokens": 2828,
+            "cacheHitInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "nonCacheInputTokens": 2545,
+            "reasoningTokens": 0,
+            "tokenUsage": {
+              "inputTokens": 2545,
+              "outputTokens": 283,
+              "totalTokens": 2828,
+              "cacheHitInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "nonCacheInputTokens": 2545,
+              "reasoningTokens": 0
+            },
+            "contextLengthObservations": [
+              {
+                "phase": "afterWindowRestart",
+                "source": "carryForwardContext",
+                "estimatedTokens": 53,
+                "itemCount": 1,
+                "trigger": "restartSnapshot"
+              },
+              {
+                "phase": "beforeContextPruning",
+                "source": "currentContext",
+                "estimatedTokens": 53,
+                "itemCount": 1
+              },
+              {
+                "phase": "afterContextPruning",
+                "source": "currentContext",
+                "estimatedTokens": 53,
+                "itemCount": 1
+              },
+              {
+                "phase": "beforeModelInvocation",
+                "source": "promptMessages",
+                "estimatedTokens": 1957,
+                "messageCount": 10,
+                "roundIndex": 0
+              },
+              {
+                "phase": "taskEnd",
+                "source": "conversationMessages",
+                "estimatedTokens": 2073,
+                "messageCount": 11,
+                "roundIndex": 0
+              }
+            ],
+            "maxContextLengthTokens": 2073,
+            "windowIndex": 101,
+            "restartCount": 100,
+            "compressionCount": 101,
+            "cumulativeWindowSpanTokens": 5540,
+            "carryForwardLossCount": 0,
+            "effectiveContextWindow": 120,
+            "windowRestartThreshold": 90,
+            "restartSuccessRate0_1": 1.0,
+            "windowTransitionCount": 100,
+            "pass": true,
+            "promptCompileArtifactId": "promptcmp_e41347fd00024c53a2d7"
+          },
+          "scorecardRow": {
+            "run_id": "RV-LIVE-2026-05-15-g4-window-stress",
+            "batch_id": "G4-PROVIDER-MATRIX",
+            "participant_id": "internal-reviewer",
+            "participant_segment": "developer",
+            "reviewer_id": "internal-reviewer",
+            "agent_system": "yggdrasil-longcat-live",
+            "baseline_system": "none",
+            "app_id": "yggdrasil.app.coding-greenfield",
+            "task_id": "g4-window-stress",
+            "task_type": "coding",
+            "environment_id": "g4-provider-matrix",
+            "workspace_profile": "g4-window-restart-stress",
+            "provider": "longcat",
+            "model": "LongCat-Flash-Lite",
+            "audit_level": "default",
+            "coordination_backend": "memory",
+            "used_full_infra_0_1": 0,
+            "session_count": 1,
+            "start_at": "2026-05-15T17:10:48Z",
+            "first_token_at": "2026-05-15T17:10:50Z",
+            "first_useful_output_at": "2026-05-15T17:10:50.110000Z",
+            "end_at": "2026-05-15T17:11:21Z",
+            "first_token_seconds": 2.0,
+            "first_useful_output_seconds": 2.11,
+            "total_duration_seconds": 33.0,
+            "input_tokens_used": 2545,
+            "output_tokens_used": 283,
+            "total_tokens_used": 2828,
+            "cache_hit_input_tokens": 0,
+            "non_cache_input_tokens": 2545,
+            "cache_write_input_tokens": 0,
+            "reasoning_tokens": 0,
+            "max_context_length_tokens": 2073,
+            "context_length_observations_json": "[{\"phase\":\"afterWindowRestart\",\"source\":\"carryForwardContext\",\"estimatedTokens\":53,\"itemCount\":1,\"trigger\":\"restartSnapshot\"},{\"phase\":\"beforeContextPruning\",\"source\":\"currentContext\",\"estimatedTokens\":53,\"itemCount\":1},{\"phase\":\"afterContextPruning\",\"source\":\"currentContext\",\"estimatedTokens\":53,\"itemCount\":1},{\"phase\":\"beforeModelInvocation\",\"source\":\"promptMessages\",\"estimatedTokens\":1957,\"messageCount\":10,\"roundIndex\":0},{\"phase\":\"taskEnd\",\"source\":\"conversationMessages\",\"estimatedTokens\":2073,\"messageCount\":11,\"roundIndex\":0}]",
+            "task_completed_0_1": 1,
+            "acceptance_pass_0_1": 1,
+            "completion_quality_0_5": 5,
+            "process_stability_0_5": 5,
+            "diagnosability_0_5": 5,
+            "human_takeover_count": 0,
+            "user_clarification_rounds": 0,
+            "human_edit_minutes": 0,
+            "pause_resume_attempted_0_1": 0,
+            "pause_resume_success_0_1": 0,
+            "recovery_attempted_0_1": 0,
+            "recovery_success_0_1": 0,
+            "configuration_issues_count": 0,
+            "major_issues_count": 0,
+            "blocking_issues_count": 0,
+            "response_speed_score_0_100": 100,
+            "config_quality_score_0_100": 100,
+            "human_effort_score_0_100": 100,
+            "continuity_recovery_score_0_100": 100,
+            "task_outcome_score_0_100": 100,
+            "weighted_total_score_0_100": 100,
+            "user_would_reuse_0_5": 5,
+            "plan_quality_score_0_100": 96.0,
+            "rework_count": 0,
+            "rework_rate": 0.0,
+            "reviewer_notes": "traceIds=07448d37dcb894fdc823bb7058d03312 | workspace=C:\\skzy\\QuickFileTransport\\世界树计划"
+          },
+          "assistantPreview": ""
+        },
+        "tags": [
+          "g4",
+          "window-restart",
+          "stress",
+          "longcat"
+        ],
+        "difficulty": "hard"
+      }
+    ],
+    "generatedAt": "2026-05-15T17:11:21+00:00",
+    "traceId": "07448d37dcb894fdc823bb7058d03312",
+    "liveScenarios": [
+      {
+        "taskId": "task_0644a49bdcfd419e9a3a",
+        "invocationId": "llm_07bf0372752047449e5d",
+        "invocationStatus": "completed",
+        "provider": "longcat",
+        "model": "LongCat-Flash-Lite",
+        "traceId": "07448d37dcb894fdc823bb7058d03312",
+        "latencyMs": 2112.31,
+        "totalTokens": 2828,
+        "costUsed": 0.0,
+        "tokenUsage": {
+          "inputTokens": 2545,
+          "outputTokens": 283,
+          "totalTokens": 2828,
+          "cacheHitInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "nonCacheInputTokens": 2545,
+          "reasoningTokens": 0
+        },
+        "contextLengthObservations": [
+          {
+            "phase": "afterWindowRestart",
+            "source": "carryForwardContext",
+            "estimatedTokens": 53,
+            "itemCount": 1,
+            "trigger": "restartSnapshot"
+          },
+          {
+            "phase": "beforeContextPruning",
+            "source": "currentContext",
+            "estimatedTokens": 53,
+            "itemCount": 1
+          },
+          {
+            "phase": "afterContextPruning",
+            "source": "currentContext",
+            "estimatedTokens": 53,
+            "itemCount": 1
+          },
+          {
+            "phase": "beforeModelInvocation",
+            "source": "promptMessages",
+            "estimatedTokens": 1957,
+            "messageCount": 10,
+            "roundIndex": 0
+          },
+          {
+            "phase": "taskEnd",
+            "source": "conversationMessages",
+            "estimatedTokens": 2073,
+            "messageCount": 11,
+            "roundIndex": 0
+          }
+        ],
+        "maxContextLengthTokens": 2073,
+        "runtimeMetrics": {
+          "windowIndex": 101,
+          "restartCount": 100,
+          "compressionCount": 101,
+          "cumulativeWindowSpanTokens": 5540,
+          "carryForwardLossCount": 0,
+          "effectiveContextWindow": 120,
+          "windowRestartThreshold": 90,
+          "forcedWindowRestartBudget": 0,
+          "windowSpanTokens": 53
+        },
+        "windowTransitionCount": 100,
+        "promptCompileArtifactId": "promptcmp_e41347fd00024c53a2d7"
+      }
+    ],
+    "providerMatrix": [
+      {
+        "matrixKey": "g4-window-stress",
+        "appId": "yggdrasil.app.coding-greenfield",
+        "taskType": "coding",
+        "provider": "longcat",
+        "model": "LongCat-Flash-Lite",
+        "scenario": "coding.new-project",
+        "promptProfileId": "yggdrasil.coding-greenfield.main-agent",
+        "seedTemplateId": "yggdrasil.seed.coding.new-project",
+        "fewShotRefs": [
+          "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+          "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+          "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+        ],
+        "firstTokenSeconds": 2.0,
+        "firstUsefulOutputSeconds": 2.11,
+        "humanTakeoverCount": 0,
+        "userClarificationRounds": 0,
+        "planQualityScore0_100": 96.0,
+        "reworkCount": 0,
+        "reworkRate": 0.0,
+        "inputTokens": 2545,
+        "outputTokens": 283,
+        "totalTokens": 2828,
+        "cacheHitInputTokens": 0,
+        "cacheWriteInputTokens": 0,
+        "nonCacheInputTokens": 2545,
+        "reasoningTokens": 0,
+        "tokenUsage": {
+          "inputTokens": 2545,
+          "outputTokens": 283,
+          "totalTokens": 2828,
+          "cacheHitInputTokens": 0,
+          "cacheWriteInputTokens": 0,
+          "nonCacheInputTokens": 2545,
+          "reasoningTokens": 0
+        },
+        "contextLengthObservations": [
+          {
+            "phase": "afterWindowRestart",
+            "source": "carryForwardContext",
+            "estimatedTokens": 53,
+            "itemCount": 1,
+            "trigger": "restartSnapshot"
+          },
+          {
+            "phase": "beforeContextPruning",
+            "source": "currentContext",
+            "estimatedTokens": 53,
+            "itemCount": 1
+          },
+          {
+            "phase": "afterContextPruning",
+            "source": "currentContext",
+            "estimatedTokens": 53,
+            "itemCount": 1
+          },
+          {
+            "phase": "beforeModelInvocation",
+            "source": "promptMessages",
+            "estimatedTokens": 1957,
+            "messageCount": 10,
+            "roundIndex": 0
+          },
+          {
+            "phase": "taskEnd",
+            "source": "conversationMessages",
+            "estimatedTokens": 2073,
+            "messageCount": 11,
+            "roundIndex": 0
+          }
+        ],
+        "maxContextLengthTokens": 2073,
+        "windowIndex": 101,
+        "restartCount": 100,
+        "compressionCount": 101,
+        "cumulativeWindowSpanTokens": 5540,
+        "carryForwardLossCount": 0,
+        "effectiveContextWindow": 120,
+        "windowRestartThreshold": 90,
+        "restartSuccessRate0_1": 1.0,
+        "windowTransitionCount": 100,
+        "pass": true,
+        "promptCompileArtifactId": "promptcmp_e41347fd00024c53a2d7"
+      }
+    ],
+    "providerSummary": [
+      {
+        "provider": "longcat",
+        "model": "LongCat-Flash-Lite",
+        "caseCount": 1,
+        "passRate": 1.0,
+        "avgFirstTokenSeconds": 2.0,
+        "avgFirstUsefulOutputSeconds": 2.11,
+        "avgPlanQualityScore0_100": 96.0,
+        "avgReworkRate": 0.0,
+        "avgTotalTokens": 2828.0,
+        "avgOutputTokens": 283.0,
+        "avgCacheHitInputTokens": 0.0,
+        "avgNonCacheInputTokens": 2545.0,
+        "avgCacheWriteInputTokens": 0.0,
+        "avgReasoningTokens": 0.0,
+        "avgMaxContextLengthTokens": 2073.0,
+        "avgRestartCount": 100.0,
+        "avgCompressionCount": 101.0,
+        "avgCumulativeWindowSpanTokens": 5540.0,
+        "avgCarryForwardLossCount": 0.0,
+        "avgEffectiveContextWindow": 120.0
+      }
+    ]
+  }
+}

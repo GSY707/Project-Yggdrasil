@@ -85,6 +85,10 @@ Task:
   ownerProfileId: string
   executionRootNodeId: string|null
   activeSnapshotId: string|null
+  windowIndex: integer
+  restartCount: integer
+  cumulativeWindowSpanTokens: integer
+  carryForwardLossCount: integer
   budget: BudgetState
   pauseRequested: boolean
   lastSafeStopAt: datetime|null
@@ -160,6 +164,9 @@ AgentRun:
   routeDecisionId: string|null
   status: initializing | mounting | running | waiting-tool | draining | pausing | paused | completed | failed | aborted
   nextObjective: string|null
+  windowIndex: integer
+  restartCount: integer
+  cumulativeWindowSpanTokens: integer
   inputTokensUsed: integer
   outputTokensUsed: integer
   costUsed: number
@@ -194,6 +201,8 @@ TaskSnapshot:
 ### 6.2 约束
 
 - pause 只能在 safe-stop 语义满足时生成可恢复快照。
+- restart 快照必须把 carry-forward package 写入 `contextRef`，并通过 `pendingActions.requestState` 保留下一窗口的 `windowIndex`、`restartCount`、`effectiveContextWindow` 与相关 handoff 元数据。
+- 当启用 stress 口径时，restart 快照可以通过 `forcedWindowRestartBudget` 驱动多次受控 handoff；每次 handoff 后该预算必须单调递减。
 - consumed 快照不能再次作为恢复入口。
 
 ## 7. RootMountPackage

@@ -345,6 +345,81 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(compact) // 4)
 
 
+def _usage_value(payload: dict[str, Any], *path: str) -> Any:
+    current: Any = payload
+    for part in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _usage_int(payload: dict[str, Any], *candidates: tuple[str, ...]) -> int:
+    for candidate in candidates:
+        value = _usage_value(payload, *candidate)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
+def _normalize_usage(raw_usage: dict[str, Any], messages: list[dict[str, Any]], output_text: str) -> dict[str, int]:
+    input_tokens = _usage_int(
+        raw_usage,
+        ("prompt_tokens",),
+        ("input_tokens",),
+    )
+    if input_tokens <= 0:
+        input_tokens = sum(_estimate_tokens(str(item.get("content") or "")) for item in messages)
+
+    output_tokens = _usage_int(
+        raw_usage,
+        ("completion_tokens",),
+        ("output_tokens",),
+    )
+    if output_tokens <= 0:
+        output_tokens = _estimate_tokens(output_text)
+
+    cache_hit_input_tokens = _usage_int(
+        raw_usage,
+        ("cache_read_input_tokens",),
+        ("input_cached_tokens",),
+        ("cached_input_tokens",),
+        ("cached_tokens",),
+        ("prompt_tokens_details", "cached_tokens"),
+        ("input_tokens_details", "cached_tokens"),
+    )
+    cache_write_input_tokens = _usage_int(
+        raw_usage,
+        ("cache_creation_input_tokens",),
+        ("cache_write_input_tokens",),
+        ("prompt_tokens_details", "cache_creation_tokens"),
+        ("input_tokens_details", "cache_creation_tokens"),
+    )
+    reasoning_tokens = _usage_int(
+        raw_usage,
+        ("reasoning_tokens",),
+        ("completion_tokens_details", "reasoning_tokens"),
+        ("output_tokens_details", "reasoning_tokens"),
+    )
+    total_tokens = _usage_int(raw_usage, ("total_tokens",))
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+
+    return {
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "totalTokens": total_tokens,
+        "cacheHitInputTokens": max(cache_hit_input_tokens, 0),
+        "cacheWriteInputTokens": max(cache_write_input_tokens, 0),
+        "nonCacheInputTokens": max(input_tokens - cache_hit_input_tokens, 0),
+        "reasoningTokens": max(reasoning_tokens, 0),
+    }
+
+
 def _extract_text_content(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
@@ -518,9 +593,9 @@ def _result_from_raw_response(
             }
         )
     usage = raw_response.get("usage") if isinstance(raw_response, dict) else {}
-    input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or sum(_estimate_tokens(str(item.get("content") or "")) for item in messages))
-    output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or _estimate_tokens(output_text))
-    total_tokens = int(usage.get("total_tokens") or input_tokens + output_tokens)
+    normalized_usage = _normalize_usage(usage if isinstance(usage, dict) else {}, messages, output_text)
+    input_tokens = normalized_usage["inputTokens"]
+    output_tokens = normalized_usage["outputTokens"]
     cost_per_1k_input = float(model_profile.get("cost_per_1k_input", config.cost_per_1k_input))
     cost_per_1k_output = float(model_profile.get("cost_per_1k_output", config.cost_per_1k_output))
     cost_used = round((input_tokens * cost_per_1k_input + output_tokens * cost_per_1k_output) / 1000.0, 6)
@@ -531,11 +606,7 @@ def _result_from_raw_response(
         "outputText": output_text,
         "reasoningContent": reasoning_content or None,
         "finishReason": choice.get("finish_reason") or "stop",
-        "usage": {
-            "inputTokens": input_tokens,
-            "outputTokens": output_tokens,
-            "totalTokens": total_tokens,
-        },
+        "usage": normalized_usage,
         "costUsed": cost_used,
         "error": None,
         "toolCalls": tool_calls,
@@ -570,6 +641,10 @@ def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested
             "inputTokens": input_tokens,
             "outputTokens": output_tokens,
             "totalTokens": input_tokens + output_tokens,
+            "cacheHitInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "nonCacheInputTokens": input_tokens,
+            "reasoningTokens": 0,
         },
         "costUsed": 0.0,
         "error": reason,

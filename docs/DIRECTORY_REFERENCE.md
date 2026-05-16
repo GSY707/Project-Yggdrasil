@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 3 闭环证据、Gate 4 评估路线图、work tree 规格、execute-server 权限层与 paid-provider live rerun 同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 4 正式闭环、few-shot 执行链、官方三场景评测、Prompt 控制面 few-shot 可见性与 provider matrix release gate 同步）
 
 ---
 
@@ -216,15 +216,15 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管）
-│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、指数退避重试、安全关闭中断）；`SafeShutdownInterrupt` + pending-tool-calls 断点续跑
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 现已在 prompt 前按 work tree 锚点把 currentContext 物化进记忆树并执行 retrieval）
+│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、指数退避重试、安全关闭中断）；`SafeShutdownInterrupt` + pending-tool-calls 断点续跑；Prompt artifact 现带 takeover/work tree snapshot，response 工件现带 runtimeMetrics
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
 │       ├── application_runtime.py  # 应用配置加载与初始化
 │       │
 │       ├── # ── Prompt 管理 ──────────────────────────────
-│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）
+│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 的 response requirements 现内置 memory-write 标签语法提示，并追加 memory_retrieval_state 结构化节
 │       ├── prompt_modules/
 │       │   ├── compiler.py         # PromptCompiler 核心（模板 + 记忆 → 最终 Prompt）
 │       │   └── formatters.py       # 不同格式的 Prompt 输出渲染
@@ -243,7 +243,7 @@ packages/
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
 │       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner）
+│       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner；含 G4 longform / window stress / real-task parity 指标聚合、文件/目录语料装载、可选隔离沙筃保留，以及 live-provider-matrix 的正式合同型 acceptance 检查；_run_g4_live_provider_matrix_case 现在 forward responseRequirements / restartMessage）
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -254,7 +254,7 @@ packages/
 │           ├── ops_runtime.py      # 运维兼容门面，保持 CLI 与外部导入路径稳定
 │           ├── ops_runtime_backup.py # runtime 备份与恢复实现
 │           ├── ops_runtime_compose.py # compose smoke 检查实现
-│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、worker requeue drain、paid-provider 门控与 pause/resume 约束
+│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、worker requeue drain、paid-provider 门控、pause/resume 与真实任务窗口对照入口
 │           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现
 │           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
 │           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
@@ -272,7 +272,9 @@ packages/
 
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
-- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景。
+- `runtime_kernel/execution_loop.py` 现在会先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化为 temporary memory nodes、通过 `MEMORY_RETRIEVE_EXPAND` 重建 prompt 工作集，并把 retrieval state / takeoverProtocol / memory tag writes 写回 snapshot requestState、Prompt artifact 与 ModelInvocation 审计；对 restart carry-forward 恢复场景会按窗口预算裁剪检索结果，避免重复超窗重启。
+- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，用于核查当前 prompt 是否确实基于记忆树工作集而非旧摘要上下文。
+- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 
 ---
@@ -294,16 +296,16 @@ modules/
 │   ├── yggdrasil.module.yaml
 │   └── src/context_pruning/        # 基于信息熵的上下文裁剪实现
 │
-├── shared-memory/                  # 多用户共享记忆空间与权限控制
+├── shared-memory/                  # 多用户共享记忆空间与权限控制（写权限现在可按 sourceWorkTreeNodeId 做节点级约束）
 │   └── src/shared_memory/
 │
-├── multimodal-memory/              # 图片/音频资产的记忆节点关联
+├── multimodal-memory/              # 图片/音频资产的记忆节点关联（资产与摘要节点现可回挂到 related/source work tree）
 │   └── src/multimodal_memory/
 │
 ├── memory-organizer/               # 自动记忆整理与软遗忘治理
 │   └── src/memory_organizer/
 │
-├── relation-discovery/             # 跨节点语义关联发现
+├── relation-discovery/             # 跨节点语义关联发现（新建边会带 source-work-tree 审计线索）
 │   └── src/relation_discovery/
 │
 ├── # ── 任务能力模块 ─────────────────────────────────────
@@ -414,7 +416,7 @@ docs/
 ├── DEVELOPER_GUIDE.md              # 开发指南（本套文档之一）
 ├── USER_GUIDE.md                   # 使用指南（本套文档之一）
 ├── DIRECTORY_REFERENCE.md          # 目录说明书（本文档）
-├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值
+├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值与长任务伪无限上下文评测口径
 │
 ├── adr/                            # 架构决策记录 (Architecture Decision Records)
 │   ├── README.md                   # ADR 索引
@@ -430,8 +432,8 @@ docs/
 │
 ├── protocols/                      # 内部协议规格
 │   ├── README.md                   # 协议索引
-│   ├── event-contracts-v0.1.md     # 事件契约（NATS 事件格式）
-│   ├── hook-contracts-v0.1.md      # Hook 接口契约（所有 Hook 事件清单）
+│   ├── event-contracts-v0.1.md     # 事件契约（NATS 事件格式；补充 context.restart.requested/completed payload 约束）
+│   ├── hook-contracts-v0.1.md      # Hook 接口契约（所有 Hook 事件清单；补充 restart-snapshot rehydrate 约束）
 │   ├── module-lifecycle-v0.1.md    # 模块生命周期协议（启动/停止/健康）
 │   ├── yggdrasil-module-manifest-v0.1.md    # 模块清单 YAML 规格
 │   └── yggdrasil-application-manifest-v0.1.md # 应用清单 YAML 规格
@@ -463,8 +465,18 @@ docs/
 │   │                               #   Gate 2 正式闭环报告：官方复跑 3 轮、scorecard 汇总与后续非阻塞动作
 │   ├── g3-closeout-2026-05-15.md
 │   │                               #   Gate 3 正式闭环报告：首 token、work tree、execute-server 隔离、worker retry 与 DeepSeek paid live batch
+│   ├── g4-closeout-2026-05-15.md
+│   │                               #   Gate 4 正式闭环报告：few-shot 执行链、三场景 multiscene suite、provider matrix 与 release gate
 │   ├── g4-assessment-and-roadmap-2026-05-15.md
 │   │                               #   Gate 4 评估与完美实现路线图：多场景官方范围、few-shot 执行链、provider 矩阵与 CI 门禁
+│   ├── g4-long-task-window-restart-baseline-2026-05-15.md
+│   │                               #   Gate 4 长任务与窗口重启基线研究：LongCat 128k 基线、restart 闭环缺口、任务编排与 work tree 路线
+│   ├── g4-real-task-window-parity-validation-2026-05-16.md
+│   │                               #   4M 真实任务首轮窗口对照记录：初版 scorecard parity 结论，后续已被保留日志重跑在交付轴上修正
+│   ├── pseudo-infinite-context-window-roadmap-2026-05-16.md
+│   │                               #   伪无限上下文窗口研究与优先级路线：当前已确认 restart 技术闭环成立，但交付闭环仍待修正
+│   ├── g4-real-task-window-parity-rerun-log-audit-2026-05-16.md
+│   │                               #   4M 真实任务保留日志重跑记录：窗口 1/2 行为、保留沙箱路径、最终输出偏移与根因分析
 │   ├── g2-stage-progress-2026-05-04.md
 │   │                               #   Gate 2 推进记录：现已补录 2026-05-15 官方复跑闭环、稳定性复跑与出口判定
 │   ├── 系统核心理念.md
@@ -520,7 +532,15 @@ evaluation/
     ├── m8-live-llm.json            # M8 真实 LLM 评测套件
     ├── m9-acceptance.json          # M9 验收套件
     ├── m9-control-plane.json       # M9 控制面回归套件
-    └── g2-regression.json          # G2 受控自治回归套件（复杂文件拆分固定样本）
+    ├── g2-regression.json          # G2 受控自治回归套件（复杂文件拆分固定样本）
+    ├── g4-multiscene.json          # G4 官方三场景离线套件（快任务/跨会话/恢复/隔离）
+    ├── g4-provider-matrix.json     # G4 官方 live provider matrix（DeepSeek + LongCat；live artifact 现含 token 用量拆分、contextLengthObservations 与 runtimeMetrics）
+    ├── g4-provider-matrix-longform.json
+                                    #   G4 单任务长样本 live provider matrix（先聚焦一个更长的 coding 任务；用于观察长任务 token 与上下文窗口压力）
+    ├── g4-real-task-window-parity.json
+                                    #   G4 真实任务窗口对照（把当前 repo 的真实语料作为同一任务输入，对比 64k / 128k 窗口效果；现显式要求 release brief 小节、parity judgment 与 restart 证据；已添加 responseRequirements 交付合同和 restartMessage 跨窗口提示）
+    └── g4-window-restart-stress.json
+                                    #   G4 官方伪无限上下文窗口 stress（显式 effectiveContextWindow + forcedWindowRestartBudget；LongCat/DeepSeek 正式对照）
 ```
 
 **评测命令映射：**
@@ -533,6 +553,11 @@ evaluation/
 | `eval:m9:control-plane` | `suites/m9-control-plane.json` |
 | `eval:m9:acceptance` | `suites/m9-acceptance.json` |
 | `eval:g2:regression` | `suites/g2-regression.json` |
+| `eval:g4:multiscene` | `suites/g4-multiscene.json` |
+| `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
+| `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
+| `eval:g4:real-task-parity` | `suites/g4-real-task-window-parity.json` |
+| `eval:g4:window-stress` | `suites/g4-window-restart-stress.json` |
 
 ---
 
@@ -576,6 +601,7 @@ migrations/
 
 **当前迁移头补充：**
 - `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
+- `migrations/versions/a91c2e7d4f33_memory_tree_worktree_audit_fields.py`：为 nodes / retrieval_requests / model_invocations / assets / prompt_compile_artifacts 补 work tree 审计字段，支撑“记忆树即全部记忆”的 snapshot、rehydrate 与多模态/关系发现闭环。
 
 ---
 
@@ -589,7 +615,7 @@ tests/
 ├── # ── 基础层测试 ────────────────────────────────────────
 ├── test_persistence_api.py         # 持久化层：ORM、仓储、迁移
 ├── test_prompting_runtime.py       # PromptCompiler 链路端到端
-├── test_runtime_and_pruning.py     # 运行时内核 + 上下文裁剪
+├── test_runtime_and_pruning.py     # 运行时内核 + 上下文裁剪（含记忆树物化检索、snapshot requestState 恢复、memory-write 标签落树与窗口重启闭环回归）
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
@@ -616,10 +642,11 @@ tests/
 │
 ├── # ── M8/M9 里程碑测试 ─────────────────────────────────
 ├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测/真实试跑沙箱隔离）
-├── test_m9_shared_memory.py        # M9：shared-memory 专项测试
+├── test_g4_multiscene.py           # G4：官方三场景 multiscene suite 与 live budget 回归
+├── test_m9_shared_memory.py        # M9：shared-memory 专项测试（含按 work tree 节点约束的写权限）
 ├── test_m9_pause_resume.py         # M9：pause-resume 专项测试
 ├── test_m9_multimodal_and_relations.py
-│                                   #   M9：multimodal-memory + relation-discovery 专项测试
+│                                   #   M9：multimodal-memory + relation-discovery 专项测试（含资产/边的 work tree 溯源）
 ├── test_m9_memory_organizer.py     # M9：memory-organizer 专项测试
 ├── test_m9_training_lab.py         # M9：training-lab 专项测试
 └── test_m9_acceptance.py           # M9：端到端验收测试 + 控制面 API 回归
@@ -675,6 +702,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
                           #   full-regression：release:check（SQLite 全量回归 + 评测 + web）
                           #   postgres-regression：pytest --postgres -m "not slow"
                           #   live-provider-smoke：可选输入，按需触发 eval:m8:live
+                          #   g4-provider-matrix：可选输入，按需触发 eval:g4:provider-matrix
 ```
 
 **当前测试/门禁策略：**
@@ -684,7 +712,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | 本地开发 | 每次改动后 | 全仓回归、PostgreSQL、benchmark、live smoke | 按受影响测试而定 |
 | PR | pull_request | 全仓 Python 测试、评测、docker | ~3-5 min |
 | merge | push to main | 全仓 Python 测试、评测、docker | ~3-5 min |
-| release-check | 手动 | 默认不跑 live provider smoke（可选开启） | ~30-60 min |
+| release-check | 手动 | 默认不跑 live provider smoke / G4 provider matrix（可选开启） | ~30-60 min |
 
 ---
 
@@ -702,6 +730,11 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
+| `docs/research/g4-real-task-window-parity-validation-2026-05-16.md` | 4M 真实任务首轮窗口对照验证：初版 scorecard parity 结论，后续已被保留日志重跑在交付轴上修正 |
+| `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测，以及“技术闭环已成立但交付闭环未证实”的最新口径 |
+| `docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
+| `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` | 4M 真实任务保留日志重跳记录：保留沙筃路径、窗口级行为、最终输出、根因分析、收紧 acceptance 后的正式 failed run，以及工程现实与理论设想差距和推进路线（responseRequirements / restartMessage / snapshot 修复） |
+| `docs/research/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务、难度分级（L1-L5）、逐项实现路径与执行优先级 |
 | `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
 | `docs/research/future/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
 | `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
@@ -724,7 +757,7 @@ docs/
 
 | 我想找… | 去哪里找 |
 |---------|---------|
-| 任务执行的核心逻辑 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
+| 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompt_modules/compiler.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |

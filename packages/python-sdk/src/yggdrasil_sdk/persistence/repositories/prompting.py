@@ -110,6 +110,10 @@ class PromptAssetRepository:
             registeredTools=list(payload.get("registeredTools") or []),
             systemSections=dict(payload.get("systemSections") or {}),
             userSections=dict(payload.get("userSections") or {}),
+            workTreeSnapshot=dict(payload.get("workTreeSnapshot") or {}) if payload.get("workTreeSnapshot") is not None else None,
+            takeoverProtocolSnapshot=(
+                dict(payload.get("takeoverProtocolSnapshot") or {}) if payload.get("takeoverProtocolSnapshot") is not None else None
+            ),
             compiledMessagesRef=_external_ref(payload.get("compiledMessagesRef")),
             contentHash=str(payload.get("contentHash")),
             createdAt=payload.get("createdAt") or utc_now(),
@@ -133,6 +137,10 @@ class PromptAssetRepository:
             registered_tools=list(record.registered_tools),
             system_sections=dict(record.system_sections),
             user_sections=dict(record.user_sections),
+            work_tree_snapshot=dict(record.work_tree_snapshot or {}) if record.work_tree_snapshot is not None else None,
+            takeover_protocol_snapshot=(
+                dict(record.takeover_protocol_snapshot or {}) if record.takeover_protocol_snapshot is not None else None
+            ),
             compiled_messages_ref=record.compiled_messages_ref.model_dump(mode="json"),
             content_hash=record.content_hash,
             created_at=record.created_at,

@@ -178,6 +178,46 @@ payload 至少包含：
 - restoredFromCheckpoint
 - resumePath
 
+### 8.4 context.restart.requested
+
+payload 至少包含：
+
+- snapshotId
+- snapshotType，第一版固定为 `restart`
+- restartReason，允许值至少包含 `effectiveContextWindow`、`forcedWindowRestartBudget`、`planned-window-rotation`
+- sourceWindowIndex
+- targetWindowIndex
+- restartCount
+- cumulativeWindowSpanTokens
+- effectiveContextWindow
+- windowRestartThreshold
+- carryForwardContextRef
+- resumeToken
+
+补充约束：
+
+- `carryForwardContextRef` 指向精简后的 handoff package，而不是重启前完整上下文镜像。
+- 同一次 restart handoff 中生成的 `resumeToken` 必须全局唯一，不能复用旧 token。
+- 当 stress 口径启用 `forcedWindowRestartBudget` 时，事件对应的 requestState 视图必须体现预算单调递减后的值。
+
+### 8.5 context.restart.completed
+
+payload 至少包含：
+
+- snapshotId
+- resumePath，第一版允许值至少包含 `restart-snapshot` 与 `snapshot`
+- restoredFromCheckpoint
+- sourceWindowIndex
+- targetWindowIndex
+- restartCount
+- carryForwardLossCount
+- effectiveContextWindow
+
+补充约束：
+
+- 只有在下一窗口成功消费 restart snapshot、恢复 requestState、并重新进入正式模型调用路径后，才能发布 `context.restart.completed`。
+- 如果 restart snapshot 被消费但 carry-forward package 无法恢复到可执行状态，应视为 restart 失败，而不是提前发布 completed。
+
 ## 9. 兼容策略
 
 - 新增非必填字段不提升主版本。

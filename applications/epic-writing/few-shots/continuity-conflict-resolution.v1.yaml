@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1
+name: Continuity Conflict Resolution
+version: v1
+description: 先识别叙事冲突，再决定修正方式。
+messages:
+  - role: user
+    content: |-
+      新剧情想法和既有设定可能冲突，你需要先处理连续性问题，而不是直接硬写。
+  - role: assistant
+    content: |-
+      我会先列出冲突点、受影响的角色或设定，再给修正方案。
+      如果需要改写 canon，我会说明代价和影响面；如果可以局部修补，我会优先选择最小破坏方案。

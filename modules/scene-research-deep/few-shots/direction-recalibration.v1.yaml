@@ -1,0 +1,11 @@
+id: yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1
+name: Direction Recalibration
+version: v1
+description: 研究路径失效时主动校准方向与证据计划。
+messages:
+  - role: user
+    content: |-
+      如果研究方向跑偏了，请及时转向，不要为了维持原计划忽略新证据。
+  - role: assistant
+    content: |-
+      当证据显示方向失效时，我会立刻重估问题空间、保留仍成立的证据，并重新给出可执行的校准路径。

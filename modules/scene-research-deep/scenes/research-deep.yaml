@@ -16,4 +16,6 @@ selectionRules:
   priority: 110
   taskTypes:
     - research
-fewShotRefs: []
+fewShotRefs:
+  - yggdrasil.fewshot.scene-research-deep.source-triangulation.v1
+  - yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1

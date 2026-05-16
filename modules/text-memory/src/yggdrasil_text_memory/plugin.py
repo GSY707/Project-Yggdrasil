@@ -148,12 +148,23 @@ def _build_edge_candidates(nodes: list[dict[str, Any]], project_id: str, space_i
     return edges
 
 
-def _score_node_for_query(node: dict[str, Any], query_tokens: set[str], seeded_node_ids: set[str]) -> float:
+def _score_node_for_query(
+    node: dict[str, Any],
+    query_tokens: set[str],
+    seeded_node_ids: set[str],
+    *,
+    reverse_trace_mode: bool,
+    work_tree_node_id: str | None,
+) -> float:
     node_tokens = set(_tokenize(f"{node.get('title', '')} {node.get('content', '')}"))
     overlap = len(node_tokens.intersection(query_tokens))
     seed_bonus = 2.0 if node["id"] in seeded_node_ids else 0.0
     branch_bonus = 0.5 if node.get("rootBranch") == "execution" and query_tokens else 0.0
-    return overlap + seed_bonus + branch_bonus + float(node.get("importance", 0.5))
+    source_work_tree_node_id = str(node.get("sourceWorkTreeNodeId") or "").strip() or None
+    work_tree_bonus = 0.0
+    if work_tree_node_id is not None and source_work_tree_node_id == work_tree_node_id:
+        work_tree_bonus = 3.0 if reverse_trace_mode else 1.5
+    return overlap + seed_bonus + branch_bonus + work_tree_bonus + float(node.get("importance", 0.5))
 
 
 class TextMemoryModule(BaseModulePlugin):
@@ -405,6 +416,8 @@ class TextMemoryModule(BaseModulePlugin):
 
         query_text = str(retrieval_request.get("queryText") or "")
         query_tokens = set(_tokenize(query_text))
+        reverse_trace_mode = bool(retrieval_request.get("reverseTraceMode", False))
+        work_tree_node_id = str(retrieval_request.get("workTreeNodeId") or "").strip() or None
         seeded_node_ids = {
             str(seed_ref.get("id"))
             for seed_ref in retrieval_request.get("seedNodeRefs", [])
@@ -415,7 +428,13 @@ class TextMemoryModule(BaseModulePlugin):
 
         ranked_nodes = sorted(
             nodes,
-            key=lambda node: _score_node_for_query(node, query_tokens, seeded_node_ids),
+            key=lambda node: _score_node_for_query(
+                node,
+                query_tokens,
+                seeded_node_ids,
+                reverse_trace_mode=reverse_trace_mode,
+                work_tree_node_id=work_tree_node_id,
+            ),
             reverse=True,
         )
         matched_nodes = ranked_nodes[:max_leaf_nodes]
@@ -474,6 +493,11 @@ class TextMemoryModule(BaseModulePlugin):
             "naturalLanguageSummary": (
                 f"Retrieved {len(matched_nodes)} nodes for query '{query_text or 'seeded retrieval'}'. "
                 f"Top nodes: {summary_titles}."
+                + (
+                    f" Reverse trace anchored at work tree node {work_tree_node_id}."
+                    if reverse_trace_mode and work_tree_node_id is not None
+                    else ""
+                )
             ),
             "truncated": truncated,
             "generatedAt": utc_now().isoformat(),

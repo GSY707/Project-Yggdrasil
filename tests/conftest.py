@@ -33,13 +33,13 @@ def _truncate_all_tables() -> None:
     runtime = get_persistence_runtime()
     with runtime.engine().connect() as conn:
         dialect_name = conn.dialect.name
+        all_tables = list(Base.metadata.tables.values())
         if dialect_name == "sqlite":
             conn.execute(sa.text("PRAGMA foreign_keys = OFF"))
-            for table in reversed(Base.metadata.sorted_tables):
+            for table in reversed(all_tables):
                 conn.execute(sa.delete(table))
             conn.execute(sa.text("PRAGMA foreign_keys = ON"))
         elif dialect_name == "postgresql":
-            all_tables = list(Base.metadata.tables.values())
             if all_tables:
                 preparer = conn.dialect.identifier_preparer
                 table_names = []
@@ -52,7 +52,7 @@ def _truncate_all_tables() -> None:
                         table_names.append(table_name)
                 conn.execute(sa.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"))
         else:
-            for table in reversed(Base.metadata.sorted_tables):
+            for table in reversed(all_tables):
                 conn.execute(sa.delete(table))
         conn.commit()
 

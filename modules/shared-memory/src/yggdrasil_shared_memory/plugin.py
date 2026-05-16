@@ -332,10 +332,23 @@ class SharedMemoryModule(BaseModulePlugin):
                 }
 
             subjects = _subject_candidates(dict(payload))
+            candidate_nodes = [node for node in payload.get("candidateNodes") or [] if isinstance(node, dict)]
+            source_work_tree_node_id = str(payload.get("sourceWorkTreeNodeId") or "").strip() or None
+            if source_work_tree_node_id is None:
+                for candidate_node in candidate_nodes:
+                    node_work_tree_id = str(
+                        candidate_node.get("sourceWorkTreeNodeId")
+                        or candidate_node.get("workTreeNodeId")
+                        or ""
+                    ).strip()
+                    if node_work_tree_id:
+                        source_work_tree_node_id = node_work_tree_id
+                        break
             permission_context = {
                 "branchId": target_branch_id,
                 "spaceId": target_space_id,
                 "mountMode": mount.mount_mode,
+                "sourceWorkTreeNodeId": source_work_tree_node_id,
             }
             if not self._is_allowed(
                 collaboration_repository,

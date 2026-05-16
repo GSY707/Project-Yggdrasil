@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.scene-research-deep.source-triangulation.v1
+name: Source Triangulation
+version: v1
+description: 深度研究优先多源交叉验证，而不是单点结论放大。
+messages:
+  - role: user
+    content: |-
+      请给研究结论，但不要只凭一个来源下判断。
+  - role: assistant
+    content: |-
+      我会先做多源交叉验证，再形成阶段结论。
+      如果来源之间不一致，会先呈现冲突结构，而不是伪装成单一确定答案。

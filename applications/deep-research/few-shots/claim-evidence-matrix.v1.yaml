@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1
+name: Claim Evidence Matrix
+version: v1
+description: 把研究结论拆成主张、证据、冲突与空白。
+messages:
+  - role: user
+    content: |-
+      请直接告诉我当前研究结论，但要能追溯每个结论背后的证据。
+  - role: assistant
+    content: |-
+      我会按“结论 / 证据 / 冲突 / 待验证空白”组织输出。
+      没有来源支撑的内容不会写成结论；如果证据相互冲突，我会显式标出分歧和下一步验证点。

@@ -1,5 +1,6 @@
 from ._common import *  # noqa: F403,F401
 from ..domain import PromptProfileVersionRecord
+from contextlib import nullcontext
 
 _SCHEMA_TEMPLATE_LOCK = threading.Lock()
 _SCHEMA_TEMPLATE_DIR: tempfile.TemporaryDirectory[str] | None = None
@@ -104,10 +105,22 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
         "YGGDRASIL_GIT_REPO_PATH",
         "YGGDRASIL_MCP_PROJECT_WORKSPACE",
         "YGGDRASIL_DISABLE_LIVE_LLM",
+        "YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT",
+        "YGGDRASIL_EVAL_ACTIVE_WORKSPACE_ROOT",
+        "YGGDRASIL_EVAL_ACTIVE_DB_PATH",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
     template_db = _get_schema_template_db()
-    with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-") as temp_dir:
+    preserve_sandbox = str(os.environ.get("YGGDRASIL_EVAL_PRESERVE_SANDBOX") or "").strip().lower() in {"1", "true", "yes", "on"}
+    if preserve_sandbox:
+        sandbox_root = resolve_state_dir() / "evaluation-sandboxes"
+        sandbox_root.mkdir(parents=True, exist_ok=True)
+        temp_root = sandbox_root / new_id("evalsandbox", utc_now().isoformat(), stable=False)
+        temp_root.mkdir(parents=True, exist_ok=False)
+        temp_dir_context = nullcontext(str(temp_root))
+    else:
+        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-")
+    with temp_dir_context as temp_dir:
         temp_root = Path(temp_dir)
         sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root)
         db_path = temp_root / "evaluation.db"
@@ -119,6 +132,9 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
         os.environ["YGGDRASIL_STATE_ROOT"] = str((temp_root / ".yggdrasil").resolve())
         os.environ["YGGDRASIL_GIT_REPO_PATH"] = str(sandbox_workspace.resolve())
         os.environ["YGGDRASIL_MCP_PROJECT_WORKSPACE"] = str(sandbox_workspace.resolve())
+        os.environ["YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT"] = str(temp_root.resolve())
+        os.environ["YGGDRASIL_EVAL_ACTIVE_WORKSPACE_ROOT"] = str(sandbox_workspace.resolve())
+        os.environ["YGGDRASIL_EVAL_ACTIVE_DB_PATH"] = str(db_path.resolve())
         if disable_live_llm:
             os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
         else:
@@ -211,26 +227,41 @@ def _run_git(repo_path: Path, *args: str) -> str:
         raise RuntimeError(detail)
     return completed.stdout.strip()
 
-def _seed_runtime_task(task_id: str) -> dict[str, Any]:
+def _seed_runtime_task(
+    task_id: str,
+    *,
+    app_id: str | None = None,
+    title: str | None = None,
+    goal: str | None = None,
+    current_focus: str | None = None,
+    current_objective: str | None = None,
+    resume_message: str | None = None,
+    token_budget_total: int | None = 1200,
+    cost_budget_total: float | None = 5.0,
+) -> dict[str, Any]:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         task_repository = TaskRepository(session)
-        task = task_repository.create_task(
-            {
-                "id": task_id,
-                "title": "Evaluation Runtime Task",
-                "goal": "Validate the main-agent pause and resume closed loop.",
-                "status": "draft",
-                "currentObjective": "complete the evaluation execution and enter safe-stop",
-                "currentFocus": "evaluation-runtime",
-                "resumeMessage": "resume the evaluation flow",
-                "budgetState": {
-                    "tokenBudgetTotal": 1200,
-                    "costBudgetTotal": 5.0,
-                },
-            }
-        )
+        payload = {
+            "id": task_id,
+            "title": title or "Evaluation Runtime Task",
+            "goal": goal or "Validate the main-agent pause and resume closed loop.",
+            "status": "draft",
+            "currentObjective": current_objective or "complete the evaluation execution and enter safe-stop",
+            "currentFocus": current_focus or "evaluation-runtime",
+            "resumeMessage": resume_message or "resume the evaluation flow",
+        }
+        budget_state: dict[str, Any] = {}
+        if token_budget_total is not None:
+            budget_state["tokenBudgetTotal"] = int(token_budget_total)
+        if cost_budget_total is not None:
+            budget_state["costBudgetTotal"] = float(cost_budget_total)
+        if budget_state:
+            payload["budgetState"] = budget_state
+        if app_id is not None:
+            payload["appId"] = app_id
+        task = task_repository.create_task(payload)
     return task.model_dump(by_alias=True, mode="json")
 
 def _seed_tool_case_memory(task_id: str) -> list[dict[str, Any]]:

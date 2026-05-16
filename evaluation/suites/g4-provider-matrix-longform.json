@@ -1,0 +1,130 @@
+{
+  "id": "evalsuite_g4_provider_matrix_longform",
+  "name": "G4 Single-Task Longform Provider Matrix",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "first-token-seconds",
+    "first-useful-output-seconds",
+    "plan-quality",
+    "rework-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:provider-matrix:longform",
+  "cases": [
+    {
+      "id": "evalcase_g4_matrix_coding_longform_deepseek",
+      "title": "G4 Coding Longform Provider Matrix - DeepSeek",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-coding-longform",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Coding Longform Provider Matrix",
+      "taskGoal": "You are given a greenfield product brief for a new engineering workspace named Delivery Hub. Produce a final long-form implementation plan that is detailed enough for a follow-up coding session to execute without re-discovering the architecture. The result must cover: a module map, critical domain entities, external interfaces, data flow, phased milestones, validation strategy, release gates, observability hooks, rollback and migration constraints, documentation updates, and explicit unresolved questions. The project must support a CLI, a small REST API, and a background worker that all share the same domain model. The first milestone has to be independently shippable within a narrow time box, but the design must still leave a clear path for batch imports, resumable jobs, and operator-facing diagnostics in later milestones.",
+      "currentFocus": "g4-coding-longform-provider-matrix",
+      "currentObjective": "Turn a dense greenfield brief into an architecture-first, contract-driven, phased delivery plan that preserves a thin first milestone while still accounting for schema evolution, resumable execution, auditability, operator tooling, and backward-compatible extension points.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_longform_product_brief",
+          "title": "product brief",
+          "content": "Delivery Hub must ingest project requests from multiple upstream channels, normalize them into a shared job model, route them through policy checks, and then expose status through both CLI and HTTP surfaces. Version 1 only needs one upstream channel and a local persistence backend, but the architecture must show where additional channels, stronger auth, and distributed execution would attach without rewriting the core model. The system is expected to run on Windows-first developer machines and later move into Linux-based CI and managed production infrastructure.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_constraints",
+          "title": "delivery constraints",
+          "content": "The first delivery slice must stay small enough for a single engineer to implement incrementally, but it cannot become a throwaway prototype. The plan should keep a stable contract between CLI, REST API, and worker layers; explicitly name which capabilities are in milestone 1 versus deferred; and call out which abstractions must be introduced immediately versus postponed. Assume the team is strict about testability, Windows-safe local workflows, and release check reproducibility. Avoid introducing unnecessary infrastructure in milestone 1, but do not hide the migration path for queues, remote storage, or auth hardening.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_quality_bar",
+          "title": "quality and verification bar",
+          "content": "The answer should contain enough structure to drive implementation directly: recommended repository layout, domain model boundaries, configuration surfaces, API and CLI contracts, persistence decisions, background execution lifecycle, validation layers, test pyramid, smoke checks, and release gate updates. Each milestone should include a concrete verification target. The plan must also include a risk register covering schema drift, duplicate execution, partial failure during background work, operator confusion, and documentation drift between code and control-plane surfaces.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_output_contract",
+          "title": "expected output contract",
+          "content": "Return a final answer that is explicitly organized into: 1) architecture summary, 2) module and contract map, 3) phased implementation plan, 4) verification matrix, 5) risks and mitigations, and 6) open questions. Keep the tone implementation-oriented rather than exploratory. The output should make it obvious which files, services, and boundaries would be touched first in a real repo, even though this provider-matrix task does not execute tools or modify files.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 1400,
+      "costBudgetTotal": 8.0,
+      "workspaceProfile": "g4-longform-single-task",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "longform", "coding", "deepseek"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_matrix_coding_longform_longcat",
+      "title": "G4 Coding Longform Provider Matrix - LongCat",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-coding-longform",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Coding Longform Provider Matrix",
+      "taskGoal": "You are given a greenfield product brief for a new engineering workspace named Delivery Hub. Produce a final long-form implementation plan that is detailed enough for a follow-up coding session to execute without re-discovering the architecture. The result must cover: a module map, critical domain entities, external interfaces, data flow, phased milestones, validation strategy, release gates, observability hooks, rollback and migration constraints, documentation updates, and explicit unresolved questions. The project must support a CLI, a small REST API, and a background worker that all share the same domain model. The first milestone has to be independently shippable within a narrow time box, but the design must still leave a clear path for batch imports, resumable jobs, and operator-facing diagnostics in later milestones.",
+      "currentFocus": "g4-coding-longform-provider-matrix",
+      "currentObjective": "Turn a dense greenfield brief into an architecture-first, contract-driven, phased delivery plan that preserves a thin first milestone while still accounting for schema evolution, resumable execution, auditability, operator tooling, and backward-compatible extension points.",
+      "currentContext": [
+        {
+          "id": "ctx_g4_longform_product_brief",
+          "title": "product brief",
+          "content": "Delivery Hub must ingest project requests from multiple upstream channels, normalize them into a shared job model, route them through policy checks, and then expose status through both CLI and HTTP surfaces. Version 1 only needs one upstream channel and a local persistence backend, but the architecture must show where additional channels, stronger auth, and distributed execution would attach without rewriting the core model. The system is expected to run on Windows-first developer machines and later move into Linux-based CI and managed production infrastructure.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_constraints",
+          "title": "delivery constraints",
+          "content": "The first delivery slice must stay small enough for a single engineer to implement incrementally, but it cannot become a throwaway prototype. The plan should keep a stable contract between CLI, REST API, and worker layers; explicitly name which capabilities are in milestone 1 versus deferred; and call out which abstractions must be introduced immediately versus postponed. Assume the team is strict about testability, Windows-safe local workflows, and release check reproducibility. Avoid introducing unnecessary infrastructure in milestone 1, but do not hide the migration path for queues, remote storage, or auth hardening.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_quality_bar",
+          "title": "quality and verification bar",
+          "content": "The answer should contain enough structure to drive implementation directly: recommended repository layout, domain model boundaries, configuration surfaces, API and CLI contracts, persistence decisions, background execution lifecycle, validation layers, test pyramid, smoke checks, and release gate updates. Each milestone should include a concrete verification target. The plan must also include a risk register covering schema drift, duplicate execution, partial failure during background work, operator confusion, and documentation drift between code and control-plane surfaces.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_g4_longform_output_contract",
+          "title": "expected output contract",
+          "content": "Return a final answer that is explicitly organized into: 1) architecture summary, 2) module and contract map, 3) phased implementation plan, 4) verification matrix, 5) risks and mitigations, and 6) open questions. Keep the tone implementation-oriented rather than exploratory. The output should make it obvious which files, services, and boundaries would be touched first in a real repo, even though this provider-matrix task does not execute tools or modify files.",
+          "importance": 0.99
+        }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-Flash-Lite",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 1400,
+      "costBudgetTotal": 8.0,
+      "workspaceProfile": "g4-longform-single-task",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "provider-matrix", "longform", "coding", "longcat"],
+      "difficulty": "hard"
+    }
+  ]
+}

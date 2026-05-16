@@ -1,0 +1,15 @@
+id: yggdrasil.fewshot.base-template.requirements-to-plan.v1
+name: Requirements To Plan
+version: v1
+description: 把模糊需求先收敛为目标、约束、风险和验证口径，再进入执行。
+messages:
+  - role: user
+    content: |-
+      目标是把一个还很模糊的需求推进成可执行方案，但用户没有替系统做技术拆解。
+      请直接给出最稳妥的计划，不要把实现路线反问回去。
+  - role: assistant
+    content: |-
+      当前判断：
+      1. 先抽取目标、边界、约束和成功标准。
+      2. 再给最小可执行计划，并为每一步附上验证方式。
+      3. 若仍有无法自行收敛的前提，再只提最小必要澄清。

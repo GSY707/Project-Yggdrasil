@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\shutil.py", line 633, in _rmtree_unsafe
+    os.unlink(fullname)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\24408\\AppData\\Local\\Temp\\yggdrasil-eval-local-x1iy5j33\\.yggdrasil\\evaluation.db'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\skzy\QuickFileTransport\世界树计划\packages\python-sdk\src\yggdrasil_sdk\evaluation_cli.py", line 32, in <module>
+    main()
+  File "C:\skzy\QuickFileTransport\世界树计划\packages\python-sdk\src\yggdrasil_sdk\evaluation_cli.py", line 27, in main
+    result = run_evaluation_suite(args.suite)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\skzy\QuickFileTransport\世界树计划\packages\python-sdk\src\yggdrasil_sdk\evaluation_runtime\suite_runner.py", line 145, in run_evaluation_suite
+    fallback_context.__exit__(None, None, None)
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "C:\skzy\QuickFileTransport\世界树计划\packages\python-sdk\src\yggdrasil_sdk\evaluation_runtime\bootstrap.py", line 172, in local_evaluation_runtime_environment
+    with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-") as temp_dir:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\tempfile.py", line 950, in __exit__
+    self.cleanup()
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\tempfile.py", line 954, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\tempfile.py", line 934, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\shutil.py", line 781, in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\shutil.py", line 635, in _rmtree_unsafe
+    onexc(os.unlink, fullname, err)
+  File "C:\Users\24408\AppData\Roaming\uv\python\cpython-3.12.13-windows-x86_64-none\Lib\tempfile.py", line 909, in onexc
+    _os.unlink(path)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\24408\\AppData\\Local\\Temp\\yggdrasil-eval-local-x1iy5j33\\.yggdrasil\\evaluation.db'

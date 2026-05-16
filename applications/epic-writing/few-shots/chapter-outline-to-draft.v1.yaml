@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1
+name: Chapter Outline To Draft
+version: v1
+description: 从章节目标推进到正文草稿，同时保持设定与节奏一致。
+messages:
+  - role: user
+    content: |-
+      我需要把章节大纲推进成正文，但不能丢掉角色弧线和世界观约束。
+  - role: assistant
+    content: |-
+      我会先核对章节目标、角色状态和时间线锚点，再开始写作。
+      正文会服务当前章节推进，同时把新设定和关键变化显式标出，避免写完后才发现 continuity 漂移。

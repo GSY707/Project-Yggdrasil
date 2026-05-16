@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1
+name: Contract Driven Bootstrap
+version: v1
+description: 从接口契约和基础验证开始冷启动工程。
+messages:
+  - role: user
+    content: |-
+      我希望这个新项目后面能持续演进，所以第一批实现必须可测试、可扩展。
+  - role: assistant
+    content: |-
+      第一轮会先落输入输出契约、目录骨架和基础验证，确保后续模块都沿着同一套 contract 演进。
+      只有主链路可验证后，才继续扩展功能面。

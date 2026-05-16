@@ -5,6 +5,150 @@ from .root_mount import *  # noqa: F403,F401
 
 _logger = logging.getLogger(__name__)
 
+
+def _int_metric(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[str, Any]) -> dict[str, Any]:
+    request_state = {
+        key: request.get(key)
+        for key in (
+            "taskType",
+            "runType",
+            "currentFocus",
+            "currentObjective",
+            "taskObjective",
+            "activeCapabilities",
+            "registeredTools",
+            "protectedItems",
+            "allowModelFallback",
+            "allowToolExecution",
+            "candidateModels",
+            "temperature",
+            "thinking",
+            "reasoningEffort",
+            "maxTokens",
+            "maxToolRounds",
+            "auditLevel",
+            "maxRetainedTokens",
+            "minQuality",
+            "effectiveContextWindow",
+            "windowRestartRatio",
+            "windowRestartThreshold",
+            "forcedWindowRestartBudget",
+            "memoryWriteTagsEnabled",
+            "responseRequirements",
+            "restartMessage",
+        )
+        if request.get(key) is not None
+    }
+    for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites"):
+        value = request.get(key)
+        if isinstance(value, dict) and value:
+            request_state[key] = dict(value)
+    request_state.update(
+        {
+            "windowIndex": runtime_metrics.get("windowIndex"),
+            "restartCount": runtime_metrics.get("restartCount"),
+            "compressionCount": runtime_metrics.get("compressionCount"),
+            "cumulativeWindowSpanTokens": runtime_metrics.get("cumulativeWindowSpanTokens"),
+            "carryForwardLossCount": runtime_metrics.get("carryForwardLossCount"),
+            "forcedWindowRestartBudget": runtime_metrics.get("forcedWindowRestartBudget"),
+            "runtimeMetrics": dict(runtime_metrics),
+        }
+    )
+    return request_state
+
+
+def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    current_context_state = payload.get("currentContextState") if isinstance(payload.get("currentContextState"), list) else []
+    if not current_context_state:
+        return []
+
+    effective_context_window = max(_int_metric(payload.get("effectiveContextWindow"), 256), 64)
+    restart_threshold = max(_int_metric(payload.get("windowRestartThreshold"), effective_context_window), 32)
+    carry_forward_limit = max(32, min(effective_context_window, restart_threshold - 8 if restart_threshold > 8 else restart_threshold))
+    target_chars = max(160, int(carry_forward_limit * 4 * 0.55))
+    item_limit = max(1, min(5, len(current_context_state)))
+    per_item_chars = max(96, target_chars // item_limit)
+    bullets: list[str] = []
+    for item in current_context_state[:item_limit]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or item.get("id") or "context-item")
+        excerpt_source = " ".join(
+            str(item.get(key) or "")
+            for key in ("summary", "content", "note", "excerpt")
+            if item.get(key)
+        ).strip()
+        excerpt = normalize_excerpt(excerpt_source or title, per_item_chars)
+        bullets.append(f"- {title}: {excerpt}")
+
+    source_window_index = max(_int_metric(payload.get("windowIndex"), 1), 1)
+    target_window_index = source_window_index + 1
+    objective = str(payload.get("currentObjective") or payload.get("taskObjective") or "Continue the current task.")
+    focus = str(payload.get("currentFocus") or "window-restart")
+    restart_message = str(
+        payload.get("restartMessage")
+        or payload.get("resumeMessage")
+        or f"Continue task {task_id} from the carry-forward package."
+    )
+    takeover_protocol = payload.get("takeoverProtocol") if isinstance(payload.get("takeoverProtocol"), dict) else {}
+    work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
+    memory_retrieval_state = payload.get("memoryRetrievalState") if isinstance(payload.get("memoryRetrievalState"), dict) else {}
+    protected_ids = [
+        str(item.get("id") or "")
+        for item in payload.get("protectedItems") or []
+        if isinstance(item, dict) and item.get("id") is not None
+    ]
+    content = "\n".join(
+        part
+        for part in (
+            f"Window restart handoff: {source_window_index} -> {target_window_index}",
+            f"Current objective: {objective}",
+            f"Current focus: {focus}",
+            f"Restart instruction: {restart_message}",
+            (
+                f"Work tree handoff: status={work_tree.get('status')}; currentNode={work_tree.get('currentNodeId')}"
+                if work_tree
+                else None
+            ),
+            (
+                "Memory retrieval handoff: " + str(memory_retrieval_state.get("summary") or "")
+                if memory_retrieval_state.get("summary")
+                else None
+            ),
+            (
+                f"Reverse trace mode: workTreeNode={memory_retrieval_state.get('workTreeNodeId')}"
+                if memory_retrieval_state.get("reverseTraceMode") and memory_retrieval_state.get("workTreeNodeId")
+                else None
+            ),
+            f"Protected refs: {', '.join(protected_ids)}" if protected_ids else None,
+            "Carry-forward evidence:",
+            *bullets,
+        )
+        if part
+    )
+    content = normalize_excerpt(content, target_chars)
+    carry_forward_item = {
+        "id": new_id("carryforward", task_id, source_window_index, target_window_index),
+        "title": f"Carry-forward package W{source_window_index} -> W{target_window_index}",
+        "content": content,
+        "kind": "carry-forward-package",
+        "sourceWindowIndex": source_window_index,
+        "targetWindowIndex": target_window_index,
+    }
+
+    while _estimate_context_tokens([carry_forward_item]) >= carry_forward_limit and len(content) > 64:
+        content = normalize_excerpt(content, max(64, len(content) // 2))
+        carry_forward_item["content"] = content
+
+    return [carry_forward_item]
+
 def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     request = payload or {}
     runtime = get_persistence_runtime()
@@ -18,6 +162,10 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     active_tool_calls = request.get("activeToolCalls") if isinstance(request.get("activeToolCalls"), list) else []
     current_response_state = str(request.get("currentResponseState", "completed"))
     current_context_state = request.get("currentContextState") if isinstance(request.get("currentContextState"), list) else []
+    runtime_request_state = _build_restart_request_state(
+        request,
+        request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {},
+    )
     blockers: list[str] = []
 
     try:
@@ -108,7 +256,19 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         pendingWrites=pending_writes,
         pendingActions=[
             action
-            for action in [*pending_actions, *(snapshot_delta.get("pendingActions") or [])]
+            for action in [
+                *pending_actions,
+                *(snapshot_delta.get("pendingActions") or []),
+                *(
+                    [{"kind": "runtime-request-state", "requestState": runtime_request_state}]
+                    if runtime_request_state
+                    and not any(
+                        isinstance(action, dict) and action.get("kind") == "runtime-request-state"
+                        for action in [*pending_actions, *(snapshot_delta.get("pendingActions") or [])]
+                    )
+                    else []
+                ),
+            ]
             if isinstance(action, dict)
         ],
         resumeMessage=(
@@ -132,6 +292,113 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         "contextCached": context_cached,
         "moduleSummaries": module_summaries,
         "projectId": project_id,
+    }
+
+
+def _build_restart_snapshot_state(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    request = payload or {}
+    runtime = get_persistence_runtime()
+    coordinator = RedisCoordinator(runtime.settings)
+    app_id = str(request.get("appId") or DEFAULT_APP_ID)
+    project_id = str(request.get("projectId", DEFAULT_PROJECT_ID))
+    branch_id = str(request.get("branchId", DEFAULT_BRANCH_ID))
+    agent_run_id = str(request.get("agentRunId", new_id("run", task_id, stable=True)))
+    current_context_state = request.get("currentContextState") if isinstance(request.get("currentContextState"), list) else []
+
+    try:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            task = TaskRepository(session).get_task(task_id)
+            if task is not None:
+                app_id = task.app_id
+                project_id = task.project_id
+                branch_id = task.branch_id
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("Failed to read task record during restart snapshot build (task_id=%s): %s", task_id, exc)
+
+    snapshot_id = str(request.get("snapshotId") or new_id("snap", task_id, agent_run_id, "restart"))
+    root_mount = request.get("rootMountPreview") if isinstance(request.get("rootMountPreview"), dict) else build_root_mount_package(
+        task_id,
+        {
+            "appId": app_id,
+            "projectId": project_id,
+            "branchId": branch_id,
+            "spaceId": request.get("spaceId", DEFAULT_SPACE_ID),
+            "taskObjective": request.get("taskObjective"),
+            "resumeMessage": request.get("restartMessage") or request.get("resumeMessage"),
+            "budget": request.get("budget") or request.get("budgetState") or {},
+        },
+    )
+    carry_forward_context = _build_carry_forward_context(task_id, request)
+    root_mount_locator = f"runtime/tasks/{task_id}/snapshots/{snapshot_id}/root-mount"
+    context_locator = f"runtime/tasks/{task_id}/snapshots/{snapshot_id}/context"
+    root_mount_cached = _cache_package_entry(coordinator, root_mount_locator, root_mount)
+    context_cached = _cache_package_entry(coordinator, context_locator, carry_forward_context)
+
+    source_window_index = max(_int_metric(request.get("windowIndex"), 1), 1)
+    window_span_tokens = max(_int_metric(request.get("windowSpanTokens"), _estimate_context_tokens(current_context_state)), 0)
+    runtime_metrics = {
+        "windowIndex": source_window_index + 1,
+        "restartCount": max(_int_metric(request.get("restartCount"), 0), 0) + 1,
+        "compressionCount": max(_int_metric(request.get("compressionCount"), 0), 0),
+        "cumulativeWindowSpanTokens": max(_int_metric(request.get("cumulativeWindowSpanTokens"), 0), 0) + window_span_tokens,
+        "carryForwardLossCount": max(_int_metric(request.get("carryForwardLossCount"), 0), 0),
+        "effectiveContextWindow": max(_int_metric(request.get("effectiveContextWindow"), 0), 0),
+        "windowRestartThreshold": max(_int_metric(request.get("windowRestartThreshold"), 0), 0),
+        "forcedWindowRestartBudget": max(_int_metric(request.get("forcedWindowRestartBudget"), 0) - 1, 0),
+        "windowSpanTokens": window_span_tokens,
+    }
+    if current_context_state and not carry_forward_context:
+        runtime_metrics["carryForwardLossCount"] = int(runtime_metrics["carryForwardLossCount"]) + 1
+
+    snapshot = TaskSnapshotSummary(
+        id=snapshot_id,
+        appId=app_id,
+        taskId=task_id,
+        agentRunId=agent_run_id,
+        projectId=project_id,
+        branchId=branch_id,
+        snapshotType="restart",
+        status="restorable",
+        resumeToken=new_id("resume", task_id, agent_run_id, "restart", utc_now().isoformat()),
+        contextRef=ExternalRef(type="package-entry", locator=context_locator),
+        rootMountRef=ExternalRef(type="package-entry", locator=root_mount_locator),
+        pendingWrites=[],
+        pendingActions=[
+            {
+                "kind": "window-restart",
+                "sourceWindowIndex": source_window_index,
+                "targetWindowIndex": runtime_metrics["windowIndex"],
+                "windowSpanTokens": window_span_tokens,
+                "effectiveContextWindow": runtime_metrics["effectiveContextWindow"],
+                "windowRestartThreshold": runtime_metrics["windowRestartThreshold"],
+                "forcedWindowRestartBudget": runtime_metrics["forcedWindowRestartBudget"],
+                "carryForwardSummary": normalize_excerpt(str(carry_forward_context[0].get("content") or ""), 240) if carry_forward_context else None,
+                "requestState": _build_restart_request_state(request, runtime_metrics),
+            },
+            {
+                "kind": "runtime-request-state",
+                "requestState": _build_restart_request_state(request, runtime_metrics),
+            },
+        ],
+        resumeMessage=str(
+            request.get("restartMessage")
+            or request.get("resumeMessage")
+            or f"Continue task {task_id} from the carry-forward package."
+        ),
+        safeStopReason="context-window-restart",
+        createdAt=utc_now(),
+        safeToPause=True,
+        blockers=[],
+    )
+    return {
+        "snapshot": snapshot,
+        "rootMountPreview": root_mount,
+        "rootMountCached": root_mount_cached,
+        "contextCached": context_cached,
+        "projectId": project_id,
+        "carryForwardContext": carry_forward_context,
+        "runtimeMetrics": runtime_metrics,
     }
 
 def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:

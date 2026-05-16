@@ -14,7 +14,7 @@ from ..llm_runtime import invoke_runtime_completion, load_runtime_candidate_mode
 from ..model_routing import build_model_route_decision
 from ..persistence import OutboxRepository, RedisCoordinator, RuntimeRepository, TaskRepository, get_persistence_runtime
 from ..persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID, DEFAULT_PROJECT_ID, DEFAULT_SPACE_ID
-from ..persistence.repositories import NodeRepository, WorkspaceBootstrapRepository
+from ..persistence.repositories import MemoryRepository, NodeRepository, WorkspaceBootstrapRepository
 from ..support import ensure_state_subdir, new_id, normalize_excerpt, relative_workspace_path, resolve_workspace_root, utc_now, write_json
 
 

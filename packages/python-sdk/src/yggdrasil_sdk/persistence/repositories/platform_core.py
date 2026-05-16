@@ -217,6 +217,8 @@ class RuntimeRepository:
             promptCompileArtifactId=str(payload.get("promptCompileArtifactId")) if payload.get("promptCompileArtifactId") is not None else None,
             requestRef=_external_ref(payload.get("requestRef")),
             responseRef=_external_ref(payload.get("responseRef")),
+            outputLabels=[str(label) for label in payload.get("outputLabels") or []],
+            assistantTextSummary=str(payload.get("assistantTextSummary")) if payload.get("assistantTextSummary") is not None else None,
             inputTokensUsed=int(payload.get("inputTokensUsed", 0)),
             outputTokensUsed=int(payload.get("outputTokensUsed", 0)),
             costUsed=float(payload.get("costUsed", 0.0)),
@@ -243,6 +245,8 @@ class RuntimeRepository:
             prompt_compile_artifact_id=record.prompt_compile_artifact_id,
             request_ref=record.request_ref.model_dump(mode="json") if record.request_ref is not None else None,
             response_ref=record.response_ref.model_dump(mode="json") if record.response_ref is not None else None,
+            output_labels=list(record.output_labels),
+            assistant_text_summary=record.assistant_text_summary,
             input_tokens_used=record.input_tokens_used,
             output_tokens_used=record.output_tokens_used,
             cost_used=record.cost_used,
@@ -274,6 +278,10 @@ class RuntimeRepository:
             model.request_ref = _external_ref(payload["requestRef"]).model_dump(mode="json") if payload["requestRef"] is not None else None
         if "responseRef" in payload:
             model.response_ref = _external_ref(payload["responseRef"]).model_dump(mode="json") if payload["responseRef"] is not None else None
+        if "outputLabels" in payload:
+            model.output_labels = [str(label) for label in payload["outputLabels"] or []]
+        if "assistantTextSummary" in payload:
+            model.assistant_text_summary = str(payload["assistantTextSummary"]) if payload["assistantTextSummary"] is not None else None
         if "inputTokensUsed" in payload:
             model.input_tokens_used = int(payload["inputTokensUsed"])
         if "outputTokensUsed" in payload:

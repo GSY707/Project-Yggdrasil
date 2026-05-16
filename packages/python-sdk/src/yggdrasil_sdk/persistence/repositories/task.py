@@ -48,6 +48,14 @@ class TaskRepository:
             )
         if "activeSnapshotId" in payload:
             task.active_snapshot_id = str(payload["activeSnapshotId"]) if payload["activeSnapshotId"] is not None else None
+        if "windowIndex" in payload:
+            task.window_index = max(int(payload["windowIndex"]), 1)
+        if "restartCount" in payload:
+            task.restart_count = max(int(payload["restartCount"]), 0)
+        if "cumulativeWindowSpanTokens" in payload:
+            task.cumulative_window_span_tokens = max(int(payload["cumulativeWindowSpanTokens"]), 0)
+        if "carryForwardLossCount" in payload:
+            task.carry_forward_loss_count = max(int(payload["carryForwardLossCount"]), 0)
         if "pauseRequested" in payload:
             task.pause_requested = bool(payload["pauseRequested"])
         if "lastSafeStopAt" in payload:
@@ -105,6 +113,12 @@ class TaskRepository:
                 run.ended_at = payload.get("endedAt") or utc_now()
         if "nextObjective" in payload:
             run.next_objective = str(payload["nextObjective"]) if payload["nextObjective"] is not None else None
+        if "windowIndex" in payload:
+            run.window_index = max(int(payload["windowIndex"]), 1)
+        if "restartCount" in payload:
+            run.restart_count = max(int(payload["restartCount"]), 0)
+        if "cumulativeWindowSpanTokens" in payload:
+            run.cumulative_window_span_tokens = max(int(payload["cumulativeWindowSpanTokens"]), 0)
         if "inputTokensUsed" in payload:
             run.input_tokens_used = int(payload["inputTokensUsed"])
         if "outputTokensUsed" in payload:
@@ -137,6 +151,10 @@ class TaskRepository:
             owner_profile_id=str(payload.get("ownerProfileId") or DEFAULT_OWNER_PROFILE_ID),
             execution_root_node_id=str(payload.get("executionRootNodeId") or new_id("node", project_id, branch_id, "execution", stable=True)),
             active_snapshot_id=None,
+            window_index=max(int(payload.get("windowIndex", 1)), 1),
+            restart_count=max(int(payload.get("restartCount", 0)), 0),
+            cumulative_window_span_tokens=max(int(payload.get("cumulativeWindowSpanTokens", 0)), 0),
+            carry_forward_loss_count=max(int(payload.get("carryForwardLossCount", 0)), 0),
             budget=budget.model_dump(by_alias=True, mode="json"),
             pause_requested=bool(payload.get("pauseRequested", False)),
             last_safe_stop_at=None,
@@ -170,6 +188,9 @@ class TaskRepository:
             route_decision_id=str(payload.get("routeDecisionId")) if payload.get("routeDecisionId") is not None else None,
             status=str(payload.get("status") or "initializing"),
             next_objective=str(payload.get("nextObjective")) if payload.get("nextObjective") is not None else None,
+            window_index=max(int(payload.get("windowIndex", 1)), 1),
+            restart_count=max(int(payload.get("restartCount", 0)), 0),
+            cumulative_window_span_tokens=max(int(payload.get("cumulativeWindowSpanTokens", 0)), 0),
             input_tokens_used=int(payload.get("inputTokensUsed", 0)),
             output_tokens_used=int(payload.get("outputTokensUsed", 0)),
             cost_used=float(payload.get("costUsed", 0.0)),

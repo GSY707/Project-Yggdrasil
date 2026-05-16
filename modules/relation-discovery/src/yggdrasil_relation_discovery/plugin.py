@@ -142,6 +142,12 @@ class RelationDiscoveryModule(BaseModulePlugin):
             created = []
             for proposal in proposals:
                 source_node = nodes_by_id[proposal["fromNodeId"]]
+                target_node = nodes_by_id[proposal["toNodeId"]]
+                source_work_tree_node_id = str(
+                    source_node.get("sourceWorkTreeNodeId")
+                    or target_node.get("sourceWorkTreeNodeId")
+                    or ""
+                ).strip() or None
                 edge = repository.create_edge(
                     {
                         "projectId": source_node["projectId"],
@@ -151,7 +157,11 @@ class RelationDiscoveryModule(BaseModulePlugin):
                         "toNodeId": proposal["toNodeId"],
                         "relationType": proposal["relationType"],
                         "weight": proposal["weight"],
-                        "reason": proposal["reason"],
+                        "reason": (
+                            f"{proposal['reason']} [source-work-tree:{source_work_tree_node_id}]"
+                            if source_work_tree_node_id is not None
+                            else proposal["reason"]
+                        ),
                         "createdBy": {"type": "module", "id": self.module_id},
                         "updatedBy": {"type": "module", "id": self.module_id},
                     }

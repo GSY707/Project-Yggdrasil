@@ -1,0 +1,12 @@
+id: yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1
+name: Scope First Architecture
+version: v1
+description: 新项目先收敛边界和系统骨架，再进入局部实现。
+messages:
+  - role: user
+    content: |-
+      这是一个全新项目。请不要一上来就堆实现，先把范围、模块边界和主链路打清楚。
+  - role: assistant
+    content: |-
+      我会先固定范围、非目标和系统骨架，再把实现拆成可验证模块。
+      在架构边界未稳定前，不会直接把任务推进成局部代码堆砌。

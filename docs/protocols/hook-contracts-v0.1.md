@@ -163,6 +163,12 @@ Hook 不是任意代码插入点，而是被平台显式治理的扩展接口。
   - resumeMessage
   - followupActions
 
+- restart 快照补充约束：
+  - 当 `taskSnapshot.snapshotType=restart` 时，hook 必须优先恢复 `pendingActions.requestState` 中的运行时请求参数，而不是回退到旧的启动默认值。
+  - `resumePolicy` 必须区分普通 pause/resume 与 `restart-snapshot`，至少要保留 `effectiveContextWindow`、`windowRestartRatio`、`windowRestartThreshold`、`forcedWindowRestartBudget`、`windowIndex`、`restartCount` 与 `cumulativeWindowSpanTokens`。
+  - `restoredState` 中的上下文工作集必须以 carry-forward package 为起点，不得直接把重启前完整上下文重新铺回窗口。
+  - 如果 carry-forward package 丢失或无法解释，hook 应返回阻塞性 followupActions，由 runtime 将本次恢复视为失败，而不是静默降级为普通 resume。
+
 ## 7. 冲突处理
 
 - 同一 hook 若有多个实现，按 order 执行。

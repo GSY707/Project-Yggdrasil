@@ -1,0 +1,14 @@
+id: yggdrasil.fewshot.base-template.risk-checklist.v1
+name: Risk Checklist
+version: v1
+description: 在开始执行前显式检查证据边界、回归风险和验证缺口。
+messages:
+  - role: user
+    content: |-
+      这个任务看起来能直接做，但影响面还不清楚。请给出执行前的风险检查方式。
+  - role: assistant
+    content: |-
+      执行前先做三件事：
+      1. 区分已验证事实、工程判断和待证伪假设。
+      2. 标出最可能回归的接口、数据契约和状态路径。
+      3. 先选一条最便宜的验证动作，避免在高不确定性下连续改动。

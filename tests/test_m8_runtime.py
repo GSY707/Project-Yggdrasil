@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -367,6 +368,71 @@ def test_build_scorecard_row_keeps_pause_resume_metrics_from_repair_attempts() -
     assert row["first_token_at"] == "2026-05-15T08:31:07.500000Z"
     assert row["first_token_seconds"] == 1.5
     assert row["agent_system"] == "yggdrasil-deepseek-direct-live"
+
+
+def test_build_scorecard_row_records_token_usage_and_context_lengths() -> None:
+    row = ops_runtime_scorecard._build_scorecard_row(
+        task_key="G4-CONTEXT-LONGFORM",
+        task_def={"appLabel": "coding-greenfield", "taskType": "coding", "workspaceProfile": "g4-longform-single-task"},
+        execution={
+            "verification": [{"returncode": 0}],
+            "taskRuntime": {
+                "task": {"status": "completed"},
+                "invocations": [
+                    {
+                        "record": {"inputTokensUsed": 3200, "outputTokensUsed": 400},
+                        "responsePayload": {
+                            "usage": {
+                                "inputTokens": 3200,
+                                "outputTokens": 400,
+                                "totalTokens": 3600,
+                                "cacheHitInputTokens": 2400,
+                                "cacheWriteInputTokens": 300,
+                                "nonCacheInputTokens": 800,
+                                "reasoningTokens": 120,
+                            },
+                            "contextLengthObservations": [
+                                {"phase": "beforeContextPruning", "estimatedTokens": 1800},
+                                {"phase": "taskEnd", "estimatedTokens": 1400},
+                            ],
+                        },
+                    }
+                ],
+            },
+            "firstTokenSeconds": 2.5,
+            "firstUsefulOutputSeconds": 18.0,
+            "issues": [],
+            "traceIds": [],
+            "toolExecutionNames": [],
+            "diffSummary": {},
+            "taskWorkspace": "C:/tmp/g4-longform",
+            "auditLevel": "default",
+            "startAt": "2026-05-15T15:16:06Z",
+            "firstTokenAt": "2026-05-15T15:16:08.500000Z",
+            "firstUsefulOutputAt": "2026-05-15T15:16:24Z",
+            "endAt": "2026-05-15T15:16:52Z",
+            "totalDurationSeconds": 46.0,
+            "pauseResumeAttempted": False,
+            "pauseResumeSuccess": False,
+        },
+        fastest_first_useful=18.0,
+        provider="deepseek_direct",
+        model="deepseek-v4-pro",
+        batch_id="G4-PROVIDER-MATRIX",
+        environment_id="g4-provider-matrix",
+        coordination_backend="memory",
+    )
+
+    assert row["input_tokens_used"] == 3200
+    assert row["output_tokens_used"] == 400
+    assert row["total_tokens_used"] == 3600
+    assert row["cache_hit_input_tokens"] == 2400
+    assert row["non_cache_input_tokens"] == 800
+    assert row["cache_write_input_tokens"] == 300
+    assert row["reasoning_tokens"] == 120
+    assert row["max_context_length_tokens"] == 1800
+    observations = json.loads(row["context_length_observations_json"])
+    assert observations[0]["phase"] == "beforeContextPruning"
 
 
 def test_append_scorecard_rows_inserts_newline_after_header(tmp_path: Path) -> None:
