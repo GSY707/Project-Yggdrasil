@@ -39,7 +39,7 @@
 
 - G2 路线定义与出口标准：`docs/research/final-goal-roadmap-2026-04-30.md`
 - 当前阶段与待办：`todo.md`
-- 当前 G2 推进状态：`docs/research/g2-stage-progress-2026-05-04.md`
+- 当前 G2 推进状态：`docs/research/归档/g2-stage-progress-2026-05-04.md`
 - 性能与质量基线：`docs/QUALITY_BASELINE.md`
 - 运行时与提示词实现：`packages/python-sdk/src/yggdrasil_sdk/`、`applications/`
 - 真实用户验证材料：`evaluation/fixtures/real-user-validation/`
@@ -90,7 +90,7 @@
 #### A. 重复执行证据不足
 
 - 当前 scorecard 只有 3 条记录，见 `evaluation/fixtures/real-user-validation/scorecard-2026-05-04.csv`。
-- 当前 G2 进展文档已明确指出“当前基线不能替代同一批窄路径任务重复执行证据”，见 [docs/research/g2-stage-progress-2026-05-04.md](docs/research/g2-stage-progress-2026-05-04.md#L12)。
+- 当前 G2 进展文档已明确指出“当前基线不能替代同一批窄路径任务重复执行证据”，见 [docs/research/归档/g2-stage-progress-2026-05-04.md](docs/research/归档/g2-stage-progress-2026-05-04.md#L12)。
 - 当前 TODO 第 1 项仍是“连续 3 轮重复执行 `YGG-CG-01` + `YGG-CG-03`”，见 [todo.md](todo.md#L45)。
 
 #### A-1. 真实 LLM 调用证据已经恢复到 smoke 级

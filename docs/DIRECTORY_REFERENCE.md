@@ -453,32 +453,26 @@ docs/
 │   │                               #   工作树研究草案：任务分解、优先图、熵增控制与阶段性重启的结构化定义
 │   ├── hypergraph-reasoning-protocol-draft-2026-05-05.md
 │   │                               #   超图推理研究草案：关系平铺、关系原因升维与模式识别的高阶推理方向
-│   ├── prompt-engineering-and-seed-templates-v0.1.md
-│   │                               #   提示词工程、PromptProfile、SeedTemplate 设计调研
 │   ├── real-user-validation-plan-2026-04-30.md
-│   │                               #   真实用户验证计划：冻结材料、时间盒、评分口径与执行顺序
+│   │                               #   参考版：真实用户验证计划的复用要点；原文已归档
 │   ├── real-user-validation-baseline-freeze-2026-04-30.md
-│   │                               #   真实用户验证基线与材料冻结记录
+│   │                               #   参考版：材料冻结与口径锁定实践；原文已归档
 │   ├── real-user-validation-internal-pilot-deepseek-2026-04-30.md
-│   │                               #   DeepSeek V4 provider 更新后的内部试跑、调试与成本记录
+│   │                               #   参考版：内部试跑复盘模板；原文已归档
 │   ├── g2-closeout-2026-05-15.md
-│   │                               #   Gate 2 正式闭环报告：官方复跑 3 轮、scorecard 汇总与后续非阻塞动作
+│   │                               #   参考版：Gate 2 闭环结论与复用口径；原文已归档
 │   ├── g3-closeout-2026-05-15.md
-│   │                               #   Gate 3 正式闭环报告：首 token、work tree、execute-server 隔离、worker retry 与 DeepSeek paid live batch
+│   │                               #   参考版：Gate 3 闭环结论与复用口径；原文已归档
 │   ├── g4-closeout-2026-05-15.md
-│   │                               #   Gate 4 正式闭环报告：few-shot 执行链、三场景 multiscene suite、provider matrix 与 release gate
+│   │                               #   参考版：Gate 4 闭环结论与复用口径；原文已归档
 │   ├── g4-assessment-and-roadmap-2026-05-15.md
 │   │                               #   Gate 4 评估与完美实现路线图：多场景官方范围、few-shot 执行链、provider 矩阵与 CI 门禁
 │   ├── g4-long-task-window-restart-baseline-2026-05-15.md
 │   │                               #   Gate 4 长任务与窗口重启基线研究：LongCat 128k 基线、restart 闭环缺口、任务编排与 work tree 路线
-│   ├── g4-real-task-window-parity-validation-2026-05-16.md
-│   │                               #   4M 真实任务首轮窗口对照记录：初版 scorecard parity 结论，后续已被保留日志重跑在交付轴上修正
-│   ├── pseudo-infinite-context-window-roadmap-2026-05-16.md
-│   │                               #   伪无限上下文窗口研究与优先级路线：当前已确认 restart 技术闭环成立，但交付闭环仍待修正
 │   ├── g4-real-task-window-parity-rerun-log-audit-2026-05-16.md
 │   │                               #   4M 真实任务保留日志重跑记录：窗口 1/2 行为、保留沙箱路径、最终输出偏移与根因分析
-│   ├── g2-stage-progress-2026-05-04.md
-│   │                               #   Gate 2 推进记录：现已补录 2026-05-15 官方复跑闭环、稳定性复跑与出口判定
+│   ├── pseudo-infinite-context-window-roadmap-2026-05-16.md
+│   │                               #   伪无限上下文窗口研究与优先级路线：当前已确认 restart 技术闭环成立，但交付闭环仍待修正
 │   ├── 系统核心理念.md
 │   │                               #   记忆树系统的核心设计哲学说明
 │   ├── 系统概念/
@@ -492,18 +486,7 @@ docs/
 │   │   └── Project-Yggdrasil 未来多模态潜空间智能体架构.md
 │   │                               #   面向远期能力的前瞻研究草案，不纳入当前 Gate 承诺范围
 │   ├── 归档/
-│   │   ├── g1-stage-assessment-2026-05-04.md
-│   │   │                           #   G1 待真实任务复核版历史评估；2026-05-15 起由正式闭环结果覆盖
-│   │   ├── g2-gap-assessment-2026-05-04.md
-│   │   │                           #   G2 未闭环阶段的差距分析归档
-│   │   ├── protocol-integration-plan-2026-05-05.md
-│   │   │                           #   G1/G2 过渡期的协议纳入计划归档
-│   │   └── note-legacy-2026-05-15.md
-│   │                               #   根目录旧开发者笔记归档
-│   ├── runtime-optimization-plan-2026-04-29.md
-│   │                               #   运行时优化总计划：先削减等待与重复装配，再决定是否需要 Rust 重写
-│   └── test-suite-cpu-time-analysis-2026-04-29.md
-│                                   #   pytest CPU/等待时间拆分：Redis 超时、MCP bridge stdio、运行时与控制面热点
+│   │                               #   历史归档目录（按约定不在目录索引中展开文件列表）
 ```
 
 ---
@@ -730,11 +713,11 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
-| `docs/research/g4-real-task-window-parity-validation-2026-05-16.md` | 4M 真实任务首轮窗口对照验证：初版 scorecard parity 结论，后续已被保留日志重跑在交付轴上修正 |
 | `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测，以及“技术闭环已成立但交付闭环未证实”的最新口径 |
 | `docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
 | `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` | 4M 真实任务保留日志重跳记录：保留沙筃路径、窗口级行为、最终输出、根因分析、收紧 acceptance 后的正式 failed run，以及工程现实与理论设想差距和推进路线（responseRequirements / restartMessage / snapshot 修复） |
-| `docs/research/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务、难度分级（L1-L5）、逐项实现路径与执行优先级 |
+| `docs/research/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务、难度分级（L1-L5）、逐项实现路径与执行优先级，并可作为“记忆树替代上下文窗口”主线的影响排序输入 |
+| `docs/research/memory-tree-agent-executable-roadmap-2026-05-16.md` | 记忆树 Agent 可执行路线图：按“写树-取树-恢复-验收”闭环重排 26 项任务，给出逐项输入/实现/验证/证据/退出条件的工程化执行稿 |
 | `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
 | `docs/research/future/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
 | `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |

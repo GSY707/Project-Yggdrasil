@@ -1,6 +1,8 @@
 
 # 世界树计划 · G4 真实任务窗口对照验证（2026-05-16）
 
+> 归档说明：本文档已归档。当前以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。
+
 - 文档状态：Initial Scorecard Parity Finding, Superseded On Delivery Axis
 - 日期：2026-05-16
 - 官方命令：`corepack pnpm eval:g4:real-task-parity`
