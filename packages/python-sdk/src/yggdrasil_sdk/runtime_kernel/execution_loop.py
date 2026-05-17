@@ -230,6 +230,7 @@ def _materialize_runtime_context_items(
     execution_root_id: str,
     window_index: int,
     source_work_tree_node_id: str | None,
+    source_run_id: str | None,
 ) -> list[str]:
     if not current_context:
         return []
@@ -292,6 +293,7 @@ def _materialize_runtime_context_items(
                     "floatScore": 0.3,
                     "windowIndex": window_index,
                     "sourceWorkTreeNodeId": source_work_tree_node_id,
+                    "sourceRunId": source_run_id,
                     "createdBy": actor,
                     "updatedBy": actor,
                     "changeReason": "runtime-context-materialization",
@@ -305,6 +307,7 @@ def _materialize_runtime_context_items(
                     "content": content,
                     "windowIndex": window_index,
                     "sourceWorkTreeNodeId": source_work_tree_node_id,
+                    "sourceRunId": source_run_id,
                     "changeReason": "runtime-context-materialization",
                     "updatedBy": actor,
                 }
@@ -400,7 +403,15 @@ def _normalize_memory_tag_action(value: str | None, *, has_node_id: bool) -> str
     return candidate if candidate in {"create", "append", "replace"} else ("append" if has_node_id else "create")
 
 
-def _extract_assistant_memory_write_tags(assistant_text: str) -> dict[str, Any]:
+def _extract_assistant_memory_write_tags(assistant_text: str, *, enabled: bool) -> dict[str, Any]:
+    if not enabled:
+        return {
+            "cleanAssistantText": str(assistant_text or "").strip(),
+            "writes": [],
+            "blocked": [],
+            "detectedCount": 0,
+        }
+
     parsed_writes: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
 
@@ -410,6 +421,7 @@ def _extract_assistant_memory_write_tags(assistant_text: str) -> dict[str, Any]:
         content = str(match.group("content") or "").strip()
         node_id = str(attributes.get("nodeid") or "").strip()
         title = str(attributes.get("title") or "").strip()
+        action_raw = str(attributes.get("action") or "").strip().lower()
         if not content:
             blocked.append(
                 {
@@ -418,7 +430,7 @@ def _extract_assistant_memory_write_tags(assistant_text: str) -> dict[str, Any]:
                     "tagPreview": normalize_excerpt(raw_tag, 160),
                 }
             )
-            return raw_tag
+            return ""
         if not node_id and not title:
             blocked.append(
                 {
@@ -427,7 +439,17 @@ def _extract_assistant_memory_write_tags(assistant_text: str) -> dict[str, Any]:
                     "tagPreview": normalize_excerpt(raw_tag, 160),
                 }
             )
-            return raw_tag
+            return ""
+        if action_raw and action_raw not in {"create", "append", "replace"}:
+            blocked.append(
+                {
+                    "status": "blocked",
+                    "reason": "invalid-action",
+                    "action": action_raw,
+                    "tagPreview": normalize_excerpt(raw_tag, 160),
+                }
+            )
+            return ""
         parsed_writes.append(
             {
                 "rawTag": raw_tag,
@@ -464,14 +486,14 @@ def _assistant_memory_write_annotation(
 ) -> dict[str, Any]:
     return {
         "id": new_id("srcann", task.id, run.id, "assistant-memory-tag", index, stable=True),
-        "sourceType": "system",
+        "sourceType": "assistant-memory-tag",
         "sourceRef": {
             "type": "package-entry",
             "locator": f"agent-runtime/runtime/model-invocations/{invocation_id}#memory-write-{index}",
         },
         "excerpt": normalize_excerpt(str(write.get("rawTag") or ""), 240),
         "inferenceSummary": f"Assistant output memory tag ({write.get('action') or 'create'}) was applied at a safe stop.",
-        "confidence": 1.0,
+        "confidence": 0.95,
         "createdBy": {"type": "module", "id": "runtime-kernel"},
     }
 
@@ -514,7 +536,11 @@ def _apply_assistant_memory_write_tags(
     llm_result: dict[str, Any],
     execution_actor_id: str,
 ) -> dict[str, Any]:
-    parsed = _extract_assistant_memory_write_tags(str(llm_result.get("assistantText") or ""))
+    memory_tag_writes_enabled = bool(request.get("memoryWriteTagsEnabled", True))
+    parsed = _extract_assistant_memory_write_tags(
+        str(llm_result.get("assistantText") or ""),
+        enabled=memory_tag_writes_enabled,
+    )
     llm_result["assistantText"] = parsed["cleanAssistantText"]
     writes = [item for item in parsed["writes"] if isinstance(item, dict)]
     work_tree_node_id = _work_tree_node_id_from_request(request)
@@ -802,6 +828,11 @@ def _retrieve_context_from_memory_tree(
         execution_root_id=execution_root_id,
         window_index=window_index,
         source_work_tree_node_id=work_tree_node_id,
+        source_run_id=(
+            str(request.get("agentRunId") or "").strip()
+            or str(request.get("parentRunId") or "").strip()
+            or None
+        ),
     )
 
     repository = NodeRepository(session)
@@ -1123,16 +1154,21 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 root_mount["rootSummary"] = " ".join(
                     item for item in [root_mount.get("rootSummary") or "", str(memory_context["summary"])] if item
                 ).strip()
-            request["memoryRetrievalState"] = {
+            retrieval_state = {
                 "requestId": str((memory_context.get("retrievalRequest") or {}).get("id") or ""),
-                "summary": memory_context.get("summary"),
-                "matchedNodeRefs": [dict(item) for item in protected_items if isinstance(item, dict)],
+                "summary": str(memory_context.get("summary") or ""),
+                "matchedNodeRefs": [
+                    dict(item)
+                    for item in (memory_context.get("protectedItems") or [])
+                    if isinstance(item, dict)
+                ],
                 "materializedNodeIds": [str(node_id) for node_id in memory_context.get("materializedNodeIds") or []],
                 "reverseTraceMode": bool((memory_context.get("retrievalRequest") or {}).get("reverseTraceMode", False)),
                 "workTreeNodeId": (memory_context.get("retrievalRequest") or {}).get("workTreeNodeId"),
                 "windowIndex": (memory_context.get("retrievalRequest") or {}).get("windowIndex"),
             }
-            root_mount["memoryRetrievalState"] = dict(request["memoryRetrievalState"])
+            request["memoryRetrievalState"] = retrieval_state
+            root_mount["memoryRetrievalState"] = dict(retrieval_state)
             runtime_timings["memoryRetrievalMs"] = _elapsed_ms(memory_retrieval_started_at)
 
             takeover_prepare_started_at = perf_counter()

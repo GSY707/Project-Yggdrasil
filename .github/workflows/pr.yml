@@ -49,3 +49,6 @@ jobs:
 
       - name: Build web workbench
         run: pnpm run web:build
+
+      - name: Fast Python tests (non-slow)
+        run: uv run pytest -m "not slow"

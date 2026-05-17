@@ -268,6 +268,12 @@ def test_observability_summary_reports_exporters(monkeypatch) -> None:
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
     monkeypatch.delenv("YGGDRASIL_LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("YGGDRASIL_LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
+    monkeypatch.delenv("YGGDRASIL_OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("YGGDRASIL_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.delenv("YGGDRASIL_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", raising=False)
     summary = summarize_observability(limit=5)
     assert summary["exporters"]["otel"]["configured"] is False
     assert summary["exporters"]["langfuse"]["configured"] is False

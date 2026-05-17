@@ -148,12 +148,21 @@ def test_context_pruning_retains_protected_refs() -> None:
                     "content": "这段内容和当前目标没有直接关系。",
                     "importance": 0.1,
                 },
+                {
+                    "id": "ctx_response_requirements",
+                    "kind": "responseRequirements",
+                    "title": "responseRequirements",
+                    "content": "result/evidence/pending/incomplete 必须齐全。",
+                    "importance": 0.0,
+                },
             ],
         }
     )
 
     retained_ids = {reference["id"] for reference in plan["retainedRefs"]}
     assert "node_keep" in retained_ids
+    assert "ctx_response_requirements" in retained_ids
+    assert plan["pruningReport"]["kept"]
 
     executed = plugin.execute(
         {
@@ -343,6 +352,32 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
         assert "<memory-write" not in execution_notes[0].content
 
 
+def test_memory_write_tag_parser_blocks_invalid_action_and_supports_disable_switch() -> None:
+    parsed_enabled = runtime_execution_loop._extract_assistant_memory_write_tags(
+        (
+            "开始输出。"
+            '<memory-write title="非法动作" action="merge">不应写入</memory-write>'
+            '<memory-write title="合法动作" action="append">可写入</memory-write>'
+        ),
+        enabled=True,
+    )
+    assert parsed_enabled["detectedCount"] == 2
+    assert len(parsed_enabled["writes"]) == 1
+    assert parsed_enabled["writes"][0]["title"] == "合法动作"
+    assert len(parsed_enabled["blocked"]) == 1
+    assert parsed_enabled["blocked"][0]["reason"] == "invalid-action"
+    assert "memory-write" not in parsed_enabled["cleanAssistantText"]
+
+    parsed_disabled = runtime_execution_loop._extract_assistant_memory_write_tags(
+        '<memory-write title="不解析">保持原文</memory-write>',
+        enabled=False,
+    )
+    assert parsed_disabled["detectedCount"] == 0
+    assert parsed_disabled["writes"] == []
+    assert parsed_disabled["blocked"] == []
+    assert parsed_disabled["cleanAssistantText"] == '<memory-write title="不解析">保持原文</memory-write>'
+
+
 def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -437,6 +472,7 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
     assert second_run["result"]["status"] == "completed"
     assert len(invoke_calls) == 1
     assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["memoryRetrievalState"]["requestId"]
+    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["memoryRetrievalState"]["summary"] is not None
     assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
 
     with runtime.session_scope() as session:

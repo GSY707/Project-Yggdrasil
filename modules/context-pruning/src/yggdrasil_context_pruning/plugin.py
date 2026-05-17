@@ -30,6 +30,24 @@ def _estimated_tokens(item: dict[str, Any]) -> int:
     return max(1, len(str(item.get("content", ""))) // 4)
 
 
+def _is_contract_protected_item(item: dict[str, Any]) -> bool:
+    marker_parts = [
+        str(item.get("id") or ""),
+        str(item.get("kind") or ""),
+        str(item.get("title") or ""),
+    ]
+    marker = " ".join(marker_parts).lower()
+    return any(
+        token in marker
+        for token in (
+            "responserequirements",
+            "restartmessage",
+            "worktree",
+            "takeoverprotocol",
+        )
+    )
+
+
 class ContextPruningModule(BaseModulePlugin):
     module_id = "context-pruning"
 
@@ -101,6 +119,9 @@ class ContextPruningModule(BaseModulePlugin):
         budget = payload.get("budget") if isinstance(payload.get("budget"), dict) else {}
         protected_items = payload.get("protectedItems") if isinstance(payload.get("protectedItems"), list) else []
         protected_refs = [_normalize_ref(item, "node", index) for index, item in enumerate(protected_items)]
+        for index, item in enumerate(current_context):
+            if isinstance(item, dict) and _is_contract_protected_item(item):
+                protected_refs.append(_normalize_ref(item.get("ref") or item.get("entityRef") or item.get("id"), "context-item", index))
         protected_ids = {item.id for item in protected_refs}
         max_retained_tokens = int(
             budget.get("maxRetainedTokens")
@@ -115,6 +136,8 @@ class ContextPruningModule(BaseModulePlugin):
                 continue
             item_ref = _normalize_ref(item.get("ref") or item.get("entityRef") or item.get("id"), "node", index)
             score = float(item.get("importance", 0.5)) + _keyword_overlap(next_objective, item)
+            if str(item.get("kind") or "") in {"retrieval-summary", "summary"}:
+                score -= 0.25
             if item_ref.id in protected_ids:
                 score += 10.0
             scored_items.append(
@@ -126,11 +149,13 @@ class ContextPruningModule(BaseModulePlugin):
                 }
             )
 
-        scored_items.sort(key=lambda item: item["score"], reverse=True)
+        scored_items.sort(key=lambda item: (-item["score"], item["ref"].id))
         retained_refs: list[EntityRef] = []
         compressed_refs: list[EntityRef] = []
         dropped_refs: list[EntityRef] = []
         retained_tokens = 0
+        keep_reasons: list[dict[str, Any]] = []
+        drop_reasons: list[dict[str, Any]] = []
 
         for scored_item in scored_items:
             ref = scored_item["ref"]
@@ -139,11 +164,29 @@ class ContextPruningModule(BaseModulePlugin):
             if is_protected or retained_tokens + tokens <= max_retained_tokens:
                 retained_refs.append(ref)
                 retained_tokens += tokens
+                keep_reasons.append(
+                    {
+                        "ref": ref.model_dump(by_alias=True, mode="json"),
+                        "reason": "protected" if is_protected else "within-budget",
+                    }
+                )
                 continue
             if scored_item["score"] >= 1.0:
                 compressed_refs.append(ref)
+                drop_reasons.append(
+                    {
+                        "ref": ref.model_dump(by_alias=True, mode="json"),
+                        "reason": "compressed-low-priority",
+                    }
+                )
                 continue
             dropped_refs.append(ref)
+            drop_reasons.append(
+                {
+                    "ref": ref.model_dump(by_alias=True, mode="json"),
+                    "reason": "dropped-under-budget-pressure",
+                }
+            )
 
         plan = ContextPruningPlan(
             id=new_id("prune", task_id, source_run_id),
@@ -167,6 +210,10 @@ class ContextPruningModule(BaseModulePlugin):
         response["estimatedCompressedTokens"] = sum(
             scored_item["tokens"] for scored_item in scored_items if scored_item["ref"] in compressed_refs
         )
+        response["pruningReport"] = {
+            "kept": keep_reasons,
+            "droppedOrCompressed": drop_reasons,
+        }
         return response
 
     def execute(self, payload: dict[str, object]) -> dict[str, object]:
@@ -175,7 +222,7 @@ class ContextPruningModule(BaseModulePlugin):
         normalized_plan = {
             key: value
             for key, value in raw_plan.items()
-            if key not in {"estimatedRetainedTokens", "estimatedCompressedTokens"}
+            if key not in {"estimatedRetainedTokens", "estimatedCompressedTokens", "pruningReport"}
         }
         pruning_plan = ContextPruningPlan.model_validate(normalized_plan)
         executed_plan = pruning_plan.model_copy(update={"status": "executed"})

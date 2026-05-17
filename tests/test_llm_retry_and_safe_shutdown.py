@@ -62,8 +62,20 @@ class TestGatewayRetry:
             def __exit__(self, *_):
                 pass
 
+            def readline(self):
+                # Return the full body on first call (non-SSE path in _assemble_stream_response),
+                # then empty bytes to signal EOF on subsequent calls.
+                if self._data:
+                    line, self._data = self._data, b""
+                    return line
+                return b""
+
         def fake_urlopen(req, timeout=None):
             nonlocal call_count
+            if call_count >= len(side_effects):
+                raise AssertionError(
+                    f"fake_urlopen called too many times: call_count={call_count}, configured={len(side_effects)}"
+                )
             effect = side_effects[call_count]
             call_count += 1
             if isinstance(effect, Exception):

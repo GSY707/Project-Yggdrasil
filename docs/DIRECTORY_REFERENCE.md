@@ -1,6 +1,6 @@
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/15 更新：Gate 4 正式闭环、few-shot 执行链、官方三场景评测、Prompt 控制面 few-shot 可见性与 provider matrix release gate 同步）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
 
 ---
 
@@ -272,8 +272,10 @@ packages/
 
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
-- `runtime_kernel/execution_loop.py` 现在会先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化为 temporary memory nodes、通过 `MEMORY_RETRIEVE_EXPAND` 重建 prompt 工作集，并把 retrieval state / takeoverProtocol / memory tag writes 写回 snapshot requestState、Prompt artifact 与 ModelInvocation 审计；对 restart carry-forward 恢复场景会按窗口预算裁剪检索结果，避免重复超窗重启。
+- `runtime_kernel/execution_loop.py` 现在会先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化为 temporary memory nodes（含 `sourceWorkTreeNodeId/sourceRunId`）、通过 `MEMORY_RETRIEVE_EXPAND` 重建 prompt 工作集，并把冻结字段的 retrieval state / takeoverProtocol / memory tag writes 写回 snapshot requestState、Prompt artifact 与 ModelInvocation 审计；对 restart carry-forward 恢复场景会按窗口预算裁剪检索结果，避免重复超窗重启。
+- `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 提供执行节点级进度；当前完成判定仍由 runtime 在写入执行结果后直接落 `completed`，而不是由独立 verifier 二次裁决。
 - `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，用于核查当前 prompt 是否确实基于记忆树工作集而非旧摘要上下文。
+- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链：工具描述符先注册为 LLM function spec，执行期异常会被包成 `{status:error,error:...}` 的 tool message 回填到 conversation，因此默认不是“吞错”，但 runtime 当前也不会基于工具失败自动阻止任务完成，是否返工主要仍取决于模型后续回合和交付协议。
 - `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 

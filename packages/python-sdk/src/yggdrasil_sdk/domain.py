@@ -149,7 +149,7 @@ class SourceAnnotationRecord(BaseModel):
     branch_id: str = Field(alias="branchId")
     owner_kind: Literal["node", "edge", "version", "task", "pr", "package"] = Field(alias="ownerKind")
     owner_id: str = Field(alias="ownerId")
-    source_type: Literal["external", "memory", "human", "inference", "system"] = Field(alias="sourceType")
+    source_type: Literal["external", "memory", "human", "inference", "system", "assistant-memory-tag"] = Field(alias="sourceType")
     source_ref: ExternalRef | None = Field(default=None, alias="sourceRef")
     excerpt: str | None = None
     inference_summary: str | None = Field(default=None, alias="inferenceSummary")

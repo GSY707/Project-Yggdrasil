@@ -33,6 +33,11 @@ STOP_WORDS = {
     "与",
 }
 
+_PLAN_TREE_TARGET_CHARS = 320
+_PLAN_TREE_DEPTH = 2
+_MAX_RETRIEVAL_LEAF_NODES = 4
+_MAX_RETRIEVAL_RELATED_NODES = 4
+
 
 def _tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[A-Za-z0-9_\-\u4e00-\u9fff]+", text.lower())
@@ -233,8 +238,8 @@ class TextMemoryModule(BaseModulePlugin):
 
     def preprocess_import(self, payload: dict[str, object]) -> dict[str, object]:
         import_job = payload.get("importJob") if isinstance(payload.get("importJob"), dict) else {}
-        policy = payload.get("importPolicy") if isinstance(payload.get("importPolicy"), dict) else import_job.get("importPolicy")
-        target_chars = int((policy or {}).get("segmentTargetChars") or 320)
+        import_policy = payload.get("importPolicy") if isinstance(payload.get("importPolicy"), dict) else {}
+        target_chars = int(import_policy.get("segmentTargetChars") or _PLAN_TREE_TARGET_CHARS)
         raw_ref = payload.get("rawRef") if isinstance(payload.get("rawRef"), dict) else None
         ordered_fragments = payload.get("orderedFragments") if isinstance(payload.get("orderedFragments"), list) else None
         if ordered_fragments:
@@ -383,6 +388,8 @@ class TextMemoryModule(BaseModulePlugin):
             "candidateEdges": candidate_edges,
             "candidateSourceAnnotations": candidate_annotations,
             "discardedFragmentRefs": discarded_fragment_refs,
+            "nodeCount": len(candidate_nodes),
+            "depth": _PLAN_TREE_DEPTH,
             "confidence": min(1.0, confidence),
             "rationale": (
                 f"Generated {len(candidate_nodes)} candidate nodes from {len(normalized_fragments)} fragments "
@@ -423,8 +430,8 @@ class TextMemoryModule(BaseModulePlugin):
             for seed_ref in retrieval_request.get("seedNodeRefs", [])
             if isinstance(seed_ref, dict) and seed_ref.get("id")
         }
-        max_related_nodes = int(retrieval_request.get("maxRelatedNodes") or 4)
-        max_leaf_nodes = int(retrieval_request.get("maxLeafNodes") or 6)
+        max_related_nodes = min(max(int(retrieval_request.get("maxRelatedNodes") or _MAX_RETRIEVAL_RELATED_NODES), 0), _MAX_RETRIEVAL_RELATED_NODES)
+        max_leaf_nodes = min(max(int(retrieval_request.get("maxLeafNodes") or _MAX_RETRIEVAL_LEAF_NODES), 1), _MAX_RETRIEVAL_LEAF_NODES)
 
         ranked_nodes = sorted(
             nodes,
@@ -448,8 +455,22 @@ class TextMemoryModule(BaseModulePlugin):
                 child_name_map[parent_id].append(str(node.get("title")))
 
         related_name_map: dict[str, list[str]] = defaultdict(list)
-        related_edges = []
-        for edge in edges:
+        related_edges: list[dict[str, Any]] = []
+        sorted_edges = sorted(
+            edges,
+            key=lambda edge: (
+                0
+                if work_tree_node_id
+                and (
+                    str(node_by_id.get(str(edge.get("fromNodeId")), {}).get("sourceWorkTreeNodeId") or "").strip() == work_tree_node_id
+                    or str(node_by_id.get(str(edge.get("toNodeId")), {}).get("sourceWorkTreeNodeId") or "").strip() == work_tree_node_id
+                )
+                else 1,
+                -float(edge.get("weight", 0.0)),
+                str(edge.get("id") or ""),
+            ),
+        )
+        for edge in sorted_edges:
             from_node_id = edge.get("fromNodeId")
             to_node_id = edge.get("toNodeId")
             if from_node_id in matched_node_ids and to_node_id in node_by_id and len(related_edges) < max_related_nodes:
@@ -492,7 +513,8 @@ class TextMemoryModule(BaseModulePlugin):
             "sourceAnnotationRefs": matched_annotations,
             "naturalLanguageSummary": (
                 f"Retrieved {len(matched_nodes)} nodes for query '{query_text or 'seeded retrieval'}'. "
-                f"Top nodes: {summary_titles}."
+                f"Top nodes: {summary_titles}. "
+                f"Bounded expansion kept at most {max_leaf_nodes} nodes and {max_related_nodes} related links."
                 + (
                     f" Reverse trace anchored at work tree node {work_tree_node_id}."
                     if reverse_trace_mode and work_tree_node_id is not None

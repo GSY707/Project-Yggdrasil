@@ -60,6 +60,79 @@ def test_text_memory_plan_tree_and_expand_retrieval() -> None:
     assert retrieval["matchedNodeRefs"]
     assert retrieval["nodePayloads"]
     assert retrieval["naturalLanguageSummary"]
+    assert len(retrieval["matchedNodeRefs"]) <= 4
+
+
+def test_text_memory_plan_tree_is_stable_for_same_input() -> None:
+    plugin = TextMemoryModule()
+    payload = {
+        "importJob": {
+            "id": "import_stable",
+            "projectId": "project_default",
+            "spaceId": "space_default",
+            "branchId": "branch_main",
+        },
+        "sourceTexts": [
+            "任务目标是让记忆树成为主记忆，并确保跨窗口恢复时保持同一执行指针。",
+            "检索扩展必须有界，且优先与当前 work tree 节点关联的线索。",
+        ],
+    }
+    fragments = plugin.preprocess_import(payload)["orderedFragments"]
+    first = plugin.plan_tree({"importJob": payload["importJob"], "orderedFragments": fragments})
+    second = plugin.plan_tree({"importJob": payload["importJob"], "orderedFragments": fragments})
+
+    first_nodes = [node["id"] for node in first["candidateNodes"]]
+    second_nodes = [node["id"] for node in second["candidateNodes"]]
+    first_edges = [edge["id"] for edge in first["candidateEdges"]]
+    second_edges = [edge["id"] for edge in second["candidateEdges"]]
+    assert first_nodes == second_nodes
+    assert first_edges == second_edges
+    assert first["depth"] == 2
+    assert second["depth"] == 2
+
+
+def test_text_memory_expand_retrieval_is_bounded_by_caps() -> None:
+    plugin = TextMemoryModule()
+    preprocess = plugin.preprocess_import(
+        {
+            "importJob": {
+                "id": "import_bounds",
+                "projectId": "project_default",
+                "spaceId": "space_default",
+                "branchId": "branch_main",
+            },
+            "sourceTexts": [
+                "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z。" * 4,
+            ],
+        }
+    )
+    tree_plan = plugin.plan_tree(
+        {
+            "importJob": {
+                "id": "import_bounds",
+                "projectId": "project_default",
+                "spaceId": "space_default",
+                "branchId": "branch_main",
+            },
+            "orderedFragments": preprocess["orderedFragments"],
+        }
+    )
+    retrieval = plugin.expand_retrieval(
+        {
+            "retrievalRequest": {
+                "id": "retr_bounded",
+                "queryText": "A B C",
+                "maxLeafNodes": 99,
+                "maxRelatedNodes": 99,
+                "tokenBudget": 1,
+            },
+            "candidateNodes": tree_plan["candidateNodes"],
+            "candidateEdges": tree_plan["candidateEdges"],
+            "candidateSourceAnnotations": tree_plan["candidateSourceAnnotations"],
+        }
+    )
+    assert len(retrieval["matchedNodeRefs"]) <= 4
+    assert retrieval["truncated"] is True
 
 
 def test_model_router_returns_weighted_route_decision() -> None:
