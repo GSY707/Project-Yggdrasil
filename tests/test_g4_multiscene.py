@@ -301,3 +301,57 @@ def test_g4_live_provider_matrix_case_handles_window_restart_chain() -> None:
     assert detail["windowTransitionCount"] == 2
     assert detail["restartSuccessRate0_1"] == 1.0
     assert detail["liveScenario"]["runtimeMetrics"]["restartCount"] == 2
+
+
+def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:
+    report = suite_cases_g4._g4_restart_stability_report(
+        {"restartStabilityTiers": [30, 60, 100]},
+        {"restartCount": 100},
+        acceptance_pass=1,
+    )
+
+    assert report["enabled"] is True
+    assert report["passed"] is True
+    assert report["restartSuccessRate0_1"] == 1.0
+    assert [item["targetRestarts"] for item in report["tiers"]] == [30, 60, 100]
+
+
+def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> None:
+    payload = evaluation_scorer._aggregate_case_metrics(
+        [
+            {
+                "id": "short",
+                "title": "short",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-short64k",
+                        "parityRole": "short",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 94.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+            {
+                "id": "long",
+                "title": "long",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-long128k",
+                        "parityRole": "long",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 96.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+        ]
+    )
+
+    parity = payload["realTaskWindowParity"]
+    assert parity["goalCompletionParity0_1"] == 1
+    assert parity["deliveryEquivalence0_1"] == 1
+    assert parity["qualityDeltaToLongWindow0_100"] == 2.0
+    assert parity["parityPassed0_1"] == 1

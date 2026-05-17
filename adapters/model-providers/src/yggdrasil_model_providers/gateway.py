@@ -44,11 +44,29 @@ class ProviderConfig:
 PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
     "longcat": {
         "base_url": "https://api.longcat.chat/openai/v1",
-        "default_model": "LongCat-Flash-Lite",
-        "quality": 0.78,
+        "default_model": "LongCat-2.0-Preview",
+        "models": {
+            "LongCat-2.0-Preview": {
+                "quality": 0.82,
+                "cost_per_1k_input": 0.0,
+                "cost_per_1k_output": 0.0,
+                "latency_ms": 760,
+                "context_window": 128000,
+                "priority": 101,
+            },
+            "LongCat-Flash-Lite": {
+                "quality": 0.78,
+                "cost_per_1k_input": 0.0,
+                "cost_per_1k_output": 0.0,
+                "latency_ms": 700,
+                "context_window": 128000,
+                "priority": 100,
+            },
+        },
+        "quality": 0.82,
         "cost_per_1k_input": 0.0,
         "cost_per_1k_output": 0.0,
-        "latency_ms": 700,
+        "latency_ms": 760,
         "context_window": 128000,
         "free_tier": True,
         "priority": 100,

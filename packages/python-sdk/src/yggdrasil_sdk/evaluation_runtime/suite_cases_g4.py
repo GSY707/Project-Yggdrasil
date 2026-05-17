@@ -84,6 +84,43 @@ def _g4_runtime_metrics(response_payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _g4_restart_stability_report(case_payload: dict[str, Any], runtime_metrics: dict[str, Any], *, acceptance_pass: int) -> dict[str, Any]:
+    raw_tiers = case_payload.get("restartStabilityTiers")
+    tiers = [max(_g4_int_metric(item), 0) for item in raw_tiers] if isinstance(raw_tiers, list) else []
+    tiers = [item for item in tiers if item > 0]
+    restart_count = max(_g4_int_metric(runtime_metrics.get("restartCount")), 0)
+    if not tiers:
+        return {
+            "enabled": False,
+            "restartCount": restart_count,
+            "tiers": [],
+            "restartSuccessRate0_1": 1.0 if acceptance_pass == 1 else 0.0,
+            "passed": True,
+        }
+
+    tier_results: list[dict[str, Any]] = []
+    for tier in sorted(set(tiers)):
+        tier_results.append(
+            {
+                "targetRestarts": tier,
+                "observedRestartCount": restart_count,
+                "passed": restart_count >= tier and acceptance_pass == 1,
+            }
+        )
+    restart_success_rate = (
+        round(sum(1.0 for item in tier_results if item.get("passed")) / len(tier_results), 4)
+        if tier_results
+        else (1.0 if acceptance_pass == 1 else 0.0)
+    )
+    return {
+        "enabled": True,
+        "restartCount": restart_count,
+        "tiers": tier_results,
+        "restartSuccessRate0_1": restart_success_rate,
+        "passed": bool(tier_results) and all(bool(item.get("passed")) for item in tier_results),
+    }
+
+
 def _g4_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -613,7 +650,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     app_id = str(case_payload.get("appId") or DEFAULT_APP_ID)
     task_type = str(case_payload.get("taskType") or "generic")
     requested_provider = str(case_payload.get("requestedProvider") or "longcat")
-    requested_model = str(case_payload.get("requestedModel") or "LongCat-Flash-Lite")
+    requested_model = str(case_payload.get("requestedModel") or "LongCat-2.0-Preview")
     expected_prompt_profile_id = str(case_payload.get("expectedPromptProfileId") or "")
     expected_seed_template_id = str(case_payload.get("expectedSeedTemplateId") or "")
     expected_few_shot_refs = [str(item) for item in case_payload.get("expectedCompiledFewShotRefs") or []]
@@ -784,6 +821,11 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     max_context_length_tokens = _g4_max_context_length_tokens(context_length_observations)
     restart_success_rate = 1.0 if task_record.get("status") == "completed" else 0.0
     acceptance_pass = int(scorecard_row.get("acceptance_pass_0_1") or 0)
+    restart_stability_report = _g4_restart_stability_report(
+        case_payload,
+        runtime_metrics,
+        acceptance_pass=acceptance_pass,
+    )
     prompt_artifact_record = prompt_artifact.model_dump(by_alias=True, mode="json")
     evaluation_sandbox = os.environ.get("YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT")
     sandbox_state_root = os.environ.get("YGGDRASIL_STATE_ROOT")
@@ -821,9 +863,15 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "carryForwardLossCount": runtime_metrics["carryForwardLossCount"],
         "effectiveContextWindow": runtime_metrics["effectiveContextWindow"],
         "windowRestartThreshold": runtime_metrics["windowRestartThreshold"],
-        "restartSuccessRate0_1": restart_success_rate,
+        "restartSuccessRate0_1": restart_stability_report.get("restartSuccessRate0_1", restart_success_rate),
         "windowTransitionCount": max(len(processed_runs) - 1, 0),
         "acceptancePass0_1": acceptance_pass,
+        "officialAcceptancePassed0_1": 1 if contract_verification["passed"] else 0,
+        "goalCompletion0_1": 1 if invocation.status == "completed" else 0,
+        "deliveryCompletion0_1": 1 if acceptance_pass == 1 and contract_verification["passed"] else 0,
+        "parityPairKey": str(case_payload.get("parityPairKey") or ""),
+        "parityRole": str(case_payload.get("parityRole") or ""),
+        "qualityDeltaThreshold0_100": float(case_payload.get("qualityDeltaThreshold0_100") or 8.0),
         "pass": invocation.status == "completed" and acceptance_pass == 1,
         "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
     }
@@ -833,6 +881,18 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         sandbox_text = evaluation_sandbox or "unknown"
         raise RuntimeError(
             f"g4 provider matrix acceptance failed for {provider_matrix_entry['matrixKey']}: {issues_text} | sandbox={sandbox_text} | response={assistant_preview}"
+        )
+    if bool(case_payload.get("failOnRestartStabilityViolation")) and restart_stability_report.get("enabled") and not restart_stability_report.get("passed"):
+        failed_tiers = [
+            str(item.get("targetRestarts"))
+            for item in restart_stability_report.get("tiers") or []
+            if isinstance(item, dict) and not bool(item.get("passed"))
+        ]
+        sandbox_text = evaluation_sandbox or "unknown"
+        raise RuntimeError(
+            "g4 provider matrix restart stability failed "
+            f"for {provider_matrix_entry['matrixKey']}: failed tiers={','.join(failed_tiers) or 'unknown'} "
+            f"| sandbox={sandbox_text} | response={assistant_preview}"
         )
     return {
         **provider_matrix_entry,
@@ -871,6 +931,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
             **contract_verification,
             "responsePreview": assistant_preview,
         },
+        "restartStabilityReport": restart_stability_report,
         "processedRuns": [dict(item) for item in processed_runs],
         "assistantPreview": assistant_preview,
     }

@@ -138,7 +138,7 @@
 当前正式强证据主要集中在：
 
 1. `deepseek_direct / deepseek-v4-pro` 的 Gate 2、Gate 3 官方复跑。
-2. `longcat / LongCat-Flash-Lite` 的 M8 live smoke。
+2. `longcat / LongCat-2.0-Preview` 的 M8 live smoke（并保留 `LongCat-Flash-Lite` 作为对照项）。
 
 但这还不是 Gate 4 所需的“跨 provider 泛化矩阵”。
 
@@ -265,7 +265,7 @@ Gate 4 不是靠主 Agent 一个人变聪明，而是靠可复用功能积木减
 必须做的动作：
 
 1. 明确 1 个官方验收 provider，例如 `deepseek_direct / deepseek-v4-pro`。
-2. 明确 1 个成本对照 provider，例如 `longcat / LongCat-Flash-Lite`。
+2. 明确 1 个成本对照 provider，例如 `longcat / LongCat-Flash-Lite`（与默认 `longcat / LongCat-2.0-Preview` 同任务对照）。
 3. 在同一批多场景任务下生成统一 scorecard 对比，不允许不同 provider 跑不同任务。
 4. 形成正式 provider 质量矩阵文档，至少比较：通过率、澄清回合、接管次数、计划质量、返工率、首 token、首次有效输出。
 

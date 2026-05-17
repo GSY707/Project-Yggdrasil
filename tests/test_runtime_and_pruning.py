@@ -1351,3 +1351,36 @@ def test_multiple_pause_resume_cycles_no_state_pollution() -> None:
         statuses = [run.status for run in runs]
         # Count of paused states should match our pause requests
         assert statuses.count("paused") >= 2
+
+
+def test_build_runtime_metrics_snapshot_counts_tool_failures() -> None:
+    runtime_metrics = {
+        "windowIndex": 3,
+        "restartCount": 2,
+        "cumulativeWindowSpanTokens": 420,
+        "carryForwardLossCount": 1,
+    }
+    llm_result = {
+        "usage": {"totalTokens": 512},
+        "costUsed": 0.0123,
+        "toolExecutions": [
+            {"success": True},
+            {"success": False},
+            {"success": False},
+        ],
+        "roundSummaries": [{"index": 0}, {"index": 1}],
+    }
+
+    snapshot = runtime_execution_loop._build_runtime_metrics_snapshot(
+        runtime_metrics=runtime_metrics,
+        llm_result=llm_result,
+    )
+
+    assert snapshot.window_index == 3
+    assert snapshot.restart_count == 2
+    assert snapshot.total_tokens_used == 512
+    assert snapshot.total_cost_used == pytest.approx(0.0123)
+    assert snapshot.cumulative_window_span_tokens == 420
+    assert snapshot.carry_forward_loss_count == 1
+    assert snapshot.tool_round_count == 2
+    assert snapshot.tool_failures_count == 2

@@ -312,4 +312,60 @@ def summarize_task_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     return "\n".join(lines)
 
 
+def _fallback_work_tree_node(nodes: list[WorkTreeNode]) -> WorkTreeNode | None:
+    if not nodes:
+        return None
+    for preferred_status in ("in-progress", "blocked", "pending"):
+        candidate = next((node for node in nodes if node.status == preferred_status), None)
+        if candidate is not None:
+            return candidate
+    candidate = next((node for node in nodes if node.status not in {"completed", "skipped"}), None)
+    if candidate is not None:
+        return candidate
+    return nodes[-1]
+
+
+def restore_takeover_work_tree_pointer(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Restore a durable work-tree pointer for resume request state.
+
+    Priority:
+    1) keep existing currentNodeId when valid,
+    2) fallback to the nearest executable node,
+    3) align recoveryAnchor and workTree status.
+    """
+    if not isinstance(candidate, dict):
+        return {}
+    try:
+        protocol = TaskTakeoverProtocol.model_validate(candidate)
+    except Exception:
+        return candidate
+
+    work_tree = protocol.work_tree
+    if work_tree is None:
+        return protocol.model_dump(by_alias=True, mode="json")
+
+    node_by_id = {node.id: node for node in work_tree.nodes}
+    current_node = node_by_id.get(str(work_tree.current_node_id)) if work_tree.current_node_id is not None else None
+    if current_node is None:
+        current_node = _fallback_work_tree_node(work_tree.nodes)
+
+    recovered_status = work_tree.status
+    if recovered_status == "planned" and current_node is not None:
+        recovered_status = "active"
+
+    repaired_work_tree = work_tree.model_copy(
+        update={
+            "current_node_id": current_node.id if current_node is not None else None,
+            "recovery_anchor": (
+                current_node.recovery_anchor
+                if current_node is not None and current_node.recovery_anchor is not None
+                else work_tree.recovery_anchor
+            ),
+            "status": recovered_status,
+        }
+    )
+    repaired_protocol = protocol.model_copy(update={"work_tree": repaired_work_tree})
+    return repaired_protocol.model_dump(by_alias=True, mode="json")
+
+
 __all__ = [name for name in globals() if not name.startswith("__")]

@@ -346,3 +346,154 @@ def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_a
     assert conversation_messages[1]["reasoning_content"] == "先恢复上轮 thinking，再执行 pending tool calls。"
     assert conversation_messages[1]["tool_calls"][0]["id"] == "call_resume_note_index"
     assert conversation_messages[2]["tool_call_id"] == "call_resume_note_index"
+
+
+def test_execute_tool_with_isolation_retries_timeout_then_succeeds(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    calls = {"count": 0}
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise TimeoutError("tool timeout")
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok"},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.read.read_file", "arguments": {"path": "README.md"}},
+        tool_call_id="tc_retry_1",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        max_retries=2,
+    )
+
+    assert result.success is True
+    assert calls["count"] == 2
+    assert result.failure is None
+
+
+def test_execute_tool_with_isolation_reports_failure_after_retry_budget(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        raise ConnectionError("downstream disconnected")
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.read.read_file", "arguments": {"path": "README.md"}},
+        tool_call_id="tc_retry_2",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        max_retries=1,
+    )
+
+    assert result.success is False
+    assert result.failure is not None
+    assert result.failure.retry_count == 1
+    assert result.failure.is_retryable is True
+
+
+def test_snapshot_checksum_compute_and_verify_roundtrip() -> None:
+    from yggdrasil_sdk.runtime_kernel.snapshot import _compute_snapshot_checksum, _verify_snapshot_integrity
+
+    pending_action = {
+        "kind": "pending-tool-calls",
+        "invocationId": "inv_1",
+        "toolCalls": [{"id": "t1", "name": "mcp.read.read_file", "arguments": {"path": "README.md"}}],
+    }
+    pending_action["checksum"] = _compute_snapshot_checksum(pending_action)
+
+    ok, err = _verify_snapshot_integrity(pending_action)
+    assert ok is True
+    assert err is None
+
+    pending_action["toolCalls"][0]["arguments"]["path"] = "CHANGED.md"
+    ok, err = _verify_snapshot_integrity(pending_action)
+    assert ok is False
+    assert err is not None
+
+
+def test_pre_invocation_budget_check_blocks_insufficient_cost() -> None:
+    from types import SimpleNamespace
+    from yggdrasil_sdk import llm_runtime
+
+    task = SimpleNamespace(
+        budget=SimpleNamespace(
+            token_budget_total=5000,
+            token_budget_used=100,
+            cost_budget_total=0.02,
+            cost_budget_used=0.0195,
+        )
+    )
+
+    result = llm_runtime._check_pre_invocation_budget(
+        task,
+        {},
+        estimated_input_tokens=200,
+        estimated_output_tokens=200,
+        estimated_cost=0.001,
+    )
+
+    assert result.check_passed is False
+    assert result.reason is not None
+    assert "cost budget" in result.reason
+
+
+def test_pre_invocation_budget_check_passes_sufficient_budget() -> None:
+    from types import SimpleNamespace
+    from yggdrasil_sdk import llm_runtime
+
+    task = SimpleNamespace(
+        budget=SimpleNamespace(
+            token_budget_total=10000,
+            token_budget_used=100,
+            cost_budget_total=1.0,
+            cost_budget_used=0.1,
+        )
+    )
+
+    result = llm_runtime._check_pre_invocation_budget(
+        task,
+        {},
+        estimated_input_tokens=200,
+        estimated_output_tokens=200,
+        estimated_cost=0.02,
+    )
+
+    assert result.check_passed is True
+    assert result.reason is None
+
+
+def test_post_invocation_budget_overrun_detected() -> None:
+    from types import SimpleNamespace
+    from yggdrasil_sdk import llm_runtime
+
+    task = SimpleNamespace(
+        budget=SimpleNamespace(
+            token_budget_total=1000,
+            token_budget_used=920,
+            cost_budget_total=0.2,
+            cost_budget_used=0.18,
+        )
+    )
+
+    result = llm_runtime._check_post_invocation_budget(
+        task,
+        input_tokens_used=90,
+        output_tokens_used=40,
+        cost_used=0.03,
+    )
+
+    assert result.is_overrun is True
+    assert result.violation_type == "both"
+    assert result.tokens_exceeded_by > 0
+    assert result.cost_exceeded_by > 0

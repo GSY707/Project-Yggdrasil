@@ -1573,7 +1573,7 @@ def run_real_user_live_task_pack(
     sandbox_root: Path,
     tasks: list[str] | None = None,
     provider: str = "longcat",
-    model: str = "LongCat-Flash-Lite",
+    model: str = "LongCat-2.0-Preview",
     scorecard_csv: Path | None = None,
     output_path: Path | None = None,
     batch_id: str | None = None,

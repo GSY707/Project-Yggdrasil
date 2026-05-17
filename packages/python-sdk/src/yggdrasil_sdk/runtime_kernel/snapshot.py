@@ -1,9 +1,34 @@
 import logging
+import json
+from copy import deepcopy
+from hashlib import sha256
 
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
 
 _logger = logging.getLogger(__name__)
+
+
+def _compute_snapshot_checksum(pending_action: dict[str, Any]) -> str:
+    """Compute deterministic checksum for snapshot pending action payload."""
+    payload = {
+        key: value
+        for key, value in pending_action.items()
+        if key != "checksum"
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _verify_snapshot_integrity(pending_action: dict[str, Any]) -> tuple[bool, str | None]:
+    """Verify pending action checksum and return a detailed error on mismatch."""
+    expected = pending_action.get("checksum")
+    if not isinstance(expected, str) or not expected.strip():
+        return False, "missing-checksum"
+    actual = _compute_snapshot_checksum(pending_action)
+    if actual != expected:
+        return False, f"checksum-mismatch: expected={expected}, actual={actual}"
+    return True, None
 
 
 def _int_metric(value: Any, default: int = 0) -> int:
@@ -15,7 +40,7 @@ def _int_metric(value: Any, default: int = 0) -> int:
 
 def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[str, Any]) -> dict[str, Any]:
     request_state = {
-        key: request.get(key)
+        key: deepcopy(request.get(key))
         for key in (
             "taskType",
             "runType",
@@ -48,8 +73,19 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
     }
     for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites"):
         value = request.get(key)
-        if isinstance(value, dict) and value:
-            request_state[key] = dict(value)
+        if isinstance(value, dict):
+            request_state[key] = deepcopy(value)
+    # Keep restart/resume contract keys stable across windows, even when temporarily empty.
+    request_state.setdefault("responseRequirements", deepcopy(request.get("responseRequirements")))
+    request_state.setdefault("restartMessage", deepcopy(request.get("restartMessage")))
+    request_state.setdefault(
+        "takeoverProtocol",
+        deepcopy(request.get("takeoverProtocol")) if isinstance(request.get("takeoverProtocol"), dict) else {},
+    )
+    request_state.setdefault(
+        "memoryRetrievalState",
+        deepcopy(request.get("memoryRetrievalState")) if isinstance(request.get("memoryRetrievalState"), dict) else {},
+    )
     request_state.update(
         {
             "windowIndex": runtime_metrics.get("windowIndex"),
@@ -58,10 +94,25 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
             "cumulativeWindowSpanTokens": runtime_metrics.get("cumulativeWindowSpanTokens"),
             "carryForwardLossCount": runtime_metrics.get("carryForwardLossCount"),
             "forcedWindowRestartBudget": runtime_metrics.get("forcedWindowRestartBudget"),
-            "runtimeMetrics": dict(runtime_metrics),
+            "runtimeMetrics": deepcopy(runtime_metrics),
         }
     )
     return request_state
+
+
+def _dedupe_excerpt_sources(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for raw_value in values:
+        normalized = " ".join(str(raw_value or "").split()).strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
 
 
 def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -81,10 +132,15 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
             continue
         title = str(item.get("title") or item.get("id") or "context-item")
         excerpt_source = " ".join(
-            str(item.get(key) or "")
-            for key in ("summary", "content", "note", "excerpt")
-            if item.get(key)
-        ).strip()
+            _dedupe_excerpt_sources(
+                [
+                    str(item.get("summary") or ""),
+                    str(item.get("content") or ""),
+                    str(item.get("note") or ""),
+                    str(item.get("excerpt") or ""),
+                ]
+            )
+        )
         excerpt = normalize_excerpt(excerpt_source or title, per_item_chars)
         bullets.append(f"- {title}: {excerpt}")
 
@@ -105,35 +161,36 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
         for item in payload.get("protectedItems") or []
         if isinstance(item, dict) and item.get("id") is not None
     ]
-    content = "\n".join(
-        part
-        for part in (
-            f"Window restart handoff: {source_window_index} -> {target_window_index}",
-            f"Current objective: {objective}",
-            f"Current focus: {focus}",
-            f"Restart instruction: {restart_message}",
+    header_lines = [
+        f"Window restart handoff: {source_window_index} -> {target_window_index}",
+        f"Current objective: {objective}",
+        f"Current focus: {focus}",
+        f"Restart instruction: {restart_message}",
+    ]
+    if work_tree:
+        header_lines.append(
             (
-                f"Work tree handoff: status={work_tree.get('status')}; currentNode={work_tree.get('currentNodeId')}"
-                if work_tree
-                else None
-            ),
-            (
-                "Memory retrieval handoff: " + str(memory_retrieval_state.get("summary") or "")
-                if memory_retrieval_state.get("summary")
-                else None
-            ),
-            (
-                f"Reverse trace mode: workTreeNode={memory_retrieval_state.get('workTreeNodeId')}"
-                if memory_retrieval_state.get("reverseTraceMode") and memory_retrieval_state.get("workTreeNodeId")
-                else None
-            ),
-            f"Protected refs: {', '.join(protected_ids)}" if protected_ids else None,
-            "Carry-forward evidence:",
-            *bullets,
+                "Work tree handoff: "
+                f"status={work_tree.get('status')}; currentNode={work_tree.get('currentNodeId')}; "
+                f"recoveryAnchor={work_tree.get('recoveryAnchor')}"
+            )
         )
-        if part
-    )
-    content = normalize_excerpt(content, target_chars)
+    if memory_retrieval_state.get("summary"):
+        header_lines.append("Memory retrieval handoff: " + str(memory_retrieval_state.get("summary") or ""))
+    if memory_retrieval_state.get("reverseTraceMode") and memory_retrieval_state.get("workTreeNodeId"):
+        header_lines.append(f"Reverse trace mode: workTreeNode={memory_retrieval_state.get('workTreeNodeId')}")
+    if protected_ids:
+        header_lines.append(f"Protected refs: {', '.join(protected_ids)}")
+
+    evidence_lines: list[str] = ["Carry-forward evidence:", *bullets]
+
+    def _compose_content(max_evidence_lines: int, evidence_chars: int) -> str:
+        capped_evidence = [evidence_lines[0], *[normalize_excerpt(line, evidence_chars) for line in evidence_lines[1:max_evidence_lines]]]
+        return "\n".join([*header_lines, *capped_evidence])
+
+    evidence_line_limit = len(evidence_lines)
+    evidence_chars = per_item_chars
+    content = _compose_content(evidence_line_limit, evidence_chars)
     carry_forward_item = {
         "id": new_id("carryforward", task_id, source_window_index, target_window_index),
         "title": f"Carry-forward package W{source_window_index} -> W{target_window_index}",
@@ -143,8 +200,14 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
         "targetWindowIndex": target_window_index,
     }
 
-    while _estimate_context_tokens([carry_forward_item]) >= carry_forward_limit and len(content) > 64:
-        content = normalize_excerpt(content, max(64, len(content) // 2))
+    while _estimate_context_tokens([carry_forward_item]) >= carry_forward_limit and evidence_line_limit > 2:
+        evidence_line_limit -= 1
+        content = _compose_content(evidence_line_limit, evidence_chars)
+        carry_forward_item["content"] = content
+
+    while _estimate_context_tokens([carry_forward_item]) >= carry_forward_limit and evidence_chars > 80:
+        evidence_chars = max(80, evidence_chars // 2)
+        content = _compose_content(evidence_line_limit, evidence_chars)
         carry_forward_item["content"] = content
 
     return [carry_forward_item]
@@ -529,6 +592,7 @@ def save_pending_tool_calls_snapshot(
         pending_action["assistantMessage"] = assistant_message
     if isinstance(request_state, dict) and request_state:
         pending_action["requestState"] = request_state
+    pending_action["checksum"] = _compute_snapshot_checksum(pending_action)
     resume_message = (
         f"Resume task {task_id}: execute {len(pending_tool_calls)} pending tool call(s) "
         f"from round {round_index}, then continue agent loop."

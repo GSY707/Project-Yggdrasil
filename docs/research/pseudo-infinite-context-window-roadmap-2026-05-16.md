@@ -23,7 +23,7 @@
 
 1. execution loop 已落地 restart controller，不再只记录 `restartMessage`。
 2. `restart snapshot`、`carry-forward package`、`context.restart.requested/completed` 事件与 `runtimeMetrics` 已进入正式 runtime 路径。
-3. 评测侧已新增 `evalsuite_g4_window_restart_stress` / `corepack pnpm eval:g4:window-stress`，并批准使用 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-Flash-Lite` 作为正式 stress provider。
+3. 评测侧已新增 `evalsuite_g4_window_restart_stress` / `corepack pnpm eval:g4:window-stress`，并批准使用 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 作为正式 stress provider（保留 `LongCat-Flash-Lite` 作为对照项）。
 4. 2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上 LongCat / DeepSeek 的首轮 stress 证据：两条 provider 路径都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
 5. 2026-05-16 的正式 LongCat real-task parity run `evalrun_590eca26a63247308373` 给出了第一条结构性真实任务对照证据：同一条 repo-wide 任务在 `64k` 与 `128k` 两档窗口下都通过了当时的 scorecard 口径，`cumulativeWindowSpanTokens` 约为 `4.10M`。
 6. 但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认：这条证据只足以证明 restart 技术闭环，不足以证明最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。

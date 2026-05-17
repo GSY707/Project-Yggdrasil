@@ -115,7 +115,7 @@ def _generate_strategy_answer(case: dict[str, Any], query: str, strategy_name: s
             ),
         },
     ]
-    requested_model = str(case.get("requestedModel") or "LongCat-Flash-Lite")
+    requested_model = str(case.get("requestedModel") or "LongCat-2.0-Preview")
     requested_provider = str(case.get("requestedProvider") or "longcat")
     workspace_root = resolve_workspace_root()
     temperature = float(case.get("temperature") or 0.1)
@@ -263,6 +263,67 @@ def _provider_matrix_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "providerSummary": provider_summary,
     }
 
+
+def _real_task_window_parity_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not rows:
+        return None
+
+    def _role_of(row: dict[str, Any]) -> str:
+        explicit_role = str(row.get("parityRole") or "").strip().lower()
+        if explicit_role in {"short", "long"}:
+            return explicit_role
+        matrix_key = str(row.get("matrixKey") or "").lower()
+        if "short" in matrix_key:
+            return "short"
+        if "long" in matrix_key:
+            return "long"
+        return ""
+
+    def _avg(bucket: list[dict[str, Any]], key: str) -> float:
+        if not bucket:
+            return 0.0
+        values = [float(item.get(key) or 0.0) for item in bucket]
+        return round(sum(values) / len(values), 4)
+
+    short_rows = [row for row in rows if _role_of(row) == "short"]
+    long_rows = [row for row in rows if _role_of(row) == "long"]
+    if not short_rows or not long_rows:
+        return None
+
+    short_goal_completion = 1 if all(int(item.get("goalCompletion0_1") or 0) == 1 for item in short_rows) else 0
+    long_goal_completion = 1 if all(int(item.get("goalCompletion0_1") or 0) == 1 for item in long_rows) else 0
+    short_delivery = 1 if all(int(item.get("deliveryCompletion0_1") or 0) == 1 for item in short_rows) else 0
+    long_delivery = 1 if all(int(item.get("deliveryCompletion0_1") or 0) == 1 for item in long_rows) else 0
+    short_quality = _avg(short_rows, "planQualityScore0_100")
+    long_quality = _avg(long_rows, "planQualityScore0_100")
+    quality_delta = round(abs(long_quality - short_quality), 4)
+    quality_threshold = min(
+        [float(item.get("qualityDeltaThreshold0_100") or 8.0) for item in [*short_rows, *long_rows]]
+    )
+
+    goal_completion_parity = 1 if short_goal_completion == 1 and long_goal_completion == 1 else 0
+    delivery_equivalence = 1 if short_delivery == 1 and long_delivery == 1 else 0
+
+    return {
+        "goalCompletionParity0_1": goal_completion_parity,
+        "deliveryEquivalence0_1": delivery_equivalence,
+        "qualityDeltaToLongWindow0_100": quality_delta,
+        "qualityDeltaThreshold0_100": quality_threshold,
+        "parityPassed0_1": 1 if goal_completion_parity == 1 and delivery_equivalence == 1 and quality_delta <= quality_threshold else 0,
+        "shortWindow": {
+            "caseCount": len(short_rows),
+            "goalCompletion0_1": short_goal_completion,
+            "deliveryCompletion0_1": short_delivery,
+            "avgPlanQualityScore0_100": short_quality,
+        },
+        "longWindow": {
+            "caseCount": len(long_rows),
+            "goalCompletion0_1": long_goal_completion,
+            "deliveryCompletion0_1": long_delivery,
+            "avgPlanQualityScore0_100": long_quality,
+        },
+    }
+
 def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     strategy_totals: dict[str, dict[str, float]] = {}
     baseline_comparisons: list[dict[str, Any]] = []
@@ -327,6 +388,9 @@ def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any
         payload["liveScenarios"] = live_scenarios
     if provider_matrix_rows:
         payload.update(_provider_matrix_summary(provider_matrix_rows))
+        parity_summary = _real_task_window_parity_summary(provider_matrix_rows)
+        if parity_summary is not None:
+            payload["realTaskWindowParity"] = parity_summary
     return payload
 
 

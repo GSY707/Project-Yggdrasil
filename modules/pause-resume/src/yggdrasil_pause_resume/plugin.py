@@ -6,6 +6,7 @@ from typing import Any
 from yggdrasil_sdk.hooks import HookNames
 from yggdrasil_sdk.module import BaseModulePlugin, HookRegistration
 from yggdrasil_sdk.runtime_kernel import load_package_entry
+from yggdrasil_sdk.runtime_kernel.takeover import restore_takeover_work_tree_pointer
 from yggdrasil_sdk.support import new_id, normalize_excerpt
 
 
@@ -25,6 +26,8 @@ def _restored_request_state(snapshot_pending_actions: list[dict[str, Any]]) -> d
         if request_state is None:
             continue
         merged.update(request_state)
+    if isinstance(merged.get("takeoverProtocol"), dict):
+        merged["takeoverProtocol"] = restore_takeover_work_tree_pointer(dict(merged["takeoverProtocol"]))
     return merged
 
 

@@ -200,6 +200,109 @@ class EventHandlingResult(BaseModel):
     )
 
 
+class BudgetCheckResult(BaseModel):
+    """Result of pre-invocation budget check."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    check_passed: bool = Field(alias="checkPassed")
+    reason: str | None = None
+    available_token_budget: int = Field(alias="availableTokenBudget")
+    available_cost_budget: float = Field(alias="availableCostBudget")
+    estimated_total_tokens: int = Field(alias="estimatedTotalTokens")
+    estimated_cost: float = Field(alias="estimatedCost")
+
+
+class BudgetOverrunResult(BaseModel):
+    """Result of post-invocation budget validation."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    is_overrun: bool = Field(alias="isOverrun")
+    violation_type: Literal["token", "cost", "both"] | None = Field(
+        default=None, alias="violationType"
+    )
+    tokens_used: int = Field(alias="tokensUsed")
+    cost_used: float = Field(alias="costUsed")
+    tokens_exceeded_by: int = Field(alias="tokensExceededBy")
+    cost_exceeded_by: float = Field(alias="costExceededBy")
+
+
+class ToolExecutionFailure(BaseModel):
+    """Record of a tool execution failure with retry information."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    tool_name: str = Field(alias="toolName")
+    error_message: str = Field(alias="errorMessage")
+    error_type: str = Field(alias="errorType")
+    retry_count: int = Field(default=0, alias="retryCount")
+    is_retryable: bool = Field(alias="isRetryable")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ToolExecutionResult(BaseModel):
+    """Detailed result of a single tool execution."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    tool_name: str = Field(alias="toolName")
+    tool_call_id: str = Field(alias="toolCallId")
+    success: bool
+    result: dict[str, Any] = Field(default_factory=dict)
+    failure: ToolExecutionFailure | None = None
+    duration_ms: int = Field(alias="durationMs")
+
+
+class RuntimeMetricsSnapshot(BaseModel):
+    """Snapshot of runtime metrics at a specific point in execution."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    window_index: int = Field(alias="windowIndex")
+    restart_count: int = Field(alias="restartCount")
+    total_tokens_used: int = Field(alias="totalTokensUsed")
+    total_cost_used: float = Field(alias="totalCostUsed")
+    cumulative_window_span_tokens: int = Field(alias="cumulativeWindowSpanTokens")
+    carry_forward_loss_count: int = Field(alias="carryForwardLossCount")
+    tool_round_count: int = Field(alias="toolRoundCount")
+    tool_failures_count: int = Field(alias="toolFailuresCount")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RuntimeMetricsArtifact(BaseModel):
+    """Persistent artifact storing runtime metrics across windows."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    artifact_id: str = Field(alias="artifactId")
+    task_id: str = Field(alias="taskId")
+    run_id: str = Field(alias="runId")
+    invocation_id: str = Field(alias="invocationId")
+    snapshots: list[RuntimeMetricsSnapshot] = Field(default_factory=list)
+    cumulative_tokens: int = Field(alias="cumulativeTokens")
+    cumulative_cost: float = Field(alias="cumulativeCost")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SnapshotIntegrityCheck(BaseModel):
+    """Integrity check information for snapshot verification."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    checksum: str
+    checksum_algorithm: str = Field(default="sha256", alias="checksumAlgorithm")
+    verified_at: datetime = Field(default_factory=datetime.utcnow)
+    is_valid: bool = True
+
+
+class PendingActionSnapshot(BaseModel):
+    """Restorable pending action with deterministic integrity checksum."""
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    kind: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    checksum: str
+    checksum_algorithm: str = Field(default="sha256", alias="checksumAlgorithm")
+    checksum_verified_at: datetime | None = Field(default=None, alias="checksumVerifiedAt")
+    checksum_failed: bool = Field(default=False, alias="checksumFailed")
+    failure_reason: str | None = Field(default=None, alias="failureReason")
+
+
 class RootMountPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

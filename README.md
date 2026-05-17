@@ -120,13 +120,13 @@ corepack pnpm eval:g4:window-stress
 corepack pnpm eval:g4:real-task-parity
 ```
 
-补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-Flash-Lite`；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
+补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-2.0-Preview`，并保留 `longcat/LongCat-Flash-Lite` 作为对照 case；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
 
-`corepack pnpm eval:g4:multiscene` 是 Gate 4 官方离线门禁，覆盖 coding / research / writing 三场景的快任务合同、跨会话恢复合同、pause/resume 恢复与场景切换隔离。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 官方 live provider matrix，覆盖同一组三场景在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-Flash-Lite` 上的正式复跑。
+`corepack pnpm eval:g4:multiscene` 是 Gate 4 官方离线门禁，覆盖 coding / research / writing 三场景的快任务合同、跨会话恢复合同、pause/resume 恢复与场景切换隔离。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 官方 live provider matrix，覆盖同一组三场景在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上的正式复跑。
 
-`corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-Flash-Lite` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
+`corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
 
-`corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-Flash-Lite`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
+`corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
 
 `corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。
 

@@ -47,7 +47,7 @@ def main() -> None:
     live_run_parser.add_argument("--sandbox-root", required=True, help="Path to the isolated real-user validation sandbox root.")
     live_run_parser.add_argument("--tasks", help="Comma-separated task ids. Defaults to YGG-CI-01,YGG-CG-01,YGG-CG-03.")
     live_run_parser.add_argument("--provider", default="longcat", help="Requested live provider. Defaults to longcat.")
-    live_run_parser.add_argument("--model", default="LongCat-Flash-Lite", help="Requested live model. Defaults to LongCat-Flash-Lite.")
+    live_run_parser.add_argument("--model", default="LongCat-2.0-Preview", help="Requested live model. Defaults to LongCat-2.0-Preview.")
     live_run_parser.add_argument("--scorecard-csv", help="Optional scorecard CSV to append generated rows to.")
     live_run_parser.add_argument("--output", help="Optional JSON output path for the structured run summary.")
     live_run_parser.add_argument("--batch-id", help="Optional batch id written into generated scorecard rows.")

@@ -7,7 +7,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from .contracts import ExternalRef
+from .contracts import BudgetCheckResult, BudgetOverrunResult, ExternalRef, ToolExecutionFailure, ToolExecutionResult
 from .domain import PromptProfileVersionRecord, SeedTemplateVersionRecord
 from .observability_exporters import finish_langfuse_generation
 from .observability_exporters import start_langfuse_generation
@@ -54,6 +54,12 @@ _USAGE_COUNTER_FIELDS = (
     "nonCacheInputTokens",
     "reasoningTokens",
 )
+
+# P2 constants for budget management and tool execution
+_MAX_TOOL_RETRIES = 2
+_COST_BUDGET_BUFFER = 0.01
+_TOKEN_BUDGET_SAFETY_MARGIN = 32
+_TOOL_EXECUTION_TIMEOUT_MS = 5000
 
 
 class SafeShutdownInterrupt(Exception):
@@ -109,6 +115,193 @@ def _normalize_route_decision(route_decision: Any) -> dict[str, Any]:
         "selectedModel": getattr(route_decision, "selected_model", None),
         "selectedProvider": getattr(route_decision, "selected_provider", None),
     }
+
+
+def _check_pre_invocation_budget(
+    task: Any,
+    request: dict[str, Any],
+    estimated_input_tokens: int = 1000,
+    estimated_output_tokens: int = 500,
+    estimated_cost: float = 0.01,
+) -> BudgetCheckResult:
+    """Validate budget headroom before invoking the model."""
+    budget = task.budget if hasattr(task, "budget") else None
+    if not budget:
+        return BudgetCheckResult(
+            checkPassed=True,
+            reason=None,
+            availableTokenBudget=999_999,
+            availableCostBudget=999_999.0,
+            estimatedTotalTokens=estimated_input_tokens + estimated_output_tokens,
+            estimatedCost=estimated_cost,
+        )
+
+    estimated_total_tokens = estimated_input_tokens + estimated_output_tokens
+    available_token_budget = (
+        budget.token_budget_total - budget.token_budget_used
+        if budget.token_budget_total is not None
+        else float("inf")
+    )
+    available_cost_budget = (
+        budget.cost_budget_total - budget.cost_budget_used
+        if budget.cost_budget_total is not None
+        else float("inf")
+    )
+
+    check_passed = True
+    violation_reason = None
+
+    if budget.token_budget_total is not None:
+        required_tokens = estimated_total_tokens + _TOKEN_BUDGET_SAFETY_MARGIN
+        if available_token_budget < required_tokens:
+            violation_reason = (
+                f"Insufficient token budget: required {required_tokens}, "
+                f"available {int(available_token_budget)}"
+            )
+            check_passed = False
+
+    if budget.cost_budget_total is not None and check_passed:
+        required_cost = estimated_cost + _COST_BUDGET_BUFFER
+        if available_cost_budget < required_cost:
+            violation_reason = (
+                f"Insufficient cost budget: required {required_cost:.6f}, "
+                f"available {available_cost_budget:.6f}"
+            )
+            check_passed = False
+
+    return BudgetCheckResult(
+        checkPassed=check_passed,
+        reason=violation_reason,
+        availableTokenBudget=(int(available_token_budget) if available_token_budget != float("inf") else 999_999),
+        availableCostBudget=(float(available_cost_budget) if available_cost_budget != float("inf") else 999_999.0),
+        estimatedTotalTokens=estimated_total_tokens,
+        estimatedCost=estimated_cost,
+    )
+
+
+def _check_post_invocation_budget(
+    task: Any,
+    input_tokens_used: int,
+    output_tokens_used: int,
+    cost_used: float,
+) -> BudgetOverrunResult:
+    """Validate consumed budget and report any overrun details."""
+    budget = task.budget if hasattr(task, "budget") else None
+    if not budget:
+        return BudgetOverrunResult(
+            isOverrun=False,
+            violationType=None,
+            tokensUsed=input_tokens_used + output_tokens_used,
+            costUsed=cost_used,
+            tokensExceededBy=0,
+            costExceededBy=0.0,
+        )
+
+    total_tokens_used = input_tokens_used + output_tokens_used
+    violation_type: str | None = None
+    tokens_exceeded_by = 0
+    cost_exceeded_by = 0.0
+
+    if budget.token_budget_total is not None:
+        new_total = budget.token_budget_used + total_tokens_used
+        if new_total > budget.token_budget_total:
+            tokens_exceeded_by = new_total - budget.token_budget_total
+            violation_type = "token"
+
+    if budget.cost_budget_total is not None:
+        new_total = budget.cost_budget_used + cost_used
+        if new_total > budget.cost_budget_total:
+            cost_exceeded_by = new_total - budget.cost_budget_total
+            violation_type = "both" if violation_type == "token" else "cost"
+
+    return BudgetOverrunResult(
+        isOverrun=violation_type is not None,
+        violationType=violation_type,
+        tokensUsed=total_tokens_used,
+        costUsed=cost_used,
+        tokensExceededBy=tokens_exceeded_by,
+        costExceededBy=cost_exceeded_by,
+    )
+
+
+def _is_retryable_tool_exception(exc: Exception) -> bool:
+    """Use class names to avoid hard dependency on provider-specific exception types."""
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    error_name = exc.__class__.__name__.lower()
+    return "timeout" in error_name or "connection" in error_name
+
+
+def _execute_tool_with_isolation(
+    *,
+    call: dict[str, Any],
+    tool_call_id: str,
+    task: Any,
+    run: Any,
+    root_mount: dict[str, Any],
+    current_context: list[dict[str, Any]],
+    max_retries: int = _MAX_TOOL_RETRIES,
+) -> ToolExecutionResult:
+    """Execute a single tool call with retryable-failure isolation and structured result."""
+    tool_name = str(call.get("name") or "")
+    arguments = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+    last_error: Exception | None = None
+    started_at = perf_counter()
+
+    for attempt in range(max(0, int(max_retries)) + 1):
+        try:
+            execution = execute_registered_tool(
+                tool_name,
+                arguments,
+                task=task,
+                run=run,
+                root_mount=root_mount,
+                current_context=current_context,
+            )
+            return ToolExecutionResult(
+                toolName=tool_name,
+                toolCallId=tool_call_id,
+                success=True,
+                result=execution if isinstance(execution, dict) else {"value": execution},
+                failure=None,
+                durationMs=int(round((perf_counter() - started_at) * 1000.0)),
+            )
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            retryable = _is_retryable_tool_exception(exc)
+            if retryable and attempt < max_retries:
+                continue
+            failure = ToolExecutionFailure(
+                toolName=tool_name,
+                errorMessage=str(exc),
+                errorType=exc.__class__.__name__,
+                retryCount=attempt,
+                isRetryable=retryable,
+            )
+            return ToolExecutionResult(
+                toolName=tool_name,
+                toolCallId=tool_call_id,
+                success=False,
+                result={"status": "error", "error": str(exc)},
+                failure=failure,
+                durationMs=int(round((perf_counter() - started_at) * 1000.0)),
+            )
+
+    assert last_error is not None
+    return ToolExecutionResult(
+        toolName=tool_name,
+        toolCallId=tool_call_id,
+        success=False,
+        result={"status": "error", "error": str(last_error)},
+        failure=ToolExecutionFailure(
+            toolName=tool_name,
+            errorMessage=str(last_error),
+            errorType=last_error.__class__.__name__,
+            retryCount=max(0, int(max_retries)),
+            isRetryable=_is_retryable_tool_exception(last_error),
+        ),
+        durationMs=int(round((perf_counter() - started_at) * 1000.0)),
+    )
 
 
 def _context_lines(current_context: list[dict[str, Any]], *, limit: int = 10) -> str:
@@ -917,6 +1110,8 @@ def invoke_runtime_completion(
             conversation_messages = [dict(message) for message in messages]
             usage_totals = _empty_usage_totals()
             accumulated_cost = 0.0
+            budget_check_result: dict[str, Any] | None = None
+            budget_overrun_result: dict[str, Any] | None = None
             tool_executions: list[dict[str, Any]] = []
             round_summaries: list[dict[str, Any]] = []
             round_modes: list[str] = []
@@ -989,6 +1184,47 @@ def invoke_runtime_completion(
                     message_count=len(conversation_messages),
                     round_index=round_index,
                 )
+                estimated_input_tokens = _estimate_message_tokens(conversation_messages)
+                estimated_output_tokens = max(1, int(max_tokens))
+                selected_cost_per_1k = float(
+                    route_payload.get("costPer1k")
+                    or route_payload.get("selectedModelCostPer1k")
+                    or FALLBACK_ROUTE_CANDIDATE["costPer1k"]
+                )
+                estimated_cost = round(
+                    ((estimated_input_tokens + estimated_output_tokens) * max(selected_cost_per_1k, 0.0)) / 1000.0,
+                    6,
+                )
+                pre_check = _check_pre_invocation_budget(
+                    task,
+                    request,
+                    estimated_input_tokens=estimated_input_tokens,
+                    estimated_output_tokens=estimated_output_tokens,
+                    estimated_cost=estimated_cost,
+                )
+                budget_check_result = pre_check.model_dump(by_alias=True, mode="json")
+                if not pre_check.check_passed:
+                    round_modes.append("budget-check")
+                    round_summaries.append(
+                        {
+                            "index": round_index,
+                            "mode": "budget-check",
+                            "finishReason": "pre-invocation-budget-check-failed",
+                            "latencyMs": _elapsed_ms(round_started_at),
+                            "toolCalls": [],
+                            "budgetCheckResult": budget_check_result,
+                        }
+                    )
+                    final_result = {
+                        "mode": "budget-check",
+                        "provider": route_payload.get("selectedProvider"),
+                        "model": route_payload.get("selectedModel"),
+                        "finishReason": "pre-invocation-budget-check-failed",
+                        "outputText": "Task execution halted: pre-invocation budget check failed.",
+                        "toolCalls": [],
+                        "error": str(pre_check.reason or "pre-invocation-budget-check-failed"),
+                    }
+                    break
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
                 else:
@@ -1007,6 +1243,13 @@ def invoke_runtime_completion(
 
                 _merge_usage(usage_totals, dict(result.get("usage") or {}))
                 accumulated_cost += float(result.get("costUsed", 0.0) or 0.0)
+                post_check = _check_post_invocation_budget(
+                    task,
+                    input_tokens_used=int(usage_totals.get("inputTokens") or 0),
+                    output_tokens_used=int(usage_totals.get("outputTokens") or 0),
+                    cost_used=accumulated_cost,
+                )
+                budget_overrun_result = post_check.model_dump(by_alias=True, mode="json")
                 round_modes.append(str(result.get("mode") or "unknown"))
                 tool_calls = [call for call in result.get("toolCalls") or [] if isinstance(call, dict) and call.get("name")]
                 current_tool_round_signature = _tool_round_signature(tool_calls) if tool_calls else None
@@ -1024,10 +1267,25 @@ def invoke_runtime_completion(
                         "reasoningContentPresent": bool(result.get("reasoningContent")),
                         "toolCalls": [str(call.get("name")) for call in tool_calls],
                         "duplicateToolRoundStreak": duplicate_tool_round_streak,
+                        "budgetCheckResult": budget_check_result,
+                        "budgetOverrunResult": budget_overrun_result,
                     }
                 )
                 if result.get("firstTokenLatencyMs") is not None:
                     round_summaries[-1]["firstTokenLatencyMs"] = float(result["firstTokenLatencyMs"])
+                if post_check.is_overrun:
+                    round_modes.append("budget-check")
+                    round_summaries[-1]["finishReason"] = "post-invocation-budget-overrun"
+                    final_result = {
+                        "mode": "budget-check",
+                        "provider": route_payload.get("selectedProvider"),
+                        "model": route_payload.get("selectedModel"),
+                        "finishReason": "post-invocation-budget-overrun",
+                        "outputText": "Task execution halted: post-invocation budget overrun.",
+                        "toolCalls": [],
+                        "error": "post-invocation-budget-overrun",
+                    }
+                    break
                 if not tool_calls:
                     final_result = result
                     break
@@ -1059,26 +1317,29 @@ def invoke_runtime_completion(
 
                 assistant_tool_calls = _assistant_tool_calls_payload(tool_calls, round_index)
                 conversation_messages.append(_assistant_tool_round_message(result, assistant_tool_calls))
+                round_tool_failures: list[dict[str, Any]] = []
                 for call in tool_calls:
                     tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), round_index))
-                    try:
-                        execution = execute_registered_tool(
-                            str(call.get("name")),
-                            call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
-                            task=task,
-                            run=run,
-                            root_mount=root_mount,
-                            current_context=current_context,
-                        )
-                        execution["success"] = True
-                    except Exception as exc:
-                        execution = {
-                            "tool": {"name": str(call.get("name"))},
-                            "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
-                            "result": {"status": "error", "error": str(exc)},
-                            "success": False,
-                        }
-                    execution["toolCallId"] = tool_call_id
+                    isolated_result = _execute_tool_with_isolation(
+                        call=call,
+                        tool_call_id=tool_call_id,
+                        task=task,
+                        run=run,
+                        root_mount=root_mount,
+                        current_context=current_context,
+                        max_retries=_MAX_TOOL_RETRIES,
+                    )
+                    execution = {
+                        "tool": {"name": isolated_result.tool_name},
+                        "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                        "result": dict(isolated_result.result),
+                        "success": bool(isolated_result.success),
+                        "toolCallId": isolated_result.tool_call_id,
+                        "durationMs": int(isolated_result.duration_ms),
+                    }
+                    if isolated_result.failure is not None:
+                        execution["failure"] = isolated_result.failure.model_dump(by_alias=True, mode="json")
+                        round_tool_failures.append(execution["failure"])
                     tool_executions.append(execution)
                     conversation_messages.append(
                         {
@@ -1088,6 +1349,7 @@ def invoke_runtime_completion(
                             "content": tool_result_to_message_content(execution),
                         }
                     )
+                round_summaries[-1]["toolFailures"] = round_tool_failures
 
             if final_result is None:
                 raise RuntimeError(f"Invocation {invocation.id} finished without a terminal model result.")
@@ -1267,10 +1529,13 @@ def invoke_runtime_completion(
                 "prompt": compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"}),
                 "promptArtifact": prompt_artifact.model_dump(by_alias=True, mode="json"),
                 "toolExecutions": tool_executions,
+                "roundSummaries": round_summaries,
                 "usage": dict(usage_totals),
                 "costUsed": float(accumulated_cost or 0.0),
                 "status": invocation.status,
                 "auditLevel": audit_level,
+                "budgetCheckResult": budget_check_result,
+                "budgetOverrunResult": budget_overrun_result,
                 "contextLengthObservations": list(context_length_observations),
                 "runtimeMetrics": dict(request.get("runtimeMetrics") or {}),
                 "timings": dict(local_runtime_timings),

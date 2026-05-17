@@ -6,6 +6,7 @@ from .root_mount import *  # noqa: F403,F401
 from .snapshot import *  # noqa: F403,F401
 from .execution_control import *  # noqa: F403,F401
 from .takeover import *  # noqa: F403,F401
+from ..contracts import RuntimeMetricsSnapshot
 from ..llm_runtime import SafeShutdownInterrupt
 from .shutdown_control import is_shutdown_requested as _is_shutdown_requested
 from .snapshot import save_pending_tool_calls_snapshot
@@ -120,6 +121,74 @@ def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
         "windowRestartRatio": restart_ratio,
         "windowRestartThreshold": threshold,
         "windowSpanTokens": max(_int_metric(request_metrics.get("windowSpanTokens"), 0), 0),
+    }
+
+
+def _build_runtime_metrics_snapshot(
+    *,
+    runtime_metrics: dict[str, Any],
+    llm_result: dict[str, Any],
+) -> RuntimeMetricsSnapshot:
+    """Build normalized runtime metrics snapshot for artifact persistence."""
+    usage = llm_result.get("usage") if isinstance(llm_result.get("usage"), dict) else {}
+    tool_executions = llm_result.get("toolExecutions") if isinstance(llm_result.get("toolExecutions"), list) else []
+    tool_failures_count = sum(
+        1
+        for execution in tool_executions
+        if isinstance(execution, dict) and not bool(execution.get("success"))
+    )
+    tool_round_count = len(
+        [
+            summary
+            for summary in (llm_result.get("roundSummaries") or [])
+            if isinstance(summary, dict)
+        ]
+    )
+    return RuntimeMetricsSnapshot(
+        windowIndex=max(_int_metric(runtime_metrics.get("windowIndex"), 1), 1),
+        restartCount=max(_int_metric(runtime_metrics.get("restartCount"), 0), 0),
+        totalTokensUsed=max(_int_metric(usage.get("totalTokens"), 0), 0),
+        totalCostUsed=max(_float_metric(llm_result.get("costUsed"), 0.0), 0.0),
+        cumulativeWindowSpanTokens=max(_int_metric(runtime_metrics.get("cumulativeWindowSpanTokens"), 0), 0),
+        carryForwardLossCount=max(_int_metric(runtime_metrics.get("carryForwardLossCount"), 0), 0),
+        toolRoundCount=tool_round_count,
+        toolFailuresCount=tool_failures_count,
+    )
+
+
+def _persist_runtime_metrics_artifact(
+    session,
+    *,
+    task,
+    invocation_id: str,
+    metrics_snapshot: RuntimeMetricsSnapshot,
+) -> dict[str, Any]:
+    """Persist runtime metrics to artifact file and emit a DB-backed runtime event."""
+    workspace_root = resolve_workspace_root()
+    metrics_dir = ensure_state_subdir("runtime/metrics", workspace_root)
+    metrics_path = metrics_dir / f"{invocation_id}.json"
+    payload = {
+        "taskId": task.id,
+        "projectId": task.project_id,
+        "invocationId": invocation_id,
+        "createdAt": utc_now().isoformat(),
+        "snapshot": metrics_snapshot.model_dump(by_alias=True, mode="json"),
+    }
+    write_json(metrics_path, payload)
+    metrics_ref = ExternalRef(type="file", locator=relative_workspace_path(metrics_path, workspace_root))
+    event = _persist_runtime_event(
+        session,
+        project_id=task.project_id,
+        aggregate_type="runtime-metrics",
+        aggregate_id=invocation_id,
+        event_type="runtime.metrics.persisted",
+        locator=f"agent-runtime/runtime/metrics/{invocation_id}",
+    )
+    return {
+        "invocationId": invocation_id,
+        "metricsRef": metrics_ref.model_dump(mode="json"),
+        "snapshot": metrics_snapshot.model_dump(by_alias=True, mode="json"),
+        "outboxRecord": event.model_dump(by_alias=True, mode="json"),
     }
 
 
@@ -1019,6 +1088,17 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         continue
                     if pending_action.get("kind") not in {"pending-tool-calls", "window-restart"}:
                         continue
+                    if pending_action.get("kind") == "pending-tool-calls" or pending_action.get("checksum") is not None:
+                        integrity_ok, integrity_error = _verify_snapshot_integrity(pending_action)
+                        if not integrity_ok:
+                            task_repository.update_snapshot(
+                                snapshot.id,
+                                status="created",
+                                blockers=[f"snapshot-corrupted:{integrity_error or 'unknown'}"],
+                            )
+                            raise ValueError(
+                                f"Task {task_id} snapshot integrity check failed and resume was rejected: {integrity_error}"
+                            )
                     request_state = pending_action.get("requestState") if isinstance(pending_action.get("requestState"), dict) else {}
                     for key, value in request_state.items():
                         if key not in request or request.get(key) is None:
@@ -1594,6 +1674,19 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
             actual_output_tokens = int(llm_result["usage"].get("outputTokens", output_tokens))
             actual_cost = float(llm_result.get("costUsed", estimated_cost))
+            runtime_metrics_artifact: dict[str, Any] | None = None
+            invocation_id = str((llm_result.get("invocation") or {}).get("id") or "").strip()
+            if invocation_id:
+                metrics_snapshot = _build_runtime_metrics_snapshot(
+                    runtime_metrics=runtime_metrics,
+                    llm_result=llm_result,
+                )
+                runtime_metrics_artifact = _persist_runtime_metrics_artifact(
+                    session,
+                    task=task,
+                    invocation_id=invocation_id,
+                    metrics_snapshot=metrics_snapshot,
+                )
             budget_overrun: str | None = None
             try:
                 _enforce_consumed_budget(
@@ -1650,6 +1743,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
                         "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
                     },
+                    "runtimeMetricsArtifact": runtime_metrics_artifact,
                     "detail": budget_overrun,
                     "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
                 }
@@ -1924,6 +2018,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "memoryTagWrites": memory_tag_write_result,
                     "writeValidation": write_validation,
                     "rehydration": rehydration_result,
+                    "runtimeMetricsArtifact": runtime_metrics_artifact,
                     "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
                 }
 
@@ -1970,6 +2065,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 "memoryTagWrites": memory_tag_write_result,
                 "writeValidation": write_validation,
                 "rehydration": rehydration_result,
+                "runtimeMetricsArtifact": runtime_metrics_artifact,
                 "runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
             }
     except Exception as exc:

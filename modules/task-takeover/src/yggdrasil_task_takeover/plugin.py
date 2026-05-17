@@ -151,7 +151,7 @@ def _verification_items(delivery_sections: list[dict[str, object]]) -> list[dict
     items: list[dict[str, object]] = []
     for section, detail in required.items():
         item = sections_by_name.get(section) or {}
-        status = "passed" if item.get("status") == "present" else "warning"
+        status = "passed" if item.get("status") == "present" else "failed"
         items.append(
             TaskTakeoverVerificationItem(
                 id=new_id("takeover-verify", section, stable=True),

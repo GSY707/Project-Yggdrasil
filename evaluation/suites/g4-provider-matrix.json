@@ -69,7 +69,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0-Preview",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -143,7 +143,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0-Preview",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -217,7 +217,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0-Preview",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,

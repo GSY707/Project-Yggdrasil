@@ -41,7 +41,7 @@
 
 | 维度 | 已核实事实 | 工程含义 |
 |------|------------|----------|
-| LongCat 正式窗口 | [adapters/model-providers/src/yggdrasil_model_providers/gateway.py](../../adapters/model-providers/src/yggdrasil_model_providers/gateway.py) 将 `LongCat-Flash-Lite` 的 `context_window` 定义为 `128000`。 | 若采用“10 倍上下文窗口任务”作为出口标准，则累计任务跨度至少要覆盖 `1,280,000` tokens 量级。 |
+| LongCat 正式窗口 | [adapters/model-providers/src/yggdrasil_model_providers/gateway.py](../../adapters/model-providers/src/yggdrasil_model_providers/gateway.py) 将 `LongCat-2.0-Preview` 的 `context_window` 定义为 `128000`（并保留 `LongCat-Flash-Lite` 作为对照模型）。 | 若采用“10 倍上下文窗口任务”作为出口标准，则累计任务跨度至少要覆盖 `1,280,000` tokens 量级。 |
 | 当前官方长样本入口 | [evaluation/suites/g4-provider-matrix-longform.json](../../evaluation/suites/g4-provider-matrix-longform.json) 只固定了一个 `g4-coding-longform` 单任务样本；[README.md](../../README.md) 和 [package.json](../../package.json) 已把它定义为官方命令入口。 | 现有 longform suite 的定位是“比快任务更长的单任务样本”，不是“强制多次窗口重启的正式压力套件”。 |
 | 最新官方 live 证据 | `.yggdrasil/state/evaluations/evalrun_821c46b4b4584f38911e.json` 中，LongCat case 的 `totalTokens=4091`、`nonCacheInputTokens=2811`、`maxContextLengthTokens=3078`。 | 这只相当于一个 128k 窗口的约 `2.4%` 最大上下文占用，距离“单窗口吃满”都还很远，更谈不上“10 倍窗口任务”。 |
 | 上下文观测链路 | [packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py](../../packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py) 已记录 `beforeContextPruning`、`afterContextPruning`、`beforeModelInvocation`、`taskEnd`，且当存在 `restartMessage` 时会记录 `beforeWindowRestart`。 | 观测位已经开始对 restart 让路，但还缺真正的 restart 触发器、状态迁移和 run-to-run handoff。 |
@@ -122,7 +122,7 @@
 
 如果把用户当前要求冻结成 G4 长任务出口标准，建议直接采用下面这组硬口径：
 
-1. 官方模型：`longcat / LongCat-Flash-Lite`
+1. 官方模型：`longcat / LongCat-2.0-Preview`（`LongCat-Flash-Lite` 作为对照项）
 2. 官方窗口：`contextWindow = 128000`
 3. 目标任务跨度：`cumulativeWindowSpanTokens >= 1,280,000`
 4. 最低 restart 次数：`restartCount >= 10`

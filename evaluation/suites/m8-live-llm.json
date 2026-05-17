@@ -13,10 +13,10 @@
   "cases": [
     {
       "id": "evalcase_m8_live_longcat",
-      "title": "LongCat 真实场景主链路联调",
+      "title": "LongCat-2.0-Preview 真实场景主链路联调",
       "scenario": "m8.live_llm_task_execution",
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0-Preview",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -27,12 +27,12 @@
       "maxToolRounds": 8,
       "maxTokens": 320,
       "temperature": 0.15,
-      "tags": ["m8", "live", "longcat", "llm"],
+      "tags": ["m8", "live", "longcat", "llm", "preview-default"],
       "difficulty": "hard"
     },
     {
       "id": "evalcase_m8_live_tool_task_longcat",
-      "title": "LongCat 真实任务型工具闭环",
+      "title": "LongCat-Flash-Lite 真实任务型工具闭环（对照）",
       "scenario": "m8.live_llm_tool_task",
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-Flash-Lite",
@@ -44,7 +44,7 @@
       "maxTokens": 420,
       "temperature": 0.1,
       "requiredTools": ["text_memory.retrieve", "context_pruning.plan"],
-      "tags": ["m8", "live", "longcat", "tool-calling"],
+      "tags": ["m8", "live", "longcat", "tool-calling", "flash-lite-compare"],
       "difficulty": "hard"
     }
   ]

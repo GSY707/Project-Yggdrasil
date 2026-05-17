@@ -4,6 +4,17 @@
 - 日期：2026-05-16
 - 目标：把“记忆树代替上下文窗口成为 LLM 的全部记忆”落成可执行工程计划，不依赖原拆分文档的建议顺序。
 
+### 执行状态更新（2026-05-17）
+
+1. P2 已完成主链路闭环（含预算 pre/post check 接线与回归），验证结论见 `docs/research/P2_VERIFICATION_AND_P3_DELIVERY_2026_05_17.md`。
+2. P3（任务 18-20）已完成工程落地：
+  - E1：交付段落缺失从 warning 升级为 failed（硬门禁语义）。
+  - D6：G4 case 增加 tier 化 restart stability 报告与可选强失败门禁。
+  - E2：新增 short-window vs long-window parity 冻结指标并进入 suite 聚合输出。
+3. 官方入口运行状态：
+  - `eval:g4:window-stress` 本次运行通过（`passRate=1.0`）。
+  - `eval:g4:real-task-parity` 本次运行 failed（严格 acceptance 未通过），当前剩余工作转为 live 结果达标而非代码接线缺失。
+
 ---
 
 ## 1. 总目标与验收基线

@@ -569,19 +569,31 @@ def _format_task_contract(task: Any, run_type: str, task_type: str, request: dic
     return "\n".join(lines)
 
 
-def _format_response_requirements(request: dict[str, Any], seed_template: SeedTemplate | None) -> str:
+def _format_response_requirements(
+    request: dict[str, Any],
+    seed_template: SeedTemplate | None,
+    resume_path: str | None = None,
+) -> str:
     style = seed_template.output_style if seed_template is not None else "concise"
     additional = request.get("responseRequirements")
     has_delivery_contract = isinstance(additional, str) and additional.strip()
+    is_resume = bool(resume_path)
     lines = [
-        "1. 直接产出以下要求指定的最终交付物，不要停在计划或下一步总结。" if has_delivery_contract else "1. 先总结当前局势，再给出最稳妥的下一步。",
+        (
+            "1. 直接产出以下要求指定的最终交付物，不要停在计划或下一步总结。"
+            if has_delivery_contract or is_resume
+            else "1. 先总结当前局势，再给出最稳妥的下一步。"
+        ),
         "2. 若证据不足，明确说明缺失信息，不要补空白。",
         "3. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
         f"4. 默认采用 {style} 风格，除非任务另有明确要求。",
     ]
+    if is_resume:
+        lines.append("5. 恢复态必须优先交付 result/evidence/pending/incomplete 四段，不允许仅输出计划草稿。")
+        lines.append("6. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
     if bool(request.get("memoryWriteTagsEnabled", True)):
         lines.append(
-            '5. 如需在不中断回答的情况下修改记忆树，可插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
+            f'{len(lines) + 1}. 如需在不中断回答的情况下修改记忆树，可插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
         )
     if has_delivery_contract:
         lines.append(f"{len(lines) + 1}. Additional requirement: {additional.strip()}")
@@ -729,7 +741,7 @@ def compile_runtime_prompt(
         "runtime_state": _format_runtime_state(root_mount),
         "task_contract": _format_task_contract(task, run_type, task_type, request, resume_path),
         "mounted_context_items": _format_context_lines(current_context),
-        "response_requirements": _format_response_requirements(request, seed_template),
+        "response_requirements": _format_response_requirements(request, seed_template, resume_path),
     }
     if takeover_protocol is not None:
         user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)

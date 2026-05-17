@@ -1,6 +1,10 @@
+| `docs/research/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范（任务14-17）：LLM 预算治理（hard fail + retry 策略）、工具调用执行回合（failure 隔离 + pending action）、runtime metrics 导出（统一指标快照）、安全停止与可恢复断点（checksum 校验机制），包含完整代码改动、新增常量/数据类、集成点、测试断言建议 |
+| `docs/research/P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` | P2 任务14-17 快速参考实现检查清单：文件修改位置、关键代码片段行号、集成顺序、验收标准、常见错误提示 |
+| `docs/research/P2_COMPLETION_SUMMARY_2026_05_17.md` | P2 阶段完成总结（2026-05-17）：全部4任务完成✅、28/28测试通过✅、代码修改清单、架构兼容性分析、后续行动计划、质量指标统计 |
+| `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/17 更新：默认 LongCat 模型已切换为 `LongCat-2.0-Preview`，并保留 `LongCat-Flash-Lite` 作为评测对照项；同时完成 P1 全部验证（31/31 通过）并完成 P2 任务15/16/17 实施：工具调用隔离重试、runtime metrics 快照与 artifact 落盘、安全停止 pending action checksum 与恢复校验；并保留 P2 任务14-17 审计入口——参见 [P2_TASK_14_17_FILE_STATUS_AUDIT.md](P2_TASK_14_17_FILE_STATUS_AUDIT.md)。此前补充 P1 恢复链路硬化，包含 restart requestState 深拷贝与强制合同字段透传、carry-forward 去重压缩并保留 work tree 执行指针、pause-resume 恢复时自动修复 takeover work tree 当前节点与 recovery anchor、以及恢复态 Prompt 强制 delivery-first（result/evidence/pending/incomplete + judgment）；2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
 
 ---
 
@@ -419,6 +423,8 @@ docs/
 ├── USER_GUIDE.md                   # 使用指南（本套文档之一）
 ├── DIRECTORY_REFERENCE.md          # 目录说明书（本文档）
 ├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值与长任务伪无限上下文评测口径
+├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
+├── P2_TASK_14_17_FILE_STATUS_AUDIT.md # P2 任务14-17 文件现状审计：成本预算检查、工具执行隔离、runtime metrics、safe-stop机制全景分析，6项关键缺失+6项重要缺失
 │
 ├── adr/                            # 架构决策记录 (Architecture Decision Records)
 │   ├── README.md                   # ADR 索引
@@ -720,6 +726,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` | 4M 真实任务保留日志重跳记录：保留沙筃路径、窗口级行为、最终输出、根因分析、收紧 acceptance 后的正式 failed run，以及工程现实与理论设想差距和推进路线（responseRequirements / restartMessage / snapshot 修复） |
 | `docs/research/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务、难度分级（L1-L5）、逐项实现路径与执行优先级，并可作为“记忆树替代上下文窗口”主线的影响排序输入 |
 | `docs/research/memory-tree-agent-executable-roadmap-2026-05-16.md` | 记忆树 Agent 可执行路线图：按“写树-取树-恢复-验收”闭环重排 26 项任务，给出逐项输入/实现/验证/证据/退出条件的工程化执行稿 |
+| `docs/research/P2_VERIFICATION_AND_P3_DELIVERY_2026_05_17.md` | P2 执行结果验证与 P3 完成报告：明确 P2 已落地项与缺口，并给出 E1/D6/E2 的代码、配置与测试闭环证据 |
 | `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
 | `docs/research/future/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
 | `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |

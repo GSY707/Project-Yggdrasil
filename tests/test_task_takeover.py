@@ -52,3 +52,20 @@ def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None
     assert all(item["status"] == "passed" for item in verification["verificationItems"])
     assert verification["metrics"]["deliveryCompletenessScore0_100"] == 100.0
     assert verification["metrics"]["verificationPassRate"] == 1.0
+
+
+def test_task_takeover_module_hard_fails_when_required_delivery_section_missing() -> None:
+    plugin = TaskTakeoverModule()
+
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# 结果\n已完成核心改动。\n\n# 证据\n- 补了测试\n\n# 待确认\n- 需要 live 复跑",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+        }
+    )
+
+    incomplete_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.incomplete")
+    assert incomplete_item["status"] == "failed"
+    assert verification["metrics"]["deliveryCompletenessScore0_100"] == 75.0
+    assert verification["metrics"]["verificationPassRate"] == 0.75
