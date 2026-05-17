@@ -41,6 +41,12 @@ class PersistenceSettings:
     module_failure_threshold: int
     redis_socket_connect_timeout: float
     redis_failure_ttl_seconds: float
+    sqlite_connect_timeout_seconds: float
+    sqlite_busy_timeout_ms: int
+    sqlite_enable_wal: bool
+    sqlite_lock_retry_max_attempts: int
+    sqlite_lock_retry_backoff_ms: float
+    operation_queue_enabled: bool
 
     @classmethod
     def load(cls) -> "PersistenceSettings":
@@ -67,4 +73,22 @@ class PersistenceSettings:
                 0.0,
                 _as_float(os.getenv("YGGDRASIL_REDIS_FAILURE_TTL_SECONDS"), 5.0),
             ),
+            sqlite_connect_timeout_seconds=max(
+                0.0,
+                _as_float(os.getenv("YGGDRASIL_SQLITE_CONNECT_TIMEOUT_SECONDS"), 30.0),
+            ),
+            sqlite_busy_timeout_ms=max(
+                0,
+                int(os.getenv("YGGDRASIL_SQLITE_BUSY_TIMEOUT_MS", "30000")),
+            ),
+            sqlite_enable_wal=_as_bool(os.getenv("YGGDRASIL_SQLITE_ENABLE_WAL"), True),
+            sqlite_lock_retry_max_attempts=max(
+                1,
+                int(os.getenv("YGGDRASIL_SQLITE_LOCK_RETRY_MAX_ATTEMPTS", "3")),
+            ),
+            sqlite_lock_retry_backoff_ms=max(
+                0.0,
+                _as_float(os.getenv("YGGDRASIL_SQLITE_LOCK_RETRY_BACKOFF_MS"), 50.0),
+            ),
+            operation_queue_enabled=_as_bool(os.getenv("YGGDRASIL_OPERATION_QUEUE_ENABLED"), True),
         )

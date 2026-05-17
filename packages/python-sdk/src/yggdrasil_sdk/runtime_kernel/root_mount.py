@@ -28,6 +28,34 @@ def _normalize_entity_refs(values: Any, default_kind: str) -> list[EntityRef]:
 def _root_ref(project_id: str, branch_id: str, root_branch: str) -> EntityRef:
     return EntityRef(kind="node", id=new_id("node", project_id, branch_id, root_branch, stable=True))
 
+
+def _root_branches(
+    identity_refs: list[EntityRef],
+    context_refs: list[EntityRef],
+    execution_refs: list[EntityRef],
+) -> dict[str, str | None]:
+    return {
+        "identity": identity_refs[0].id if identity_refs else None,
+        "context": context_refs[0].id if context_refs else None,
+        "execution": execution_refs[0].id if execution_refs else None,
+    }
+
+
+def _startup_contract(payload: dict[str, Any], *, task_record: Any | None = None) -> dict[str, str]:
+    response_requirements = payload.get("responseRequirements")
+    restart_message = payload.get("restartMessage")
+    if restart_message is None and task_record is not None:
+        restart_message = getattr(task_record, "restart_message", None)
+    if restart_message is None:
+        restart_message = payload.get("resumeMessage")
+
+    contract: dict[str, str] = {}
+    if response_requirements is not None and str(response_requirements).strip():
+        contract["responseRequirements"] = str(response_requirements)
+    if restart_message is not None and str(restart_message).strip():
+        contract["restartMessage"] = str(restart_message)
+    return contract
+
 def _active_capabilities() -> list[str]:
     return active_module_ids()
 
@@ -224,6 +252,7 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
     module_mount_fragments: list[dict[str, Any]] = []
     module_mounted_node_refs: list[dict[str, Any]] = []
     accessible_mounts: list[dict[str, Any]] = []
+    startup_contract = _startup_contract(request, task_record=task_record)
     startup_results = collect_hook_results(
         HookNames.AGENT_STARTUP_MOUNT_ROOT,
         {
@@ -300,6 +329,8 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
     response["source"] = "database" if task_record is not None else "preview"
     response["moduleMountFragments"] = module_mount_fragments
     response["accessibleMounts"] = accessible_mounts
+    response["rootBranches"] = _root_branches(identity_refs, context_refs, execution_refs)
+    response["startupContract"] = startup_contract
     response["cached"] = _cache_package_entry(coordinator, f"runtime/tasks/{task_id}/root-mount/current", response)
     return response
 

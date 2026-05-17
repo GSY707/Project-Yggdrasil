@@ -494,7 +494,8 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
         assert previous_run.window_index == 1
 
 
-def test_main_agent_runtime_pause_resume_closed_loop() -> None:
+def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
+    monkeypatch.setenv("YGGDRASIL_DISABLE_LIVE_LLM", "1")
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -611,6 +612,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert request_payload["promptMetadata"]["takeoverProtocol"]["workTree"]["status"] == "planned"
         response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+        assert isinstance(response_payload["assistantText"], str)
         assert response_payload["localRuntimeTimings"]["compilePromptMs"] >= 0
         assert response_payload["localRuntimeTimings"]["modelToolLoopMs"] >= 0
         execution_notes = [
@@ -626,6 +628,7 @@ def test_main_agent_runtime_pause_resume_closed_loop() -> None:
         assert any(record.reverse_trace_mode for record in retrieval_requests)
 
     assert first_run["result"]["takeoverProtocol"] is not None
+    assert isinstance(first_run["result"]["assistantText"], str)
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
     assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] == "verified"
     assert first_run["result"]["takeoverProtocolRef"] is not None

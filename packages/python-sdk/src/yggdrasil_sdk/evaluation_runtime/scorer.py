@@ -324,6 +324,36 @@ def _real_task_window_parity_summary(rows: list[dict[str, Any]]) -> dict[str, An
         },
     }
 
+
+def _real_task_window_parity_group_summaries(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+
+    grouped_rows: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        pair_key = str(row.get("parityPairKey") or "").strip() or "default"
+        provider = str(row.get("provider") or "unknown")
+        model = str(row.get("model") or "unknown")
+        grouped_rows.setdefault((pair_key, provider, model), []).append(row)
+
+    summaries: list[dict[str, Any]] = []
+    for (pair_key, provider, model), bucket in grouped_rows.items():
+        summary = _real_task_window_parity_summary(bucket)
+        if summary is None:
+            continue
+        summary.update(
+            {
+                "parityPairKey": pair_key,
+                "provider": provider,
+                "model": model,
+                "groupKey": f"{pair_key}:{provider}:{model}",
+            }
+        )
+        summaries.append(summary)
+
+    summaries.sort(key=lambda item: (str(item.get("parityPairKey") or ""), str(item.get("provider") or ""), str(item.get("model") or "")))
+    return summaries
+
 def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     strategy_totals: dict[str, dict[str, float]] = {}
     baseline_comparisons: list[dict[str, Any]] = []
@@ -388,9 +418,18 @@ def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any
         payload["liveScenarios"] = live_scenarios
     if provider_matrix_rows:
         payload.update(_provider_matrix_summary(provider_matrix_rows))
-        parity_summary = _real_task_window_parity_summary(provider_matrix_rows)
-        if parity_summary is not None:
-            payload["realTaskWindowParity"] = parity_summary
+        parity_summaries = _real_task_window_parity_group_summaries(provider_matrix_rows)
+        if parity_summaries:
+            payload["realTaskWindowParityGroups"] = parity_summaries
+            if len(parity_summaries) == 1:
+                payload["realTaskWindowParity"] = parity_summaries[0]
+            else:
+                payload["realTaskWindowParity"] = {
+                    "groupCount": len(parity_summaries),
+                    "passedGroupCount": len([item for item in parity_summaries if int(item.get("parityPassed0_1") or 0) == 1]),
+                    "parityPassed0_1": 1 if all(int(item.get("parityPassed0_1") or 0) == 1 for item in parity_summaries) else 0,
+                    "groups": parity_summaries,
+                }
     return payload
 
 

@@ -94,7 +94,7 @@ def _get_schema_template_db() -> str:
     return _SCHEMA_TEMPLATE_DB
 
 @contextmanager
-def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[None]:
+def isolated_runtime_environment(*, disable_live_llm: bool = True, allow_paid_models: bool = False) -> Iterator[None]:
     managed_keys = [
         "YGGDRASIL_DATABASE_URL",
         "YGGDRASIL_AUTO_CREATE_SCHEMA",
@@ -105,6 +105,7 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
         "YGGDRASIL_GIT_REPO_PATH",
         "YGGDRASIL_MCP_PROJECT_WORKSPACE",
         "YGGDRASIL_DISABLE_LIVE_LLM",
+        "YGGDRASIL_ALLOW_PAID_MODELS",
         "YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT",
         "YGGDRASIL_EVAL_ACTIVE_WORKSPACE_ROOT",
         "YGGDRASIL_EVAL_ACTIVE_DB_PATH",
@@ -139,6 +140,10 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
             os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
         else:
             os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
+        if allow_paid_models:
+            os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
+        else:
+            os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
         os.environ.pop("YGGDRASIL_STATE_DIR", None)
         close_mcp_bridge_sessions()
         reset_persistence_runtime()
@@ -156,7 +161,12 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True) -> Iterator[N
             reset_persistence_runtime()
 
 @contextmanager
-def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, disable_live_llm: bool = True) -> Iterator[None]:
+def local_evaluation_runtime_environment(
+    workspace_root: Path | None = None,
+    *,
+    disable_live_llm: bool = True,
+    allow_paid_models: bool = False,
+) -> Iterator[None]:
     managed_keys = [
         "YGGDRASIL_DATABASE_URL",
         "YGGDRASIL_AUTO_CREATE_SCHEMA",
@@ -167,6 +177,7 @@ def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, 
         "YGGDRASIL_GIT_REPO_PATH",
         "YGGDRASIL_MCP_PROJECT_WORKSPACE",
         "YGGDRASIL_DISABLE_LIVE_LLM",
+        "YGGDRASIL_ALLOW_PAID_MODELS",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
     with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-") as temp_dir:
@@ -185,6 +196,10 @@ def local_evaluation_runtime_environment(workspace_root: Path | None = None, *, 
             os.environ["YGGDRASIL_DISABLE_LIVE_LLM"] = "1"
         else:
             os.environ.pop("YGGDRASIL_DISABLE_LIVE_LLM", None)
+        if allow_paid_models:
+            os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
+        else:
+            os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
         os.environ.pop("YGGDRASIL_STATE_DIR", None)
         close_mcp_bridge_sessions()
         reset_persistence_runtime()

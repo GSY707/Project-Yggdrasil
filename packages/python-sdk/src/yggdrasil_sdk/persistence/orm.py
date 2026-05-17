@@ -85,6 +85,9 @@ class PermissionTupleORM(Base):
 
 class NodeORM(Base):
     __tablename__ = "nodes"
+    __table_args__ = (
+        sa.Index("ix_nodes_branch_created_at", "branch_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -218,7 +221,10 @@ class ImportJobORM(Base):
 
 class ImportFragmentORM(Base):
     __tablename__ = "import_fragments"
-    __table_args__ = (sa.UniqueConstraint("import_job_id", "ordinal"),)
+    __table_args__ = (
+        sa.UniqueConstraint("import_job_id", "ordinal"),
+        sa.Index("ix_import_fragments_job_created", "import_job_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
     import_job_id: Mapped[str] = mapped_column(sa.ForeignKey("import_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -303,6 +309,10 @@ class AgentRunORM(Base):
 
 class TaskSnapshotORM(Base):
     __tablename__ = "task_snapshots"
+    __table_args__ = (
+        sa.Index("ix_task_snapshots_task_status_created", "task_id", "status", "created_at"),
+        sa.Index("ix_task_snapshots_task_created", "task_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
     app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
@@ -344,6 +354,10 @@ class ModelRouteDecisionORM(Base):
 
 class ModelInvocationORM(Base):
     __tablename__ = "model_invocations"
+    __table_args__ = (
+        sa.Index("ix_model_invocations_task_created", "task_id", "created_at"),
+        sa.Index("ix_model_invocations_run_created", "agent_run_id", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
     app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)

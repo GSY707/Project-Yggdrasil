@@ -1127,6 +1127,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "currentObjective": request.get("currentObjective") or task.current_objective,
                     "currentFocus": request.get("currentFocus") or task.current_focus,
                     "resumeMessage": request.get("resumeMessage") or (snapshot.resume_message if snapshot else task.resume_message),
+                    "restartMessage": request.get("restartMessage") or task.restart_message,
+                    "responseRequirements": request.get("responseRequirements"),
                     "budgetState": request.get("budgetState") or task.budget.model_dump(by_alias=True),
                     "activeCapabilities": request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
                 },
@@ -1688,15 +1690,23 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     metrics_snapshot=metrics_snapshot,
                 )
             budget_overrun: str | None = None
-            try:
-                _enforce_consumed_budget(
-                    task.budget,
-                    input_tokens=actual_input_tokens,
-                    output_tokens=actual_output_tokens,
-                    cost_used=actual_cost,
-                )
-            except ValueError as exc:
-                budget_overrun = str(exc)
+            llm_budget_check = llm_result.get("budgetCheckResult") if isinstance(llm_result.get("budgetCheckResult"), dict) else None
+            llm_budget_overrun = llm_result.get("budgetOverrunResult") if isinstance(llm_result.get("budgetOverrunResult"), dict) else None
+            if llm_budget_check is not None and not bool(llm_budget_check.get("checkPassed", True)):
+                budget_overrun = str(llm_budget_check.get("reason") or "Pre-invocation budget check failed.")
+            elif llm_budget_overrun is not None and bool(llm_budget_overrun.get("isOverrun", False)):
+                violation_type = str(llm_budget_overrun.get("violationType") or "budget")
+                budget_overrun = f"{violation_type.capitalize()} budget exceeded after model invocation."
+            if budget_overrun is None:
+                try:
+                    _enforce_consumed_budget(
+                        task.budget,
+                        input_tokens=actual_input_tokens,
+                        output_tokens=actual_output_tokens,
+                        cost_used=actual_cost,
+                    )
+                except ValueError as exc:
+                    budget_overrun = str(exc)
             run = task_repository.update_agent_run(
                 run.id,
                 {
@@ -1999,6 +2009,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "task": task.model_dump(by_alias=True, mode="json"),
                     "run": run.model_dump(by_alias=True, mode="json"),
                     "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                    "assistantText": str(llm_result.get("assistantText") or ""),
                     "rootMount": root_mount,
                     "createdNode": created_node.model_dump(by_alias=True, mode="json"),
                     "snapshot": pause_snapshot,
@@ -2048,6 +2059,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 "task": task.model_dump(by_alias=True, mode="json"),
                 "run": run.model_dump(by_alias=True, mode="json"),
                 "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                "assistantText": str(llm_result.get("assistantText") or ""),
                 "rootMount": root_mount,
                 "createdNode": created_node.model_dump(by_alias=True, mode="json"),
                 "pruning": pruning_result,

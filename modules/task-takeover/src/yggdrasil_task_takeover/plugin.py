@@ -229,10 +229,22 @@ class TaskTakeoverModule(BaseModulePlugin):
         request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
         root_mount = payload.get("rootMount") if isinstance(payload.get("rootMount"), dict) else {}
         budget = root_mount.get("budgetState") if isinstance(root_mount.get("budgetState"), dict) else {}
+        startup_contract = root_mount.get("startupContract") if isinstance(root_mount.get("startupContract"), dict) else {}
+        root_branches = root_mount.get("rootBranches") if isinstance(root_mount.get("rootBranches"), dict) else {}
         constraints: list[dict[str, object]] = [
             _build_constraint("delivery", "交付结构", "结果 / 证据 / 待确认项 / 未完成项", source="gate-2", required=True),
             _build_constraint("tooling", "可见能力", ", ".join([str(item) for item in root_mount.get("activeCapabilities") or []]) or "none", source="root-mount", required=False),
         ]
+        if root_branches:
+            constraints.append(
+                _build_constraint(
+                    "environment",
+                    "根挂载",
+                    ", ".join(f"{key}={value}" for key, value in root_branches.items() if value),
+                    source="root-mount",
+                    required=True,
+                )
+            )
         if budget.get("tokenBudgetTotal") is not None:
             constraints.append(
                 _build_constraint(
@@ -256,6 +268,26 @@ class TaskTakeoverModule(BaseModulePlugin):
         if request.get("readonlyContextRef") is not None:
             constraints.append(
                 _build_constraint("scope", "只读切片", "当前运行只能依赖已挂载只读上下文。", source="request", required=True)
+            )
+        if startup_contract.get("responseRequirements"):
+            constraints.append(
+                _build_constraint(
+                    "delivery",
+                    "启动合同",
+                    str(startup_contract["responseRequirements"]),
+                    source="startup-contract",
+                    required=True,
+                )
+            )
+        if startup_contract.get("restartMessage"):
+            constraints.append(
+                _build_constraint(
+                    "runtime",
+                    "重启交接",
+                    str(startup_contract["restartMessage"]),
+                    source="startup-contract",
+                    required=True,
+                )
             )
         if request.get("resumeMessage") or root_mount.get("resumeMessage"):
             constraints.append(

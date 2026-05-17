@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
-from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task
+from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment
 import yggdrasil_sdk.evaluation_runtime.scorer as evaluation_scorer
 import yggdrasil_sdk.evaluation_runtime.suite_cases_g4 as suite_cases_g4
 from yggdrasil_sdk import list_evaluation_suite_definitions, run_evaluation_suite
@@ -70,6 +71,34 @@ def test_g4_window_restart_stress_suite_targets_longcat_and_deepseek() -> None:
     assert {case["forcedWindowRestartBudget"] for case in cases} == {100}
     assert {case["effectiveContextWindow"] for case in cases} == {120}
     assert {case["maxWindowCycles"] for case in cases} == {120}
+
+
+def test_g4_real_task_window_parity_suite_uses_free_default_and_small_paid_approval() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    suite = suites["evalsuite_g4_real_task_window_parity"]
+    cases = suite["cases"]
+
+    assert len(cases) == 4
+    assert {case["requestedProvider"] for case in cases} == {"longcat", "deepseek_direct"}
+    assert len([case for case in cases if bool(case.get("allowPaidModels"))]) == 2
+    assert {case["costBudgetTotal"] for case in cases if case["requestedProvider"] == "deepseek_direct"} == {2.0}
+    assert {case["parityPairKey"] for case in cases} == {"g4-real-task-window-parity", "g4-real-task-window-parity-deepseek"}
+
+
+def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_allows_it() -> None:
+    previous = os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS")
+    os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
+    try:
+        with isolated_runtime_environment(disable_live_llm=True):
+            assert os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS") is None
+        with isolated_runtime_environment(disable_live_llm=True, allow_paid_models=True):
+            assert os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS") == "1"
+    finally:
+        if previous is None:
+            os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
+        else:
+            os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = previous
 
 
 def test_g4_provider_matrix_metrics_capture_token_and_context_usage() -> None:
@@ -355,3 +384,88 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
     assert parity["deliveryEquivalence0_1"] == 1
     assert parity["qualityDeltaToLongWindow0_100"] == 2.0
     assert parity["parityPassed0_1"] == 1
+
+
+def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -> None:
+    payload = evaluation_scorer._aggregate_case_metrics(
+        [
+            {
+                "id": "short-longcat",
+                "title": "short-longcat",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-short64k",
+                        "parityPairKey": "g4-real-task-window-parity",
+                        "parityRole": "short",
+                        "provider": "longcat",
+                        "model": "LongCat-2.0-Preview",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 94.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+            {
+                "id": "long-longcat",
+                "title": "long-longcat",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-long128k",
+                        "parityPairKey": "g4-real-task-window-parity",
+                        "parityRole": "long",
+                        "provider": "longcat",
+                        "model": "LongCat-2.0-Preview",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 96.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+            {
+                "id": "short-deepseek",
+                "title": "short-deepseek",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-short64k-deepseek",
+                        "parityPairKey": "g4-real-task-window-parity-deepseek",
+                        "parityRole": "short",
+                        "provider": "deepseek_direct",
+                        "model": "deepseek-v4-pro",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 93.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+            {
+                "id": "long-deepseek",
+                "title": "long-deepseek",
+                "detail": {
+                    "providerMatrixEntry": {
+                        "matrixKey": "g4-real-task-window-parity-long128k-deepseek",
+                        "parityPairKey": "g4-real-task-window-parity-deepseek",
+                        "parityRole": "long",
+                        "provider": "deepseek_direct",
+                        "model": "deepseek-v4-pro",
+                        "goalCompletion0_1": 1,
+                        "deliveryCompletion0_1": 1,
+                        "planQualityScore0_100": 95.0,
+                        "qualityDeltaThreshold0_100": 8.0,
+                    }
+                },
+            },
+        ]
+    )
+
+    parity = payload["realTaskWindowParity"]
+    groups = payload["realTaskWindowParityGroups"]
+
+    assert parity["groupCount"] == 2
+    assert parity["passedGroupCount"] == 2
+    assert parity["parityPassed0_1"] == 1
+    assert len(groups) == 2
+    assert {item["provider"] for item in groups} == {"longcat", "deepseek_direct"}
+    assert all(item["parityPassed0_1"] == 1 for item in groups)

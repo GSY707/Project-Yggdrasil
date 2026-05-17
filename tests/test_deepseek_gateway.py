@@ -295,3 +295,322 @@ def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> Non
     assert result["firstTokenLatencyMs"] >= 0
     assert result["rawResponse"]["stream"] is True
     assert result["usage"]["totalTokens"] == 20
+
+
+def test_invoke_model_extracts_output_text_from_block_content(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {"type": "output_text", "text": "任务价值判断：高价值"},
+                                {"type": "text", "text": "acceptance 对照结论：等价"},
+                            ],
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 16,
+                    "total_tokens": 26,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-2.0-Preview",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "给出最终结论。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "任务价值判断：高价值\nacceptance 对照结论：等价"
+
+
+def test_invoke_model_extracts_top_level_output_payload(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": []},
+                    }
+                ],
+                "output": [
+                    {"type": "output_text", "text": "风险与下一步：继续补齐 live 证据。"}
+                ],
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 9,
+                    "total_tokens": 20,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "输出风险与下一步。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "风险与下一步：继续补齐 live 证据。"
+
+
+def test_invoke_model_extracts_tool_call_from_block_payload(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "function_call",
+                                    "name": "text_memory.retrieve",
+                                    "arguments": '{"query":"window parity"}',
+                                    "id": "call_block_1",
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 12,
+                    "total_tokens": 62,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "先检索再回答。"}],
+        allow_fallback=False,
+    )
+
+    assert result["toolCalls"][0]["name"] == "text_memory.retrieve"
+    assert result["toolCalls"][0]["arguments"] == {"query": "window parity"}
+
+
+def test_invoke_model_streaming_extracts_block_content_and_tool_calls(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeStreamingResponse(
+            [
+                {
+                    "id": "chatcmpl-block-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-2.0-Preview",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": [{"type": "output_text", "text": "任务价值判断：高价值"}],
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                },
+                {
+                    "id": "chatcmpl-block-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-2.0-Preview",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": [
+                                    {
+                                        "type": "function_call",
+                                        "name": "mcp.read.read_file",
+                                        "arguments": '{"path":"docs/DIRECTORY_REFERENCE.md"}',
+                                        "id": "call_stream_1",
+                                    }
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 10,
+                        "total_tokens": 30,
+                    },
+                },
+            ]
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-2.0-Preview",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "先读目录说明，再回答。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "任务价值判断：高价值"
+    assert result["toolCalls"][0]["name"] == "mcp.read.read_file"
+    assert result["toolCalls"][0]["arguments"] == {"path": "docs/DIRECTORY_REFERENCE.md"}
+
+
+def test_invoke_model_extracts_longcat_tagged_tool_calls(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "先读取关键证据文件，再产出最终发布简报。\n"
+                                "<longcat_tool_call>mcp.read.read_file\n"
+                                "<longcat_arg_key>file_path</longcat_arg_key>\n"
+                                "<longcat_arg_value>docs/DIRECTORY_REFERENCE.md</longcat_arg_value>\n"
+                                "</longcat_tool_call>"
+                            ),
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-2.0-Preview",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "先读证据再回答。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "先读取关键证据文件，再产出最终发布简报。"
+    assert result["toolCalls"][0]["name"] == "mcp.read.read_file"
+    assert result["toolCalls"][0]["arguments"] == {"path": "docs/DIRECTORY_REFERENCE.md"}
+
+
+def test_invoke_model_extracts_inline_xml_tool_tags(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "正在扫描仓库关键结构，为最终判断收集跨表面证据。\n"
+                                '<mcp.read.list_directory path="docs" recursive="false"/>\n'
+                                '<mcp.read.read_file file_path="README.md" start_line="1" end_line="20"/>'
+                            ),
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 24,
+                    "completion_tokens": 18,
+                    "total_tokens": 42,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "扫描关键证据。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "正在扫描仓库关键结构，为最终判断收集跨表面证据。"
+    assert [call["name"] for call in result["toolCalls"]] == ["mcp.read.list_directory", "mcp.read.read_file"]
+    assert result["toolCalls"][0]["arguments"] == {"path": "docs", "recursive": False}
+    assert result["toolCalls"][1]["arguments"] == {"path": "README.md", "startLine": 1, "endLine": 20}
+
+
+def test_invoke_model_extracts_block_xml_tool_calls(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "首先扫描当前仓库结构以收集证据。\n"
+                                "<tool_calls>\n"
+                                "<mcp.read.list_directory><path>.</path><recursive>false</recursive></mcp.read.list_directory>\n"
+                                "<mcp.read.read_file><file_path>README.md</file_path><start_line>1</start_line><end_line>20</end_line></mcp.read.read_file>\n"
+                                "</tool_calls>"
+                            ),
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 24,
+                    "completion_tokens": 18,
+                    "total_tokens": 42,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "扫描关键证据。"}],
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "首先扫描当前仓库结构以收集证据。"
+    assert [call["name"] for call in result["toolCalls"]] == ["mcp.read.list_directory", "mcp.read.read_file"]
+    assert result["toolCalls"][0]["arguments"] == {"path": ".", "recursive": False}
+    assert result["toolCalls"][1]["arguments"] == {"path": "README.md", "startLine": 1, "endLine": 20}

@@ -11,16 +11,19 @@ Tests cover:
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import tracemalloc
 from dataclasses import dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from yggdrasil_agent_runtime.runtime import prepare_pause_snapshot
-from yggdrasil_sdk import TaskRepository, get_persistence_runtime
+from yggdrasil_sdk import TaskRepository, get_persistence_runtime, initialize_schema, reset_persistence_runtime
 from yggdrasil_sdk.contracts import ExternalRef, ModuleCatalogSnapshot, ModuleInstallRecord, ModuleManifestSummary
 from yggdrasil_sdk.hook_runtime import collect_hook_results
 from yggdrasil_sdk.hooks import HookNames
@@ -31,6 +34,28 @@ from yggdrasil_sdk.support import utc_now
 
 
 pytestmark = pytest.mark.slow
+
+
+@pytest.fixture
+def isolated_phase3_sqlite_db():
+    original_db_url = os.environ.get("YGGDRASIL_DATABASE_URL")
+    original_auto_create_schema = os.environ.get("YGGDRASIL_AUTO_CREATE_SCHEMA")
+    with TemporaryDirectory(prefix="yggdrasil-phase3-") as temp_dir:
+        db_path = Path(temp_dir) / "phase3-concurrency.db"
+        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
+        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "0"
+        reset_persistence_runtime()
+        initialize_schema()
+        yield
+        reset_persistence_runtime()
+    if original_db_url is None:
+        os.environ.pop("YGGDRASIL_DATABASE_URL", None)
+    else:
+        os.environ["YGGDRASIL_DATABASE_URL"] = original_db_url
+    if original_auto_create_schema is None:
+        os.environ.pop("YGGDRASIL_AUTO_CREATE_SCHEMA", None)
+    else:
+        os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = original_auto_create_schema
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +242,7 @@ def _seed_concurrent_task(task_id: str, run_ids: list[str]) -> None:
             )
 
 
-def test_concurrent_pause_same_task_no_double_snapshot() -> None:
+def test_concurrent_pause_same_task_no_double_snapshot(isolated_phase3_sqlite_db) -> None:
     """
     Phase 3 concurrency test: two workers simultaneously calling prepare_pause_snapshot
     on the same task must not produce two active (non-superseded) snapshots.
@@ -237,13 +262,15 @@ def test_concurrent_pause_same_task_no_double_snapshot() -> None:
 
     def pause_worker(run_id: str) -> None:
         try:
-            result = prepare_pause_snapshot(
-                task_id,
-                {
-                    "agentRunId": run_id,
-                    "currentResponseState": "completed",
-                    "pendingWrites": [],
-                },
+            result = get_persistence_runtime().run_with_sqlite_lock_retry(
+                lambda: prepare_pause_snapshot(
+                    task_id,
+                    {
+                        "agentRunId": run_id,
+                        "currentResponseState": "completed",
+                        "pendingWrites": [],
+                    },
+                )
             )
             results.append(result)
         except Exception as exc:
@@ -294,7 +321,7 @@ CONCURRENT_WRITERS = 4
 NODES_PER_WRITER = 25
 
 
-def test_concurrent_subagent_space_writes_no_data_race() -> None:
+def test_concurrent_subagent_space_writes_no_data_race(isolated_phase3_sqlite_db) -> None:
     """
     Phase 3 concurrency test: CONCURRENT_WRITERS sub-agents simultaneously writing
     NODES_PER_WRITER nodes each to the same space/branch must produce all
@@ -309,14 +336,26 @@ def test_concurrent_subagent_space_writes_no_data_race() -> None:
 
     def writer_thread(writer_idx: int) -> None:
         try:
-            with runtime.session_scope() as session:
-                node_repo = NodeRepository(session)
-                ids = _bulk_create_nodes(
-                    node_repo,
-                    count=NODES_PER_WRITER,
-                    prefix=f"concurrent-w{writer_idx}",
-                )
-                created_ids[writer_idx] = ids
+            ids: list[str] = []
+            for node_idx in range(NODES_PER_WRITER):
+                def _write_single_node() -> None:
+                    with runtime.session_scope() as session:
+                        node_repo = NodeRepository(session)
+                        node = node_repo.create_node(
+                            {
+                                "projectId": DEFAULT_PROJECT_ID,
+                                "spaceId": DEFAULT_SPACE_ID,
+                                "branchId": DEFAULT_BRANCH_ID,
+                                "nodeType": "detail",
+                                "title": f"concurrent-w{writer_idx}-{node_idx}",
+                                "content": "Content for concurrent writer node.",
+                                "importance": 0.5,
+                            }
+                        )
+                        ids.append(node.id)
+
+                runtime.run_with_sqlite_lock_retry(_write_single_node)
+            created_ids[writer_idx] = ids
         except Exception as exc:
             errors.append(exc)
 

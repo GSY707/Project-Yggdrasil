@@ -1,4 +1,5 @@
 from ._common import *
+from ..write_queue import run_serialized_write
 
 class NodeRepository:
     def __init__(self, session: Session) -> None:
@@ -67,112 +68,121 @@ class NodeRepository:
         )
 
     def create_node(self, payload: dict[str, Any]) -> NodeRecord:
-        now = utc_now()
-        actor = _actor(payload.get("createdBy") or payload.get("updatedBy"), default_type="user", default_id="core-api")
-        node_id = str(payload.get("id") or new_id("node", payload.get("branchId") or DEFAULT_BRANCH_ID, payload.get("title") or now.isoformat()))
-        version_id = str(payload.get("latestVersionId") or new_id("ver", node_id, 1, stable=True))
-        parent_id = payload.get("parentId")
-        project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
-        space_id = str(payload.get("spaceId") or DEFAULT_SPACE_ID)
         branch_id = str(payload.get("branchId") or DEFAULT_BRANCH_ID)
-        tree_path = str(payload.get("treePath")) if payload.get("treePath") is not None else None
-        if tree_path is None and parent_id is not None:
-            parent = self.session.get(NodeORM, str(parent_id))
-            if parent is not None and parent.tree_path:
-                tree_path = f"{parent.tree_path}.{node_id}"
-            elif parent is not None:
-                tree_path = f"{parent.id}.{node_id}"
-        node = NodeORM(
-            id=node_id,
-            project_id=project_id,
-            space_id=space_id,
-            branch_id=branch_id,
-            parent_id=str(parent_id) if parent_id is not None else None,
-            root_branch=str(payload.get("rootBranch") or "none"),
-            node_type=str(payload.get("nodeType") or "detail"),
-            status=str(payload.get("status") or "active"),
-            title=str(payload.get("title") or "Untitled Node"),
-            content=str(payload.get("content") or ""),
-            detail_level=int(payload.get("detailLevel") or 1),
-            importance=float(payload.get("importance", 0.5)),
-            stability=float(payload.get("stability", 0.5)),
-            forget_rate=float(payload.get("forgetRate", 0.2)),
-            feedforward_score=float(payload.get("feedforwardScore", 0.5)),
-            access_score=float(payload.get("accessScore", 0.0)),
-            activity_k=float(payload.get("activityK", 0.4)),
-            float_score=float(payload.get("floatScore", 0.3)),
-            latest_version_id=version_id,
-            merged_into_node_id=str(payload.get("mergedIntoNodeId")) if payload.get("mergedIntoNodeId") is not None else None,
-            children_count=0,
-            edge_count=0,
-            tree_path=tree_path,
-            window_index=max(int(payload.get("windowIndex", 1)), 1),
-            source_work_tree_node_id=str(payload.get("sourceWorkTreeNodeId")) if payload.get("sourceWorkTreeNodeId") is not None else None,
-            created_at=now,
-            created_by=actor.model_dump(mode="json"),
-            updated_at=now,
-            updated_by=actor.model_dump(mode="json"),
-        )
-        self.session.add(node)
-        version = NodeVersionORM(
-            id=version_id,
-            node_id=node_id,
-            version_no=1,
-            title_snapshot=node.title,
-            content_snapshot=node.content,
-            parent_id_snapshot=node.parent_id,
-            score_snapshot=_score_snapshot_from_node(node),
-            change_reason=str(payload.get("changeReason") or "initial-create"),
-            derived_from_version_id=None,
-            created_at=now,
-            created_by=actor.model_dump(mode="json"),
-        )
-        self.session.add(version)
-        if node.parent_id:
-            parent = self.session.get(NodeORM, node.parent_id)
-            if parent is not None:
-                parent.children_count += 1
-                parent.updated_at = now
-                parent.updated_by = actor.model_dump(mode="json")
-        self.session.flush()
-        return _node_record(node)
+
+        def _create() -> NodeRecord:
+            now = utc_now()
+            actor = _actor(payload.get("createdBy") or payload.get("updatedBy"), default_type="user", default_id="core-api")
+            node_id = str(payload.get("id") or new_id("node", branch_id, payload.get("title") or now.isoformat()))
+            version_id = str(payload.get("latestVersionId") or new_id("ver", node_id, 1, stable=True))
+            parent_id = payload.get("parentId")
+            project_id = str(payload.get("projectId") or DEFAULT_PROJECT_ID)
+            space_id = str(payload.get("spaceId") or DEFAULT_SPACE_ID)
+            tree_path = str(payload.get("treePath")) if payload.get("treePath") is not None else None
+            if tree_path is None and parent_id is not None:
+                parent = self.session.get(NodeORM, str(parent_id))
+                if parent is not None and parent.tree_path:
+                    tree_path = f"{parent.tree_path}.{node_id}"
+                elif parent is not None:
+                    tree_path = f"{parent.id}.{node_id}"
+            node = NodeORM(
+                id=node_id,
+                project_id=project_id,
+                space_id=space_id,
+                branch_id=branch_id,
+                parent_id=str(parent_id) if parent_id is not None else None,
+                root_branch=str(payload.get("rootBranch") or "none"),
+                node_type=str(payload.get("nodeType") or "detail"),
+                status=str(payload.get("status") or "active"),
+                title=str(payload.get("title") or "Untitled Node"),
+                content=str(payload.get("content") or ""),
+                detail_level=int(payload.get("detailLevel") or 1),
+                importance=float(payload.get("importance", 0.5)),
+                stability=float(payload.get("stability", 0.5)),
+                forget_rate=float(payload.get("forgetRate", 0.2)),
+                feedforward_score=float(payload.get("feedforwardScore", 0.5)),
+                access_score=float(payload.get("accessScore", 0.0)),
+                activity_k=float(payload.get("activityK", 0.4)),
+                float_score=float(payload.get("floatScore", 0.3)),
+                latest_version_id=version_id,
+                merged_into_node_id=str(payload.get("mergedIntoNodeId")) if payload.get("mergedIntoNodeId") is not None else None,
+                children_count=0,
+                edge_count=0,
+                tree_path=tree_path,
+                window_index=max(int(payload.get("windowIndex", 1)), 1),
+                source_work_tree_node_id=str(payload.get("sourceWorkTreeNodeId")) if payload.get("sourceWorkTreeNodeId") is not None else None,
+                created_at=now,
+                created_by=actor.model_dump(mode="json"),
+                updated_at=now,
+                updated_by=actor.model_dump(mode="json"),
+            )
+            self.session.add(node)
+            version = NodeVersionORM(
+                id=version_id,
+                node_id=node_id,
+                version_no=1,
+                title_snapshot=node.title,
+                content_snapshot=node.content,
+                parent_id_snapshot=node.parent_id,
+                score_snapshot=_score_snapshot_from_node(node),
+                change_reason=str(payload.get("changeReason") or "initial-create"),
+                derived_from_version_id=None,
+                created_at=now,
+                created_by=actor.model_dump(mode="json"),
+            )
+            self.session.add(version)
+            if node.parent_id:
+                parent = self.session.get(NodeORM, node.parent_id)
+                if parent is not None:
+                    parent.children_count += 1
+                    parent.updated_at = now
+                    parent.updated_by = actor.model_dump(mode="json")
+            self.session.flush()
+            return _node_record(node)
+
+        return run_serialized_write(f"nodes:{branch_id}", _create)
 
     def create_edge(self, payload: dict[str, Any]) -> EdgeRecord:
-        now = utc_now()
-        actor = _actor(payload.get("createdBy") or payload.get("updatedBy"), default_type="user", default_id="core-api")
-        from_node_id = str(payload.get("fromNodeId"))
-        to_node_id = str(payload.get("toNodeId"))
-        from_node = self.session.get(NodeORM, from_node_id)
-        to_node = self.session.get(NodeORM, to_node_id)
-        if from_node is None or to_node is None:
-            raise KeyError("Both fromNodeId and toNodeId must reference existing nodes.")
-        edge = EdgeORM(
-            id=str(payload.get("id") or new_id("edge", from_node_id, to_node_id, payload.get("relationType") or "related")),
-            project_id=str(payload.get("projectId") or from_node.project_id),
-            space_id=str(payload.get("spaceId") or from_node.space_id),
-            branch_id=str(payload.get("branchId") or from_node.branch_id),
-            from_node_id=from_node_id,
-            to_node_id=to_node_id,
-            relation_type=str(payload.get("relationType") or "related-to"),
-            weight=float(payload.get("weight", 0.5)),
-            reason=str(payload.get("reason") or "Derived during import materialization."),
-            evidence_annotation_ids=list(payload.get("evidenceAnnotationIds") or []),
-            status=str(payload.get("status") or "active"),
-            created_at=now,
-            created_by=actor.model_dump(mode="json"),
-            updated_at=now,
-            updated_by=actor.model_dump(mode="json"),
-        )
-        self.session.add(edge)
-        from_node.edge_count += 1
-        from_node.updated_at = now
-        from_node.updated_by = actor.model_dump(mode="json")
-        if to_node.id != from_node.id:
-            to_node.edge_count += 1
-            to_node.updated_at = now
-            to_node.updated_by = actor.model_dump(mode="json")
-        self.session.flush()
-        return _edge_record(edge)
+        queue_branch_id = str(payload.get("branchId") or DEFAULT_BRANCH_ID)
+
+        def _create() -> EdgeRecord:
+            now = utc_now()
+            actor = _actor(payload.get("createdBy") or payload.get("updatedBy"), default_type="user", default_id="core-api")
+            from_node_id = str(payload.get("fromNodeId"))
+            to_node_id = str(payload.get("toNodeId"))
+            from_node = self.session.get(NodeORM, from_node_id)
+            to_node = self.session.get(NodeORM, to_node_id)
+            if from_node is None or to_node is None:
+                raise KeyError("Both fromNodeId and toNodeId must reference existing nodes.")
+            edge = EdgeORM(
+                id=str(payload.get("id") or new_id("edge", from_node_id, to_node_id, payload.get("relationType") or "related")),
+                project_id=str(payload.get("projectId") or from_node.project_id),
+                space_id=str(payload.get("spaceId") or from_node.space_id),
+                branch_id=str(payload.get("branchId") or from_node.branch_id),
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                relation_type=str(payload.get("relationType") or "related-to"),
+                weight=float(payload.get("weight", 0.5)),
+                reason=str(payload.get("reason") or "Derived during import materialization."),
+                evidence_annotation_ids=list(payload.get("evidenceAnnotationIds") or []),
+                status=str(payload.get("status") or "active"),
+                created_at=now,
+                created_by=actor.model_dump(mode="json"),
+                updated_at=now,
+                updated_by=actor.model_dump(mode="json"),
+            )
+            self.session.add(edge)
+            from_node.edge_count += 1
+            from_node.updated_at = now
+            from_node.updated_by = actor.model_dump(mode="json")
+            if to_node.id != from_node.id:
+                to_node.edge_count += 1
+                to_node.updated_at = now
+                to_node.updated_by = actor.model_dump(mode="json")
+            self.session.flush()
+            return _edge_record(edge)
+
+        return run_serialized_write(f"nodes:{queue_branch_id}", _create)
 
     def append_version(self, node_id: str, payload: dict[str, Any]) -> NodeVersionRecord:
         node = self.session.get(NodeORM, node_id)
@@ -309,30 +319,44 @@ class MemoryRepository:
         return _import_job_record(model)
 
     def replace_import_fragments(self, import_job_id: str, fragments: list[dict[str, Any]]) -> list[ImportFragmentRecord]:
-        if self.session.get(ImportJobORM, import_job_id) is None:
-            raise KeyError(f"Import job {import_job_id} not found.")
-        self.session.execute(sa.delete(ImportFragmentORM).where(ImportFragmentORM.import_job_id == import_job_id))
-        created_at = utc_now()
-        created: list[ImportFragmentORM] = []
-        for index, fragment in enumerate(fragments, start=1):
-            raw_ref = _external_ref(fragment.get("rawRef")) or ExternalRef(
-                type="package-entry",
-                locator=f"core-api/memory/import-jobs/{import_job_id}/fragments/{index}",
+        def _replace() -> list[ImportFragmentRecord]:
+            if self.session.get(ImportJobORM, import_job_id) is None:
+                raise KeyError(f"Import job {import_job_id} not found.")
+
+            self.session.execute(sa.delete(ImportFragmentORM).where(ImportFragmentORM.import_job_id == import_job_id))
+            created_at = utc_now()
+            rows: list[dict[str, Any]] = []
+            for index, fragment in enumerate(fragments, start=1):
+                raw_ref = _external_ref(fragment.get("rawRef")) or ExternalRef(
+                    type="package-entry",
+                    locator=f"core-api/memory/import-jobs/{import_job_id}/fragments/{index}",
+                )
+                normalized_text = str(fragment.get("normalizedText") or fragment.get("text") or "")
+                rows.append(
+                    {
+                        "id": str(fragment.get("id") or new_id("frag", import_job_id, index, stable=True)),
+                        "import_job_id": import_job_id,
+                        "ordinal": int(fragment.get("ordinal") or index),
+                        "raw_ref": raw_ref.model_dump(mode="json"),
+                        "normalized_text": normalized_text,
+                        "approx_tokens": int(fragment.get("approxTokens") or max(len(normalized_text) // 4, 1)),
+                        "related_hints": [str(hint) for hint in fragment.get("relatedHints") or []],
+                        "created_at": created_at,
+                    }
+                )
+
+            if rows:
+                self.session.execute(sa.insert(ImportFragmentORM), rows)
+
+            statement = (
+                sa.select(ImportFragmentORM)
+                .where(ImportFragmentORM.import_job_id == import_job_id)
+                .order_by(ImportFragmentORM.ordinal.asc())
             )
-            model = ImportFragmentORM(
-                id=str(fragment.get("id") or new_id("frag", import_job_id, index, stable=True)),
-                import_job_id=import_job_id,
-                ordinal=int(fragment.get("ordinal") or index),
-                raw_ref=raw_ref.model_dump(mode="json"),
-                normalized_text=str(fragment.get("normalizedText") or fragment.get("text") or ""),
-                approx_tokens=int(fragment.get("approxTokens") or max(len(str(fragment.get("normalizedText") or fragment.get("text") or "")) // 4, 1)),
-                related_hints=[str(hint) for hint in fragment.get("relatedHints") or []],
-                created_at=created_at,
-            )
-            self.session.add(model)
-            created.append(model)
-        self.session.flush()
-        return [_import_fragment_record(model) for model in sorted(created, key=lambda item: item.ordinal)]
+            models = self.session.execute(statement).scalars().all()
+            return [_import_fragment_record(model) for model in models]
+
+        return run_serialized_write(f"import-fragments:{import_job_id}", _replace)
 
     def list_import_fragments(self, import_job_id: str, limit: int = 500) -> list[ImportFragmentRecord]:
         statement = (

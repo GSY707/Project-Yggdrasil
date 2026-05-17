@@ -24,6 +24,23 @@ _DEEPSEEK_REASONING_EFFORT_ALIASES = {
     "xhigh": "max",
     "max": "max",
 }
+_LONGCAT_TOOL_CALL_PATTERN = re.compile(r"<longcat_tool_call>(?P<body>.*?)</longcat_tool_call>", re.IGNORECASE | re.DOTALL)
+_LONGCAT_ARG_KEY_PATTERN = re.compile(r"<longcat_arg_key>(?P<value>.*?)</longcat_arg_key>", re.IGNORECASE | re.DOTALL)
+_LONGCAT_ARG_VALUE_PATTERN = re.compile(r"<longcat_arg_value>(?P<value>.*?)</longcat_arg_value>", re.IGNORECASE | re.DOTALL)
+_BLOCK_TOOL_CALLS_PATTERN = re.compile(r"<tool_calls>(?P<body>.*?)</tool_calls>", re.IGNORECASE | re.DOTALL)
+_BLOCK_TOOL_TAG_PATTERN = re.compile(r"<(?P<name>[A-Za-z0-9_.-]+)>(?P<body>.*?)</(?P=name)>", re.DOTALL)
+_BLOCK_TOOL_ARG_PATTERN = re.compile(r"<(?P<name>[A-Za-z0-9_.-]+)>(?P<value>.*?)</(?P=name)>", re.DOTALL)
+_INLINE_TOOL_TAG_PATTERN = re.compile(r"<(?P<name>[A-Za-z0-9_.-]+)(?P<attrs>\s+[^<>]*?)?\s*/>", re.DOTALL)
+_INLINE_TOOL_ATTR_PATTERN = re.compile(r'(?P<name>[A-Za-z0-9_.-]+)\s*=\s*"(?P<value>[^"]*)"')
+_LONGCAT_ARGUMENT_ALIASES = {
+    "file_path": "path",
+    "start_line": "startLine",
+    "end_line": "endLine",
+    "old_text": "oldText",
+    "new_text": "newText",
+    "working_directory": "workingDirectory",
+    "timeout_ms": "timeoutMs",
+}
 
 
 @dataclass(frozen=True)
@@ -444,15 +461,211 @@ def _extract_text_content(payload: Any) -> str:
     if isinstance(payload, list):
         parts: list[str] = []
         for item in payload:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if isinstance(item, dict) and item.get("type") == "text" and item.get("text"):
-                parts.append(str(item["text"]))
+            fragment = _extract_text_content(item)
+            if fragment:
+                parts.append(fragment)
         return "\n".join(parts)
-    if isinstance(payload, dict) and payload.get("text"):
-        return str(payload["text"])
-    return str(payload or "")
+
+    if isinstance(payload, dict):
+        for key in ("text", "output_text"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+        payload_type = str(payload.get("type") or "").strip().lower()
+        if payload_type in {"text", "output_text", "input_text"}:
+            for key in ("text", "output_text", "content"):
+                value = payload.get(key)
+                fragment = _extract_text_content(value)
+                if fragment:
+                    return fragment
+
+        for key in ("content", "output", "message", "delta"):
+            value = payload.get(key)
+            fragment = _extract_text_content(value)
+            if fragment:
+                return fragment
+
+    return ""
+
+
+def _coerce_tool_argument_value(value: str) -> Any:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return ""
+    try:
+        return json.loads(candidate)
+    except Exception:
+        return candidate
+
+
+def _extract_longcat_tagged_tool_calls(content: str) -> tuple[str, list[dict[str, Any]]]:
+    if not content or "<longcat_tool_call>" not in content.lower():
+        return str(content or ""), []
+
+    tool_calls: list[dict[str, Any]] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        body = str(match.group("body") or "")
+        tool_name = body.split("<longcat_arg_key>", 1)[0].strip()
+        keys = [str(item).strip() for item in _LONGCAT_ARG_KEY_PATTERN.findall(body)]
+        values = [str(item).strip() for item in _LONGCAT_ARG_VALUE_PATTERN.findall(body)]
+        arguments: dict[str, Any] = {}
+        for key, value in zip(keys, values):
+            normalized_key = _LONGCAT_ARGUMENT_ALIASES.get(key, key)
+            arguments[normalized_key] = _coerce_tool_argument_value(value)
+        if tool_name:
+            tool_calls.append(
+                {
+                    "id": new_id("toolcall", tool_name),
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
+                    },
+                }
+            )
+        return ""
+
+    cleaned = _LONGCAT_TOOL_CALL_PATTERN.sub(_replace, content)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned, tool_calls
+
+
+def _extract_inline_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
+    if not content or "<" not in content or "/>" not in content:
+        return str(content or ""), []
+
+    tool_calls: list[dict[str, Any]] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        name = str(match.group("name") or "").strip()
+        if "." not in name:
+            return str(match.group(0) or "")
+        attributes_text = str(match.group("attrs") or "")
+        arguments = {
+            _LONGCAT_ARGUMENT_ALIASES.get(attr_name, attr_name): _coerce_tool_argument_value(attr_value)
+            for attr_name, attr_value in _INLINE_TOOL_ATTR_PATTERN.findall(attributes_text)
+        }
+        tool_calls.append(
+            {
+                "id": new_id("toolcall", name),
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                },
+            }
+        )
+        return ""
+
+    cleaned = _INLINE_TOOL_TAG_PATTERN.sub(_replace, content)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned, tool_calls
+
+
+def _extract_block_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
+    if not content or "<tool_calls>" not in content.lower():
+        return str(content or ""), []
+
+    tool_calls: list[dict[str, Any]] = []
+
+    def _replace_container(match: re.Match[str]) -> str:
+        body = str(match.group("body") or "")
+        for tool_match in _BLOCK_TOOL_TAG_PATTERN.finditer(body):
+            name = str(tool_match.group("name") or "").strip()
+            if "." not in name:
+                continue
+            tool_body = str(tool_match.group("body") or "")
+            arguments = {
+                _LONGCAT_ARGUMENT_ALIASES.get(arg_name, arg_name): _coerce_tool_argument_value(arg_value)
+                for arg_name, arg_value in _BLOCK_TOOL_ARG_PATTERN.findall(tool_body)
+                if "." not in str(arg_name)
+            }
+            tool_calls.append(
+                {
+                    "id": new_id("toolcall", name),
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
+                    },
+                }
+            )
+        return ""
+
+    cleaned = _BLOCK_TOOL_CALLS_PATTERN.sub(_replace_container, content)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned, tool_calls
+
+
+def _extract_embedded_tool_calls(content: str) -> tuple[str, list[dict[str, Any]]]:
+    cleaned_text, tool_calls = _extract_longcat_tagged_tool_calls(content)
+    cleaned_text, block_tool_calls = _extract_block_tool_tags(cleaned_text)
+    cleaned_text, inline_tool_calls = _extract_inline_tool_tags(cleaned_text)
+    return cleaned_text, [*tool_calls, *block_tool_calls, *inline_tool_calls]
+
+
+def _extract_tool_call_candidates(payload: Any) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    if isinstance(payload, list):
+        for item in payload:
+            candidates.extend(_extract_tool_call_candidates(item))
+        return candidates
+
+    if not isinstance(payload, dict):
+        return candidates
+
+    raw_tool_calls = payload.get("tool_calls") if isinstance(payload.get("tool_calls"), list) else None
+    if raw_tool_calls:
+        candidates.extend([call for call in raw_tool_calls if isinstance(call, dict)])
+
+    payload_type = str(payload.get("type") or "").strip().lower()
+    if payload_type in {"function_call", "tool_call", "tool_use"}:
+        function_payload = payload.get("function") if isinstance(payload.get("function"), dict) else None
+        name = str(
+            payload.get("name")
+            or (function_payload or {}).get("name")
+            or payload.get("tool_name")
+            or payload.get("function_name")
+            or ""
+        ).strip()
+        arguments_payload = payload.get("arguments")
+        if arguments_payload is None:
+            arguments_payload = payload.get("input")
+        if arguments_payload is None and function_payload is not None:
+            arguments_payload = function_payload.get("arguments")
+        candidates.append(
+            {
+                "id": payload.get("id") or payload.get("call_id"),
+                "type": payload.get("type") or "function",
+                "function": {
+                    "name": name,
+                    "arguments": arguments_payload if arguments_payload is not None else "{}",
+                },
+            }
+        )
+
+    for key in ("content", "output", "message", "delta"):
+        value = payload.get(key)
+        if value is not None:
+            candidates.extend(_extract_tool_call_candidates(value))
+    return candidates
+
+
+def _normalize_tool_call(raw_call: dict[str, Any], *, default_name: str) -> dict[str, Any] | None:
+    function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
+    name = str(function_payload.get("name") or default_name or "").strip()
+    if not name:
+        return None
+    return {
+        "id": raw_call.get("id") or raw_call.get("call_id"),
+        "type": str(raw_call.get("type") or "function"),
+        "function": {
+            "name": name,
+            "arguments": function_payload.get("arguments") if function_payload.get("arguments") is not None else "{}",
+        },
+    }
 
 
 def _merge_stream_tool_call(tool_calls: dict[int, dict[str, Any]], raw_call: dict[str, Any]) -> None:
@@ -531,7 +744,7 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
                 if payload.get("reasoning_content") is not None
                 else ""
             )
-            raw_tool_calls = payload.get("tool_calls") if isinstance(payload.get("tool_calls"), list) else []
+            raw_tool_calls = _extract_tool_call_candidates(payload)
             if first_token_latency_ms is None and (content_fragment or reasoning_fragment or raw_tool_calls):
                 first_token_latency_ms = round((time.perf_counter() - request_started_at) * 1000.0, 2)
             if content_fragment:
@@ -540,7 +753,9 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
                 reasoning_parts.append(reasoning_fragment)
             for raw_call in raw_tool_calls:
                 if isinstance(raw_call, dict):
-                    _merge_stream_tool_call(tool_calls, raw_call)
+                    normalized_call = _normalize_tool_call(raw_call, default_name="")
+                    if normalized_call is not None:
+                        _merge_stream_tool_call(tool_calls, normalized_call)
             if choice.get("finish_reason") is not None:
                 finish_reason = str(choice.get("finish_reason") or "stop")
 
@@ -585,10 +800,29 @@ def _result_from_raw_response(
 ) -> dict[str, Any]:
     choice = ((raw_response.get("choices") or [{}])[0]) if isinstance(raw_response, dict) else {}
     message = choice.get("message") or {}
-    output_text = _extract_text_content(message.get("content"))
-    reasoning_content = _extract_text_content(message.get("reasoning_content")) if message.get("reasoning_content") is not None else ""
+    output_text = (
+        _extract_text_content(message.get("content"))
+        or _extract_text_content(message.get("output_text"))
+        or _extract_text_content(choice.get("output_text"))
+        or _extract_text_content(raw_response.get("output_text"))
+        or _extract_text_content(raw_response.get("output"))
+        or _extract_text_content(choice.get("delta"))
+    )
+    output_text, embedded_tool_calls = _extract_embedded_tool_calls(output_text)
+    reasoning_content = (
+        _extract_text_content(message.get("reasoning_content"))
+        or _extract_text_content(choice.get("reasoning_content"))
+        or _extract_text_content(raw_response.get("reasoning_content"))
+    )
     tool_calls: list[dict[str, Any]] = []
-    for raw_call in message.get("tool_calls") or []:
+    raw_tool_calls = _extract_tool_call_candidates(message)
+    if not raw_tool_calls:
+        raw_tool_calls = _extract_tool_call_candidates(choice)
+    if not raw_tool_calls:
+        raw_tool_calls = _extract_tool_call_candidates(raw_response)
+    if not raw_tool_calls and embedded_tool_calls:
+        raw_tool_calls = embedded_tool_calls
+    for raw_call in raw_tool_calls:
         if not isinstance(raw_call, dict):
             continue
         function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}

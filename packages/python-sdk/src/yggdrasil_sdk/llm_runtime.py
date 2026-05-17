@@ -357,6 +357,30 @@ def _default_max_tokens(task: Any, request: dict[str, Any]) -> int:
     return max(configured, 64)
 
 
+def _estimated_input_tokens_for_precheck(*, raw_message_tokens: int, max_tokens: int, request: dict[str, Any]) -> int:
+    configured_estimate = request.get("estimatedInputTokens")
+    if configured_estimate is not None:
+        try:
+            return max(16, int(configured_estimate))
+        except (TypeError, ValueError):
+            pass
+    # Prompt transcript may include heavyweight scaffolding. Cap with max_tokens-derived bound
+    # to reduce false negatives in pre-check while keeping a conservative estimate.
+    cap = max(96, min(max_tokens, max_tokens // 2))
+    return max(16, min(max(1, int(raw_message_tokens)), cap))
+
+
+def _estimated_output_tokens_for_precheck(*, max_tokens: int, request: dict[str, Any]) -> int:
+    configured_estimate = request.get("estimatedOutputTokens")
+    if configured_estimate is not None:
+        try:
+            return max(16, min(int(configured_estimate), max_tokens))
+        except (TypeError, ValueError):
+            pass
+    # maxTokens is an upper bound, not expected usage; keep pre-check conservative but not overly pessimistic.
+    return max(32, min(max_tokens, max(64, max_tokens // 4), 128))
+
+
 def _invocation_file_ref(path: Path, workspace_root: Path) -> ExternalRef:
     return ExternalRef(type="file", locator=relative_workspace_path(path, workspace_root))
 
@@ -815,6 +839,7 @@ def _response_file_payload(
         "provider": final_result.get("provider"),
         "model": final_result.get("model"),
         "finishReason": final_result.get("finishReason"),
+        "assistantText": str(final_result.get("outputText") or ""),
         "usage": usage_totals,
         "costUsed": accumulated_cost,
         "error": final_result.get("error"),
@@ -1184,8 +1209,16 @@ def invoke_runtime_completion(
                     message_count=len(conversation_messages),
                     round_index=round_index,
                 )
-                estimated_input_tokens = _estimate_message_tokens(conversation_messages)
-                estimated_output_tokens = max(1, int(max_tokens))
+                raw_message_tokens = _estimate_message_tokens(conversation_messages)
+                estimated_input_tokens = _estimated_input_tokens_for_precheck(
+                    raw_message_tokens=raw_message_tokens,
+                    max_tokens=max(1, int(max_tokens)),
+                    request=request,
+                )
+                estimated_output_tokens = _estimated_output_tokens_for_precheck(
+                    max_tokens=max(1, int(max_tokens)),
+                    request=request,
+                )
                 selected_cost_per_1k = float(
                     route_payload.get("costPer1k")
                     or route_payload.get("selectedModelCostPer1k")

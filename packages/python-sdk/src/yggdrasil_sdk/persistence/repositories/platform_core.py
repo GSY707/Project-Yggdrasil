@@ -1,71 +1,65 @@
 from ._common import *  # noqa: F403,F401
+from ..write_queue import run_serialized_write
 
 class WorkspaceBootstrapRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
     def ensure_default_workspace(self) -> dict[str, str]:
-        now = utc_now()
-        system_actor = _actor(None)
-        project_created = False
-        space_created = False
+        def _ensure() -> dict[str, str]:
+            now = utc_now()
+            system_actor = _actor(None)
 
-        project = self.session.get(ProjectORM, DEFAULT_PROJECT_ID)
-        if project is None:
-            project = ProjectORM(
-                id=DEFAULT_PROJECT_ID,
-                display_name="Project Yggdrasil",
-                status="active",
-                export_policy="project-package-only",
-                created_at=now,
-                created_by=system_actor.model_dump(mode="json"),
-            )
-            self.session.add(project)
-            project_created = True
+            project = self.session.get(ProjectORM, DEFAULT_PROJECT_ID)
+            if project is None:
+                project = ProjectORM(
+                    id=DEFAULT_PROJECT_ID,
+                    display_name="Project Yggdrasil",
+                    status="active",
+                    export_policy="project-package-only",
+                    created_at=now,
+                    created_by=system_actor.model_dump(mode="json"),
+                )
+                self.session.add(project)
 
-        if project_created:
+            space = self.session.get(SpaceORM, DEFAULT_SPACE_ID)
+            if space is None:
+                space = SpaceORM(
+                    id=DEFAULT_SPACE_ID,
+                    project_id=DEFAULT_PROJECT_ID,
+                    space_type="default",
+                    status="active",
+                    owner_subject=None,
+                    created_at=now,
+                )
+                self.session.add(space)
+
+            branch = self.session.get(MemoryBranchORM, DEFAULT_BRANCH_ID)
+            if branch is None:
+                branch = MemoryBranchORM(
+                    id=DEFAULT_BRANCH_ID,
+                    project_id=DEFAULT_PROJECT_ID,
+                    space_id=DEFAULT_SPACE_ID,
+                    name="main",
+                    base_branch_id=None,
+                    head_ref=None,
+                    status="active",
+                    created_at=now,
+                    created_by=system_actor.model_dump(mode="json"),
+                )
+                self.session.add(branch)
+
             self.session.flush()
-
-        space = self.session.get(SpaceORM, DEFAULT_SPACE_ID)
-        if space is None:
-            space = SpaceORM(
-                id=DEFAULT_SPACE_ID,
-                project_id=DEFAULT_PROJECT_ID,
-                space_type="default",
-                status="active",
-                owner_subject=None,
-                created_at=now,
-            )
-            self.session.add(space)
-            space_created = True
-
-        if space_created:
-            self.session.flush()
-
-        branch = self.session.get(MemoryBranchORM, DEFAULT_BRANCH_ID)
-        if branch is None:
-            branch = MemoryBranchORM(
-                id=DEFAULT_BRANCH_ID,
+            return _ensure_branch_roots(
+                self.session,
                 project_id=DEFAULT_PROJECT_ID,
                 space_id=DEFAULT_SPACE_ID,
-                name="main",
-                base_branch_id=None,
-                head_ref=None,
-                status="active",
-                created_at=now,
-                created_by=system_actor.model_dump(mode="json"),
+                branch_id=DEFAULT_BRANCH_ID,
+                created_by=system_actor,
+                now=now,
             )
-            self.session.add(branch)
 
-        self.session.flush()
-        return _ensure_branch_roots(
-            self.session,
-            project_id=DEFAULT_PROJECT_ID,
-            space_id=DEFAULT_SPACE_ID,
-            branch_id=DEFAULT_BRANCH_ID,
-            created_by=system_actor,
-            now=now,
-        )
+        return run_serialized_write("workspace:default", _ensure)
 
     def ensure_branch_workspace(
         self,
@@ -77,50 +71,53 @@ class WorkspaceBootstrapRepository:
         base_branch_id: str | None = None,
         created_by: dict[str, Any] | ActorRef | None = None,
     ) -> dict[str, str]:
-        now = utc_now()
-        actor = _actor(created_by)
+        def _ensure() -> dict[str, str]:
+            now = utc_now()
+            actor = _actor(created_by)
 
-        if project_id == DEFAULT_PROJECT_ID and space_id == DEFAULT_SPACE_ID:
-            self.ensure_default_workspace()
+            if project_id == DEFAULT_PROJECT_ID and space_id == DEFAULT_SPACE_ID:
+                self.ensure_default_workspace()
 
-        project = self.session.get(ProjectORM, project_id)
-        if project is None:
-            raise KeyError(f"Project {project_id} not found.")
-        space = self.session.get(SpaceORM, space_id)
-        if space is None:
-            raise KeyError(f"Space {space_id} not found.")
+            project = self.session.get(ProjectORM, project_id)
+            if project is None:
+                raise KeyError(f"Project {project_id} not found.")
+            space = self.session.get(SpaceORM, space_id)
+            if space is None:
+                raise KeyError(f"Space {space_id} not found.")
 
-        branch = self.session.get(MemoryBranchORM, branch_id)
-        if branch is None:
-            branch = MemoryBranchORM(
-                id=branch_id,
+            branch = self.session.get(MemoryBranchORM, branch_id)
+            if branch is None:
+                branch = MemoryBranchORM(
+                    id=branch_id,
+                    project_id=project_id,
+                    space_id=space_id,
+                    name=branch_name or branch_id,
+                    base_branch_id=base_branch_id,
+                    head_ref=None,
+                    status="active",
+                    created_at=now,
+                    created_by=actor.model_dump(mode="json"),
+                )
+                self.session.add(branch)
+            else:
+                if branch_name is not None:
+                    branch.name = branch_name
+                if base_branch_id is not None:
+                    branch.base_branch_id = base_branch_id
+                if branch.status == "deleted":
+                    branch.status = "active"
+
+            self.session.flush()
+            return _ensure_branch_roots(
+                self.session,
                 project_id=project_id,
                 space_id=space_id,
-                name=branch_name or branch_id,
-                base_branch_id=base_branch_id,
-                head_ref=None,
-                status="active",
-                created_at=now,
-                created_by=actor.model_dump(mode="json"),
+                branch_id=branch_id,
+                created_by=actor,
+                now=now,
             )
-            self.session.add(branch)
-        else:
-            if branch_name is not None:
-                branch.name = branch_name
-            if base_branch_id is not None:
-                branch.base_branch_id = base_branch_id
-            if branch.status == "deleted":
-                branch.status = "active"
 
-        self.session.flush()
-        return _ensure_branch_roots(
-            self.session,
-            project_id=project_id,
-            space_id=space_id,
-            branch_id=branch_id,
-            created_by=actor,
-            now=now,
-        )
+        return run_serialized_write(f"workspace:branch:{branch_id}", _ensure)
 
 class RuntimeRepository:
     def __init__(self, session: Session) -> None:

@@ -1,10 +1,15 @@
-| `docs/research/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范（任务14-17）：LLM 预算治理（hard fail + retry 策略）、工具调用执行回合（failure 隔离 + pending action）、runtime metrics 导出（统一指标快照）、安全停止与可恢复断点（checksum 校验机制），包含完整代码改动、新增常量/数据类、集成点、测试断言建议 |
-| `docs/research/P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` | P2 任务14-17 快速参考实现检查清单：文件修改位置、关键代码片段行号、集成顺序、验收标准、常见错误提示 |
-| `docs/research/P2_COMPLETION_SUMMARY_2026_05_17.md` | P2 阶段完成总结（2026-05-17）：全部4任务完成✅、28/28测试通过✅、代码修改清单、架构兼容性分析、后续行动计划、质量指标统计 |
-| `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
+| `docs/research/project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md` | 记忆树理论目标差距评估（2026-05-17）：围绕"全部记忆上树、窗口仅最小子任务工作集"给出实现现状、主要差距与量化结论（综合完成度 59/100，差距 41/100） |
+| `docs/research/specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范（任务14-17）：LLM 预算治理（hard fail + retry 策略）、工具调用执行回合（failure 隔离 + pending action）、runtime metrics 导出（统一指标快照）、安全停止与可恢复断点（checksum 校验机制），包含完整代码改动、新增常量/数据类、集成点、测试断言建议 |
+| `docs/research/specifications/P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` | P2 任务14-17 快速参考实现检查清单：文件修改位置、关键代码片段行号、集成顺序、验收标准、常见错误提示 |
+| `docs/research/completion-reports/P2_COMPLETION_SUMMARY_2026_05_17.md` | P2 阶段完成总结（2026-05-17）：全部4任务完成✅、28/28测试通过✅、代码修改清单、架构兼容性分析、后续行动计划、质量指标统计 |
+| `docs/research/technical-analysis/sqlite-concurrency-ops-queue-2026-05-17.md` | SQLite 并发优化研究（2026-05-17）：锁告警成因、操作队列适配性、可放开锁策略边界、事务瘦身与批量写建议、分阶段性能提升路线 |
+| `docs/development/HIGH_CONCURRENCY_TABLE_PLAYBOOK.md` | 高并发表使用与迁移说明：操作队列键策略、事务瘦身原则、索引迁移项、并发基准执行方式与注意事项 |
+| `scripts/benchmarks/sqlite_concurrency_benchmark.py` | SQLite 并发基准单 profile 执行脚本：支持 baseline/optimized 配置、节点写入与快照争用场景测试、JSON 结果输出 |
+| `scripts/benchmarks/sqlite_concurrency_compare.py` | SQLite 并发前后对比脚本：串行运行 baseline 与 optimized，输出吞吐/p95/锁错误对比报告 |
+| `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/17 更新：默认 LongCat 模型已切换为 `LongCat-2.0-Preview`，并保留 `LongCat-Flash-Lite` 作为评测对照项；同时完成 P1 全部验证（31/31 通过）并完成 P2 任务15/16/17 实施：工具调用隔离重试、runtime metrics 快照与 artifact 落盘、安全停止 pending action checksum 与恢复校验；并保留 P2 任务14-17 审计入口——参见 [P2_TASK_14_17_FILE_STATUS_AUDIT.md](P2_TASK_14_17_FILE_STATUS_AUDIT.md)。此前补充 P1 恢复链路硬化，包含 restart requestState 深拷贝与强制合同字段透传、carry-forward 去重压缩并保留 work tree 执行指针、pause-resume 恢复时自动修复 takeover work tree 当前节点与 recovery anchor、以及恢复态 Prompt 强制 delivery-first（result/evidence/pending/incomplete + judgment）；2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/17 更新：补齐 P3 最后一段 live parity 缺口，evaluation 隔离环境现在会主动清理遗留 `YGGDRASIL_ALLOW_PAID_MODELS`，并支持 case 级 `allowPaidModels` 显式批准，从而实现“free 默认、少量 paid 例外”；`evalsuite_g4_real_task_window_parity` 已从 LongCat 单 provider 扩展为 free LongCat + paid-approved DeepSeek 双 provider 对照，同时 scorer 不再把不同 provider 的 short/long 样本混成一个 parity 结论，而是按 parity pair + provider/model 分组输出；当前 parity suite 还提高了最终简报 token 预算，并为 short/long 路径显式注入 `forcedWindowRestartBudget=16/8`，确保真实任务 parity case 会真正穿过 restart 合同而不是停留在单窗口摘要；同时补上 model-provider gateway 对 block `content`、顶层 `output/output_text`、块式 `function_call/tool_call`、`<tool_calls>...</tool_calls>` 块状 XML 工具调用、LongCat 内嵌 XML 风格工具标记与自闭合 inline XML 工具标记的统一兼容抽取，并把最终 `assistantText` 保留到 runtime response artifact 与 worker 完成结果里，避免 live provider 已返回 completion tokens 但 suite 仍读到空字符串；paid DeepSeek parity case 的 response contract 也已收紧为只允许直接输出最终 Markdown 简报，禁止再输出 XML/tool/MCP 标签；此前已补齐 P4 外围完备性基础链路，包含任务创建时的 project/space/branch 一致性校验与缺失 branch workspace 自动引导、root mount 显式输出 identity/context/execution 三根分支映射与 startup contract、task-takeover 将启动合同和根挂载转成结构化约束、以及空 plan 时 work tree 自动生成可恢复 bootstrap 指针；此前默认 LongCat 模型已切换为 `LongCat-2.0-Preview`，并保留 `LongCat-Flash-Lite` 作为评测对照项；同时完成 P1 全部验证（31/31 通过）并完成 P2 任务15/16/17 实施：工具调用隔离重试、runtime metrics 快照与 artifact 落盘、安全停止 pending action checksum 与恢复校验；并保留 P2 任务14-17 审计入口——参见 [P2_TASK_14_17_FILE_STATUS_AUDIT.md](P2_TASK_14_17_FILE_STATUS_AUDIT.md)；并补齐 runtime 预算一致性修复：预检改为有界估算、budget-check 终态统一落成 failed、paused 结果显式回传 assistantText，覆盖 `tests/test_runtime_and_pruning.py` 两个预算相关失败用例。此前补充 P1 恢复链路硬化，包含 restart requestState 深拷贝与强制合同字段透传、carry-forward 去重压缩并保留 work tree 执行指针、pause-resume 恢复时自动修复 takeover work tree 当前节点与 recovery anchor、以及恢复态 Prompt 强制 delivery-first（result/evidence/pending/incomplete + judgment）；2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
 
 ---
 
@@ -720,15 +725,18 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `uv.lock` | Python 依赖锁定文件（不要手动修改） |
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
-| `docs/research/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
-| `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测，以及“技术闭环已成立但交付闭环未证实”的最新口径 |
-| `docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
-| `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` | 4M 真实任务保留日志重跳记录：保留沙筃路径、窗口级行为、最终输出、根因分析、收紧 acceptance 后的正式 failed run，以及工程现实与理论设想差距和推进路线（responseRequirements / restartMessage / snapshot 修复） |
-| `docs/research/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务、难度分级（L1-L5）、逐项实现路径与执行优先级，并可作为“记忆树替代上下文窗口”主线的影响排序输入 |
-| `docs/research/memory-tree-agent-executable-roadmap-2026-05-16.md` | 记忆树 Agent 可执行路线图：按“写树-取树-恢复-验收”闭环重排 26 项任务，给出逐项输入/实现/验证/证据/退出条件的工程化执行稿 |
-| `docs/research/P2_VERIFICATION_AND_P3_DELIVERY_2026_05_17.md` | P2 执行结果验证与 P3 完成报告：明确 P2 已落地项与缺口，并给出 E1/D6/E2 的代码、配置与测试闭环证据 |
-| `docs/research/系统概念/` | Agent / 记忆树中文系统设计文档集合 |
-| `docs/research/future/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
+| `docs/research/README.md` | research 目录组织导航：按用途分类为路线图、项目评估、完成报告、规范设计、技术分析和历史归档 |
+| `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
+| `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
+| `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
+| `docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` | 4M 真实任务保留日志重跳记录 |
+| `docs/research/technical-analysis/memory-tree-agent-work-breakdown-2026-05-16.md` | 记忆树 Agent 全工作拆分研究：26 个最小可推进子任务 |
+| `docs/research/roadmaps/memory-tree-agent-executable-roadmap-2026-05-16.md` | 记忆树 Agent 可执行路线图 |
+| `docs/research/completion-reports/P2_VERIFICATION_AND_P3_DELIVERY_2026_05_17.md` | P2 执行结果验证与 P3 完成报告 |
+| `docs/research/technical-analysis/runtime-two-failures-summary-2026-05-17.md` | 运行时两个失败用例摘要 |
+| `docs/research/project-assessments/memory-tree-effect-report-2026-05-17.md` | 记忆树效果详细报告 |
+| `docs/research/specifications/concepts/` | Agent / 记忆树中文系统设计文档集合 |
+| `docs/research/archive/future-planning/` | 不进入当前 Gate 承诺范围的前瞻研究草案 |
 | `todo.md` | 开发里程碑、阶段完成度与工作台优先事项追踪 |
 
 ---

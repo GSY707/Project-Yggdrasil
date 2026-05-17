@@ -65,6 +65,21 @@ def _work_tree_from_protocol_parts(
         )
         nodes.append(node)
 
+    if not nodes:
+        nodes.append(
+            WorkTreeNode(
+                id=new_id("work-tree-node", task_id, "bootstrap", stable=True),
+                title="Establish executable plan",
+                phase="planning",
+                status="in-progress",
+                planStepIds=[],
+                constraintIds=constraint_ids,
+                dependsOn=[],
+                expectedEvidence=["normalized objective", "constraint baseline"],
+                recoveryAnchor="resume:bootstrap",
+            )
+        )
+
     current_node = next((node for node in nodes if node.status in {"in-progress", "blocked", "pending"}), None)
     entropy_budget_remaining = max(0, 12 - len(nodes) - len(constraint_ids))
     return WorkTreeProtocol(

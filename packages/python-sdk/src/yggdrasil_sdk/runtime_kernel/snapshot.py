@@ -257,6 +257,8 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
             "spaceId": request.get("spaceId", DEFAULT_SPACE_ID),
             "taskObjective": request.get("taskObjective"),
             "resumeMessage": request.get("resumeMessage"),
+            "restartMessage": request.get("restartMessage"),
+            "responseRequirements": request.get("responseRequirements"),
             "budget": request.get("budget") or request.get("budgetState") or {},
         },
     )
@@ -389,6 +391,8 @@ def _build_restart_snapshot_state(task_id: str, payload: dict[str, Any] | None =
             "spaceId": request.get("spaceId", DEFAULT_SPACE_ID),
             "taskObjective": request.get("taskObjective"),
             "resumeMessage": request.get("restartMessage") or request.get("resumeMessage"),
+            "restartMessage": request.get("restartMessage"),
+            "responseRequirements": request.get("responseRequirements"),
             "budget": request.get("budget") or request.get("budgetState") or {},
         },
     )
