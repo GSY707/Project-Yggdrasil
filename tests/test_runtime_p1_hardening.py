@@ -73,7 +73,17 @@ def test_build_carry_forward_context_dedupes_excerpts_and_preserves_pointer_head
     carry_forward = runtime_snapshot._build_carry_forward_context("task-cf", payload)
 
     assert len(carry_forward) == 1
+    package = carry_forward[0]["pointerPackage"]
     content = str(carry_forward[0]["content"])
+    assert carry_forward[0]["title"] == "Carry-forward execution pointer W1 -> W2"
+    assert package["handoffMode"] == "execution-pointer"
+    assert package["workTreeCurrentNodeId"] == "wt-node-1"
+    assert package["workTreeRecoveryAnchor"] == "resume:step-1"
+    assert package["retrievalWorkTreeNodeId"] == "wt-node-1"
+    assert package["retrievalFingerprint"] is not None
+    assert package["evidenceAnchors"] == [{"title": "重复摘要", "id": "ctx-1", "excerptDigest": package["evidenceAnchors"][0]["excerptDigest"]}]
+    assert "Carry-forward execution pointer W1 -> W2" in content
+    assert "Execution rule: continue from the same work tree node and delivery contract; do not restart broad planning." in content
     assert "recoveryAnchor=resume:step-1" in content
     assert content.count("same content") == 1
 
@@ -225,6 +235,8 @@ def test_format_response_requirements_resume_path_enforces_delivery_first() -> N
 
     assert "result/evidence/pending/incomplete" in formatted
     assert "judgment" in formatted
+    assert "默认采用" in formatted
+    assert "简洁" in formatted
 
 
 def test_window_restart_trigger_threshold_boundary_and_forced_budget() -> None:

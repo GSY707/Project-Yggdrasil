@@ -107,9 +107,12 @@ tests/
 │   ├── Restart request state          [L28-40]      ✅
 │   └── (需P2补充tests)               [-]           ❌
 │
-└── test_runtime_and_pruning.py
-    ├── Token budget verification      [L581]        ✅
-    └── (需runtime metrics tests)     [-]           ❌
+└── runtime/
+    ├── test_runtime_budget_and_audit.py
+    │   ├── Token budget verification               ✅
+    │   └── Runtime audit and usage assertions      ✅
+    └── test_runtime_pause_regressions.py
+        └── Runtime metrics snapshot counting       ✅
 ```
 
 ---

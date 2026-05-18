@@ -1,0 +1,439 @@
+{
+  "id": "evalsuite_g4_real_task_minimal_workset",
+  "name": "G4 Real-Task Minimal Workset",
+  "domain": "generic",
+  "metricRefs": [
+    "pass-rate",
+    "restart-count",
+    "context-window-span",
+    "restart-success-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:minimal-workset",
+  "cases": [
+    {
+      "id": "evalcase_g4_real_task_minimal_workset_longcat_short64k",
+      "title": "G4 Real Task Minimal Workset - LongCat Short 64k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-real-task-minimal-workset-short64k",
+      "parityPairKey": "g4-real-task-minimal-workset",
+      "parityRole": "short",
+      "qualityDeltaThreshold0_100": 8.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Real Task Minimal Workset",
+      "taskGoal": "Review the current Project Yggdrasil repository and produce a final release brief for pseudo-infinite context parity under a minimal-workset regime. The brief must first judge whether this remains a high-value real task for the current repo, then synthesize the integration chain across runtime, evaluation, protocol, provider, documentation, and evidence surfaces using only the provided anchors. The final answer must explicitly decide whether a realistic short-window path remains equivalent to a realistic long-window reference when the current window is forced to stay close to the minimum working set.",
+      "currentFocus": "g4-real-task-minimal-workset",
+      "currentObjective": "Turn the current repo state into a release-ready parity judgment while keeping the active window close to the minimum working set.",
+      "currentContext": [
+        {
+          "id": "ctx_real_task_value",
+          "title": "task value contract",
+          "content": "This must still be a real repo-wide integration task, not a synthetic long prompt. In the first section, explicitly judge whether the task remains high value for the current project and explain why. The answer must treat the repo as a real engineering system and not as a toy example.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_output",
+          "title": "required output structure",
+          "content": "The final structure must be: 1) 任务价值判断, 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论, 7) 风险与下一步. The conclusion section must state whether the task effect is equivalent across the two windows and why.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_window_policy",
+          "title": "minimal workset policy",
+          "content": "This run intentionally limits the initial anchor set. Judge whether the task can still be delivered when the active window behaves like a minimum working set rather than a repo-wide dump. Distinguish acceptable cost or latency differences from unacceptable delivery-quality differences.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_delivery_mode",
+          "title": "delivery mode contract",
+          "content": "Tool execution is disabled for this case. Treat the provided anchor files as the evidence set. Do not describe future scanning, reading, listing, or tool usage. Do not mention MCP. Start immediately with the final Markdown brief using these exact section headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [
+        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
+        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
+        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
+        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 8.0,
+      "acceptanceRequiredSections": [
+        "任务价值判断",
+        "联调覆盖范围",
+        "关键集成链路",
+        "short-window 配置",
+        "long-window 配置",
+        "acceptance 对照结论",
+        "风险与下一步"
+      ],
+      "acceptanceRequiredPhrases": ["高价值"],
+      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "我会按这个顺序推进，确保每一步都可验证。",
+        "先完成仓库现状的快速扫描",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`",
+        "Do not stop at planning or next-steps summary."
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 150000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.35,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Treat the provided anchors as the complete evidence set for this minimal-workset run. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Treat the provided anchors as the sufficient minimal-workset evidence set. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 6,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 16,
+      "workspaceProfile": "g4-real-task-minimal-workset",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "longcat", "short-window"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_real_task_minimal_workset_longcat_long128k",
+      "title": "G4 Real Task Minimal Workset - LongCat Long 128k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-real-task-minimal-workset-long128k",
+      "parityPairKey": "g4-real-task-minimal-workset",
+      "parityRole": "long",
+      "qualityDeltaThreshold0_100": 8.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Real Task Minimal Workset",
+      "taskGoal": "Review the current Project Yggdrasil repository and produce a final release brief for pseudo-infinite context parity under a minimal-workset regime. The brief must first judge whether this remains a high-value real task for the current repo, then synthesize the integration chain across runtime, evaluation, protocol, provider, documentation, and evidence surfaces using only the provided anchors. The final answer must explicitly decide whether a realistic short-window path remains equivalent to a realistic long-window reference when the current window is forced to stay close to the minimum working set.",
+      "currentFocus": "g4-real-task-minimal-workset",
+      "currentObjective": "Turn the current repo state into a release-ready parity judgment while keeping the active window close to the minimum working set.",
+      "currentContext": [
+        {
+          "id": "ctx_real_task_value",
+          "title": "task value contract",
+          "content": "This must still be a real repo-wide integration task, not a synthetic long prompt. In the first section, explicitly judge whether the task remains high value for the current project and explain why. The answer must treat the repo as a real engineering system and not as a toy example.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_output",
+          "title": "required output structure",
+          "content": "The final structure must be: 1) 任务价值判断, 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论, 7) 风险与下一步. The conclusion section must state whether the task effect is equivalent across the two windows and why.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_window_policy",
+          "title": "minimal workset policy",
+          "content": "This run intentionally limits the initial anchor set. Judge whether the task can still be delivered when the active window behaves like a minimum working set rather than a repo-wide dump. Distinguish acceptable cost or latency differences from unacceptable delivery-quality differences.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_delivery_mode",
+          "title": "delivery mode contract",
+          "content": "Tool execution is disabled for this case. Treat the provided anchor files as the evidence set. Do not describe future scanning, reading, listing, or tool usage. Do not mention MCP. Start immediately with the final Markdown brief using these exact section headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [
+        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
+        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
+        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
+        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 8.0,
+      "acceptanceRequiredSections": [
+        "任务价值判断",
+        "联调覆盖范围",
+        "关键集成链路",
+        "short-window 配置",
+        "long-window 配置",
+        "acceptance 对照结论",
+        "风险与下一步"
+      ],
+      "acceptanceRequiredPhrases": ["高价值"],
+      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "我会按这个顺序推进，确保每一步都可验证。",
+        "先完成仓库现状的快速扫描",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`",
+        "Do not stop at planning or next-steps summary."
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 150000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.35,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Treat the provided anchors as the complete evidence set for this minimal-workset run. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Treat the provided anchors as the sufficient minimal-workset evidence set. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
+      "effectiveContextWindow": 128000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 3,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 12,
+      "workspaceProfile": "g4-real-task-minimal-workset",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "longcat", "long-window"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_real_task_minimal_workset_deepseek_short64k",
+      "title": "G4 Real Task Minimal Workset - DeepSeek Short 64k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-real-task-minimal-workset-short64k-deepseek",
+      "parityPairKey": "g4-real-task-minimal-workset-deepseek",
+      "parityRole": "short",
+      "qualityDeltaThreshold0_100": 8.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Real Task Minimal Workset",
+      "taskGoal": "Review the current Project Yggdrasil repository and produce a final release brief for pseudo-infinite context parity under a minimal-workset regime. The brief must first judge whether this remains a high-value real task for the current repo, then synthesize the integration chain across runtime, evaluation, protocol, provider, documentation, and evidence surfaces using only the provided anchors. The final answer must explicitly decide whether a realistic short-window path remains equivalent to a realistic long-window reference when the current window is forced to stay close to the minimum working set.",
+      "currentFocus": "g4-real-task-minimal-workset",
+      "currentObjective": "Turn the current repo state into a release-ready parity judgment while keeping the active window close to the minimum working set.",
+      "currentContext": [
+        {
+          "id": "ctx_real_task_value",
+          "title": "task value contract",
+          "content": "This must still be a real repo-wide integration task, not a synthetic long prompt. In the first section, explicitly judge whether the task remains high value for the current project and explain why. The answer must treat the repo as a real engineering system and not as a toy example.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_output",
+          "title": "required output structure",
+          "content": "The final structure must be: 1) 任务价值判断, 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论, 7) 风险与下一步. The conclusion section must state whether the task effect is equivalent across the two windows and why.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_window_policy",
+          "title": "minimal workset policy",
+          "content": "This run intentionally limits the initial anchor set. Judge whether the task can still be delivered when the active window behaves like a minimum working set rather than a repo-wide dump. Distinguish acceptable cost or latency differences from unacceptable delivery-quality differences.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_delivery_mode",
+          "title": "delivery mode contract",
+          "content": "Tool execution is disabled for this case. Treat the provided anchor files as the evidence set. Do not describe future scanning, reading, listing, or tool usage. Do not mention MCP. Start immediately with the final Markdown brief using these exact section headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [
+        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
+        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
+        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
+        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": true,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 2.0,
+      "acceptanceRequiredSections": [
+        "任务价值判断",
+        "联调覆盖范围",
+        "关键集成链路",
+        "short-window 配置",
+        "long-window 配置",
+        "acceptance 对照结论",
+        "风险与下一步"
+      ],
+      "acceptanceRequiredPhrases": ["高价值"],
+      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "我会按这个顺序推进，确保每一步都可验证。",
+        "先完成仓库现状的快速扫描",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`",
+        "Do not stop at planning or next-steps summary."
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 150000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.35,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Treat the provided anchors as the complete evidence set for this minimal-workset run. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Treat the provided anchors as the sufficient minimal-workset evidence set. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 6,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 16,
+      "workspaceProfile": "g4-real-task-minimal-workset",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "deepseek", "short-window", "paid-approved"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_real_task_minimal_workset_deepseek_long128k",
+      "title": "G4 Real Task Minimal Workset - DeepSeek Long 128k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-real-task-minimal-workset-long128k-deepseek",
+      "parityPairKey": "g4-real-task-minimal-workset-deepseek",
+      "parityRole": "long",
+      "qualityDeltaThreshold0_100": 8.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "G4 Real Task Minimal Workset",
+      "taskGoal": "Review the current Project Yggdrasil repository and produce a final release brief for pseudo-infinite context parity under a minimal-workset regime. The brief must first judge whether this remains a high-value real task for the current repo, then synthesize the integration chain across runtime, evaluation, protocol, provider, documentation, and evidence surfaces using only the provided anchors. The final answer must explicitly decide whether a realistic short-window path remains equivalent to a realistic long-window reference when the current window is forced to stay close to the minimum working set.",
+      "currentFocus": "g4-real-task-minimal-workset",
+      "currentObjective": "Turn the current repo state into a release-ready parity judgment while keeping the active window close to the minimum working set.",
+      "currentContext": [
+        {
+          "id": "ctx_real_task_value",
+          "title": "task value contract",
+          "content": "This must still be a real repo-wide integration task, not a synthetic long prompt. In the first section, explicitly judge whether the task remains high value for the current project and explain why. The answer must treat the repo as a real engineering system and not as a toy example.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_output",
+          "title": "required output structure",
+          "content": "The final structure must be: 1) 任务价值判断, 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论, 7) 风险与下一步. The conclusion section must state whether the task effect is equivalent across the two windows and why.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_window_policy",
+          "title": "minimal workset policy",
+          "content": "This run intentionally limits the initial anchor set. Judge whether the task can still be delivered when the active window behaves like a minimum working set rather than a repo-wide dump. Distinguish acceptable cost or latency differences from unacceptable delivery-quality differences.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_real_task_delivery_mode",
+          "title": "delivery mode contract",
+          "content": "Tool execution is disabled for this case. Treat the provided anchor files as the evidence set. Do not describe future scanning, reading, listing, or tool usage. Do not mention MCP. Start immediately with the final Markdown brief using these exact section headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [
+        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
+        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
+        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
+        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+      ],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": true,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 2.0,
+      "acceptanceRequiredSections": [
+        "任务价值判断",
+        "联调覆盖范围",
+        "关键集成链路",
+        "short-window 配置",
+        "long-window 配置",
+        "acceptance 对照结论",
+        "风险与下一步"
+      ],
+      "acceptanceRequiredPhrases": ["高价值"],
+      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "我会按这个顺序推进，确保每一步都可验证。",
+        "先完成仓库现状的快速扫描",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`",
+        "Do not stop at planning or next-steps summary."
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 150000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.35,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Treat the provided anchors as the complete evidence set for this minimal-workset run. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Treat the provided anchors as the sufficient minimal-workset evidence set. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
+      "effectiveContextWindow": 128000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 3,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 12,
+      "workspaceProfile": "g4-real-task-minimal-workset",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "deepseek", "long-window", "paid-approved"],
+      "difficulty": "hard"
+    }
+  ]
+}

@@ -94,7 +94,12 @@ def _get_schema_template_db() -> str:
     return _SCHEMA_TEMPLATE_DB
 
 @contextmanager
-def isolated_runtime_environment(*, disable_live_llm: bool = True, allow_paid_models: bool = False) -> Iterator[None]:
+def isolated_runtime_environment(
+    *,
+    workspace_root: Path | None = None,
+    disable_live_llm: bool = True,
+    allow_paid_models: bool = False,
+) -> Iterator[None]:
     managed_keys = [
         "YGGDRASIL_DATABASE_URL",
         "YGGDRASIL_AUTO_CREATE_SCHEMA",
@@ -123,7 +128,7 @@ def isolated_runtime_environment(*, disable_live_llm: bool = True, allow_paid_mo
         temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-")
     with temp_dir_context as temp_dir:
         temp_root = Path(temp_dir)
-        sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root)
+        sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root, workspace_root)
         db_path = temp_root / "evaluation.db"
         shutil.copy2(template_db, db_path)
         os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
@@ -180,16 +185,35 @@ def local_evaluation_runtime_environment(
         "YGGDRASIL_ALLOW_PAID_MODELS",
     ]
     previous = {key: os.environ.get(key) for key in managed_keys}
-    with tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-") as temp_dir:
+    preserve_sandbox = str(os.environ.get("YGGDRASIL_EVAL_PRESERVE_SANDBOX") or "").strip().lower() in {"1", "true", "yes", "on"}
+    persistent_local_root = preserve_sandbox or bool(previous["YGGDRASIL_STATE_ROOT"] or previous["YGGDRASIL_STATE_DIR"])
+    persistent_state_dir = resolve_state_dir(workspace_root)
+    persistent_state_root = persistent_state_dir.parent
+    if persistent_local_root:
+        persistent_state_dir.mkdir(parents=True, exist_ok=True)
+        local_root_parent = persistent_state_dir / "evaluation-local-runs"
+        local_root_parent.mkdir(parents=True, exist_ok=True)
+        local_root = local_root_parent / new_id("evallocal", utc_now().isoformat(), stable=False)
+        local_root.mkdir(parents=True, exist_ok=False)
+        temp_dir_context = nullcontext(str(local_root))
+    else:
+        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-")
+    with temp_dir_context as temp_dir:
         temp_root = Path(temp_dir)
-        sandbox_root = temp_root / ".yggdrasil"
-        sandbox_root.mkdir(parents=True, exist_ok=True)
         sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root, workspace_root)
-        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{(sandbox_root / 'evaluation.db').as_posix()}"
+        db_path = temp_root / "evaluation.db"
+        os.environ["YGGDRASIL_DATABASE_URL"] = f"sqlite+pysqlite:///{db_path.as_posix()}"
         os.environ["YGGDRASIL_AUTO_CREATE_SCHEMA"] = "1"
         os.environ["YGGDRASIL_COORDINATION_BACKEND"] = "memory"
         os.environ["YGGDRASIL_REDIS_URL"] = "redis://127.0.0.1:6390/15"
-        os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
+        if persistent_local_root:
+            os.environ["YGGDRASIL_STATE_ROOT"] = str(persistent_state_root.resolve())
+            os.environ["YGGDRASIL_STATE_DIR"] = str(persistent_state_dir.resolve())
+        else:
+            sandbox_root = temp_root / ".yggdrasil"
+            sandbox_root.mkdir(parents=True, exist_ok=True)
+            os.environ["YGGDRASIL_STATE_ROOT"] = str(sandbox_root.resolve())
+            os.environ.pop("YGGDRASIL_STATE_DIR", None)
         os.environ["YGGDRASIL_GIT_REPO_PATH"] = str(sandbox_workspace.resolve())
         os.environ["YGGDRASIL_MCP_PROJECT_WORKSPACE"] = str(sandbox_workspace.resolve())
         if disable_live_llm:
@@ -200,7 +224,6 @@ def local_evaluation_runtime_environment(
             os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
         else:
             os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
-        os.environ.pop("YGGDRASIL_STATE_DIR", None)
         close_mcp_bridge_sessions()
         reset_persistence_runtime()
         initialize_schema()

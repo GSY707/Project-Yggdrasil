@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
-from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment
+from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment, local_evaluation_runtime_environment
 import yggdrasil_sdk.evaluation_runtime.scorer as evaluation_scorer
 import yggdrasil_sdk.evaluation_runtime.suite_cases_g4 as suite_cases_g4
 from yggdrasil_sdk import list_evaluation_suite_definitions, run_evaluation_suite
@@ -84,6 +85,23 @@ def test_g4_real_task_window_parity_suite_uses_free_default_and_small_paid_appro
     assert len([case for case in cases if bool(case.get("allowPaidModels"))]) == 2
     assert {case["costBudgetTotal"] for case in cases if case["requestedProvider"] == "deepseek_direct"} == {2.0}
     assert {case["parityPairKey"] for case in cases} == {"g4-real-task-window-parity", "g4-real-task-window-parity-deepseek"}
+    assert {case.get("auditLevel") for case in cases} == {"strict"}
+
+
+def test_g4_real_task_minimal_workset_suite_uses_strict_audit_and_no_repo_wide_globs() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    suite = suites["evalsuite_g4_real_task_minimal_workset"]
+    cases = suite["cases"]
+
+    assert len(cases) == 4
+    assert {case["requestedProvider"] for case in cases} == {"deepseek_direct", "longcat"}
+    assert {case.get("auditLevel") for case in cases} == {"strict"}
+    assert all(not case.get("currentContextGlobs") for case in cases)
+    assert {case["parityPairKey"] for case in cases} == {
+        "g4-real-task-minimal-workset",
+        "g4-real-task-minimal-workset-deepseek",
+    }
 
 
 def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_allows_it() -> None:
@@ -99,6 +117,23 @@ def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_al
             os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
         else:
             os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = previous
+
+
+def test_local_evaluation_runtime_environment_keeps_preserved_case_sandboxes_under_persistent_state_root(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    state_root = tmp_path / "persistent-eval-root"
+    monkeypatch.setenv("YGGDRASIL_STATE_ROOT", state_root.as_posix())
+    monkeypatch.setenv("YGGDRASIL_EVAL_PRESERVE_SANDBOX", "1")
+
+    with local_evaluation_runtime_environment(disable_live_llm=True):
+        assert Path(os.environ["YGGDRASIL_STATE_ROOT"]).resolve() == state_root.resolve()
+        assert Path(os.environ["YGGDRASIL_STATE_DIR"]).resolve() == (state_root / "state").resolve()
+        with isolated_runtime_environment(disable_live_llm=True):
+            sandbox_root = Path(os.environ["YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT"]).resolve()
+
+        assert str(sandbox_root).startswith(str((state_root / "state" / "evaluation-sandboxes").resolve()))
 
 
 def test_g4_provider_matrix_metrics_capture_token_and_context_usage() -> None:
@@ -218,7 +253,45 @@ def test_g4_contract_verification_accepts_release_brief_with_restart_evidence() 
     assert result["enabled"] is True
     assert result["passed"] is True
     assert result["issues"] == []
-    assert all(item["returncode"] == 0 for item in result["checks"])
+
+
+def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() -> None:
+    metrics = suite_cases_g4._g4_window_execution_metrics(
+        [
+            {
+                "workTreeCurrentNodeId": "wt-node-1",
+                "responseRequirementsDigest": "resp-1",
+                "restartMessageDigest": "restart-1",
+                "stateFingerprint": "fp-1",
+                "effectiveContextWindow": 100,
+                "currentContextTokenEstimate": 70,
+                "memoryRetrievalState": {
+                    "reverseTraceMode": True,
+                    "workTreeNodeId": "wt-node-1",
+                },
+                "llm": {"planningStub0_1": 0},
+            },
+            {
+                "workTreeCurrentNodeId": "wt-node-2",
+                "responseRequirementsDigest": "resp-2",
+                "restartMessageDigest": "restart-2",
+                "stateFingerprint": "fp-2",
+                "effectiveContextWindow": 100,
+                "currentContextTokenEstimate": 20,
+                "memoryRetrievalState": {
+                    "reverseTraceMode": True,
+                    "workTreeNodeId": "wt-node-2",
+                },
+                "llm": {"planningStub0_1": 1},
+            },
+        ]
+    )
+
+    assert metrics["windowExecutionCount"] == 2
+    assert metrics["workTreeContinuity0_1"] == 1
+    assert metrics["minimalWorksetRatio0_1"] == 0.55
+    assert metrics["planningStubRate0_1"] == 0.5
+    assert metrics["retrievalDriftRate0_1"] == 0.0
 
 
 def test_g4_provider_matrix_summary_aggregates_new_metrics() -> None:
@@ -357,6 +430,9 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
                         "parityRole": "short",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.62,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 94.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }
@@ -371,6 +447,9 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
                         "parityRole": "long",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.73,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 96.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }
@@ -382,6 +461,8 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
     parity = payload["realTaskWindowParity"]
     assert parity["goalCompletionParity0_1"] == 1
     assert parity["deliveryEquivalence0_1"] == 1
+    assert parity["workTreeContinuity0_1"] == 1
+    assert parity["minimalWorksetRatio0_1"] == 0.62
     assert parity["qualityDeltaToLongWindow0_100"] == 2.0
     assert parity["parityPassed0_1"] == 1
 
@@ -401,6 +482,9 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "model": "LongCat-2.0-Preview",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.61,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 94.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }
@@ -418,6 +502,9 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "model": "LongCat-2.0-Preview",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.74,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 96.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }
@@ -435,6 +522,9 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "model": "deepseek-v4-pro",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.58,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 93.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }
@@ -452,6 +542,9 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "model": "deepseek-v4-pro",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
+                        "workTreeContinuity0_1": 1,
+                        "minimalWorksetRatio0_1": 0.7,
+                        "minimalWorksetThreshold0_1": 0.35,
                         "planQualityScore0_100": 95.0,
                         "qualityDeltaThreshold0_100": 8.0,
                     }

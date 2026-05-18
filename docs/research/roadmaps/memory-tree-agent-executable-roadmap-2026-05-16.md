@@ -1,6 +1,6 @@
 # 世界树计划 · 记忆树 Agent 可执行路线图（2026-05-16）
 
-- 文档状态：Executable Implementation Roadmap
+- 文档状态：Executable Implementation Roadmap（已完成，待验收）
 - 日期：2026-05-16
 - 目标：把“记忆树代替上下文窗口成为 LLM 的全部记忆”落成可执行工程计划，不依赖原拆分文档的建议顺序。
 

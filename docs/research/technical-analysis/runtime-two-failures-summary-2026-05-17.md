@@ -1,6 +1,6 @@
 # 世界树计划 · 两个失败用例摘要报告（2026-05-17）
 
-- 文档状态：Failure Summary
+- 文档状态：Failure Summary（已完成）
 - 日期：2026-05-17
 - 范围：仅描述 `tests/test_runtime_and_pruning.py` 中两个失败用例的错误现象与大致原因。
 

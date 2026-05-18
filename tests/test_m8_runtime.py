@@ -97,6 +97,18 @@ def test_isolated_evaluation_environment_redirects_workspace_writes() -> None:
             raise AssertionError(f"sandbox path leaked into repo root: {path}")
 
 
+def test_isolated_evaluation_environment_can_copy_explicit_workspace_root(tmp_path: Path) -> None:
+    workspace_root = _create_fake_validation_workspace(tmp_path / "source-workspace")
+
+    with isolated_runtime_environment(workspace_root=workspace_root):
+        project_workspace = Path(os.environ["YGGDRASIL_GIT_REPO_PATH"])
+
+        assert project_workspace.is_dir()
+        assert project_workspace != workspace_root
+        assert (project_workspace / "README.md").read_text(encoding="utf-8") == "# Fake Workspace\n"
+        assert (project_workspace / "evaluation" / "fixtures" / "real-user-validation" / "task-pack-2026-04-30.md").exists()
+
+
 def test_real_user_validation_sandbox_prepares_isolated_git_workspace(tmp_path: Path) -> None:
     workspace_root = _create_fake_validation_workspace(tmp_path / "source-workspace")
     sandbox_root = tmp_path / "pilot-output"

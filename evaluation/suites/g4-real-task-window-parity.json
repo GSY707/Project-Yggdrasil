@@ -64,17 +64,17 @@
         { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
         { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
         { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py", "title": "llm runtime metrics path", "lineStart": 1180, "lineEnd": 1365, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 280, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live execution path", "lineStart": 1260, "lineEnd": 1565, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
         { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
         { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 260, "importance": 0.94 },
-        { "path": "tests/test_runtime_and_pruning.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1040, "importance": 0.99 }
+        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
+        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
       ],
       "currentContextGlobs": [
         { "pattern": "*.md", "importance": 0.7 },
@@ -104,7 +104,7 @@
         { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
         { "pattern": "applications/**/*.*", "importance": 0.7 },
         { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.*", "importance": 0.68 }
+        { "pattern": "scripts/**/*.py", "importance": 0.68 }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -114,6 +114,7 @@
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
+      "auditLevel": "strict",
       "costBudgetTotal": 8.0,
       "acceptanceRequiredSections": [
         "任务价值判断",
@@ -137,6 +138,9 @@
       "acceptanceMinRestartCount": 1,
       "acceptanceMinWindowIndex": 2,
       "acceptanceMinCumulativeWindowSpanTokens": 1000000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
       "failOnAcceptanceViolation": true,
       "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
       "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
@@ -204,17 +208,17 @@
         { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
         { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
         { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py", "title": "llm runtime metrics path", "lineStart": 1180, "lineEnd": 1365, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 280, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live execution path", "lineStart": 1260, "lineEnd": 1565, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
         { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
         { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 260, "importance": 0.94 },
-        { "path": "tests/test_runtime_and_pruning.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1040, "importance": 0.99 }
+        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
+        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
       ],
       "currentContextGlobs": [
         { "pattern": "*.md", "importance": 0.7 },
@@ -244,7 +248,7 @@
         { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
         { "pattern": "applications/**/*.*", "importance": 0.7 },
         { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.*", "importance": 0.68 }
+        { "pattern": "scripts/**/*.py", "importance": 0.68 }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -254,6 +258,7 @@
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
+      "auditLevel": "strict",
       "costBudgetTotal": 8.0,
       "acceptanceRequiredSections": [
         "任务价值判断",
@@ -273,6 +278,9 @@
       "acceptanceMinRestartCount": 1,
       "acceptanceMinWindowIndex": 2,
       "acceptanceMinCumulativeWindowSpanTokens": 1000000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
       "failOnAcceptanceViolation": true,
       "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Ensure sections 6 and 7 are present at the end of the final answer even if the brief is long. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
       "restartMessage": "Window restart: you must now produce the final release brief with all 7 required sections: 1) 任务价值判断 (含 '高价值'), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (必须写明等价/不等价), 7) 风险与下一步. Ensure sections 6 and 7 are included at the end. Output Markdown only and do not emit XML/tool/MCP tags. Deliver the complete structured output, not a plan.",
@@ -340,17 +348,17 @@
         { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
         { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
         { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py", "title": "llm runtime metrics path", "lineStart": 1180, "lineEnd": 1365, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 320, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live execution path", "lineStart": 1260, "lineEnd": 1565, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
         { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
         { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 320, "importance": 0.94 },
-        { "path": "tests/test_runtime_and_pruning.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1040, "importance": 0.99 }
+        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
+        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
       ],
       "currentContextGlobs": [
         { "pattern": "*.md", "importance": 0.7 },
@@ -380,7 +388,7 @@
         { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
         { "pattern": "applications/**/*.*", "importance": 0.7 },
         { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.*", "importance": 0.68 }
+        { "pattern": "scripts/**/*.py", "importance": 0.68 }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -390,6 +398,7 @@
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
+      "auditLevel": "strict",
       "costBudgetTotal": 2.0,
       "acceptanceRequiredSections": [
         "任务价值判断",
@@ -409,6 +418,9 @@
       "acceptanceMinRestartCount": 1,
       "acceptanceMinWindowIndex": 2,
       "acceptanceMinCumulativeWindowSpanTokens": 1000000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
       "failOnAcceptanceViolation": true,
       "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Start immediately with these exact Markdown headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, code blocks, or planning preambles. Do not describe future scanning, reading, listing, or tool usage.",
       "restartMessage": "Window restart: produce the final Markdown brief now. Start immediately with these exact headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Do not emit XML/tool/MCP tags, code blocks, plans, or any statement about future scanning or tool use.",
@@ -482,17 +494,17 @@
         { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
         { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
         { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py", "title": "llm runtime metrics path", "lineStart": 1180, "lineEnd": 1365, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 320, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py", "title": "real-user live execution path", "lineStart": 1260, "lineEnd": 1565, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
         { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
         { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 320, "importance": 0.94 },
-        { "path": "tests/test_runtime_and_pruning.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1040, "importance": 0.99 }
+        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
+        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
       ],
       "currentContextGlobs": [
         { "pattern": "*.md", "importance": 0.7 },
@@ -522,7 +534,7 @@
         { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
         { "pattern": "applications/**/*.*", "importance": 0.7 },
         { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.*", "importance": 0.68 }
+        { "pattern": "scripts/**/*.py", "importance": 0.68 }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -532,6 +544,7 @@
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
+      "auditLevel": "strict",
       "costBudgetTotal": 2.0,
       "acceptanceRequiredSections": [
         "任务价值判断",
@@ -555,6 +568,9 @@
       "acceptanceMinRestartCount": 1,
       "acceptanceMinWindowIndex": 2,
       "acceptanceMinCumulativeWindowSpanTokens": 1000000,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
       "failOnAcceptanceViolation": true,
       "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. Start immediately with these exact Markdown headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, code blocks, or planning preambles. Do not describe future scanning, reading, listing, or tool usage.",
       "restartMessage": "Window restart: produce the final Markdown brief now. Start immediately with these exact headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Do not emit XML/tool/MCP tags, code blocks, plans, or any statement about future scanning or tool use.",
@@ -577,3 +593,5 @@
     }
   ]
 }
+
+

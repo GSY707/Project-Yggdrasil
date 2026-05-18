@@ -248,6 +248,11 @@ def _provider_matrix_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "avgCumulativeWindowSpanTokens": _average("cumulativeWindowSpanTokens", bucket),
                 "avgCarryForwardLossCount": _average("carryForwardLossCount", bucket),
                 "avgEffectiveContextWindow": _average("effectiveContextWindow", bucket),
+                "avgWindowExecutionCount": _average("windowExecutionCount", bucket),
+                "avgWorkTreeContinuity0_1": _average("workTreeContinuity0_1", bucket),
+                "avgMinimalWorksetRatio0_1": _average("minimalWorksetRatio0_1", bucket),
+                "avgPlanningStubRate0_1": _average("planningStubRate0_1", bucket),
+                "avgRetrievalDriftRate0_1": _average("retrievalDriftRate0_1", bucket),
             }
         )
     provider_summary.sort(
@@ -296,10 +301,17 @@ def _real_task_window_parity_summary(rows: list[dict[str, Any]]) -> dict[str, An
     long_delivery = 1 if all(int(item.get("deliveryCompletion0_1") or 0) == 1 for item in long_rows) else 0
     short_quality = _avg(short_rows, "planQualityScore0_100")
     long_quality = _avg(long_rows, "planQualityScore0_100")
+    short_minimal_workset = _avg(short_rows, "minimalWorksetRatio0_1")
+    long_minimal_workset = _avg(long_rows, "minimalWorksetRatio0_1")
     quality_delta = round(abs(long_quality - short_quality), 4)
     quality_threshold = min(
         [float(item.get("qualityDeltaThreshold0_100") or 8.0) for item in [*short_rows, *long_rows]]
     )
+    work_tree_continuity = 1 if all(int(item.get("workTreeContinuity0_1") or 0) == 1 for item in [*short_rows, *long_rows]) else 0
+    minimal_workset_threshold = min(
+        [float(item.get("minimalWorksetThreshold0_1") or 0.0) for item in [*short_rows, *long_rows]]
+    )
+    minimal_workset_ratio = round(min(short_minimal_workset, long_minimal_workset), 4)
 
     goal_completion_parity = 1 if short_goal_completion == 1 and long_goal_completion == 1 else 0
     delivery_equivalence = 1 if short_delivery == 1 and long_delivery == 1 else 0
@@ -307,20 +319,33 @@ def _real_task_window_parity_summary(rows: list[dict[str, Any]]) -> dict[str, An
     return {
         "goalCompletionParity0_1": goal_completion_parity,
         "deliveryEquivalence0_1": delivery_equivalence,
+        "workTreeContinuity0_1": work_tree_continuity,
+        "minimalWorksetRatio0_1": minimal_workset_ratio,
+        "minimalWorksetThreshold0_1": minimal_workset_threshold,
         "qualityDeltaToLongWindow0_100": quality_delta,
         "qualityDeltaThreshold0_100": quality_threshold,
-        "parityPassed0_1": 1 if goal_completion_parity == 1 and delivery_equivalence == 1 and quality_delta <= quality_threshold else 0,
+        "parityPassed0_1": 1
+        if goal_completion_parity == 1
+        and delivery_equivalence == 1
+        and work_tree_continuity == 1
+        and minimal_workset_ratio >= minimal_workset_threshold
+        and quality_delta <= quality_threshold
+        else 0,
         "shortWindow": {
             "caseCount": len(short_rows),
             "goalCompletion0_1": short_goal_completion,
             "deliveryCompletion0_1": short_delivery,
             "avgPlanQualityScore0_100": short_quality,
+            "avgMinimalWorksetRatio0_1": short_minimal_workset,
+            "workTreeContinuity0_1": 1 if all(int(item.get("workTreeContinuity0_1") or 0) == 1 for item in short_rows) else 0,
         },
         "longWindow": {
             "caseCount": len(long_rows),
             "goalCompletion0_1": long_goal_completion,
             "deliveryCompletion0_1": long_delivery,
             "avgPlanQualityScore0_100": long_quality,
+            "avgMinimalWorksetRatio0_1": long_minimal_workset,
+            "workTreeContinuity0_1": 1 if all(int(item.get("workTreeContinuity0_1") or 0) == 1 for item in long_rows) else 0,
         },
     }
 

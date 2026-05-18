@@ -61,6 +61,7 @@ def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> d
                 case_started = perf_counter()
                 try:
                     with isolated_runtime_environment(
+                        workspace_root=workspace_root,
                         disable_live_llm=not bool(case.get("requireLive", False)),
                         allow_paid_models=bool(case.get("allowPaidModels", False)),
                     ):

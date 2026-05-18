@@ -121,16 +121,16 @@ class CompiledPrompt(BaseModel):
 
 def _format_memory_retrieval_state(state: dict[str, Any]) -> str:
     lines = [
-        f"Summary: {state.get('summary') or 'No retrieval summary was recorded.'}",
-        f"Request id: {state.get('requestId') or 'unknown'}",
-        f"Window index: {state.get('windowIndex') or 'unknown'}",
-        f"Matched refs: {len(state.get('matchedNodeRefs') or [])}",
-        f"Materialized refs: {len(state.get('materializedNodeIds') or [])}",
+        f"摘要: {state.get('summary') or '未记录检索摘要。'}",
+        f"请求 ID: {state.get('requestId') or 'unknown'}",
+        f"窗口索引: {state.get('windowIndex') or 'unknown'}",
+        f"命中引用数: {len(state.get('matchedNodeRefs') or [])}",
+        f"物化引用数: {len(state.get('materializedNodeIds') or [])}",
     ]
     if state.get("workTreeNodeId") is not None:
-        lines.append(f"Work tree node: {state['workTreeNodeId']}")
+        lines.append(f"工作树节点: {state['workTreeNodeId']}")
     if state.get("reverseTraceMode") is not None:
-        lines.append(f"Reverse trace mode: {bool(state.get('reverseTraceMode'))}")
+        lines.append(f"反向追踪模式: {'是' if bool(state.get('reverseTraceMode')) else '否'}")
     return "\n".join(lines)
 
 
@@ -507,6 +507,65 @@ def _format_section(tag: str, content: str | None) -> str:
     return f"<{tag}>\n{text}\n</{tag}>"
 
 
+def _normalize_prompt_text(value: str | None) -> str:
+    return " ".join((value or "").split())
+
+
+def _dedupe_section_contents(sections: dict[str, str]) -> dict[str, str]:
+    deduped: dict[str, str] = {}
+    seen_signatures: set[str] = set()
+    for tag, content in sections.items():
+        text = (content or "").strip()
+        if not text:
+            continue
+        signature = _normalize_prompt_text(text)
+        if signature in seen_signatures:
+            continue
+        deduped[tag] = text
+        seen_signatures.add(signature)
+    return deduped
+
+
+def _localized_output_style(style: str | None) -> str:
+    normalized = str(style or "concise").strip().lower()
+    return {
+        "concise": "简洁",
+        "detailed": "详细",
+        "structured": "结构化",
+        "narrative": "叙事化",
+    }.get(normalized, str(style or "concise"))
+
+
+def _example_role_label(role: str) -> str:
+    if role == "user":
+        return "用户示例"
+    if role == "assistant":
+        return "助手示例"
+    return "系统示例"
+
+
+def _format_few_shot_examples(few_shot_assets: list[FewShotAsset]) -> str:
+    if not few_shot_assets:
+        return ""
+    blocks: list[str] = ["以下示例仅用于对齐执行风格，不代表当前用户真实发言："]
+    seen_signatures: set[tuple[tuple[str, str], ...]] = set()
+    example_index = 1
+    for asset in few_shot_assets:
+        signature = tuple((message.role, _normalize_prompt_text(message.content)) for message in asset.messages)
+        if not signature or signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        title = f"示例 {example_index}（{asset.name}）"
+        if asset.description:
+            title += f"：{asset.description}"
+        block_lines = [title]
+        for message in asset.messages:
+            block_lines.append(f"{_example_role_label(message.role)}:\n{message.content.strip()}")
+        blocks.append("\n".join(block_lines))
+        example_index += 1
+    return "\n\n".join(block for block in blocks if block.strip())
+
+
 def _format_active_capabilities(active_capabilities: list[str]) -> str:
     if not active_capabilities:
         return "当前未显式挂载模块能力清单。"
@@ -518,11 +577,11 @@ def _format_registered_tools(registered_tools: list[dict[str, Any]]) -> str:
         return "当前没有通过模块 hook 暴露的结构化工具描述。"
     lines: list[str] = []
     for tool in registered_tools:
-        permissions = ", ".join(tool.get("permissionRequired") or []) or "none"
-        schema_ref = str(tool.get("schemaRef") or "n/a")
-        description = str(tool.get("description") or tool.get("displayName") or tool["name"])
+        permissions = ", ".join(tool.get("permissionRequired") or []) or "无"
+        schema_ref = str(tool.get("schemaRef") or "未提供")
+        module_id = str(tool.get("moduleId") or "unknown")
         lines.append(
-            f"- {tool['name']} | {description} | mode={tool.get('executionMode') or 'sync'} | permissions={permissions} | schema={schema_ref}"
+            f"- {tool['name']} | 模块={module_id} | 执行模式={tool.get('executionMode') or 'sync'} | 权限={permissions} | schema={schema_ref}"
         )
     return "\n".join(lines)
 
@@ -542,12 +601,12 @@ def _format_runtime_state(root_mount: dict[str, Any]) -> str:
     mounted_refs = root_mount.get("mountedNodeRefs") or []
     return "\n".join(
         [
-            f"System intro: {root_mount.get('systemIntro') or ''}",
-            f"Root summary: {root_mount.get('rootSummary') or ''}",
-            f"Task objective: {root_mount.get('taskObjective') or ''}",
-            f"Resume message: {root_mount.get('resumeMessage') or ''}",
-            f"Mounted node refs: {len(mounted_refs)}",
-            "Active capabilities:",
+            f"系统导语: {root_mount.get('systemIntro') or ''}",
+            f"根摘要: {root_mount.get('rootSummary') or ''}",
+            f"任务说明: {root_mount.get('taskObjective') or ''}",
+            f"恢复提示: {root_mount.get('resumeMessage') or ''}",
+            f"挂载节点引用数: {len(mounted_refs)}",
+            "当前可见能力:",
             _format_active_capabilities([str(item) for item in root_mount.get("activeCapabilities") or []]),
         ]
     ).strip()
@@ -557,15 +616,15 @@ def _format_task_contract(task: Any, run_type: str, task_type: str, request: dic
     objective = str(request.get("taskObjective") or request.get("currentObjective") or task.current_objective or task.goal)
     focus = str(request.get("currentFocus") or task.current_focus or "runtime execution")
     lines = [
-        f"Task title: {task.title}",
-        f"Task goal: {task.goal}",
-        f"Current objective: {objective}",
-        f"Current focus: {focus}",
-        f"Run type: {run_type}",
-        f"Task type: {task_type}",
+        f"任务标题: {task.title}",
+        f"任务目标: {task.goal}",
+        f"当前目标: {objective}",
+        f"当前焦点: {focus}",
+        f"运行类型: {run_type}",
+        f"任务类型: {task_type}",
     ]
     if resume_path:
-        lines.append(f"Resume path: {resume_path}")
+        lines.append(f"恢复路径: {resume_path}")
     return "\n".join(lines)
 
 
@@ -575,28 +634,26 @@ def _format_response_requirements(
     resume_path: str | None = None,
 ) -> str:
     style = seed_template.output_style if seed_template is not None else "concise"
+    localized_style = _localized_output_style(style)
     additional = request.get("responseRequirements")
     has_delivery_contract = isinstance(additional, str) and additional.strip()
     is_resume = bool(resume_path)
     lines = [
-        (
-            "1. 直接产出以下要求指定的最终交付物，不要停在计划或下一步总结。"
-            if has_delivery_contract or is_resume
-            else "1. 先总结当前局势，再给出最稳妥的下一步。"
-        ),
+        "1. 基于完整的工作树状态和记忆内容自主判断下一步行动。需要交付则直接交付，需要规划则进行规划，不要被强制指令干扰。",
         "2. 若证据不足，明确说明缺失信息，不要补空白。",
         "3. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
-        f"4. 默认采用 {style} 风格，除非任务另有明确要求。",
+        f"4. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
     ]
     if is_resume:
-        lines.append("5. 恢复态必须优先交付 result/evidence/pending/incomplete 四段，不允许仅输出计划草稿。")
-        lines.append("6. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
+        lines.append("5. 恢复态下，把 resume_message 视为接续上下文的提示（context hint），结合记忆树继续执行，无需退回初始规划状态。")
+        lines.append("6. 恢复态优先按 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）组织交付，不要回退成纯规划。")
+        lines.append("7. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
     if bool(request.get("memoryWriteTagsEnabled", True)):
         lines.append(
             f'{len(lines) + 1}. 如需在不中断回答的情况下修改记忆树，可插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
         )
     if has_delivery_contract:
-        lines.append(f"{len(lines) + 1}. Additional requirement: {additional.strip()}")
+        lines.append(f"{len(lines) + 1}. 附加要求: {additional.strip()}")
     return "\n".join(lines)
 
 
@@ -612,27 +669,27 @@ def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProt
 
 def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     lines = [
-        f"Objective summary: {protocol.objective_summary}",
-        f"Current phase: {protocol.current_phase}",
-        f"Status: {protocol.status}",
-        "Constraints:",
+        f"目标摘要: {protocol.objective_summary}",
+        f"当前阶段: {protocol.current_phase}",
+        f"状态: {protocol.status}",
+        "约束:",
     ]
     if protocol.constraints:
         lines.extend(f"- [{item.category}] {item.label}: {item.value}" for item in protocol.constraints)
     else:
-        lines.append("- none")
-    lines.append("Plan:")
+        lines.append("- 无")
+    lines.append("计划:")
     if protocol.plan:
         lines.extend(
             f"{index}. [{step.phase}] {step.title}: {step.instructions}"
             for index, step in enumerate(protocol.plan, start=1)
         )
     else:
-        lines.append("1. No formal plan was generated.")
+        lines.append("1. 未生成正式计划。")
     if protocol.work_tree is not None:
-        lines.append("Work tree:")
+        lines.append("工作树:")
         lines.append(
-            f"- status={protocol.work_tree.status}; currentNode={protocol.work_tree.current_node_id or 'none'}; entropyBudgetRemaining={protocol.work_tree.entropy_budget_remaining}"
+            f"- 状态={protocol.work_tree.status}; 当前节点={protocol.work_tree.current_node_id or 'none'}; 剩余熵预算={protocol.work_tree.entropy_budget_remaining}"
         )
         if protocol.work_tree.nodes:
             lines.extend(
@@ -640,16 +697,16 @@ def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
                 for node in protocol.work_tree.nodes[:6]
             )
     if protocol.delivery_sections:
-        lines.append("Delivery checkpoints:")
+        lines.append("交付检查点:")
         lines.extend(
             f"- {section.section}: {normalize_excerpt(section.content or section.status, 120)}"
             for section in protocol.delivery_sections
         )
     lines.extend(
         [
-            f"Plan quality: {protocol.metrics.plan_quality_score_0_100}",
-            f"Rework rate: {protocol.metrics.rework_rate}",
-            f"Delivery completeness: {protocol.metrics.delivery_completeness_score_0_100}",
+            f"计划质量: {protocol.metrics.plan_quality_score_0_100}",
+            f"返工率: {protocol.metrics.rework_rate}",
+            f"交付完整度: {protocol.metrics.delivery_completeness_score_0_100}",
         ]
     )
     return "\n".join(lines)
@@ -707,11 +764,7 @@ def compile_runtime_prompt(
     takeover_protocol = _takeover_protocol_from_request(request)
     few_shot_assets = _resolve_few_shot_assets(profile, seed_template, resolved_registry)
     few_shot_refs = [asset.id for asset in few_shot_assets]
-    few_shot_messages = [
-        message.model_dump(mode="json")
-        for asset in few_shot_assets
-        for message in asset.messages
-    ]
+    few_shot_examples = "" if resume_path else _format_few_shot_examples(few_shot_assets)
 
     system_sections = {
         "system_role": profile.system_role,
@@ -734,6 +787,8 @@ def compile_runtime_prompt(
         "evidence_policy": profile.evidence_policy,
         "output_contract": profile.output_contract,
     }
+    if few_shot_examples:
+        system_sections["few_shot_examples"] = few_shot_examples
     if profile.self_evolution:
         system_sections["self_evolution"] = profile.self_evolution
 
@@ -749,7 +804,8 @@ def compile_runtime_prompt(
     if memory_retrieval_state is not None:
         user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
     resume_message = str(request.get("resumeMessage") or task.resume_message or "").strip()
-    if resume_message:
+    root_resume_message = str(root_mount.get("resumeMessage") or "").strip()
+    if resume_message and _normalize_prompt_text(resume_message) != _normalize_prompt_text(root_resume_message):
         user_sections["resume_message"] = resume_message
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
     if run_type == "subagent":
@@ -758,8 +814,11 @@ def compile_runtime_prompt(
             "如果关键前提超出这份切片，请明确报告缺失，而不是推测完整全局状态。",
         ]
         if readonly_context_ref and readonly_context_ref.get("locator"):
-            subagent_scope_lines.append(f"Readonly context ref: {readonly_context_ref['locator']}")
+            subagent_scope_lines.append(f"只读上下文引用: {readonly_context_ref['locator']}")
         user_sections["subagent_scope"] = "\n".join(subagent_scope_lines)
+
+    system_sections = _dedupe_section_contents(system_sections)
+    user_sections = _dedupe_section_contents(user_sections)
 
     system_message = "\n\n".join(
         block for block in [_format_section(tag, content) for tag, content in system_sections.items()] if block
@@ -784,7 +843,6 @@ def compile_runtime_prompt(
         takeoverProtocol=takeover_protocol,
         messages=[
             {"role": "system", "content": system_message},
-            *few_shot_messages,
             {"role": "user", "content": user_message},
         ],
     )

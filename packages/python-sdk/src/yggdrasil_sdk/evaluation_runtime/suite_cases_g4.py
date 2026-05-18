@@ -161,10 +161,102 @@ def _g4_response_text(result_payload: dict[str, Any], response_payload: dict[str
     return ""
 
 
+def _g4_window_execution_records(
+    processed_runs: list[dict[str, Any]],
+    *,
+    workspace_root: Path | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    records: list[dict[str, Any]] = []
+    artifact_refs: list[dict[str, Any]] = []
+    for item in processed_runs:
+        result_payload = item.get("result") if isinstance(item, dict) else None
+        if not isinstance(result_payload, dict):
+            continue
+        artifact = result_payload.get("windowExecutionArtifact")
+        if not isinstance(artifact, dict):
+            continue
+        artifact_ref = artifact.get("artifactRef") if isinstance(artifact.get("artifactRef"), dict) else None
+        if artifact_ref is not None:
+            artifact_refs.append(dict(artifact_ref))
+        record = artifact.get("record") if isinstance(artifact.get("record"), dict) else None
+        if record is None and artifact_ref is not None:
+            loaded = _read_external_ref_json(artifact_ref, workspace_root)
+            if isinstance(loaded, dict):
+                record = loaded
+        if isinstance(record, dict):
+            records.append(dict(record))
+    return records, artifact_refs
+
+
+def _g4_window_execution_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not records:
+        return {
+            "windowExecutionCount": 0,
+            "workTreeContinuity0_1": 0,
+            "minimalWorksetRatio0_1": 0.0,
+            "planningStubRate0_1": 0.0,
+            "retrievalDriftRate0_1": 0.0,
+        }
+
+    minimal_workset_ratios: list[float] = []
+    continuity_flags: list[bool] = []
+    planning_stub_count = 0
+    drift_checks = 0
+    drift_hits = 0
+
+    for record in records:
+        llm = record.get("llm") if isinstance(record.get("llm"), dict) else {}
+        if _g4_int_metric(llm.get("planningStub0_1"), 0) == 1:
+            planning_stub_count += 1
+
+        work_tree_node_id = str(record.get("workTreeCurrentNodeId") or "").strip()
+        response_digest = str(record.get("responseRequirementsDigest") or "").strip()
+        restart_digest = str(record.get("restartMessageDigest") or "").strip()
+        state_fingerprint = str(record.get("stateFingerprint") or "").strip()
+        memory_state = record.get("memoryRetrievalState") if isinstance(record.get("memoryRetrievalState"), dict) else {}
+        retrieval_node_id = str(memory_state.get("workTreeNodeId") or "").strip()
+        reverse_trace_mode = bool(memory_state.get("reverseTraceMode"))
+
+        continuity_ok = bool(work_tree_node_id and response_digest and restart_digest and state_fingerprint)
+        if reverse_trace_mode:
+            continuity_ok = continuity_ok and bool(retrieval_node_id)
+        continuity_flags.append(continuity_ok)
+
+        if work_tree_node_id and retrieval_node_id:
+            drift_checks += 1
+            if work_tree_node_id != retrieval_node_id:
+                drift_hits += 1
+
+        effective_context_window = max(_g4_int_metric(record.get("effectiveContextWindow"), 0), 0)
+        current_context_tokens = max(_g4_int_metric(record.get("currentContextTokenEstimate"), 0), 0)
+        if effective_context_window > 0:
+            minimal_workset_ratios.append(
+                round(max(0.0, 1.0 - min(current_context_tokens / effective_context_window, 1.0)), 4)
+            )
+
+    planning_stub_rate = round(planning_stub_count / len(records), 4)
+    retrieval_drift_rate = round(drift_hits / drift_checks, 4) if drift_checks else 0.0
+    minimal_workset_ratio = (
+        round(sum(minimal_workset_ratios) / len(minimal_workset_ratios), 4)
+        if minimal_workset_ratios
+        else 0.0
+    )
+    work_tree_continuity = 1 if continuity_flags and all(continuity_flags) and drift_hits == 0 else 0
+
+    return {
+        "windowExecutionCount": len(records),
+        "workTreeContinuity0_1": work_tree_continuity,
+        "minimalWorksetRatio0_1": minimal_workset_ratio,
+        "planningStubRate0_1": planning_stub_rate,
+        "retrievalDriftRate0_1": retrieval_drift_rate,
+    }
+
+
 def _g4_contract_verification_results(
     case_payload: dict[str, Any],
     response_text: str,
     runtime_metrics: dict[str, Any],
+    window_execution_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_response = _g4_normalize_match_text(response_text)
     required_sections = _g4_string_list(case_payload.get("acceptanceRequiredSections"))
@@ -174,6 +266,11 @@ def _g4_contract_verification_results(
     min_restart_count = case_payload.get("acceptanceMinRestartCount")
     min_window_index = case_payload.get("acceptanceMinWindowIndex")
     min_cumulative_window_span_tokens = case_payload.get("acceptanceMinCumulativeWindowSpanTokens")
+    min_work_tree_continuity = case_payload.get("acceptanceMinWorkTreeContinuity0_1")
+    min_minimal_workset_ratio = case_payload.get("acceptanceMinMinimalWorksetRatio0_1")
+    max_planning_stub_rate = case_payload.get("acceptanceMaxPlanningStubRate0_1")
+    max_retrieval_drift_rate = case_payload.get("acceptanceMaxRetrievalDriftRate0_1")
+    window_execution_metrics = window_execution_metrics or {}
 
     enabled = any(
         (
@@ -184,6 +281,10 @@ def _g4_contract_verification_results(
             min_restart_count is not None,
             min_window_index is not None,
             min_cumulative_window_span_tokens is not None,
+            min_work_tree_continuity is not None,
+            min_minimal_workset_ratio is not None,
+            max_planning_stub_rate is not None,
+            max_retrieval_drift_rate is not None,
         )
     )
     checks: list[dict[str, Any]] = []
@@ -287,6 +388,58 @@ def _g4_contract_verification_results(
         )
         if actual < expected:
             issues.append(f"cumulativeWindowSpanTokens 不足: actual={actual}, expected>={expected}")
+
+    if min_work_tree_continuity is not None:
+        expected = max(float(min_work_tree_continuity), 0.0)
+        actual = float(window_execution_metrics.get("workTreeContinuity0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-min-work-tree-continuity",
+                "returncode": 0 if actual >= expected else 1,
+                "detail": f"workTreeContinuity0_1={actual}, expected>={expected}",
+            }
+        )
+        if actual < expected:
+            issues.append(f"workTreeContinuity0_1 不足: actual={actual}, expected>={expected}")
+
+    if min_minimal_workset_ratio is not None:
+        expected = max(float(min_minimal_workset_ratio), 0.0)
+        actual = float(window_execution_metrics.get("minimalWorksetRatio0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-min-minimal-workset-ratio",
+                "returncode": 0 if actual >= expected else 1,
+                "detail": f"minimalWorksetRatio0_1={actual}, expected>={expected}",
+            }
+        )
+        if actual < expected:
+            issues.append(f"minimalWorksetRatio0_1 不足: actual={actual}, expected>={expected}")
+
+    if max_planning_stub_rate is not None:
+        expected = max(float(max_planning_stub_rate), 0.0)
+        actual = float(window_execution_metrics.get("planningStubRate0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-max-planning-stub-rate",
+                "returncode": 0 if actual <= expected else 1,
+                "detail": f"planningStubRate0_1={actual}, expected<={expected}",
+            }
+        )
+        if actual > expected:
+            issues.append(f"planningStubRate0_1 超限: actual={actual}, expected<={expected}")
+
+    if max_retrieval_drift_rate is not None:
+        expected = max(float(max_retrieval_drift_rate), 0.0)
+        actual = float(window_execution_metrics.get("retrievalDriftRate0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-max-retrieval-drift-rate",
+                "returncode": 0 if actual <= expected else 1,
+                "detail": f"retrievalDriftRate0_1={actual}, expected<={expected}",
+            }
+        )
+        if actual > expected:
+            issues.append(f"retrievalDriftRate0_1 超限: actual={actual}, expected<={expected}")
 
     return {
         "enabled": enabled,
@@ -688,6 +841,8 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "temperature": float(case_payload.get("temperature") or 0.1),
         "maxTokens": int(case_payload.get("maxTokens") or 320),
     }
+    if case_payload.get("auditLevel") is not None:
+        start_payload["auditLevel"] = str(case_payload.get("auditLevel") or "default")
     if case_payload.get("effectiveContextWindow") is not None:
         start_payload["effectiveContextWindow"] = int(case_payload["effectiveContextWindow"])
     if case_payload.get("windowRestartRatio") is not None:
@@ -776,7 +931,17 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     first_useful_output_seconds = _first_useful_output_seconds(invocation_rows)
     runtime_metrics = _g4_runtime_metrics(response_payload)
     response_text = _g4_response_text(result_payload, response_payload)
-    contract_verification = _g4_contract_verification_results(case_payload, response_text, runtime_metrics)
+    window_execution_records, window_execution_refs = _g4_window_execution_records(
+        processed_runs,
+        workspace_root=resolve_workspace_root(),
+    )
+    window_execution_metrics = _g4_window_execution_metrics(window_execution_records)
+    contract_verification = _g4_contract_verification_results(
+        case_payload,
+        response_text,
+        runtime_metrics,
+        window_execution_metrics,
+    )
     verification_results = [{"command": "g4-live-guard", "returncode": 0}]
     verification_results.extend(contract_verification["checks"])
     execution = {
@@ -829,6 +994,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     prompt_artifact_record = prompt_artifact.model_dump(by_alias=True, mode="json")
     evaluation_sandbox = os.environ.get("YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT")
     sandbox_state_root = os.environ.get("YGGDRASIL_STATE_ROOT")
+    audit_level = str(case_payload.get("auditLevel") or request_payload.get("auditLevel") or response_payload.get("auditLevel") or "default")
     provider_matrix_entry = {
         "matrixKey": str(case_payload.get("matrixKey") or case_payload.get("id") or task_id),
         "appId": app_id,
@@ -865,6 +1031,13 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "windowRestartThreshold": runtime_metrics["windowRestartThreshold"],
         "restartSuccessRate0_1": restart_stability_report.get("restartSuccessRate0_1", restart_success_rate),
         "windowTransitionCount": max(len(processed_runs) - 1, 0),
+        "windowExecutionCount": window_execution_metrics["windowExecutionCount"],
+        "workTreeContinuity0_1": window_execution_metrics["workTreeContinuity0_1"],
+        "minimalWorksetRatio0_1": window_execution_metrics["minimalWorksetRatio0_1"],
+        "planningStubRate0_1": window_execution_metrics["planningStubRate0_1"],
+        "retrievalDriftRate0_1": window_execution_metrics["retrievalDriftRate0_1"],
+        "workTreeContinuityThreshold0_1": float(case_payload.get("acceptanceMinWorkTreeContinuity0_1") or 0.0),
+        "minimalWorksetThreshold0_1": float(case_payload.get("acceptanceMinMinimalWorksetRatio0_1") or 0.0),
         "acceptancePass0_1": acceptance_pass,
         "officialAcceptancePassed0_1": 1 if contract_verification["passed"] else 0,
         "goalCompletion0_1": 1 if invocation.status == "completed" else 0,
@@ -874,6 +1047,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "qualityDeltaThreshold0_100": float(case_payload.get("qualityDeltaThreshold0_100") or 8.0),
         "pass": invocation.status == "completed" and acceptance_pass == 1,
         "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
+        "auditLevel": audit_level,
     }
     assistant_preview = normalize_excerpt(response_text or str(result_payload.get("assistantText") or ""), 240)
     if bool(case_payload.get("failOnAcceptanceViolation")) and not contract_verification["passed"]:
@@ -926,12 +1100,21 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
             "responseRef": invocation.response_ref.model_dump(mode="json") if invocation.response_ref is not None else None,
             "compiledMessagesRef": prompt_artifact_record.get("compiledMessagesRef"),
             "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
+            "windowExecutionRefs": window_execution_refs,
+        },
+        "dialogueAudit": {
+            "auditLevel": audit_level,
+            "requestRef": invocation.request_ref.model_dump(mode="json") if invocation.request_ref is not None else None,
+            "responseRef": invocation.response_ref.model_dump(mode="json") if invocation.response_ref is not None else None,
+            "compiledMessagesRef": prompt_artifact_record.get("compiledMessagesRef"),
+            "windowExecutionRefs": window_execution_refs,
         },
         "officialAcceptance": {
             **contract_verification,
             "responsePreview": assistant_preview,
         },
         "restartStabilityReport": restart_stability_report,
+        "windowExecutionMetrics": window_execution_metrics,
         "processedRuns": [dict(item) for item in processed_runs],
         "assistantPreview": assistant_preview,
     }

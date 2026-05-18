@@ -1,15 +1,28 @@
 | `docs/research/project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md` | 记忆树理论目标差距评估（2026-05-17）：围绕"全部记忆上树、窗口仅最小子任务工作集"给出实现现状、主要差距与量化结论（综合完成度 59/100，差距 41/100） |
-| `docs/research/specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范（任务14-17）：LLM 预算治理（hard fail + retry 策略）、工具调用执行回合（failure 隔离 + pending action）、runtime metrics 导出（统一指标快照）、安全停止与可恢复断点（checksum 校验机制），包含完整代码改动、新增常量/数据类、集成点、测试断言建议 |
+| `docs/research/specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范入口（已拆分索引）：聚合任务14/15/16/17与集成验收导航 |
+| `docs/research/specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md` | P2 任务14实现规范：LLM 调用与预算治理（预检/后检、硬 fail 边界、budgetCheckResult） |
+| `docs/research/specifications/P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md` | P2 任务15实现规范：工具调用执行回合（failure 隔离、重试边界、round toolFailures） |
+| `docs/research/specifications/P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md` | P2 任务16实现规范：runtime metrics 快照与工件导出（统一口径、窗口对比） |
+| `docs/research/specifications/P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md` | P2 任务17实现规范：安全停止与可恢复断点（pending action checksum、恢复验证） |
+| `docs/research/specifications/P2_IMPLEMENTATION_INTEGRATION_GUIDE_2026_05_17.md` | P2 任务14-17集成与验收指南：跨任务集成清单、验收门槛、测试路径 |
 | `docs/research/specifications/P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` | P2 任务14-17 快速参考实现检查清单：文件修改位置、关键代码片段行号、集成顺序、验收标准、常见错误提示 |
 | `docs/research/completion-reports/P2_COMPLETION_SUMMARY_2026_05_17.md` | P2 阶段完成总结（2026-05-17）：全部4任务完成✅、28/28测试通过✅、代码修改清单、架构兼容性分析、后续行动计划、质量指标统计 |
 | `docs/research/technical-analysis/sqlite-concurrency-ops-queue-2026-05-17.md` | SQLite 并发优化研究（2026-05-17）：锁告警成因、操作队列适配性、可放开锁策略边界、事务瘦身与批量写建议、分阶段性能提升路线 |
 | `docs/development/HIGH_CONCURRENCY_TABLE_PLAYBOOK.md` | 高并发表使用与迁移说明：操作队列键策略、事务瘦身原则、索引迁移项、并发基准执行方式与注意事项 |
+| `docs/development/LARGE_FILE_SPLIT_REPORT_2026_05_17.md` | 大文件扫描与拆分报告（2026-05-17）：扫描口径、拆分结果、验证命令与后续建议 |
+| `docs/development/LLM_REAL_TASK_INFINITE_CONTEXT_EVAL_2026_05_17.md` | LLM 真实任务无限上下文能力评估（2026-05-17，已纠偏）：基于 Langfuse trace 的 LLM 最终输出、任务目标对照、4 条路径结果分叉与逐窗口分析 |
+| `docs/development/LANGFUSE_TRACE_DATA_LOSS_AUDIT_2026_05_18.md` | Langfuse trace 数据损耗审计（2026-05-18）：对比本地 runtime 工件、Langfuse observation 与五层分析程序的保留字段、缺失字段，以及中间窗口重复的 runtime 根因 |
+| `docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md` | 记忆树与伪无限上下文窗口优化作战手册（2026-05-18，已补全执行版）：除总体路线外，现已包含执行状态矩阵、当前仓库分析结论、优化优先级、窗口审计命令和具体下一步实现顺序 |
+| `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py` | Langfuse 文本审查模块：以 Langfuse observation 重建窗口骨架，默认输出 LLM 交互文本摘录、重复窗口文本簇和 Langfuse UI 审查焦点；当前已能补读 `runtime/window-executions` 本地工件，用结构化窗口状态增强重复窗口判定与因果分析，并兼容中文化的任务目标/任务说明/当前焦点标签提取 |
+| `scripts/analyze_langfuse_real_task_trace.py` | Langfuse 真实任务窗口分析脚本：按 trace 提取 LLM 最终输出、第 6 节结论与逐窗口 snapshot/work tree 历史 |
+| `scripts/analyze_langfuse_real_task_trace_layered.py` | Langfuse 文本审查兼容入口：按 trace 生成 LLM prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点 |
+| `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
 | `scripts/benchmarks/sqlite_concurrency_benchmark.py` | SQLite 并发基准单 profile 执行脚本：支持 baseline/optimized 配置、节点写入与快照争用场景测试、JSON 结果输出 |
 | `scripts/benchmarks/sqlite_concurrency_compare.py` | SQLite 并发前后对比脚本：串行运行 baseline 与 optimized，输出吞吐/p95/锁错误对比报告 |
 | `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/17 更新：补齐 P3 最后一段 live parity 缺口，evaluation 隔离环境现在会主动清理遗留 `YGGDRASIL_ALLOW_PAID_MODELS`，并支持 case 级 `allowPaidModels` 显式批准，从而实现“free 默认、少量 paid 例外”；`evalsuite_g4_real_task_window_parity` 已从 LongCat 单 provider 扩展为 free LongCat + paid-approved DeepSeek 双 provider 对照，同时 scorer 不再把不同 provider 的 short/long 样本混成一个 parity 结论，而是按 parity pair + provider/model 分组输出；当前 parity suite 还提高了最终简报 token 预算，并为 short/long 路径显式注入 `forcedWindowRestartBudget=16/8`，确保真实任务 parity case 会真正穿过 restart 合同而不是停留在单窗口摘要；同时补上 model-provider gateway 对 block `content`、顶层 `output/output_text`、块式 `function_call/tool_call`、`<tool_calls>...</tool_calls>` 块状 XML 工具调用、LongCat 内嵌 XML 风格工具标记与自闭合 inline XML 工具标记的统一兼容抽取，并把最终 `assistantText` 保留到 runtime response artifact 与 worker 完成结果里，避免 live provider 已返回 completion tokens 但 suite 仍读到空字符串；paid DeepSeek parity case 的 response contract 也已收紧为只允许直接输出最终 Markdown 简报，禁止再输出 XML/tool/MCP 标签；此前已补齐 P4 外围完备性基础链路，包含任务创建时的 project/space/branch 一致性校验与缺失 branch workspace 自动引导、root mount 显式输出 identity/context/execution 三根分支映射与 startup contract、task-takeover 将启动合同和根挂载转成结构化约束、以及空 plan 时 work tree 自动生成可恢复 bootstrap 指针；此前默认 LongCat 模型已切换为 `LongCat-2.0-Preview`，并保留 `LongCat-Flash-Lite` 作为评测对照项；同时完成 P1 全部验证（31/31 通过）并完成 P2 任务15/16/17 实施：工具调用隔离重试、runtime metrics 快照与 artifact 落盘、安全停止 pending action checksum 与恢复校验；并保留 P2 任务14-17 审计入口——参见 [P2_TASK_14_17_FILE_STATUS_AUDIT.md](P2_TASK_14_17_FILE_STATUS_AUDIT.md)；并补齐 runtime 预算一致性修复：预检改为有界估算、budget-check 终态统一落成 failed、paused 结果显式回传 assistantText，覆盖 `tests/test_runtime_and_pruning.py` 两个预算相关失败用例。此前补充 P1 恢复链路硬化，包含 restart requestState 深拷贝与强制合同字段透传、carry-forward 去重压缩并保留 work tree 执行指针、pause-resume 恢复时自动修复 takeover work tree 当前节点与 recovery anchor、以及恢复态 Prompt 强制 delivery-first（result/evidence/pending/incomplete + judgment）；2026/5/16 更新：补充记忆树 P0 执行闭环，包含 memory-write 严格阻断、runtime context 物化 sourceRunId、有界 retrieval 扩展与 pruning 合同字段保护；同步补记任务进度由 runtime task state + takeover work tree 联合判定、工具调用错误会包装成 tool result 回喂模型而非静默吞掉；并修正 LLM retry 测试桩流式响应契约，避免 `readline` 缺失导致的假失败）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/17 更新：完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
 
 ---
 
@@ -225,15 +238,15 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 现已在 prompt 前按 work tree 锚点把 currentContext 物化进记忆树并执行 retrieval）
-│       ├── llm_runtime.py          # LLM 调用封装（多模型路由、指数退避重试、安全关闭中断）；`SafeShutdownInterrupt` + pending-tool-calls 断点续跑；Prompt artifact 现带 takeover/work tree snapshot，response 工件现带 runtimeMetrics
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已拆分为 execution_loop_part_a/b + transitions，入口文件保留兼容导出）
+│       ├── llm_runtime.py          # LLM 调用封装兼容门面（实现拆分到 llm_runtime_part_a/b；保留原导入路径）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
 │       ├── application_runtime.py  # 应用配置加载与初始化
 │       │
 │       ├── # ── Prompt 管理 ──────────────────────────────
-│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 的 response requirements 现内置 memory-write 标签语法提示，并追加 memory_retrieval_state 结构化节
+│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 的 response requirements 现内置 memory-write 标签语法提示，并追加 memory_retrieval_state 结构化节；few-shot 现折叠为系统示例块并在恢复态跳过，结构化 formatter 默认统一中文标签
 │       ├── prompt_modules/
 │       │   ├── compiler.py         # PromptCompiler 核心（模板 + 记忆 → 最终 Prompt）
 │       │   └── formatters.py       # 不同格式的 Prompt 输出渲染
@@ -251,8 +264,8 @@ packages/
 │       ├── mcp_servers/            # 内置 MCP Server 实现（含 execute_server 默认拒绝网络命令的 permission layer）
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
-│       ├── collaboration_runtime.py# PR 协作运行时（47KB）
-│       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner；含 G4 longform / window stress / real-task parity 指标聚合、文件/目录语料装载、可选隔离沙筃保留，以及 live-provider-matrix 的正式合同型 acceptance 检查；_run_g4_live_provider_matrix_case 现在 forward responseRequirements / restartMessage）
+│       ├── collaboration_runtime.py# PR 协作运行时兼容门面（实现拆分到 collaboration_runtime_part_a/b）
+│       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner；含 G4 longform / window stress / real-task parity 指标聚合、文件/目录语料装载、可选隔离沙箱保留，以及 live-provider-matrix 的正式合同型 acceptance 检查；fallback local evaluation 环境在 preserve sandbox 或显式 state root 下也会把 suite metrics 与 case sandboxes 写入持久 state，case 级 isolated runtime 现也会继承 suite 传入的 workspace_root，避免 clean workspace run 仍回拷原仓库）
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
@@ -263,12 +276,12 @@ packages/
 │           ├── ops_runtime.py      # 运维兼容门面，保持 CLI 与外部导入路径稳定
 │           ├── ops_runtime_backup.py # runtime 备份与恢复实现
 │           ├── ops_runtime_compose.py # compose smoke 检查实现
-│           ├── ops_runtime_live.py # 真实用户 live task pack 执行编排，含 repair、worker requeue drain、paid-provider 门控、pause/resume 与真实任务窗口对照入口
+│           ├── ops_runtime_live.py # 真实用户 live task pack 兼容门面（实现拆分到 ops_runtime_live_part_a/b）
 │           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现
 │           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
 │           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
 │           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-live/pilot-scorecard）
-│           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算）
+│           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
 ├── contracts/                      # 跨语言共享类型定义
 │   ├── package.json
@@ -281,11 +294,12 @@ packages/
 
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
-- `runtime_kernel/execution_loop.py` 现在会先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化为 temporary memory nodes（含 `sourceWorkTreeNodeId/sourceRunId`）、通过 `MEMORY_RETRIEVE_EXPAND` 重建 prompt 工作集，并把冻结字段的 retrieval state / takeoverProtocol / memory tag writes 写回 snapshot requestState、Prompt artifact 与 ModelInvocation 审计；对 restart carry-forward 恢复场景会按窗口预算裁剪检索结果，避免重复超窗重启。
+- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
 - `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 提供执行节点级进度；当前完成判定仍由 runtime 在写入执行结果后直接落 `completed`，而不是由独立 verifier 二次裁决。
-- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，用于核查当前 prompt 是否确实基于记忆树工作集而非旧摘要上下文。
-- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链：工具描述符先注册为 LLM function spec，执行期异常会被包成 `{status:error,error:...}` 的 tool message 回填到 conversation，因此默认不是“吞错”，但 runtime 当前也不会基于工具失败自动阻止任务完成，是否返工主要仍取决于模型后续回合和交付协议。
-- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计。
+- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，用于核查当前 prompt 是否确实基于记忆树工作集而非旧摘要上下文；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本，结构化说明默认统一为中文标签。
+- `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
+- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；`llm_runtime.py` 已拆分为 `llm_runtime_part_a.py`/`llm_runtime_part_b.py` 并保持原导入路径，避免外部调用改动。
+- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 
 ---
@@ -534,7 +548,9 @@ evaluation/
     ├── g4-provider-matrix-longform.json
                                     #   G4 单任务长样本 live provider matrix（先聚焦一个更长的 coding 任务；用于观察长任务 token 与上下文窗口压力）
     ├── g4-real-task-window-parity.json
-                                    #   G4 真实任务窗口对照（把当前 repo 的真实语料作为同一任务输入，对比 64k / 128k 窗口效果；现显式要求 release brief 小节、parity judgment 与 restart 证据；已添加 responseRequirements 交付合同和 restartMessage 跨窗口提示）
+                                    #   G4 真实任务窗口对照（repo-wide baseline；现已接入 strict 审计、window-execution 指标、workTreeContinuity/minimalWorkset 正式门禁）
+    ├── g4-real-task-minimal-workset.json
+                                    #   G4 真实任务最小工作集对照（只保留最小锚点文件，不再注入 repo-wide globs；用于验证“记忆树为主体、窗口为工作集”）
     └── g4-window-restart-stress.json
                                     #   G4 官方伪无限上下文窗口 stress（显式 effectiveContextWindow + forcedWindowRestartBudget；LongCat/DeepSeek 正式对照）
 ```
@@ -553,6 +569,7 @@ evaluation/
 | `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:real-task-parity` | `suites/g4-real-task-window-parity.json` |
+| `eval:g4:real-task-minimal-workset` | `suites/g4-real-task-minimal-workset.json` |
 | `eval:g4:window-stress` | `suites/g4-window-restart-stress.json` |
 
 ---
@@ -609,14 +626,30 @@ tests/
 ├── fixtures/                       # 测试用固定样本数据
 │
 ├── # ── 基础层测试 ────────────────────────────────────────
-├── test_persistence_api.py         # 持久化层：ORM、仓储、迁移
+├── test_persistence_api.py         # 迁移索引文件（持久化 API 专项测试已拆分到 tests/api）
+├── api/
+│   ├── test_persistence_task_runtime_api.py
+│   │                               # tasks/nodes/runtime/workbench 等基础 API 持久化与读取回归
+│   ├── test_persistence_control_plane_api.py
+│   │                               # 启停控制、资产/训练/prompt/mcp 控制面 API 回归
+│   └── test_persistence_app_scope_api.py
+│                                   # appId 过滤语义与 M9 control-plane suite 回归
 ├── test_prompting_runtime.py       # PromptCompiler 链路端到端
-├── test_runtime_and_pruning.py     # 运行时内核 + 上下文裁剪（含记忆树物化检索、snapshot requestState 恢复、memory-write 标签落树与窗口重启闭环回归）
+├── test_runtime_and_pruning.py     # 迁移索引文件（运行时/裁剪专项测试已拆分到 tests/runtime）
+├── runtime/
+│   ├── test_runtime_core_and_memory.py
+│   │                               # 运行时核心挂载、上下文裁剪、记忆树物化与 memory-write 标签回归
+│   ├── test_runtime_restart_and_resume.py
+│   │                               # 窗口重启与 pause/resume 主闭环回归
+│   ├── test_runtime_budget_and_audit.py
+│   │                               # 预算硬约束、审计级别与 response 指标回归
+│   └── test_runtime_pause_regressions.py
+│                                   # pause 请求竞态回归、多轮 pause/resume 污染防护与 runtime metrics 计数回归
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
 ├── test_mcp_bridge.py              # MCP 协议桥接回归
-├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径）
+├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径、workspace sandbox 复制边界）
 ├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
 ├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成
@@ -638,7 +671,7 @@ tests/
 │
 ├── # ── M8/M9 里程碑测试 ─────────────────────────────────
 ├── test_m8_runtime.py              # M8：评测与运维基础回归（含评测/真实试跑沙箱隔离）
-├── test_g4_multiscene.py           # G4：官方三场景 multiscene suite 与 live budget 回归
+├── test_g4_multiscene.py           # G4：官方三场景 multiscene suite、real-task suite 约束与 local fallback 持久审计回归
 ├── test_m9_shared_memory.py        # M9：shared-memory 专项测试（含按 work tree 节点约束的写权限）
 ├── test_m9_pause_resume.py         # M9：pause-resume 专项测试
 ├── test_m9_multimodal_and_relations.py
@@ -661,6 +694,10 @@ tests/
 
 ```
 scripts/
+├── analyze_langfuse_real_task_trace.py # Langfuse trace 分析：恢复真实任务最终输出、结论段与逐窗口快照/工作树历史
+├── analyze_langfuse_real_task_trace_layered.py # Langfuse 文本审查兼容入口：输出 prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点
+├── analyze_langfuse_real_task_execution_audit.py # Langfuse 文本审查主入口：面向 Langfuse 文字交互分析的报告生成器，内部可接本地状态增强
+├── render_live_audit_export.py     # live audit 导出包渲染器：把 evaluation/request/response/window-executions/spans/outbox 汇总成人类可读 Markdown 报告和离线 HTML 浏览页
 ├── check_migrations.sh             # 验证 Alembic 迁移头与 ORM 模型一致
 │                                   #   启动临时 pgvector 容器 → alembic upgrade head
 │                                   #   → alembic check（检测 ORM 漂移）

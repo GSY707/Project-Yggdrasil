@@ -5,6 +5,7 @@ from pathlib import Path
 
 from yggdrasil_sdk.support import estimate_word_count
 from yggdrasil_sdk.support import load_workspace_dotenv
+from yggdrasil_sdk.support import prepare_runtime_workspace_sandbox
 
 
 def _workspace_root(root: Path) -> Path:
@@ -46,3 +47,24 @@ def test_load_workspace_dotenv_does_not_override_existing_env(monkeypatch, tmp_p
     load_workspace_dotenv(workspace)
 
     assert os.environ["LONGCAT_API_KEY"] == "process-key"
+
+
+def test_prepare_runtime_workspace_sandbox_ignores_configured_state_root_inside_workspace(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace = _workspace_root(tmp_path / "source-workspace")
+    state_root = workspace / "artifacts" / "live-audit-root"
+    (workspace / "sandbox-keep").mkdir(parents=True, exist_ok=True)
+    (workspace / "sandbox-keep" / "keep.txt").write_text("keep\n", encoding="utf-8")
+    (workspace / "tmp").mkdir(parents=True, exist_ok=True)
+    (workspace / "tmp" / "transient.txt").write_text("skip\n", encoding="utf-8")
+    (state_root / "state" / "evaluations").mkdir(parents=True, exist_ok=True)
+    (state_root / "state" / "evaluations" / "evalrun_demo.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setenv("YGGDRASIL_STATE_ROOT", state_root.as_posix())
+
+    sandbox_workspace = prepare_runtime_workspace_sandbox(tmp_path / "sandbox-root", workspace)
+
+    assert (sandbox_workspace / "sandbox-keep" / "keep.txt").exists()
+    assert not (sandbox_workspace / "artifacts" / "live-audit-root").exists()
+    assert not (sandbox_workspace / "tmp").exists()

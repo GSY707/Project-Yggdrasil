@@ -55,11 +55,62 @@ _RUNTIME_SANDBOX_IGNORED_NAMES = {
     "coverage",
     "dist",
     "node_modules",
+    "tmp",
 }
 
 
 def runtime_workspace_copy_ignore(_directory: str, names: list[str]) -> set[str]:
     return {name for name in names if name in _RUNTIME_SANDBOX_IGNORED_NAMES}
+
+
+def _configured_path(raw_path: str, workspace_root: Path | None = None) -> Path:
+    candidate = Path(raw_path).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (resolve_workspace_root(workspace_root) / candidate).resolve()
+
+
+def _runtime_workspace_dynamic_ignored_names(
+    directory: str,
+    source_root: str,
+    configured_candidates: tuple[str, ...],
+    names: list[str],
+) -> set[str]:
+    ignored: set[str] = set()
+    normalized_directory = os.path.normcase(os.path.normpath(directory))
+    for candidate in configured_candidates:
+        if candidate != source_root and not candidate.startswith(source_root + os.sep):
+            continue
+        candidate_parent = os.path.dirname(candidate)
+        candidate_name = os.path.basename(candidate)
+        if normalized_directory == candidate_parent and candidate_name in names:
+            ignored.add(candidate_name)
+    return ignored
+
+
+def runtime_workspace_copy_ignore_for(source_root: Path):
+    resolved_source_root = os.path.normcase(os.path.normpath(str(source_root)))
+    configured_candidates: list[str] = []
+    for env_key in ("YGGDRASIL_STATE_ROOT", "YGGDRASIL_STATE_DIR"):
+        raw_path = str(os.environ.get(env_key) or "").strip()
+        if not raw_path:
+            continue
+        candidate_path = os.path.expanduser(raw_path)
+        if os.path.isabs(candidate_path):
+            candidate = os.path.normcase(os.path.normpath(candidate_path))
+        else:
+            candidate = os.path.normcase(os.path.normpath(os.path.join(resolved_source_root, candidate_path)))
+        configured_candidates.append(candidate)
+    configured_candidates_tuple = tuple(dict.fromkeys(configured_candidates))
+
+    def _ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = runtime_workspace_copy_ignore(directory, names)
+        ignored.update(
+            _runtime_workspace_dynamic_ignored_names(directory, resolved_source_root, configured_candidates_tuple, names)
+        )
+        return ignored
+
+    return _ignore
 
 
 def resolve_workspace_root(start: Path | None = None) -> Path:
@@ -108,15 +159,8 @@ def load_workspace_dotenv(workspace_root: Path | None = None, *, override: bool 
 def prepare_runtime_workspace_sandbox(destination_root: Path, workspace_root: Path | None = None) -> Path:
     source_root = resolve_workspace_root(workspace_root)
     sandbox_workspace = destination_root / "workspace"
-    shutil.copytree(source_root, sandbox_workspace, ignore=runtime_workspace_copy_ignore)
+    shutil.copytree(source_root, sandbox_workspace, ignore=runtime_workspace_copy_ignore_for(source_root))
     return sandbox_workspace
-
-
-def _configured_path(raw_path: str, workspace_root: Path | None = None) -> Path:
-    candidate = Path(raw_path).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve()
-    return (resolve_workspace_root(workspace_root) / candidate).resolve()
 
 
 def resolve_state_root(workspace_root: Path | None = None) -> Path:

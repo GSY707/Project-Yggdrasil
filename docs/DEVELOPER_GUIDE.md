@@ -494,8 +494,8 @@ uv run pytest tests/test_m9_shared_memory.py -v
 
 # 运行受影响的 Python 测试
 uv run pytest tests/test_prompting_runtime.py -q
-uv run pytest tests/test_persistence_api.py tests/test_memory_pipeline_api.py -q
-uv run pytest tests/test_runtime_and_pruning.py tests/test_m8_runtime.py -q
+uv run pytest tests/api tests/test_memory_pipeline_api.py -q
+uv run pytest tests/runtime tests/test_m8_runtime.py -q
 
 # 运行受影响的前端检查
 corepack pnpm web:typecheck
@@ -517,9 +517,14 @@ uv run pytest --cov=yggdrasil_sdk -q
 
 | 测试文件 | 范围 |
 |---------|------|
-| `test_persistence_api.py` | 数据库 ORM 与仓储层 |
+| `tests/api/test_persistence_task_runtime_api.py` | task/node/runtime/workbench 基础持久化 API |
+| `tests/api/test_persistence_control_plane_api.py` | 任务控制面、资产/训练/prompt/mcp 控制面 API |
+| `tests/api/test_persistence_app_scope_api.py` | appId 过滤语义与 M9 control-plane suite |
 | `test_prompting_runtime.py` | PromptCompiler 链路 |
-| `test_runtime_and_pruning.py` | 运行时内核与上下文裁剪 |
+| `tests/runtime/test_runtime_core_and_memory.py` | 运行时核心挂载、上下文裁剪、记忆树物化与 memory-write 标签 |
+| `tests/runtime/test_runtime_restart_and_resume.py` | 窗口重启与 pause/resume 主闭环 |
+| `tests/runtime/test_runtime_budget_and_audit.py` | 预算硬约束、审计级别与 response 指标 |
+| `tests/runtime/test_runtime_pause_regressions.py` | pause 请求竞态回归、多轮 pause/resume 污染防护 |
 | `test_m8_runtime.py` | M8 运行时回归 |
 | `test_m9_shared_memory.py` 等 5 个 `test_m9_*` 文件 | M9 模块专项测试 |
 | `test_m9_acceptance.py` | M9 验收测试 |

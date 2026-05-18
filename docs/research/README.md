@@ -48,7 +48,12 @@
 包含系统设计、实现规范、协议定义和核心理念文档。
 
 **子目录和关键文档**：
-- `P2_IMPLEMENTATION_SPEC_2026_05_17.md` - P2详细实现规范（~1500行）
+- `P2_IMPLEMENTATION_SPEC_2026_05_17.md` - P2详细实现规范入口（拆分索引）
+- `P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md` - 任务14：LLM预算治理
+- `P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md` - 任务15：工具执行回合
+- `P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md` - 任务16：runtime metrics
+- `P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md` - 任务17：安全停止与可恢复断点
+- `P2_IMPLEMENTATION_INTEGRATION_GUIDE_2026_05_17.md` - 任务14-17集成验收指南
 - `P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` - P2实现检查清单
 - `P2_QUICK_START_2026_05_17.md` - P2快速启动指南
 - `hypergraph-reasoning-protocol-draft-2026-05-05.md` - 超图推理协议草案
@@ -59,7 +64,7 @@
   - 记忆树核心设计、记忆树其他设计
   - Agent行为模式建议组
 
-**推荐**：实现者应参考 `P2_IMPLEMENTATION_SPEC_2026_05_17.md` 进行开发。
+**推荐**：实现者先看 `P2_IMPLEMENTATION_SPEC_2026_05_17.md` 索引，再进入对应任务子文档开发。
 
 ---
 
@@ -109,8 +114,13 @@
 #### 新加入开发者
 1. 首先阅读：[roadmaps/final-goal-roadmap-2026-04-30.md](./roadmaps/final-goal-roadmap-2026-04-30.md)
 2. 了解系统概念：[specifications/concepts/](./specifications/concepts)
-3. 查看实现规范：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026-05-17.md)
-4. 参考快速启动：[specifications/P2_QUICK_START_2026_05_17.md](./specifications/P2_QUICK_START_2026-05_17.md)
+3. 查看实现规范索引：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md)
+4. 按任务查看详细规范：
+  - [specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md](./specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md)
+  - [specifications/P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md](./specifications/P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md)
+  - [specifications/P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md](./specifications/P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md)
+  - [specifications/P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md](./specifications/P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md)
+5. 参考快速启动：[specifications/P2_QUICK_START_2026_05_17.md](./specifications/P2_QUICK_START_2026_05_17.md)
 
 #### 项目管理者
 1. 阅读完成报告：[completion-reports/](./completion-reports)
@@ -143,9 +153,9 @@
 ## ⚡ 快速导航
 
 - 🎯 **项目目标**：[roadmaps/final-goal-roadmap-2026-04-30.md](./roadmaps/final-goal-roadmap-2026-04-30.md)
-- 🛠️ **实现规范**：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026-05-17.md)
+- 🛠️ **实现规范索引**：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md)
 - 📊 **最新评估**：[project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md](./project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md)
-- ✅ **最新交付**：[completion-reports/P2_COMPLETION_REPORT_2026_05_17.md](./completion-reports/P2_COMPLETION_REPORT_2026_05-17.md)
+- ✅ **最新交付**：[completion-reports/P2_COMPLETION_REPORT_2026_05_17.md](./completion-reports/P2_COMPLETION_REPORT_2026_05_17.md)
 - 🐛 **问题分析**：[technical-analysis/runtime-two-failures-summary-2026-05-17.md](./technical-analysis/runtime-two-failures-summary-2026-05-17.md)
 
 ---

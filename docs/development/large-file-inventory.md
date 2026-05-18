@@ -11,14 +11,22 @@
 
 | File | Lines | File Type | Module | Split Suggested | Risk | Recommendation |
 |---|---:|---|---|---|---|---|
-| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` | 2004 | Python | runtime-kernel | Yes | High | 按阶段拆分（context assembly / loop control / snapshot I/O）。 |
-| `packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py` | 1684 | Python | ops-runtime | Yes | High | 将 live orchestration 与 provider gating 拆分。 |
-| `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` | 1403 | Python | llm-runtime | Yes | High | 拆分 provider binding、retry policy、artifact 写盘。 |
-| `tests/test_runtime_and_pruning.py` | 1353 | Python | tests | Yes | Medium | 按场景分测试文件，保留共享 fixture。 |
-| `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime.py` | 1058 | Python | collaboration | Yes | High | PR orchestration 与 messaging 逻辑解耦。 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` | 4 (拆分后) | Python | runtime-kernel | Done | Medium | 入口改为兼容门面，核心实现拆分至 `execution_loop_part_a.py`、`execution_loop_part_b.py`、`execution_loop_transitions.py`。 |
+| `packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py` | 4 (拆分后) | Python | ops-runtime | Done | Medium | 入口改为兼容门面，核心实现拆分至 `ops_runtime_live_part_a.py`、`ops_runtime_live_part_b.py`。 |
+| `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` | 4 (拆分后) | Python | llm-runtime | Done | Medium | 入口改为兼容门面，核心实现拆分至 `llm_runtime_part_a.py`、`llm_runtime_part_b.py`。 |
+| `tests/test_runtime_and_pruning.py` | 1353 (拆分前) | Python | tests | Done | Medium | 已拆分至 `tests/runtime/` 下 4 个专题文件，原文件保留迁移索引。 |
+| `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime.py` | 4 (拆分后) | Python | collaboration | Done | Medium | 入口改为兼容门面，核心实现拆分至 `collaboration_runtime_part_a.py`、`collaboration_runtime_part_b.py`。 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a.py` | 879 | Python | runtime-kernel | No | Medium | execution_loop 拆分后的阶段 A（检索与上下文辅助函数）。 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py` | 997 | Python | runtime-kernel | No | Medium | execution_loop 拆分后的主循环阶段 B。 |
+| `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_a.py` | 979 | Python | llm-runtime | No | Medium | llm_runtime 拆分后的预算/工具/工件辅助实现。 |
+| `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py` | 724 | Python | llm-runtime | No | Medium | llm_runtime 拆分后的调用主流程实现。 |
+| `packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py` | 910 | Python | ops-runtime | No | Medium | ops_runtime_live 拆分后的环境准备与验证辅助实现。 |
+| `packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py` | 776 | Python | ops-runtime | No | Medium | ops_runtime_live 拆分后的任务序列与汇总实现。 |
+| `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime_part_a.py` | 621 | Python | collaboration | No | Medium | collaboration_runtime 拆分后的上下文/子任务发起实现。 |
+| `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime_part_b.py` | 439 | Python | collaboration | No | Medium | collaboration_runtime 拆分后的 PR 创建/审查与子任务执行实现。 |
 | `packages/python-sdk/src/yggdrasil_sdk/persistence/module_platform.py` | 901 | Python | persistence | Yes | Medium | 按 repository/domain query 拆分。 |
 | `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` | 879 | Python | evaluation | Yes | High | 按 case 类别拆分，降低单文件认知负担。 |
-| `tests/test_persistence_api.py` | 860 | Python | tests | Yes | Medium | 按资源域拆分（task/node/memory）。 |
+| `tests/test_persistence_api.py` | 860 (拆分前) | Python | tests | Done | Medium | 已拆分至 `tests/api/` 下 3 个专题文件，原文件保留迁移索引。 |
 | `packages/python-sdk/src/yggdrasil_sdk/mcp_bridge.py` | 804 | Python | mcp-bridge | Yes | High | 拆分 transport/session/tool-dispatch。 |
 | `adapters/model-providers/src/yggdrasil_model_providers/gateway.py` | 797 | Python | adapters | Yes | Medium | 拆分 provider catalog 与 request mapping。 |
 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` | 778 | Python | prompting | Yes | High | prompt compile 与 profile registry 分层。 |
@@ -54,5 +62,9 @@
 
 ## Immediate Split Decision
 
-- 本轮任务不直接拆代码大文件：当前高风险文件多处于运行时和评测核心路径，需配套回归验证，超出“导航层建设”范围。
-- 本轮任务已拆分文档导航层：由单一大目录说明迁移为 `DIRECTORY_REFERENCE + architecture + development + modules` 结构。
+- 本轮已完成开发相关大文件拆分：
+	- `docs/research/specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md` 拆分为任务14/15/16/17与集成验收 5 个子文档。
+	- `tests/test_runtime_and_pruning.py` 拆分为 `tests/runtime/` 下 4 个专题测试文件。
+- 	- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`、`packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live.py`、`packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime.py` 已拆为兼容门面 + part 实现文件。
+- 已完成最小验证：`uv run pytest --collect-only tests/runtime -q` 收集通过。
+- 已完成语法校验：`python -m py_compile` 覆盖上述拆分文件通过。

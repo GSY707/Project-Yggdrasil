@@ -1,6 +1,6 @@
 # 世界树计划 · 记忆树 Agent 全工作拆分与实现研究（2026-05-16）
 
-- 文档状态：Task Decomposition + Implementation Guide
+- 文档状态：Task Decomposition + Implementation Guide（已完成）
 - 日期：2026-05-16
 - 目标：把“记忆树 Agent 的所有工作”拆分成最小可推进子任务；每个子任务至少包含一次有效推进（规划、基于记忆树思考、或执行修改）；对每个子任务评估难度并给出实现路径。
 

@@ -115,6 +115,34 @@ def _dedupe_excerpt_sources(values: list[str]) -> list[str]:
     return deduped
 
 
+def _stable_digest(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        serialized = value.strip()
+    else:
+        serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if not serialized:
+        return None
+    return sha256(serialized.encode("utf-8")).hexdigest()[:12]
+
+
+def _carry_forward_ref_ids(values: Any, *, limit: int = 8) -> list[str]:
+    ref_ids: list[str] = []
+    seen: set[str] = set()
+    for item in values or []:
+        if not isinstance(item, dict):
+            continue
+        candidate = str(item.get("id") or item.get("nodeId") or item.get("refId") or "").strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        ref_ids.append(candidate)
+        if len(ref_ids) >= limit:
+            break
+    return ref_ids
+
+
 def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
     current_context_state = payload.get("currentContextState") if isinstance(payload.get("currentContextState"), list) else []
     if not current_context_state:
@@ -124,13 +152,18 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
     restart_threshold = max(_int_metric(payload.get("windowRestartThreshold"), effective_context_window), 32)
     carry_forward_limit = max(32, min(effective_context_window, restart_threshold - 8 if restart_threshold > 8 else restart_threshold))
     target_chars = max(160, int(carry_forward_limit * 4 * 0.55))
-    item_limit = max(1, min(5, len(current_context_state)))
+    candidate_items = [
+        item
+        for item in current_context_state
+        if isinstance(item, dict) and str(item.get("kind") or "") != "carry-forward-package"
+    ] or [item for item in current_context_state if isinstance(item, dict)]
+    item_limit = max(1, min(4, len(candidate_items)))
     per_item_chars = max(96, target_chars // item_limit)
-    bullets: list[str] = []
-    for item in current_context_state[:item_limit]:
-        if not isinstance(item, dict):
-            continue
+    evidence_lines: list[str] = ["Minimal evidence anchors:"]
+    evidence_anchors: list[dict[str, Any]] = []
+    for item in candidate_items[:item_limit]:
         title = str(item.get("title") or item.get("id") or "context-item")
+        item_id = str(item.get("id") or "").strip() or None
         excerpt_source = " ".join(
             _dedupe_excerpt_sources(
                 [
@@ -142,7 +175,18 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
             )
         )
         excerpt = normalize_excerpt(excerpt_source or title, per_item_chars)
-        bullets.append(f"- {title}: {excerpt}")
+        anchor: dict[str, Any] = {"title": title}
+        if item_id:
+            anchor["id"] = item_id
+        if excerpt:
+            anchor["excerptDigest"] = _stable_digest(excerpt_source or excerpt)
+        evidence_anchors.append(anchor)
+        anchor_line = f"- {title}"
+        if item_id:
+            anchor_line += f" [id={item_id}]"
+        if excerpt:
+            anchor_line += f" excerpt={excerpt}"
+        evidence_lines.append(anchor_line)
 
     source_window_index = max(_int_metric(payload.get("windowIndex"), 1), 1)
     target_window_index = source_window_index + 1
@@ -156,33 +200,77 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
     takeover_protocol = payload.get("takeoverProtocol") if isinstance(payload.get("takeoverProtocol"), dict) else {}
     work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
     memory_retrieval_state = payload.get("memoryRetrievalState") if isinstance(payload.get("memoryRetrievalState"), dict) else {}
-    protected_ids = [
-        str(item.get("id") or "")
-        for item in payload.get("protectedItems") or []
-        if isinstance(item, dict) and item.get("id") is not None
-    ]
+    protected_ids = _carry_forward_ref_ids(payload.get("protectedItems"))
+    matched_node_ids = _carry_forward_ref_ids(memory_retrieval_state.get("matchedNodeRefs"))
+    retrieval_request_id = str(memory_retrieval_state.get("requestId") or "").strip() or None
+    retrieval_work_tree_node_id = str(memory_retrieval_state.get("workTreeNodeId") or "").strip() or None
+    response_requirements_digest = _stable_digest(payload.get("responseRequirements"))
+    restart_message_digest = _stable_digest(restart_message)
+    retrieval_fingerprint = _stable_digest(
+        {
+            "requestId": retrieval_request_id,
+            "workTreeNodeId": retrieval_work_tree_node_id,
+            "reverseTraceMode": bool(memory_retrieval_state.get("reverseTraceMode")),
+            "matchedNodeIds": matched_node_ids,
+        }
+    )
     header_lines = [
-        f"Window restart handoff: {source_window_index} -> {target_window_index}",
+        f"Carry-forward execution pointer W{source_window_index} -> W{target_window_index}",
+        "Execution rule: continue from the same work tree node and delivery contract; do not restart broad planning.",
         f"Current objective: {objective}",
         f"Current focus: {focus}",
         f"Restart instruction: {restart_message}",
     ]
+    if response_requirements_digest:
+        header_lines.append(f"Response contract digest: {response_requirements_digest}")
+    if restart_message_digest:
+        header_lines.append(f"Restart contract digest: {restart_message_digest}")
     if work_tree:
         header_lines.append(
             (
-                "Work tree handoff: "
+                "Work tree pointer: "
                 f"status={work_tree.get('status')}; currentNode={work_tree.get('currentNodeId')}; "
                 f"recoveryAnchor={work_tree.get('recoveryAnchor')}"
             )
         )
+    retrieval_parts: list[str] = []
+    if retrieval_request_id:
+        retrieval_parts.append(f"requestId={retrieval_request_id}")
+    if retrieval_work_tree_node_id:
+        retrieval_parts.append(f"workTreeNode={retrieval_work_tree_node_id}")
+    if retrieval_fingerprint:
+        retrieval_parts.append(f"fingerprint={retrieval_fingerprint}")
+    if memory_retrieval_state.get("reverseTraceMode"):
+        retrieval_parts.append("reverseTraceMode=true")
+    if retrieval_parts:
+        header_lines.append("Retrieval pointer: " + "; ".join(retrieval_parts))
     if memory_retrieval_state.get("summary"):
-        header_lines.append("Memory retrieval handoff: " + str(memory_retrieval_state.get("summary") or ""))
-    if memory_retrieval_state.get("reverseTraceMode") and memory_retrieval_state.get("workTreeNodeId"):
-        header_lines.append(f"Reverse trace mode: workTreeNode={memory_retrieval_state.get('workTreeNodeId')}")
+        header_lines.append("Retrieval summary: " + normalize_excerpt(str(memory_retrieval_state.get("summary") or ""), 160))
+    if matched_node_ids:
+        header_lines.append(f"Retrieved node anchors: {', '.join(matched_node_ids)}")
     if protected_ids:
         header_lines.append(f"Protected refs: {', '.join(protected_ids)}")
 
-    evidence_lines: list[str] = ["Carry-forward evidence:", *bullets]
+    pointer_package = {
+        "version": "0.2.0",
+        "handoffMode": "execution-pointer",
+        "sourceWindowIndex": source_window_index,
+        "targetWindowIndex": target_window_index,
+        "currentObjective": objective,
+        "currentFocus": focus,
+        "responseRequirementsDigest": response_requirements_digest,
+        "restartMessageDigest": restart_message_digest,
+        "workTreeStatus": str(work_tree.get("status") or "").strip() or None,
+        "workTreeCurrentNodeId": str(work_tree.get("currentNodeId") or "").strip() or None,
+        "workTreeRecoveryAnchor": str(work_tree.get("recoveryAnchor") or "").strip() or None,
+        "retrievalRequestId": retrieval_request_id,
+        "retrievalWorkTreeNodeId": retrieval_work_tree_node_id,
+        "retrievalFingerprint": retrieval_fingerprint,
+        "reverseTraceMode": bool(memory_retrieval_state.get("reverseTraceMode")),
+        "protectedRefIds": protected_ids,
+        "retrievedNodeIds": matched_node_ids,
+        "evidenceAnchors": evidence_anchors,
+    }
 
     def _compose_content(max_evidence_lines: int, evidence_chars: int) -> str:
         capped_evidence = [evidence_lines[0], *[normalize_excerpt(line, evidence_chars) for line in evidence_lines[1:max_evidence_lines]]]
@@ -193,11 +281,12 @@ def _build_carry_forward_context(task_id: str, payload: dict[str, Any]) -> list[
     content = _compose_content(evidence_line_limit, evidence_chars)
     carry_forward_item = {
         "id": new_id("carryforward", task_id, source_window_index, target_window_index),
-        "title": f"Carry-forward package W{source_window_index} -> W{target_window_index}",
+        "title": f"Carry-forward execution pointer W{source_window_index} -> W{target_window_index}",
         "content": content,
         "kind": "carry-forward-package",
         "sourceWindowIndex": source_window_index,
         "targetWindowIndex": target_window_index,
+        "pointerPackage": pointer_package,
     }
 
     while _estimate_context_tokens([carry_forward_item]) >= carry_forward_limit and evidence_line_limit > 2:
