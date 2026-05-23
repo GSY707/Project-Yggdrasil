@@ -23,7 +23,7 @@
 | `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/20 更新：补充“世界树计划正式项目定义”执行版、“新增特性，工作流”草稿入口和 `project-definition/` 拆分支撑文档；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
 
 ---
 
@@ -768,6 +768,9 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/README.md` | research 目录组织导航：按用途分类为路线图、项目评估、完成报告、规范设计、技术分析和历史归档 |
+| `docs/research/世界树计划正式项目定义.md` | 世界树计划正式执行定义 v0.1 入口：以 LLM 为核心，将代码定位为记忆、身体、边界、协作和反馈世界，并索引拆分支撑文档 |
+| `docs/research/project-definition/` | 正式项目定义支撑文档：哲学与心理学基础、运行语义与验收，作为正式定义的组成部分 |
+| `docs/research/新增特性，工作流.md` | 以空间深度切片、DLL 式能力加载、软中断、多 Agent 协作、语义冲突仲裁和拉取式消息队列为核心的新工作流草稿 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
 | `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
