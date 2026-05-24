@@ -9,7 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from .app_catalog import active_application_id, build_application_catalog_snapshot, get_application_manifest
-from .contracts import TaskTakeoverProtocol
+from .contracts import TaskTakeoverProtocol, WorkContextStack
 from .catalog import build_module_catalog_snapshot
 from .hook_runtime import collect_hook_results
 from .hooks import HookNames
@@ -112,6 +112,7 @@ class CompiledPrompt(BaseModel):
     task_type: str = Field(alias="taskType")
     scenario: str | None = None
     registered_tools: list[dict[str, Any]] = Field(default_factory=list, alias="registeredTools")
+    boot_sections: dict[str, str] = Field(default_factory=dict, alias="bootSections")
     system_sections: dict[str, str] = Field(default_factory=dict, alias="systemSections")
     user_sections: dict[str, str] = Field(default_factory=dict, alias="userSections")
     few_shot_refs: list[str] = Field(default_factory=list, alias="fewShotRefs")
@@ -597,19 +598,311 @@ def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int =
     return "\n".join(lines) if lines else "当前没有额外挂载的上下文切片。"
 
 
-def _format_runtime_state(root_mount: dict[str, Any]) -> str:
+def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message: bool = True) -> str:
     mounted_refs = root_mount.get("mountedNodeRefs") or []
-    return "\n".join(
+    lines = [
+        f"系统导语: {root_mount.get('systemIntro') or ''}",
+        f"根摘要: {root_mount.get('rootSummary') or ''}",
+        f"任务说明: {root_mount.get('taskObjective') or ''}",
+    ]
+    if include_resume_message:
+        lines.append(f"恢复提示: {root_mount.get('resumeMessage') or ''}")
+    lines.extend(
         [
-            f"系统导语: {root_mount.get('systemIntro') or ''}",
-            f"根摘要: {root_mount.get('rootSummary') or ''}",
-            f"任务说明: {root_mount.get('taskObjective') or ''}",
-            f"恢复提示: {root_mount.get('resumeMessage') or ''}",
             f"挂载节点引用数: {len(mounted_refs)}",
             "当前可见能力:",
             _format_active_capabilities([str(item) for item in root_mount.get("activeCapabilities") or []]),
         ]
-    ).strip()
+    )
+    return "\n".join(lines).strip()
+
+
+def _normalized_optional_text(value: Any) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _working_node_tag(node_id: str | None) -> str:
+    normalized = _normalized_optional_text(node_id) or "standby"
+    return f"<Working_Node: {normalized}>"
+
+
+def _resolved_current_node_id(
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    memory_retrieval_state: dict[str, Any] | None,
+    takeover_protocol: TaskTakeoverProtocol | None,
+) -> str | None:
+    takeover_current_node_id = None
+    if takeover_protocol is not None and takeover_protocol.work_tree is not None:
+        takeover_current_node_id = _normalized_optional_text(takeover_protocol.work_tree.current_node_id)
+    return (
+        _normalized_optional_text(request.get("currentNodeId"))
+        or _normalized_optional_text(root_mount.get("currentNodeId"))
+        or takeover_current_node_id
+        or _normalized_optional_text((memory_retrieval_state or {}).get("workTreeNodeId"))
+    )
+
+
+def _resolve_runtime_pointer_fields(
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    memory_retrieval_state: dict[str, Any] | None,
+    takeover_protocol: TaskTakeoverProtocol | None,
+) -> dict[str, str]:
+    takeover_pc_memo: str | None = None
+    if takeover_protocol is not None and takeover_protocol.work_tree is not None:
+        takeover_pc_memo = _normalized_optional_text(takeover_protocol.work_tree.pc_memo)
+
+    current_node_id = _resolved_current_node_id(request, root_mount, memory_retrieval_state, takeover_protocol)
+    canonical_annotation = _working_node_tag(current_node_id)
+    working_node_annotation = next(
+        (
+            normalized
+            for normalized in (
+                _normalized_optional_text(request.get("workingNodeAnnotation")),
+                _normalized_optional_text(root_mount.get("workingNodeAnnotation")),
+            )
+            if normalized == canonical_annotation
+        ),
+        canonical_annotation,
+    )
+    pc_memo = (
+        _normalized_optional_text(request.get("pcMemo"))
+        or _normalized_optional_text(root_mount.get("pcMemo"))
+        or takeover_pc_memo
+    )
+    top_frame_id = _normalized_optional_text(request.get("topFrameId")) or _normalized_optional_text(root_mount.get("topFrameId"))
+    stack_digest = _normalized_optional_text(request.get("stackDigest")) or _normalized_optional_text(root_mount.get("stackDigest"))
+    return {
+        "currentNodeId": current_node_id or "standby",
+        "workingNodeAnnotation": working_node_annotation,
+        "pcMemo": pc_memo or "",
+        "topFrameId": top_frame_id or "",
+        "stackDigest": stack_digest or "",
+    }
+
+
+def _canonicalize_memory_retrieval_state(
+    memory_retrieval_state: dict[str, Any] | None,
+    *,
+    current_node_id: str | None,
+) -> dict[str, Any] | None:
+    if memory_retrieval_state is None:
+        return None
+    normalized = dict(memory_retrieval_state)
+    if current_node_id is not None:
+        normalized["workTreeNodeId"] = current_node_id
+    return normalized
+
+
+def _canonicalize_takeover_protocol(
+    takeover_protocol: TaskTakeoverProtocol | None,
+    *,
+    current_node_id: str | None,
+    pc_memo: str | None,
+) -> TaskTakeoverProtocol | None:
+    if takeover_protocol is None or takeover_protocol.work_tree is None:
+        return takeover_protocol
+
+    work_tree_updates: dict[str, Any] = {}
+    if current_node_id is not None and _normalized_optional_text(takeover_protocol.work_tree.current_node_id) != current_node_id:
+        work_tree_updates["current_node_id"] = current_node_id
+    normalized_pc_memo = _normalized_optional_text(pc_memo)
+    if normalized_pc_memo is not None and _normalized_optional_text(takeover_protocol.work_tree.pc_memo) != normalized_pc_memo:
+        work_tree_updates["pc_memo"] = normalized_pc_memo
+    if not work_tree_updates:
+        return takeover_protocol
+    return takeover_protocol.model_copy(
+        update={
+            "work_tree": takeover_protocol.work_tree.model_copy(update=work_tree_updates),
+        }
+    )
+
+
+def _work_context_stack_from_request(request: dict[str, Any]) -> WorkContextStack | None:
+    candidate = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
+    if candidate is None:
+        return None
+    try:
+        return WorkContextStack.model_validate(candidate)
+    except Exception:
+        return None
+
+
+def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
+    frames = work_context_stack.frames
+    if not frames:
+        return "工作上下文栈为空。"
+    lines = [
+        f"topFrameId: {work_context_stack.top_frame_id}",
+        f"stackDigest: {work_context_stack.stack_digest}",
+        "activePath: " + " -> ".join(frame.node_id for frame in frames),
+    ]
+    top_frame = next((frame for frame in frames if frame.id == work_context_stack.top_frame_id), frames[-1])
+    if top_frame.frame_header:
+        lines.append(f"topFrameHeader: {top_frame.frame_header}")
+    if top_frame.cursor_state:
+        lines.append(f"cursorState: {top_frame.cursor_state}")
+    summary_frames = [frame for frame in frames[-3:] if frame.child_completion_summaries]
+    if summary_frames:
+        lines.append("childCompletionSummaries:")
+        for frame in summary_frames:
+            frame_label = frame.frame_header or frame.working_node_annotation or frame.node_id
+            lines.append(f"- {frame_label}")
+            for item in frame.child_completion_summaries[-4:]:
+                lines.append(f"  - {item.child_node_id}: {normalize_excerpt(item.summary, 120)}")
+    return "\n".join(lines)
+
+
+def _format_tool_usage_preferences(
+    profile: PromptProfile,
+    seed_template: SeedTemplate | None,
+    active_capabilities: list[str] | None = None,
+) -> str:
+    sections = [
+        section
+        for section in [
+            "工具使用偏好:",
+            profile.tool_policy,
+            seed_template.tool_policy_overlay if seed_template is not None else None,
+        ]
+        if section
+    ]
+    capability_set = {str(item) for item in active_capabilities or []}
+    if {"text-memory", "shared-memory"} & capability_set:
+        sections.append(
+            "\n".join(
+                [
+                    "记忆修改优先级:",
+                    "1. 默认优先使用正式记忆工具（例如 text_memory.* / shared_memory.*）完成读取、版本保护更新、追加日志、提案与遗忘。",
+                    "2. 只有在需要不中断当前回答、且修改足够轻量时，才使用 <memory-write> 作为旁路写入。",
+                    "3. 节点过宽、存在多个独立主题或冲突风险高时，优先创建细分子节点做空间隔离，再通过 relate 或 proposal 关联回父节点。",
+                    "4. 遇到 latestVersionId 冲突时，不要静默覆盖；改用 append_memory_log 或 submit_memory_proposal 把冲突转成可继续处理的合并任务。",
+                ]
+            )
+        )
+    return "\n\n".join(sections)
+
+
+def _format_world_roots(root_mount: dict[str, Any]) -> str:
+    semantic_roots = root_mount.get("semanticRoots") if isinstance(root_mount.get("semanticRoots"), dict) else {}
+    system_root_protocol = (
+        root_mount.get("systemRootProtocol") if isinstance(root_mount.get("systemRootProtocol"), dict) else {}
+    )
+    startup_load_order = [str(item) for item in root_mount.get("startupLoadOrder") or [] if str(item).strip()]
+    if semantic_roots:
+        lines = ["启动根指针:"]
+        for key, fallback_count in (("identity", len(root_mount.get("identityRefs") or [])), ("context", len(root_mount.get("contextRefs") or [])), ("execution", len(root_mount.get("executionRefs") or []))):
+            root_entry = semantic_roots.get(key) if isinstance(semantic_roots.get(key), dict) else {}
+            label = str(root_entry.get("label") or "").strip() or key
+            summary = str(root_entry.get("summary") or "").strip()
+            primary_ref = str(root_entry.get("primaryRefId") or "").strip()
+            line = f"- {label}"
+            if summary:
+                line += f" {summary}"
+            if primary_ref:
+                line += f" rootRef={primary_ref}"
+            else:
+                line += f" 引用数={fallback_count}"
+            if key == "execution" and root_entry.get("currentNodeId") is not None:
+                line += f" currentNode={root_entry['currentNodeId']}"
+            lines.append(line)
+        protocol_label = str(system_root_protocol.get("label") or "[NODE_ID: SYS_ROOT_PROTOCOL]").strip()
+        protocol_summary = str(system_root_protocol.get("summary") or "系统宪法与能力索引入口").strip()
+        lines.append(f"- {protocol_label} {protocol_summary}")
+        if startup_load_order:
+            lines.append("启动加载顺序: " + " -> ".join(startup_load_order))
+        lines.extend(
+            [
+                f"系统导语: {root_mount.get('systemIntro') or ''}",
+                f"根摘要: {root_mount.get('rootSummary') or ''}",
+                f"任务说明: {root_mount.get('taskObjective') or ''}",
+            ]
+        )
+        return "\n".join(lines)
+
+    identity_refs = root_mount.get("identityRefs") or []
+    context_refs = root_mount.get("contextRefs") or []
+    execution_refs = root_mount.get("executionRefs") or []
+    return "\n".join(
+        [
+            "启动根指针:",
+            f"- [ID: 001 我是谁] 身份引用数={len(identity_refs)}",
+            f"- [ID: 002 我在哪] 上下文引用数={len(context_refs)}",
+            f"- [ID: 003 我要干什么] 执行引用数={len(execution_refs)}",
+            "- [NODE_ID: SYS_ROOT_PROTOCOL] 系统宪法与能力索引入口",
+            f"系统导语: {root_mount.get('systemIntro') or ''}",
+            f"根摘要: {root_mount.get('rootSummary') or ''}",
+            f"任务说明: {root_mount.get('taskObjective') or ''}",
+        ]
+    )
+
+
+def _format_behavior_constitution(profile: PromptProfile) -> str:
+    constitution_lines = [
+        "行为宪法:",
+        "1. 通过结构化工具和消息通道触达外界，不跨边界越权执行。",
+        "2. 工作树节点命名优先体现 questions_it_answers，避免无语义标题。",
+        "3. 关键新知、失败原因、约束与关联优先写入记忆，再推进下一步。",
+        "4. 面对大量未知文件或长文本重活，优先委派 Sub-Agent 预读和摘要。",
+    ]
+    return "\n".join(constitution_lines)
+
+
+def _format_scene_preferences(profile: PromptProfile) -> str:
+    return "\n\n".join(
+        section
+        for section in [
+            "场景偏好与执行倾向:",
+            profile.kernel_truth,
+            profile.behavior_guidelines,
+            profile.memory_policy,
+            profile.evidence_policy,
+        ]
+        if section
+    )
+
+
+def _format_capability_protocol_index(
+    active_capabilities: list[str],
+    registered_tools: list[dict[str, Any]],
+) -> str:
+    return "\n".join(
+        [
+            "能力与协议索引:",
+            f"- 挂载能力数: {len(active_capabilities)}",
+            f"- 可见工具数: {len(registered_tools)}",
+            "- 协议入口: SYS_ROOT_PROTOCOL / WorkTreeProtocol v0.2 / Agent Runtime v0.2",
+        ]
+    )
+
+
+def _format_scene_recovery(
+    *,
+    resume_path: str | None,
+    resume_message: str,
+    pointer_fields: dict[str, str],
+    memory_retrieval_state: dict[str, Any] | None,
+) -> str:
+    lines = [
+        f"运行模式: {'恢复态' if resume_path else '常态'}",
+        f"工作节点标签: {pointer_fields['workingNodeAnnotation']}",
+        f"currentNodeId: {pointer_fields['currentNodeId']}",
+    ]
+    if pointer_fields["pcMemo"]:
+        lines.append(f"pcMemo: {pointer_fields['pcMemo']}")
+    if pointer_fields["topFrameId"]:
+        lines.append(f"topFrameId: {pointer_fields['topFrameId']}")
+    if pointer_fields["stackDigest"]:
+        lines.append(f"stackDigest: {pointer_fields['stackDigest']}")
+    if resume_path:
+        lines.append(f"恢复路径: {resume_path}")
+    lines.append(f"恢复/重启提示: {resume_message or '未提供恢复提示。'}")
+    if memory_retrieval_state is not None:
+        lines.append("记忆检索状态:")
+        lines.append(_format_memory_retrieval_state(memory_retrieval_state))
+    return "\n".join(lines)
 
 
 def _format_task_contract(task: Any, run_type: str, task_type: str, request: dict[str, Any], resume_path: str | None) -> str:
@@ -650,7 +943,7 @@ def _format_response_requirements(
         lines.append("7. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
     if bool(request.get("memoryWriteTagsEnabled", True)):
         lines.append(
-            f'{len(lines) + 1}. 如需在不中断回答的情况下修改记忆树，可插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
+            f'{len(lines) + 1}. 记忆修改默认优先使用正式记忆工具；仅当需要不中断回答且改动足够轻量时，才插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
         )
     if has_delivery_contract:
         lines.append(f"{len(lines) + 1}. 附加要求: {additional.strip()}")
@@ -678,14 +971,7 @@ def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
         lines.extend(f"- [{item.category}] {item.label}: {item.value}" for item in protocol.constraints)
     else:
         lines.append("- 无")
-    lines.append("计划:")
-    if protocol.plan:
-        lines.extend(
-            f"{index}. [{step.phase}] {step.title}: {step.instructions}"
-            for index, step in enumerate(protocol.plan, start=1)
-        )
-    else:
-        lines.append("1. 未生成正式计划。")
+    lines.append(f"计划步骤数: {len(protocol.plan)}")
     if protocol.work_tree is not None:
         lines.append("工作树:")
         lines.append(
@@ -762,29 +1048,63 @@ def compile_runtime_prompt(
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
     takeover_protocol = _takeover_protocol_from_request(request)
+    work_context_stack = _work_context_stack_from_request(request)
+    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
+    current_node_id = _resolved_current_node_id(request, root_mount, memory_retrieval_state, takeover_protocol)
+    pointer_fields = _resolve_runtime_pointer_fields(request, root_mount, memory_retrieval_state, takeover_protocol)
+    memory_retrieval_state = _canonicalize_memory_retrieval_state(
+        memory_retrieval_state,
+        current_node_id=current_node_id,
+    )
+    takeover_protocol = _canonicalize_takeover_protocol(
+        takeover_protocol,
+        current_node_id=current_node_id,
+        pc_memo=pointer_fields["pcMemo"],
+    )
+    pointer_fields = _resolve_runtime_pointer_fields(request, root_mount, memory_retrieval_state, takeover_protocol)
+    resume_message = (
+        _normalized_optional_text(request.get("restartMessage"))
+        or _normalized_optional_text(request.get("resumeMessage"))
+        or _normalized_optional_text(getattr(task, "restart_message", None))
+        or _normalized_optional_text(getattr(task, "resume_message", None))
+        or _normalized_optional_text(root_mount.get("resumeMessage"))
+        or ""
+    )
     few_shot_assets = _resolve_few_shot_assets(profile, seed_template, resolved_registry)
     few_shot_refs = [asset.id for asset in few_shot_assets]
     few_shot_examples = "" if resume_path else _format_few_shot_examples(few_shot_assets)
 
-    system_sections = {
-        "system_role": profile.system_role,
-        "kernel_truth": profile.kernel_truth,
-        "behavior_guidelines": profile.behavior_guidelines,
-        "identity": seed_template.identity_overlay,
-        "world": seed_template.context_overlay,
-        "execution_bias": seed_template.execution_bias,
-        "tool_policy": "\n\n".join(
+    boot_sections = {
+        "physical_interface": "\n\n".join(
             section
             for section in [
-                profile.tool_policy,
-                seed_template.tool_policy_overlay,
+                "你只能通过结构化工具、MCP 泛型工具与消息通道触达外部世界，不得假设隐藏接口。",
                 "当前可见模块能力:\n" + _format_active_capabilities(active_capabilities),
                 "当前可见结构化工具描述:\n" + _format_registered_tools(resolved_registered_tools),
             ]
             if section
         ),
-        "memory_policy": profile.memory_policy,
-        "evidence_policy": profile.evidence_policy,
+        "world_roots": _format_world_roots(root_mount),
+        "behavior_constitution": _format_behavior_constitution(profile),
+        "scene_recovery": _format_scene_recovery(
+            resume_path=resume_path,
+            resume_message=resume_message,
+            pointer_fields=pointer_fields,
+            memory_retrieval_state=memory_retrieval_state,
+        ),
+    }
+    boot_sections = _dedupe_section_contents(boot_sections)
+
+    system_sections = {
+        "system_role": profile.system_role,
+        "physical_interface": boot_sections.get("physical_interface", ""),
+        "world_roots": boot_sections.get("world_roots", ""),
+        "behavior_constitution": boot_sections.get("behavior_constitution", ""),
+        "scene_preferences": _format_scene_preferences(profile),
+        "tool_usage_preferences": _format_tool_usage_preferences(profile, seed_template, active_capabilities),
+        "identity": seed_template.identity_overlay,
+        "world": seed_template.context_overlay,
+        "execution_bias": seed_template.execution_bias,
         "output_contract": profile.output_contract,
     }
     if few_shot_examples:
@@ -793,20 +1113,19 @@ def compile_runtime_prompt(
         system_sections["self_evolution"] = profile.self_evolution
 
     user_sections = {
-        "runtime_state": _format_runtime_state(root_mount),
+        "runtime_state": _format_runtime_state(root_mount, include_resume_message=not bool(resume_path)),
         "task_contract": _format_task_contract(task, run_type, task_type, request, resume_path),
+        "scene_recovery": boot_sections.get("scene_recovery", ""),
+        "capability_protocol_index": _format_capability_protocol_index(active_capabilities, resolved_registered_tools),
         "mounted_context_items": _format_context_lines(current_context),
         "response_requirements": _format_response_requirements(request, seed_template, resume_path),
     }
     if takeover_protocol is not None:
         user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
-    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
+    if work_context_stack is not None:
+        user_sections["work_context_stack"] = _format_work_context_stack(work_context_stack)
     if memory_retrieval_state is not None:
         user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
-    resume_message = str(request.get("resumeMessage") or task.resume_message or "").strip()
-    root_resume_message = str(root_mount.get("resumeMessage") or "").strip()
-    if resume_message and _normalize_prompt_text(resume_message) != _normalize_prompt_text(root_resume_message):
-        user_sections["resume_message"] = resume_message
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
     if run_type == "subagent":
         subagent_scope_lines = [
@@ -837,6 +1156,7 @@ def compile_runtime_prompt(
         taskType=task_type,
         scenario=seed_template.scenario,
         registeredTools=resolved_registered_tools,
+        bootSections=boot_sections,
         systemSections=system_sections,
         userSections=user_sections,
         fewShotRefs=few_shot_refs,

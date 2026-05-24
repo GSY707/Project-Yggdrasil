@@ -1,6 +1,87 @@
 from .execution_loop_part_a import *  # noqa: F401,F403
-from .execution_loop_transitions import _finalize_execution_transition, _handle_window_restart_transition
+from .execution_loop_transitions import _finalize_execution_transition
 from .root_mount import _elapsed_ms, _infer_task_type
+
+
+def _mailbox_context_item(message: dict[str, Any]) -> dict[str, Any]:
+    subject = normalize_excerpt(str(message.get("subject") or message.get("messageKind") or "Mailbox message"), 160)
+    body = normalize_excerpt(str(message.get("body") or message.get("summary") or subject or ""), 320)
+    return {
+        "kind": "mailbox-message",
+        "id": str(message.get("id") or "mailbox-message"),
+        "mailboxMessageId": str(message.get("id") or "mailbox-message"),
+        "title": subject or "Mailbox message",
+        "content": body or subject or "Mailbox message",
+        "messageKind": str(message.get("messageKind") or "message"),
+        "workTreeNodeId": str(message.get("workTreeNodeId") or "").strip() or None,
+        "createdAt": message.get("createdAt"),
+        "importance": 1.0,
+    }
+
+
+def _hydrate_mailbox_runtime_state(
+    *,
+    task,
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    current_context: list[dict[str, Any]],
+    runtime_repository: RuntimeRepository,
+) -> list[dict[str, Any]]:
+    mailbox_messages = root_mount.get("mailboxMessages") if isinstance(root_mount.get("mailboxMessages"), list) else []
+    if not mailbox_messages:
+        return current_context
+
+    existing_ids = {
+        str(item.get("mailboxMessageId") or "")
+        for item in current_context
+        if isinstance(item, dict) and str(item.get("kind") or "") == "mailbox-message"
+    }
+    delivered_ids: list[str] = []
+    new_context_items: list[dict[str, Any]] = []
+    latest_subject: str | None = None
+    latest_node_id: str | None = None
+    for message in mailbox_messages:
+        if not isinstance(message, dict):
+            continue
+        message_id = str(message.get("id") or "").strip()
+        if not message_id:
+            continue
+        delivered_ids.append(message_id)
+        latest_subject = str(message.get("subject") or "").strip() or latest_subject
+        node_id = str(message.get("workTreeNodeId") or "").strip() or None
+        latest_node_id = node_id or latest_node_id
+        if message_id not in existing_ids:
+            new_context_items.append(_mailbox_context_item(message))
+
+    if new_context_items:
+        current_context = [*new_context_items, *current_context]
+        request["currentContext"] = [dict(item) for item in current_context]
+
+    if latest_subject and not str(request.get("currentObjective") or "").strip():
+        request["currentObjective"] = normalize_excerpt(latest_subject, 160)
+    if latest_subject and not str(request.get("currentFocus") or "").strip():
+        request["currentFocus"] = normalize_excerpt(f"mailbox: {latest_subject}", 96)
+    if latest_node_id is not None and not str(request.get("currentNodeId") or "").strip():
+        request["currentNodeId"] = latest_node_id
+        request.setdefault("workTreeNodeId", latest_node_id)
+        request.setdefault("workingNodeAnnotation", f"<Working_Node: {latest_node_id}>")
+        memory_retrieval_state = dict(request.get("memoryRetrievalState") or {})
+        memory_retrieval_state["workTreeNodeId"] = latest_node_id
+        request["memoryRetrievalState"] = memory_retrieval_state
+
+    if delivered_ids:
+        runtime_repository.update_mailbox_message_status(task_id=task.id, message_ids=delivered_ids, status="delivered")
+        root_mount["mailboxState"] = runtime_repository.get_mailbox_state(task.id)
+        root_mount["mailboxMessages"] = []
+        root_summary = str(root_mount.get("rootSummary") or "").strip()
+        mailbox_summary = f"Mailbox delivered messages: {len(delivered_ids)}."
+        root_mount["rootSummary"] = " ".join(part for part in (root_summary, mailbox_summary) if part).strip()
+        standby_state = root_mount.get("standbyState") if isinstance(root_mount.get("standbyState"), dict) else {}
+        root_mount["standbyState"] = {
+            **standby_state,
+            "pendingMailboxCount": int(root_mount["mailboxState"].get("pendingCount") or 0),
+        }
+    return current_context
 
 def _retrieve_context_from_memory_tree(
     session,
@@ -75,11 +156,15 @@ def _retrieve_context_from_memory_tree(
             if result.get("summary") is not None:
                 expansion_summaries.append(str(result["summary"]))
 
+    retrieval_focus = (
+        _work_tree_focus_label(_coerce_takeover_protocol(request.get("takeoverProtocol")))
+        or str(request.get("currentFocus") or task.current_focus or "")
+    )
     retrieval_query = " ".join(
         part.strip()
         for part in [
             str(request.get("taskObjective") or request.get("currentObjective") or task.current_objective or task.goal or ""),
-            str(request.get("currentFocus") or task.current_focus or ""),
+            retrieval_focus,
             str(request.get("resumeMessage") or root_mount.get("resumeMessage") or ""),
         ]
         if part and part.strip()
@@ -152,7 +237,7 @@ def _retrieve_context_from_memory_tree(
             }
         )
     context_items.extend(_context_item_from_retrieved_node(item) for item in node_payloads)
-    if _should_trim_retrieved_context(current_context):
+    if _should_trim_retrieved_context(current_context, request=request):
         context_items = _trim_context_items_to_token_budget(context_items, _memory_retrieval_token_budget(request))
     retained_node_ids = {
         str((item.get("ref") or {}).get("id") or "")
@@ -172,12 +257,52 @@ def _retrieve_context_from_memory_tree(
         "retrievalBundle": retrieval_bundle,
     }
 
+
+def _mark_takeover_execution_failed(
+    *,
+    request: dict[str, Any],
+    root_mount: dict[str, Any] | None,
+    takeover_protocol: TaskTakeoverProtocol | None,
+    task_id: str,
+    agent_run_id: str,
+    failure_summary: str,
+) -> tuple[TaskTakeoverProtocol | None, dict[str, Any] | None, dict[str, Any] | None]:
+    if takeover_protocol is None or takeover_protocol.work_tree is None:
+        return takeover_protocol, request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None, None
+    try:
+        failed_protocol, failed_stack, failure_transition = fail_current_work_node(
+            takeover_protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            failure_summary=failure_summary,
+            work_context_stack=request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None,
+        )
+        failed_protocol, failed_stack = sync_takeover_runtime_state(
+            request,
+            root_mount,
+            failed_protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            current_focus=(failure_transition or {}).get("currentFocus") if isinstance(failure_transition, dict) else None,
+            work_context_stack=failed_stack,
+        )
+        stack_payload = failed_stack.model_dump(by_alias=True, mode="json") if failed_stack is not None else None
+        if stack_payload is not None:
+            request["workContextStack"] = stack_payload
+            if isinstance(root_mount, dict):
+                root_mount["workContextStack"] = stack_payload
+        return failed_protocol, stack_payload, failure_transition
+    except Exception:  # noqa: BLE001
+        return takeover_protocol, request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None, None
+
 def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]:
     task_id = str(work_item.get("taskId"))
     request = work_item.get("payload") if isinstance(work_item.get("payload"), dict) else {}
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
     runtime_timings: dict[str, Any] = {}
+    root_mount: dict[str, Any] = {}
+    takeover_protocol: TaskTakeoverProtocol | None = None
     work_started_at = perf_counter()
     lock_owner = new_id("worker", task_id, utc_now().isoformat())
     if not coordinator.acquire_lock(f"task:{task_id}", lock_owner, ttl_seconds=120):
@@ -221,6 +346,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                                 status="created",
                                 blockers=[f"snapshot-corrupted:{integrity_error or 'unknown'}"],
                             )
+                            session.commit()
                             raise ValueError(
                                 f"Task {task_id} snapshot integrity check failed and resume was rejected: {integrity_error}"
                             )
@@ -315,7 +441,54 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 }
                 runtime_timings["resumeRehydrateMs"] = _elapsed_ms(rehydration_started_at)
 
-            seeded_takeover_protocol = False
+            current_context = _hydrate_mailbox_runtime_state(
+                task=task,
+                request=request,
+                root_mount=root_mount,
+                current_context=current_context,
+                runtime_repository=runtime_repository,
+            )
+
+            startup_state = _resolve_startup_state(
+                request,
+                task_objective=request.get("taskObjective") or task.current_objective or task.goal,
+                current_focus=request.get("currentFocus") or task.current_focus,
+                mounted_context_count=len([item for item in current_context if isinstance(item, dict)]),
+            )
+            if startup_state["currentNodeId"] is not None:
+                request["currentNodeId"] = startup_state["currentNodeId"]
+            if startup_state["workingNodeAnnotation"] is not None:
+                request["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
+            if startup_state["pcMemo"] is not None:
+                request["pcMemo"] = startup_state["pcMemo"]
+            request["startupMode"] = startup_state["startupMode"]
+            root_mount["startupMode"] = startup_state["startupMode"]
+            root_mount["currentNodeId"] = startup_state["currentNodeId"]
+            root_mount["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
+            root_mount["pcMemo"] = startup_state["pcMemo"]
+            root_mount["topFrameId"] = startup_state["topFrameId"]
+            root_mount["stackDigest"] = startup_state["stackDigest"]
+            standby_state = root_mount.get("standbyState") if isinstance(root_mount.get("standbyState"), dict) else {}
+            root_mount["standbyState"] = {
+                **standby_state,
+                "isStandby": startup_state["startupMode"] == "standby",
+                "reason": startup_state.get("standbyReason"),
+            }
+            semantic_roots = root_mount.get("semanticRoots") if isinstance(root_mount.get("semanticRoots"), dict) else {}
+            execution_root = semantic_roots.get("execution") if isinstance(semantic_roots.get("execution"), dict) else None
+            if execution_root is not None:
+                execution_root["currentNodeId"] = startup_state["currentNodeId"]
+                execution_root["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
+
+            if command == "start" and snapshot is None and startup_state["startupMode"] == "standby":
+                runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                return {
+                    "status": "standby",
+                    "task": task.model_dump(by_alias=True, mode="json"),
+                    "rootMount": root_mount,
+                    "runtimeTimings": dict(runtime_timings),
+                }
+
             if _coerce_takeover_protocol(request.get("takeoverProtocol")) is None:
                 seeded_protocol = build_task_takeover_protocol(
                     task=task,
@@ -326,7 +499,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     current_context=current_context,
                 )
                 if seeded_protocol is not None:
-                    seeded_takeover_protocol = True
                     request["takeoverProtocol"] = seeded_protocol.model_dump(by_alias=True, mode="json")
                     request["taskObjective"] = seeded_protocol.objective
                     request.setdefault("currentObjective", seeded_protocol.objective)
@@ -334,6 +506,23 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         request["currentFocus"] = seeded_protocol.plan[0].title
                     root_mount["taskObjective"] = seeded_protocol.objective
                     root_mount["takeoverProtocol"] = request["takeoverProtocol"]
+
+            preview_takeover_protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
+            if preview_takeover_protocol is not None:
+                preview_takeover_protocol, preview_stack = sync_takeover_runtime_state(
+                    request,
+                    root_mount,
+                    preview_takeover_protocol,
+                    task_id=task_id,
+                    agent_run_id=str(request.get("agentRunId") or request.get("parentRunId") or f"preview-{task_id}"),
+                    current_focus=_work_tree_focus_label(preview_takeover_protocol),
+                )
+                if preview_takeover_protocol is not None:
+                    request["takeoverProtocol"] = preview_takeover_protocol.model_dump(by_alias=True, mode="json")
+                    root_mount["takeoverProtocol"] = request["takeoverProtocol"]
+                if preview_stack is not None:
+                    request["workContextStack"] = preview_stack.model_dump(by_alias=True, mode="json")
+                    root_mount["workContextStack"] = request["workContextStack"]
 
             pre_retrieval_context = [dict(item) for item in current_context if isinstance(item, dict)]
             memory_retrieval_started_at = perf_counter()
@@ -348,7 +537,15 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             )
             retrieved_context_items = memory_context.get("contextItems") if isinstance(memory_context.get("contextItems"), list) else []
             if retrieved_context_items:
-                current_context = [item for item in retrieved_context_items if isinstance(item, dict)]
+                preserved_mailbox_items = [
+                    dict(item)
+                    for item in pre_retrieval_context
+                    if isinstance(item, dict) and str(item.get("kind") or "") == "mailbox-message"
+                ]
+                current_context = [
+                    *preserved_mailbox_items,
+                    *[item for item in retrieved_context_items if isinstance(item, dict)],
+                ]
                 request["currentContext"] = [dict(item) for item in current_context]
             retrieved_protected_items = memory_context.get("protectedItems") if isinstance(memory_context.get("protectedItems"), list) else []
             if retrieved_protected_items:
@@ -379,7 +576,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             runtime_timings["memoryRetrievalMs"] = _elapsed_ms(memory_retrieval_started_at)
 
             takeover_prepare_started_at = perf_counter()
-            takeover_protocol = None if seeded_takeover_protocol else _coerce_takeover_protocol(request.get("takeoverProtocol"))
+            takeover_protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
             if takeover_protocol is None:
                 takeover_protocol = build_task_takeover_protocol(
                     task=task,
@@ -473,6 +670,18 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
                 },
             )
+            if takeover_protocol is not None:
+                takeover_protocol, work_context_stack = sync_takeover_runtime_state(
+                    request,
+                    root_mount,
+                    takeover_protocol,
+                    task_id=task_id,
+                    agent_run_id=run.id,
+                )
+                if takeover_protocol is not None:
+                    root_mount["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
+                if work_context_stack is not None:
+                    root_mount["workContextStack"] = work_context_stack.model_dump(by_alias=True, mode="json")
             route_decision = runtime_repository.create_model_route_decision(
                 {
                     **route_preview,
@@ -491,7 +700,12 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 task_id,
                 {
                     "status": "running",
-                    "currentFocus": request.get("currentFocus") or task.current_focus or f"{run_type}-agent-execution",
+                    "currentFocus": (
+                        (_work_tree_focus_label(takeover_protocol) if takeover_protocol is not None else None)
+                        or request.get("currentFocus")
+                        or task.current_focus
+                        or f"{run_type}-agent-execution"
+                    ),
                     "currentObjective": request.get("currentObjective") or task.current_objective or task.goal,
                     "windowIndex": runtime_metrics["windowIndex"],
                     "restartCount": runtime_metrics["restartCount"],
@@ -576,6 +790,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                             "maxRetainedTokens": request.get("maxRetainedTokens") or max(64, input_tokens),
                             "tokenBudgetTotal": task.budget.token_budget_total,
                         },
+                        "maxUncompressedTailBeforeDecompress": _max_uncompressed_tail_before_decompress(request),
                         "protectedItems": protected_items,
                         "currentContext": current_context,
                     },
@@ -612,32 +827,90 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if context_length_observations:
                 request["contextLengthObservations"] = [dict(item) for item in context_length_observations]
             if restart_trigger is not None:
-                return _handle_window_restart_transition(
-                    session=session,
-                    coordinator=coordinator,
-                    task_repository=task_repository,
-                    task=task,
-                    run=run,
-                    route_decision=route_decision,
-                    task_id=task_id,
+                overflow_detail = (
+                    "Window overflow after context pruning in single-path runtime; "
+                    "restart is deprecated, branch marked as failed. "
+                    f"trigger={restart_trigger}; windowSpanTokens={window_span_tokens}; "
+                    f"windowRestartThreshold={_int_metric(runtime_metrics.get('windowRestartThreshold'), 0)}."
+                )
+                failure_transition = None
+                takeover_protocol, _, failure_transition = _mark_takeover_execution_failed(
                     request=request,
                     root_mount=root_mount,
-                    runtime_metrics=runtime_metrics,
-                    context_length_observations=context_length_observations,
-                    effective_context=effective_context,
-                    pre_retrieval_context=pre_retrieval_context,
-                    protected_items=protected_items,
-                    pruning_result=pruning_result,
-                    pruning_events=pruning_events,
-                    run_created_event=run_created_event,
-                    route_event=route_event,
-                    resume_event_payload=resume_event_payload,
-                    rehydration_result=rehydration_result,
-                    runtime_timings=runtime_timings,
-                    work_started_at=work_started_at,
-                    restart_trigger=restart_trigger,
-                    window_span_tokens=window_span_tokens,
+                    takeover_protocol=takeover_protocol,
+                    task_id=task_id,
+                    agent_run_id=run.id,
+                    failure_summary=overflow_detail,
                 )
+                takeover_protocol_ref = (
+                    persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
+                    if takeover_protocol is not None and takeover_protocol.work_tree is not None
+                    else None
+                )
+                run = task_repository.update_agent_run(
+                    run.id,
+                    {
+                        "status": "failed",
+                        "windowIndex": runtime_metrics["windowIndex"],
+                        "restartCount": runtime_metrics["restartCount"],
+                        "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                    },
+                )
+                task = task_repository.update_task(
+                    task_id,
+                    {
+                        "status": "failed",
+                        "currentFocus": (failure_transition or {}).get("currentFocus") or "window-overflow-failed",
+                        "windowIndex": runtime_metrics["windowIndex"],
+                        "restartCount": runtime_metrics["restartCount"],
+                        "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                        "carryForwardLossCount": runtime_metrics["carryForwardLossCount"],
+                    },
+                )
+                window_execution_artifact = _persist_window_execution_artifact(
+                    session,
+                    task=task,
+                    run=run,
+                    record=_build_window_execution_record(
+                        task=task,
+                        run=run,
+                        request=request,
+                        root_mount=root_mount,
+                        runtime_metrics=runtime_metrics,
+                        current_context=effective_context,
+                        pre_retrieval_context=pre_retrieval_context,
+                        protected_items=protected_items,
+                        transition_stage="window-restart",
+                        transition_outcome="failed-window-overflow",
+                        resume_path=(resume_event_payload or {}).get("resumePath") if isinstance(resume_event_payload, dict) else None,
+                        restart_trigger=restart_trigger,
+                        source_snapshot_id=(resume_event_payload or {}).get("snapshot", {}).get("id") if isinstance((resume_event_payload or {}).get("snapshot"), dict) else None,
+                        rehydration_result=rehydration_result,
+                    ),
+                )
+                runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                return {
+                    "status": "failed",
+                    "taskId": task_id,
+                    "task": task.model_dump(by_alias=True, mode="json"),
+                    "run": run.model_dump(by_alias=True, mode="json"),
+                    "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                    "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                    "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
+                    "pruning": pruning_result,
+                    "pruningEvents": pruning_events,
+                    "runtimeMetrics": dict(runtime_metrics),
+                    "windowExecutionArtifact": window_execution_artifact,
+                    "outboxRecords": {
+                        "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
+                        "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                        "windowExecutionPersisted": window_execution_artifact["outboxRecord"],
+                    },
+                    "resume": resume_event_payload,
+                    "rehydration": rehydration_result,
+                    "detail": overflow_detail,
+                    "runtimeTimings": dict(runtime_timings),
+                }
             registered_tools_override = [
                 dict(item)
                 for item in request.get("registeredTools") or []
@@ -764,7 +1037,28 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
             )
             if budget_overrun is not None:
+                failure_transition = None
+                takeover_protocol, _, failure_transition = _mark_takeover_execution_failed(
+                    request=request,
+                    root_mount=root_mount,
+                    takeover_protocol=takeover_protocol,
+                    task_id=task_id,
+                    agent_run_id=run.id,
+                    failure_summary=budget_overrun,
+                )
+                takeover_protocol_ref = (
+                    persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
+                    if takeover_protocol is not None and takeover_protocol.work_tree is not None
+                    else None
+                )
                 run = task_repository.update_agent_run(run.id, {"status": "failed"})
+                task = task_repository.update_task(
+                    task_id,
+                    {
+                        "status": "failed",
+                        "currentFocus": (failure_transition or {}).get("currentFocus") or f"execution-failed: {budget_overrun}",
+                    },
+                )
                 window_execution_artifact = _persist_window_execution_artifact(
                     session,
                     task=task,
@@ -799,6 +1093,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
                         "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
                     },
+                    "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                    "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
                     "windowExecutionArtifact": window_execution_artifact,
                     "runtimeMetricsArtifact": runtime_metrics_artifact,
                     "detail": budget_overrun,
@@ -815,6 +1111,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 execution_actor_id=execution_actor_id,
             )
             request["memoryTagWrites"] = memory_tag_write_result
+            assistant_work_tree_actions = _extract_assistant_work_tree_actions(
+                str(llm_result.get("assistantText") or ""),
+                enabled=True,
+            )
+            llm_result["assistantText"] = assistant_work_tree_actions["cleanAssistantText"]
             invocation_id = str((llm_result.get("invocation") or {}).get("id") or "").strip()
             if invocation_id:
                 try:
@@ -844,6 +1145,23 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if takeover_protocol is not None:
                 request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
                 root_mount["takeoverProtocol"] = request["takeoverProtocol"]
+            assistant_work_tree_transition = None
+            takeover_protocol, updated_stack, assistant_work_tree_actions = _apply_parsed_assistant_work_tree_actions(
+                task_id=task_id,
+                agent_run_id=run.id,
+                request=request,
+                root_mount=root_mount,
+                takeover_protocol=takeover_protocol,
+                parsed_actions=assistant_work_tree_actions,
+            )
+            if updated_stack is not None:
+                request["workContextStack"] = updated_stack.model_dump(by_alias=True, mode="json")
+                root_mount["workContextStack"] = request["workContextStack"]
+            if takeover_protocol is not None:
+                request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
+                root_mount["takeoverProtocol"] = request["takeoverProtocol"]
+            if assistant_work_tree_actions.get("applied"):
+                assistant_work_tree_transition = assistant_work_tree_actions
             runtime_timings["takeoverFinalizeMs"] = _elapsed_ms(takeover_finalize_started_at)
             memory_write_started_at = perf_counter()
             write_payload = _build_execution_write_payload(
@@ -990,6 +1308,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 runtime_timings=runtime_timings,
                 work_started_at=work_started_at,
                 current_context=effective_context,
+                assistant_work_tree_transition=assistant_work_tree_transition,
             )
     except Exception as exc:
         try:
@@ -998,14 +1317,42 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 task_repository = TaskRepository(session)
                 task = task_repository.get_task(task_id)
                 if task is not None:
+                    latest_run = task_repository.get_latest_agent_run(
+                        task_id,
+                        statuses={"initializing", "mounting", "running", "completed", "failed"},
+                    )
+                    if latest_run is None:
+                        runtime_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
+                        latest_run = task_repository.create_agent_run(
+                            task_id,
+                            {
+                                "id": str(request.get("agentRunId") or new_id("run", task_id, utc_now().isoformat())),
+                                "parentRunId": str(request.get("parentRunId")) if request.get("parentRunId") is not None else None,
+                                "runType": str(request.get("runType") or "main"),
+                                "status": "failed",
+                                "nextObjective": request.get("currentObjective") or task.current_objective or task.goal,
+                                "windowIndex": runtime_metrics.get("windowIndex") or task.window_index or 1,
+                                "restartCount": runtime_metrics.get("restartCount") or task.restart_count or 0,
+                                "cumulativeWindowSpanTokens": runtime_metrics.get("cumulativeWindowSpanTokens") or task.cumulative_window_span_tokens or 0,
+                            },
+                        )
+                    failure_protocol, _, failure_transition = _mark_takeover_execution_failed(
+                        request=request,
+                        root_mount=None,
+                        takeover_protocol=_coerce_takeover_protocol(request.get("takeoverProtocol")),
+                        task_id=task_id,
+                        agent_run_id=latest_run.id if latest_run is not None else f"failure-{task_id}",
+                        failure_summary=str(exc),
+                    )
+                    if failure_protocol is not None and latest_run is not None:
+                        persist_task_takeover_protocol(failure_protocol, task_id=task.id, run_id=latest_run.id)
                     task_repository.update_task(
                         task_id,
                         {
                             "status": "failed",
-                            "currentFocus": f"execution-failed: {exc}",
+                            "currentFocus": (failure_transition or {}).get("currentFocus") or f"execution-failed: {exc}",
                         },
                     )
-                    latest_run = task_repository.get_latest_agent_run(task_id, statuses={"initializing", "mounting", "running"})
                     if latest_run is not None:
                         task_repository.update_agent_run(latest_run.id, {"status": "failed"})
         except Exception as exc:  # noqa: BLE001
@@ -1014,6 +1361,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             "status": "failed",
             "taskId": task_id,
             "detail": str(exc),
+            "takeoverProtocol": request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else None,
             "runtimeTimings": {**runtime_timings, "totalMs": _elapsed_ms(work_started_at)},
         }
     finally:

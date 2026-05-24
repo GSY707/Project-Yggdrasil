@@ -1,4 +1,24 @@
 from .collaboration_runtime_part_a import *  # noqa: F401,F403
+from .collaboration_runtime_part_a import (
+    _cache_package_entry,
+    _collect_branch_changes,
+    _normalize_actor,
+    _record_package_event,
+    _root_ids,
+    _subagent_work_tree_node_id,
+)
+from .contracts import TaskTakeoverProtocol
+from .runtime_kernel.execution_control import post_task_mailbox_message
+from .runtime_kernel.takeover import (
+    bootstrap_takeover_state_for_work_node,
+    build_takeover_continuation_request,
+    load_persisted_task_takeover_protocol,
+    load_persisted_work_context_stack,
+    merge_child_takeover_completion_into_parent,
+    normalize_takeover_runtime_state,
+    persist_stack_snapshot,
+    persist_task_takeover_protocol,
+)
 
 def create_pull_request(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     request = payload or {}
@@ -6,6 +26,8 @@ def create_pull_request(payload: dict[str, Any] | None = None) -> dict[str, Any]
     coordinator = RedisCoordinator(runtime.settings)
     adapter = GitCollaborationAdapter(request)
     actor = _normalize_actor(request.get("createdBy"), default_id="subagent")
+    work_tree_node_id = _subagent_work_tree_node_id(request)
+    budget_decision = request.get("subagentBudgetDecision") if isinstance(request.get("subagentBudgetDecision"), dict) else None
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -59,6 +81,10 @@ def create_pull_request(payload: dict[str, Any] | None = None) -> dict[str, Any]
             "changedEntities": changes["changedEntities"],
             "generatedAt": utc_now().isoformat(),
         }
+        if work_tree_node_id is not None:
+            manifest["workTreeNodeId"] = work_tree_node_id
+        if budget_decision is not None:
+            manifest["subagentBudgetDecision"] = budget_decision
         git_result = adapter.write_manifest_commit(
             branch_name=source_branch.name,
             base_ref=target_branch.name,
@@ -109,6 +135,10 @@ def create_pull_request(payload: dict[str, Any] | None = None) -> dict[str, Any]
             "git": git_result,
             "github": remote_pr,
         }
+        if work_tree_node_id is not None:
+            response["workTreeNodeId"] = work_tree_node_id
+        if budget_decision is not None:
+            response["subagentBudgetDecision"] = budget_decision
         _cache_package_entry(coordinator, locator, response)
         pr_created_event = _record_package_event(
             session,
@@ -384,6 +414,147 @@ def review_pull_request(pr_id: str, payload: dict[str, Any] | None = None) -> di
     }
 
 
+def _coerce_task_takeover_protocol(candidate: Any) -> TaskTakeoverProtocol | None:
+    if not isinstance(candidate, dict):
+        return None
+    try:
+        return TaskTakeoverProtocol.model_validate(candidate)
+    except Exception:
+        return None
+
+
+def _subagent_completion_summary(request: dict[str, Any], execution_result: dict[str, Any], pr_result: dict[str, Any]) -> str:
+    return normalize_excerpt(
+        str(
+            request.get("parentSummary")
+            or pr_result.get("pullRequest", {}).get("summary")
+            or execution_result.get("assistantText")
+            or execution_result.get("createdNode", {}).get("content")
+            or "Sub-agent completed and is ready for parent summarization."
+        ),
+        240,
+    ) or "Sub-agent completed and is ready for parent summarization."
+
+
+def _publish_subagent_completion_to_parent(
+    work_item: dict[str, Any],
+    request: dict[str, Any],
+    execution_result: dict[str, Any],
+    pr_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    parent_task_id = str(work_item.get("parentTaskId") or request.get("parentTaskId") or "").strip() or None
+    if parent_task_id is None:
+        return None
+
+    parent_run_id = str(work_item.get("parentRunId") or request.get("parentRunId") or "").strip() or None
+    parent_node_id = _subagent_work_tree_node_id(request)
+    child_summary = _subagent_completion_summary(request, execution_result, pr_result)
+    child_task_id = str(execution_result.get("task", {}).get("id") or request.get("sourceTaskId") or "").strip() or None
+    child_run_id = str(execution_result.get("run", {}).get("id") or request.get("sourceRunId") or "").strip() or None
+    child_protocol = _coerce_task_takeover_protocol(execution_result.get("takeoverProtocol"))
+    evidence_refs = [
+        {"kind": "node", "id": execution_result.get("createdNode", {}).get("id")},
+        {"kind": "pull-request", "id": pr_result.get("pullRequest", {}).get("id")},
+    ]
+
+    wake_request: dict[str, Any] = {}
+    merged = False
+    latest_parent_run_id: str | None = None
+    with get_persistence_runtime().session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        parent_task = task_repository.get_task(parent_task_id)
+        if parent_task is None:
+            raise KeyError(parent_task_id)
+
+        latest_parent_run = task_repository.get_agent_run(parent_run_id) if parent_run_id is not None else None
+        if latest_parent_run is None:
+            latest_parent_run = task_repository.get_latest_agent_run(parent_task_id)
+        latest_parent_run_id = latest_parent_run.id if latest_parent_run is not None else None
+
+        parent_protocol = (
+            load_persisted_task_takeover_protocol(parent_task_id, latest_parent_run.id)
+            if latest_parent_run is not None
+            else None
+        )
+        parent_stack = (
+            load_persisted_work_context_stack(parent_task_id, latest_parent_run.id)
+            if latest_parent_run is not None
+            else None
+        )
+
+        synthetic_run_id = latest_parent_run_id or new_id("run", parent_task_id, parent_node_id or "mailbox-parent", stable=True)
+        if parent_protocol is None and parent_node_id is not None:
+            parent_protocol, parent_stack = bootstrap_takeover_state_for_work_node(
+                task_id=parent_task_id,
+                agent_run_id=synthetic_run_id,
+                objective=parent_task.current_objective or parent_task.goal or child_summary,
+                work_tree_node_id=parent_node_id,
+                current_focus=parent_task.current_focus or child_summary,
+            )
+        elif parent_protocol is not None and parent_stack is None:
+            parent_protocol, parent_stack = normalize_takeover_runtime_state(
+                parent_protocol,
+                task_id=parent_task_id,
+                agent_run_id=synthetic_run_id,
+            )
+
+        parent_protocol, parent_stack = merge_child_takeover_completion_into_parent(
+            parent_protocol,
+            parent_node_id=parent_node_id,
+            child_protocol=child_protocol,
+            child_task_id=child_task_id,
+            child_run_id=child_run_id,
+            child_summary=child_summary,
+            evidence_refs=evidence_refs,
+            work_context_stack=parent_stack,
+        )
+        merged = parent_protocol is not None and parent_stack is not None and parent_node_id is not None
+        if parent_protocol is not None and parent_stack is not None:
+            if latest_parent_run is not None:
+                persist_task_takeover_protocol(parent_protocol, task_id=parent_task_id, run_id=latest_parent_run.id)
+                persist_stack_snapshot(parent_stack, task_id=parent_task_id, run_id=latest_parent_run.id)
+            wake_request = build_takeover_continuation_request(
+                {
+                    "appId": parent_task.app_id,
+                    "projectId": parent_task.project_id,
+                    "spaceId": parent_task.space_id,
+                    "branchId": parent_task.branch_id,
+                    "currentObjective": parent_task.current_objective or parent_task.goal or child_summary,
+                    "taskObjective": parent_task.current_objective or parent_task.goal or child_summary,
+                    "currentFocus": normalize_excerpt(f"Summarize child result: {child_summary}", 96),
+                    "budgetState": parent_task.budget.model_dump(by_alias=True, mode="json"),
+                },
+                protocol=parent_protocol,
+                work_context_stack=parent_stack,
+                parent_run_id=latest_parent_run_id,
+                current_focus=normalize_excerpt(f"Summarize child result: {child_summary}", 96),
+            )
+
+    mailbox_result = post_task_mailbox_message(
+        parent_task_id,
+        {
+            "sender": request.get("createdBy") or {"type": "agent", "id": "subagent"},
+            "agentRunId": latest_parent_run_id,
+            "messageKind": "subagent-completion",
+            "subject": f"Sub-agent completed for {parent_node_id or 'parent task'}",
+            "body": child_summary,
+            "workTreeNodeId": parent_node_id,
+            "wakeOnMessage": True,
+            "wakeRequest": wake_request,
+        },
+    )
+    return {
+        "parentTaskId": parent_task_id,
+        "parentRunId": latest_parent_run_id,
+        "summary": child_summary,
+        "takeoverMerged": merged,
+        "mailboxMessage": mailbox_result.get("mailboxMessage"),
+        "sideChannelEvent": mailbox_result.get("sideChannelEvent"),
+        "wakeResult": mailbox_result.get("wakeResult"),
+    }
+
+
 def execute_subagent_work_item(work_item: dict[str, Any]) -> dict[str, Any]:
     request = work_item.get("payload") if isinstance(work_item.get("payload"), dict) else {}
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
@@ -406,9 +577,10 @@ def execute_subagent_work_item(work_item: dict[str, Any]) -> dict[str, Any]:
             },
         }
     )
-    if execution_result.get("status") != "completed":
+    execution_status = str(execution_result.get("status") or "failed")
+    if execution_status not in {"completed", "awaiting-approval"}:
         return {
-            "status": str(execution_result.get("status") or "failed"),
+            "status": execution_status,
             "taskId": work_item.get("taskId"),
             "execution": execution_result,
         }
@@ -426,8 +598,9 @@ def execute_subagent_work_item(work_item: dict[str, Any]) -> dict[str, Any]:
             "summary": request.get("prSummary") or execution_result.get("createdNode", {}).get("content"),
         }
     )
+    parent_followup = _publish_subagent_completion_to_parent(work_item, request, execution_result, pr_result)
     return {
-        "status": "completed",
+        "status": execution_status,
         "taskId": work_item.get("taskId"),
         "execution": execution_result,
         "pullRequest": pr_result["pullRequest"],
@@ -436,4 +609,7 @@ def execute_subagent_work_item(work_item: dict[str, Any]) -> dict[str, Any]:
         "git": pr_result.get("git"),
         "github": pr_result.get("github"),
         "outboxRecord": pr_result.get("outboxRecord"),
+        "workTreeNodeId": pr_result.get("workTreeNodeId"),
+        "subagentBudgetDecision": pr_result.get("subagentBudgetDecision"),
+        "parentFollowup": parent_followup,
     }

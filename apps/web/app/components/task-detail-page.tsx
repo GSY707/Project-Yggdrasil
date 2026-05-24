@@ -11,7 +11,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
   const { data, error, isLoading, reload } = useApiResource<TaskDetailResponse>(`/tasks/${encodeURIComponent(taskId)}`);
   const [controlError, setControlError] = useState<string | null>(null);
   const [controlMessage, setControlMessage] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<"pause" | "resume" | null>(null);
+  const [activeAction, setActiveAction] = useState<"pause" | "resume" | "approve" | "revise" | null>(null);
 
   if (isLoading) {
     return <LoadingState title="正在装配任务详情" />;
@@ -60,6 +60,41 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
     }
   }
 
+  async function submitApproveCompletion() {
+    setActiveAction("approve");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/approve-completion`, {
+        currentFocus: "completed",
+      });
+      setControlMessage(`任务已批准完成，当前状态 ${String(response.task.status ?? response.status)}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitRevisionRequest() {
+    setActiveAction("revise");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/request-revision`, {
+        nodeId: taskDetail.runtimeControl.recommendedRevisionNodeId ?? undefined,
+        reason: `operator-revision:${taskDetail.runtimeControl.recommendedRevisionNodeId ?? "root"}`,
+      });
+      setControlMessage(`已请求修订，任务重新入队，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -76,6 +111,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             {taskDetail.runtimeControl.canResume ? (
               <button className="action-button" disabled={activeAction !== null} onClick={() => void submitResumeRequest()} type="button">
                 {activeAction === "resume" ? "正在恢复" : "从快照恢复"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canRequestRevision ? (
+              <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitRevisionRequest()} type="button">
+                {activeAction === "revise" ? "正在请求修订" : "请求修订"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canApprove ? (
+              <button className="action-button" disabled={activeAction !== null} onClick={() => void submitApproveCompletion()} type="button">
+                {activeAction === "approve" ? "正在批准完成" : "批准完成"}
               </button>
             ) : null}
           </>
@@ -147,6 +192,27 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           <span className="inline-chip">consumed {taskDetail.runtimeControl.consumedSnapshotCount}</span>
           <span className="inline-chip">canResume {String(taskDetail.runtimeControl.canResume)}</span>
           <span className="inline-chip">canPause {String(taskDetail.runtimeControl.canRequestPause)}</span>
+          <span className="inline-chip">canApprove {String(taskDetail.runtimeControl.canApprove)}</span>
+          <span className="inline-chip">canRevise {String(taskDetail.runtimeControl.canRequestRevision)}</span>
+          <span className="inline-chip">mailbox {taskDetail.mailboxState.pendingCount}</span>
+        </div>
+        <div className="kv-grid">
+          <div className="kv-item">
+            <p className="meta-label">Recommended Revision Node</p>
+            <p className="meta-copy mono">{String(taskDetail.runtimeControl.recommendedRevisionNodeId ?? "-")}</p>
+          </div>
+          <div className="kv-item">
+            <p className="meta-label">Mailbox Status</p>
+            <p className="meta-copy">{String(taskDetail.mailboxState.status ?? "-")}</p>
+          </div>
+          <div className="kv-item">
+            <p className="meta-label">Pending Mailbox Messages</p>
+            <p className="meta-copy">{String(taskDetail.mailboxState.pendingCount ?? 0)}</p>
+          </div>
+          <div className="kv-item">
+            <p className="meta-label">Wake On Message</p>
+            <p className="meta-copy">{String(taskDetail.mailboxState.wakeOnMessage ?? false)}</p>
+          </div>
         </div>
       </Surface>
 
@@ -270,6 +336,71 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           )}
         </div>
       </Surface>
+
+      <div className="content-grid tight">
+        <Surface>
+          <p className="section-kicker">Mailbox</p>
+          <h3 className="section-title">邮箱消息</h3>
+          <div className="record-list">
+            {taskDetail.mailboxMessages.length === 0 ? (
+              <div className="empty-state">
+                <h4 className="subsection-title">暂无邮箱消息</h4>
+                <p className="empty-copy">Sub-Agent 汇总、待机唤醒和异步协作消息会出现在这里。</p>
+              </div>
+            ) : (
+              taskDetail.mailboxMessages.map((message) => (
+                <article className="record-card" key={message.id}>
+                  <div className="record-head">
+                    <div>
+                      <h4 className="record-title">{message.subject}</h4>
+                      <p className="meta-copy mono">{message.id}</p>
+                    </div>
+                    <StatusBadge value={message.status} />
+                  </div>
+                  <p className="meta-copy">{message.body}</p>
+                  <div className="pill-row">
+                    <span className="inline-chip">kind {message.messageKind}</span>
+                    <span className="inline-chip">sender {String(message.sender?.id ?? "-")}</span>
+                    <span className="inline-chip">node {String(message.workTreeNodeId ?? "-")}</span>
+                    <span className="inline-chip">created {formatTimestamp(message.createdAt)}</span>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Surface>
+
+        <Surface>
+          <p className="section-kicker">Side Channel</p>
+          <h3 className="section-title">侧信道事件</h3>
+          <div className="record-list">
+            {taskDetail.sideChannelEvents.length === 0 ? (
+              <div className="empty-state">
+                <h4 className="subsection-title">暂无侧信道事件</h4>
+                <p className="empty-copy">上下文警告、邮箱通知和非中断回执会按时间顺序保留在这里。</p>
+              </div>
+            ) : (
+              taskDetail.sideChannelEvents.map((event) => (
+                <article className="record-card" key={event.id}>
+                  <div className="record-head">
+                    <div>
+                      <h4 className="record-title">{event.eventKind}</h4>
+                      <p className="meta-copy mono">{event.id}</p>
+                    </div>
+                    <StatusBadge value={event.level} />
+                  </div>
+                  <p className="meta-copy">{event.summary}</p>
+                  <div className="pill-row">
+                    <span className="inline-chip">source {String(event.source?.id ?? "-")}</span>
+                    <span className="inline-chip">node {String(event.workTreeNodeId ?? "-")}</span>
+                    <span className="inline-chip">created {formatTimestamp(event.createdAt)}</span>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Surface>
+      </div>
     </div>
   );
 }

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import yggdrasil_sdk.prompting as runtime_prompting
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
+import yggdrasil_sdk.runtime_kernel.execution_loop_part_a as runtime_execution_loop_part_a
+import yggdrasil_sdk.runtime_kernel.root_mount as runtime_root_mount
 import yggdrasil_sdk.runtime_kernel.snapshot as runtime_snapshot
 import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
+from yggdrasil_sdk.contracts import TaskSnapshotSummary, WorkTreeProtocol
 from yggdrasil_pause_resume.plugin import PauseResumeModule
+from yggdrasil_context_pruning.plugin import ContextPruningModule
 
 
 def test_build_restart_request_state_uses_deep_copy_and_keeps_contract_keys() -> None:
@@ -36,6 +41,45 @@ def test_build_restart_request_state_uses_deep_copy_and_keeps_contract_keys() ->
     assert request_state["restartMessage"] == "继续下一窗口。"
     assert request_state["takeoverProtocol"]["workTree"]["currentNodeId"] == "node-a"
     assert request_state["memoryRetrievalState"]["matchedNodeRefs"] == [{"kind": "node", "id": "n-1"}]
+
+
+def test_work_tree_node_id_from_request_reads_current_node_memory_state_and_stack() -> None:
+    assert runtime_execution_loop_part_a._work_tree_node_id_from_request({"currentNodeId": "node-request"}) == "node-request"
+    assert runtime_execution_loop_part_a._work_tree_node_id_from_request(
+        {"memoryRetrievalState": {"workTreeNodeId": "node-memory"}}
+    ) == "node-memory"
+    assert runtime_execution_loop_part_a._work_tree_node_id_from_request(
+        {
+            "workContextStack": {
+                "topFrameId": "frame-1",
+                "frames": [
+                    {
+                        "id": "frame-1",
+                        "nodeId": "node-stack",
+                        "status": "active",
+                    }
+                ],
+            }
+        }
+    ) == "node-stack"
+
+
+def test_resolve_startup_state_prefers_resume_node_before_bootstrap() -> None:
+    startup_state = runtime_root_mount._resolve_startup_state(
+        {
+            "currentNodeId": "node-run",
+            "workingNodeAnnotation": "<Working_Node: node-run>",
+            "pcMemo": "continue:node-run",
+            "currentObjective": "完成当前节点交付",
+        },
+        task_objective="完成当前节点交付",
+        current_focus="deliver",
+    )
+
+    assert startup_state["startupMode"] == "resume-node"
+    assert startup_state["currentNodeId"] == "node-run"
+    assert startup_state["workingNodeAnnotation"] == "<Working_Node: node-run>"
+    assert startup_state["pcMemo"] == "continue:node-run"
 
 
 def test_build_carry_forward_context_dedupes_excerpts_and_preserves_pointer_header() -> None:
@@ -155,6 +199,140 @@ def test_restore_takeover_work_tree_pointer_falls_back_to_nearest_executable_nod
     assert repaired["workTree"]["status"] == "active"
 
 
+def test_work_tree_protocol_v0_1_payload_upgrades_to_v0_2_with_bootstrap_root() -> None:
+    raw_work_tree = {
+        "version": "0.1.0",
+        "rootObjective": "完成根任务",
+        "status": "planned",
+        "currentNodeId": "node-run",
+        "nodes": [
+            {
+                "id": "node-run",
+                "title": "run",
+                "phase": "executing",
+                "status": "in-progress",
+                "planStepIds": ["step-1"],
+                "constraintIds": ["constraint-1"],
+                "dependsOn": [],
+                "expectedEvidence": ["evidence-1"],
+                "recoveryAnchor": "resume:run",
+            }
+        ],
+        "recoveryAnchor": "resume:run",
+        "entropyBudgetRemaining": 8,
+    }
+
+    protocol = WorkTreeProtocol.model_validate(raw_work_tree)
+
+    assert protocol.version == "0.2.0"
+    assert protocol.root_node_id is not None
+    assert protocol.current_node_id == "node-run"
+    assert protocol.active_path_node_ids == [protocol.root_node_id, "node-run"]
+    root_node = next(node for node in protocol.nodes if node.id == protocol.root_node_id)
+    run_node = next(node for node in protocol.nodes if node.id == "node-run")
+    assert run_node.parent_node_id == protocol.root_node_id
+    assert run_node.working_node_annotation == "<Working_Node: node-run>"
+    assert run_node.local_goal == "run"
+    assert "node-run" in root_node.child_node_ids
+
+
+def test_task_snapshot_summary_backfills_runtime_pointer_fields_from_legacy_request_state() -> None:
+    summary = TaskSnapshotSummary.model_validate(
+        {
+            "id": "snap-1",
+            "appId": "app-1",
+            "taskId": "task-1",
+            "agentRunId": "run-1",
+            "projectId": "project-1",
+            "branchId": "branch-1",
+            "snapshotType": "pause",
+            "status": "restorable",
+            "resumeToken": "resume-1",
+            "contextRef": {"type": "package-entry", "locator": "runtime/context"},
+            "rootMountRef": {"type": "package-entry", "locator": "runtime/root-mount"},
+            "pendingWrites": [],
+            "pendingActions": [
+                {
+                    "kind": "runtime-request-state",
+                    "requestState": {
+                        "takeoverProtocol": {
+                            "taskId": "task-1",
+                            "workTree": {
+                                "version": "0.1.0",
+                                "rootObjective": "完成根任务",
+                                "status": "active",
+                                "currentNodeId": "node-run",
+                                "nodes": [
+                                    {
+                                        "id": "node-run",
+                                        "title": "run",
+                                        "phase": "executing",
+                                        "status": "in-progress",
+                                        "planStepIds": ["step-1"],
+                                        "constraintIds": [],
+                                        "dependsOn": [],
+                                        "expectedEvidence": [],
+                                        "recoveryAnchor": "resume:run",
+                                    }
+                                ],
+                            },
+                        }
+                    },
+                }
+            ],
+            "resumeMessage": "继续执行",
+            "safeStopReason": "manual-pause",
+            "createdAt": datetime.now(timezone.utc),
+            "safeToPause": True,
+            "blockers": [],
+        }
+    )
+
+    assert summary.current_node_id == "node-run"
+    assert summary.working_node_annotation == "<Working_Node: node-run>"
+    assert summary.top_frame_id == "frame-node-run"
+    assert summary.stack_digest is not None
+
+
+def test_build_restart_request_state_bootstraps_work_context_stack_from_legacy_work_tree() -> None:
+    request_state = runtime_snapshot._build_restart_request_state(
+        {
+            "taskId": "task-1",
+            "agentRunId": "run-1",
+            "takeoverProtocol": {
+                "taskId": "task-1",
+                "workTree": {
+                    "version": "0.1.0",
+                    "rootObjective": "完成根任务",
+                    "status": "active",
+                    "currentNodeId": "node-run",
+                    "nodes": [
+                        {
+                            "id": "node-run",
+                            "title": "run",
+                            "phase": "executing",
+                            "status": "in-progress",
+                            "planStepIds": ["step-1"],
+                            "constraintIds": [],
+                            "dependsOn": [],
+                            "expectedEvidence": [],
+                            "recoveryAnchor": "resume:run",
+                        }
+                    ],
+                },
+            },
+            "memoryRetrievalState": {"workTreeNodeId": "node-run"},
+        },
+        {"windowIndex": 2, "restartCount": 1},
+    )
+
+    assert request_state["currentNodeId"] == "node-run"
+    assert request_state["workingNodeAnnotation"] == "<Working_Node: node-run>"
+    assert request_state["topFrameId"] == "frame-node-run"
+    assert request_state["stackDigest"] is not None
+    assert request_state["workContextStack"]["topFrameId"] == "frame-node-run"
+
+
 def test_pause_resume_rehydrate_repairs_takeover_pointer_in_request_updates() -> None:
     snapshot = {
         "id": "snap-1",
@@ -262,3 +440,126 @@ def test_window_restart_trigger_threshold_boundary_and_forced_budget() -> None:
         effective_context=[{"id": "x", "content": "tiny"}],
     )
     assert trigger_forced == "forcedWindowRestartBudget"
+
+
+def test_should_trim_retrieved_context_auto_decompress_default_n_1() -> None:
+    # B-only: keep trim to avoid premature re-expansion loops.
+    should_trim_b_only = runtime_execution_loop._should_trim_retrieved_context(
+        [{"kind": "carry-forward-package", "id": "ctx_b"}],
+        request={},
+    )
+    assert should_trim_b_only is True
+
+    # ...<1>B<3>A<4>A<5> keeps trim because tail=2 > 1
+    should_trim_long_tail = runtime_execution_loop._should_trim_retrieved_context(
+        [
+            {"kind": "carry-forward-package", "id": "ctx_b"},
+            {"kind": "retrieval-node", "id": "ctx_a4"},
+            {"kind": "retrieval-node", "id": "ctx_a5"},
+        ],
+        request={},
+    )
+    assert should_trim_long_tail is True
+
+    # ...<1>B<3>A<4> auto-decompresses because tail=1 <= 1
+    should_trim_short_tail = runtime_execution_loop._should_trim_retrieved_context(
+        [
+            {"kind": "carry-forward-package", "id": "ctx_b"},
+            {"kind": "retrieval-node", "id": "ctx_a4"},
+        ],
+        request={},
+    )
+    assert should_trim_short_tail is False
+
+
+def test_should_trim_retrieved_context_auto_decompress_custom_n() -> None:
+    current_context = [
+        {"kind": "carry-forward-package", "id": "ctx_b"},
+        {"kind": "retrieval-node", "id": "ctx_a4"},
+        {"kind": "retrieval-node", "id": "ctx_a5"},
+    ]
+
+    # n=2: tail=2 should auto-decompress
+    should_trim_n2 = runtime_execution_loop._should_trim_retrieved_context(
+        current_context,
+        request={"maxUncompressedTailBeforeDecompress": 2},
+    )
+    assert should_trim_n2 is False
+
+    # n=0: tail=2 should stay compressed/trimmed
+    should_trim_n0 = runtime_execution_loop._should_trim_retrieved_context(
+        current_context,
+        request={"maxUncompressedTailBeforeDecompress": 0},
+    )
+    assert should_trim_n0 is True
+
+
+def test_context_pruning_plan_respects_compression_range_guards() -> None:
+    module = ContextPruningModule()
+    current_context = [
+        {
+            "id": "ctx_foundation_1",
+            "kind": "retrieval-summary",
+            "title": "Memory retrieval summary",
+            "content": "foundation",
+            "importance": 0.9,
+        },
+        {
+            "id": "ctx_foundation_2",
+            "kind": "context-item",
+            "title": "takeoverProtocol anchor",
+            "content": "foundation",
+            "importance": 0.9,
+        },
+        {
+            "id": "ctx_mid_1",
+            "kind": "context-item",
+            "title": "middle 1",
+            "content": "x" * 200,
+            "importance": 0.1,
+        },
+        {
+            "id": "ctx_mid_2",
+            "kind": "context-item",
+            "title": "middle 2",
+            "content": "y" * 200,
+            "importance": 0.1,
+        },
+        {
+            "id": "ctx_tail_1",
+            "kind": "context-item",
+            "title": "tail 1",
+            "content": "z" * 200,
+            "importance": 0.1,
+        },
+        {
+            "id": "ctx_tail_2",
+            "kind": "context-item",
+            "title": "tail 2",
+            "content": "w" * 200,
+            "importance": 0.1,
+        },
+    ]
+
+    plan = module.plan(
+        {
+            "taskId": "task_pruning_range",
+            "sourceRunId": "run_pruning_range",
+            "nextObjective": "focus middle",
+            "budget": {"maxRetainedTokens": 10},
+            "maxUncompressedTailBeforeDecompress": 1,
+            "currentContext": current_context,
+            "protectedItems": [],
+        }
+    )
+
+    compressed_ids = {ref["id"] for ref in plan.get("compressedRefs", []) if isinstance(ref, dict)}
+    dropped_ids = {ref["id"] for ref in plan.get("droppedRefs", []) if isinstance(ref, dict)}
+    touched_ids = compressed_ids | dropped_ids
+
+    assert "ctx_foundation_1" not in touched_ids
+    assert "ctx_foundation_2" not in touched_ids
+    assert "ctx_tail_1" not in touched_ids
+    assert "ctx_tail_2" not in touched_ids
+    assert plan["compressionRange"]["startIndex"] == 2
+    assert plan["compressionRange"]["endIndex"] == 3

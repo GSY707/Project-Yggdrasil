@@ -184,7 +184,7 @@ class NodeRepository:
 
         return run_serialized_write(f"nodes:{queue_branch_id}", _create)
 
-    def append_version(self, node_id: str, payload: dict[str, Any]) -> NodeVersionRecord:
+    def _append_version_locked(self, node_id: str, payload: dict[str, Any]) -> NodeVersionRecord:
         node = self.session.get(NodeORM, node_id)
         if node is None:
             raise KeyError(f"Node {node_id} not found.")
@@ -201,6 +201,12 @@ class NodeRepository:
             node.content = str(payload["content"])
         if "parentId" in payload:
             node.parent_id = str(payload["parentId"]) if payload["parentId"] is not None else None
+        if "status" in payload:
+            node.status = str(payload["status"])
+        if "mergedIntoNodeId" in payload:
+            node.merged_into_node_id = (
+                str(payload["mergedIntoNodeId"]) if payload["mergedIntoNodeId"] is not None else None
+            )
         if "windowIndex" in payload:
             node.window_index = max(int(payload["windowIndex"]), 1)
         if "sourceWorkTreeNodeId" in payload:
@@ -236,6 +242,36 @@ class NodeRepository:
         node.latest_version_id = version_id
         self.session.flush()
         return _node_version_record(version)
+
+    def append_version(self, node_id: str, payload: dict[str, Any]) -> NodeVersionRecord:
+        existing_node = self.session.get(NodeORM, node_id)
+        if existing_node is None:
+            raise KeyError(f"Node {node_id} not found.")
+
+        return run_serialized_write(
+            f"nodes:{existing_node.branch_id}",
+            lambda: self._append_version_locked(node_id, payload),
+        )
+
+    def append_memory_log_entry(self, node_id: str, log_entry: str, payload: dict[str, Any]) -> NodeVersionRecord:
+        existing_node = self.session.get(NodeORM, node_id)
+        if existing_node is None:
+            raise KeyError(f"Node {node_id} not found.")
+
+        def _append() -> NodeVersionRecord:
+            node = self.session.get(NodeORM, node_id)
+            if node is None:
+                raise KeyError(f"Node {node_id} not found.")
+            existing_content = str(node.content or "").rstrip()
+            version_payload = dict(payload)
+            version_payload["content"] = (
+                f"{existing_content}\n\n[Memory Log] {log_entry}"
+                if existing_content
+                else f"[Memory Log] {log_entry}"
+            )
+            return self._append_version_locked(node_id, version_payload)
+
+        return run_serialized_write(f"nodes:{existing_node.branch_id}", _append)
 
     def add_source_annotation(self, owner_kind: str, owner_id: str, payload: dict[str, Any]) -> SourceAnnotationRecord:
         actor = _actor(payload.get("createdBy"), default_type="user", default_id="core-api")

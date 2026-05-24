@@ -214,6 +214,147 @@ class TextMemoryModule(BaseModulePlugin):
                 },
                 implementationRef="yggdrasil_text_memory.plugin:retrieve_memory_tool",
             ),
+            ToolDescriptor(
+                name="text_memory.read_node",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Read Memory Node",
+                description="Read a durable memory node, its latest version pointer, and optionally recent version history.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=4000,
+                permissionRequired=["memory.read"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {"type": "string"},
+                        "includeVersions": {"type": "boolean", "default": False},
+                        "versionLimit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+                    },
+                    "required": ["nodeId"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:read_memory_node_tool",
+            ),
+            ToolDescriptor(
+                name="text_memory.read_index",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Read Memory Index",
+                description="List durable memory nodes for the current branch with lightweight filtering for LLM-visible navigation.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=4000,
+                permissionRequired=["memory.read"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "queryText": {"type": "string"},
+                        "rootBranch": {"type": "string"},
+                        "nodeType": {"type": "string"},
+                        "includeArchived": {"type": "boolean", "default": False},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 12},
+                    },
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:read_memory_index_tool",
+            ),
+            ToolDescriptor(
+                name="text_memory.update_memory_with_version",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Update Memory With Version Guard",
+                description="Update or relate a memory node only when the caller still holds the latest version pointer; otherwise return a structured conflict payload.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=5000,
+                permissionRequired=["memory.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {"type": "string"},
+                        "expectedLatestVersionId": {"type": "string"},
+                        "mode": {"type": "string", "enum": ["write", "revise", "relate"], "default": "revise"},
+                        "title": {"type": "string"},
+                        "content": {"type": "string"},
+                        "relatedNodeId": {"type": "string"},
+                        "relationType": {"type": "string"},
+                        "reason": {"type": "string"},
+                        "changeReason": {"type": "string"},
+                    },
+                    "required": ["nodeId", "expectedLatestVersionId"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:update_memory_with_version_tool",
+            ),
+            ToolDescriptor(
+                name="text_memory.append_memory_log",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Append Memory Log",
+                description="Append an additive log entry to an existing memory node without requiring the caller to win the latest-version race.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=5000,
+                permissionRequired=["memory.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {"type": "string"},
+                        "logEntry": {"type": "string"},
+                        "changeReason": {"type": "string"},
+                    },
+                    "required": ["nodeId", "logEntry"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:append_memory_log_tool",
+            ),
+            ToolDescriptor(
+                name="text_memory.submit_memory_proposal",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Submit Memory Proposal",
+                description="Create a merge proposal child node when a durable memory change is too risky to apply directly.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=5000,
+                permissionRequired=["memory.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {"type": "string"},
+                        "title": {"type": "string"},
+                        "proposal": {"type": "string"},
+                        "rationale": {"type": "string"},
+                    },
+                    "required": ["nodeId", "proposal"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:submit_memory_proposal_tool",
+            ),
+            ToolDescriptor(
+                name="text_memory.forget_node",
+                moduleId=self.module_id,
+                version="0.1.0",
+                displayName="Forget Memory Node",
+                description="Soft-forget a memory node by archiving it while preserving version history and optional merge target metadata.",
+                schemaRef="docs/specs/memory-domain-data-spec-v0.1.md",
+                executionMode="sync",
+                timeoutMs=5000,
+                permissionRequired=["memory.write"],
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "nodeId": {"type": "string"},
+                        "reason": {"type": "string"},
+                        "status": {"type": "string", "enum": ["archived", "merged", "temporary"], "default": "archived"},
+                        "mergedIntoNodeId": {"type": "string"},
+                    },
+                    "required": ["nodeId"],
+                    "additionalProperties": False,
+                },
+                implementationRef="yggdrasil_text_memory.plugin:forget_memory_node_tool",
+            ),
         )
         return tuple(tool.model_dump(by_alias=True) for tool in tools)
 
@@ -597,6 +738,346 @@ class TextMemoryModule(BaseModulePlugin):
             emittedEvents=[emission],
             healthStatus="healthy",
         )
+
+
+def _memory_tool_actor(execution_context: dict[str, Any]) -> dict[str, str]:
+    run_id = str(execution_context.get("runId") or "").strip()
+    if run_id:
+        return {"type": "agent", "id": run_id}
+    return {"type": "module", "id": "text-memory"}
+
+
+def _memory_source_work_tree_node_id(execution_context: dict[str, Any]) -> str | None:
+    direct_value = str(execution_context.get("sourceWorkTreeNodeId") or "").strip()
+    if direct_value:
+        return direct_value
+    root_mount = execution_context.get("rootMount") if isinstance(execution_context.get("rootMount"), dict) else {}
+    direct_root_mount_value = str(root_mount.get("currentNodeId") or "").strip()
+    if direct_root_mount_value:
+        return direct_root_mount_value
+    takeover_protocol = root_mount.get("takeoverProtocol") if isinstance(root_mount.get("takeoverProtocol"), dict) else {}
+    work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
+    work_tree_value = str(work_tree.get("currentNodeId") or "").strip()
+    return work_tree_value or None
+
+
+def _memory_node_payload(node: Any) -> dict[str, Any]:
+    return node.model_dump(by_alias=True, mode="json")
+
+
+def _memory_version_payload(version: Any) -> dict[str, Any]:
+    return version.model_dump(by_alias=True, mode="json")
+
+
+def read_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
+    node_id = str(payload.get("nodeId") or "").strip()
+    if not node_id:
+        raise KeyError("nodeId")
+    include_versions = bool(payload.get("includeVersions"))
+    version_limit = min(max(int(payload.get("versionLimit") or 5), 1), 20)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        node = node_repository.get_node(node_id)
+        if node is None:
+            raise KeyError(f"Node {node_id} not found.")
+        versions = node_repository.list_versions(node_id, limit=version_limit if include_versions else 1)
+
+    latest_version = versions[-1] if versions else None
+    return {
+        "node": _memory_node_payload(node),
+        "latestVersionId": node.latest_version_id,
+        "latestVersion": _memory_version_payload(latest_version) if latest_version is not None else None,
+        "versions": [_memory_version_payload(version) for version in versions] if include_versions else [],
+        "summary": normalize_excerpt(
+            f"Read memory node {node.title} with latest version {node.latest_version_id}.",
+            160,
+        ),
+    }
+
+
+def read_memory_index_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    branch_id = str(payload.get("branchId") or execution_context.get("branchId") or DEFAULT_BRANCH_ID)
+    root_branch_filter = str(payload.get("rootBranch") or "").strip() or None
+    node_type_filter = str(payload.get("nodeType") or "").strip() or None
+    query_text = str(payload.get("queryText") or "").strip()
+    query_tokens = set(_tokenize(query_text)) if query_text else set()
+    include_archived = bool(payload.get("includeArchived"))
+    limit = min(max(int(payload.get("limit") or 12), 1), 50)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        nodes = [
+            node
+            for node in node_repository.list_nodes(branch_id=branch_id, limit=max(limit * 4, 100))
+            if node.node_type != "root"
+        ]
+
+    filtered_nodes = []
+    for node in nodes:
+        if root_branch_filter and node.root_branch != root_branch_filter:
+            continue
+        if node_type_filter and node.node_type != node_type_filter:
+            continue
+        if not include_archived and node.status == "archived":
+            continue
+        if query_tokens:
+            node_tokens = set(_tokenize(f"{node.title} {node.content}"))
+            if not (query_tokens & node_tokens):
+                continue
+        filtered_nodes.append(node)
+
+    ranked_nodes = sorted(
+        filtered_nodes,
+        key=lambda node: (
+            -float(node.importance),
+            -int(node.detail_level),
+            str(node.title or ""),
+        ),
+    )[:limit]
+
+    return {
+        "nodes": [
+            {
+                "id": node.id,
+                "title": node.title,
+                "rootBranch": node.root_branch,
+                "nodeType": node.node_type,
+                "status": node.status,
+                "latestVersionId": node.latest_version_id,
+                "sourceWorkTreeNodeId": node.source_work_tree_node_id,
+            }
+            for node in ranked_nodes
+        ],
+        "count": len(ranked_nodes),
+        "summary": normalize_excerpt(
+            f"Listed {len(ranked_nodes)} memory nodes from branch {branch_id}.",
+            160,
+        ),
+    }
+
+
+def update_memory_with_version_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    node_id = str(payload.get("nodeId") or "").strip()
+    expected_latest_version_id = str(payload.get("expectedLatestVersionId") or "").strip()
+    if not node_id:
+        raise KeyError("nodeId")
+    if not expected_latest_version_id:
+        raise KeyError("expectedLatestVersionId")
+    mode = str(payload.get("mode") or "revise").strip().lower()
+    if mode not in {"write", "revise", "relate"}:
+        raise ValueError(f"Unsupported mode: {mode}")
+
+    actor = _memory_tool_actor(execution_context)
+    source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        node = node_repository.get_node(node_id)
+        if node is None:
+            raise KeyError(f"Node {node_id} not found.")
+        if node.latest_version_id != expected_latest_version_id:
+            recent_versions = node_repository.list_versions(node_id, limit=5)
+            return {
+                "status": "conflict",
+                "mode": mode,
+                "node": _memory_node_payload(node),
+                "expectedLatestVersionId": expected_latest_version_id,
+                "currentLatestVersionId": node.latest_version_id,
+                "recentVersions": [_memory_version_payload(version) for version in recent_versions],
+                "recommendedActions": [
+                    "text_memory.append_memory_log",
+                    "text_memory.submit_memory_proposal",
+                ],
+                "summary": normalize_excerpt(
+                    f"Version conflict on node {node.title}; latest pointer moved to {node.latest_version_id}.",
+                    180,
+                ),
+            }
+
+        if mode == "relate":
+            related_node_id = str(payload.get("relatedNodeId") or "").strip()
+            if not related_node_id:
+                raise KeyError("relatedNodeId")
+            related_node = node_repository.get_node(related_node_id)
+            if related_node is None:
+                raise KeyError(f"Node {related_node_id} not found.")
+            edge = node_repository.create_edge(
+                {
+                    "projectId": node.project_id,
+                    "spaceId": node.space_id,
+                    "branchId": node.branch_id,
+                    "fromNodeId": node.id,
+                    "toNodeId": related_node.id,
+                    "relationType": str(payload.get("relationType") or "related-to"),
+                    "reason": str(payload.get("reason") or f"Linked from memory tool at {source_work_tree_node_id or 'no-work-tree'}"),
+                    "createdBy": actor,
+                    "updatedBy": actor,
+                }
+            )
+            return {
+                "status": "updated",
+                "mode": mode,
+                "node": _memory_node_payload(node),
+                "edge": edge.model_dump(by_alias=True, mode="json"),
+                "summary": normalize_excerpt(f"Created relation from {node.title} to {related_node.title}.", 160),
+            }
+
+        version_payload: dict[str, Any] = {
+            "changeReason": str(payload.get("changeReason") or f"memory-tool-{mode}"),
+            "createdBy": actor,
+            "updatedBy": actor,
+            "sourceWorkTreeNodeId": source_work_tree_node_id,
+        }
+        if payload.get("title") is not None:
+            version_payload["title"] = str(payload.get("title") or "")
+        if payload.get("content") is not None:
+            version_payload["content"] = str(payload.get("content") or "")
+        if "title" not in version_payload and "content" not in version_payload:
+            raise ValueError("write/revise mode requires title or content.")
+
+        version = node_repository.append_version(node_id, version_payload)
+        updated_node = node_repository.get_node(node_id)
+        return {
+            "status": "updated",
+            "mode": mode,
+            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+            "version": _memory_version_payload(version),
+            "summary": normalize_excerpt(f"Updated memory node {node.title} via {mode} mode.", 160),
+        }
+
+
+def append_memory_log_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    node_id = str(payload.get("nodeId") or "").strip()
+    log_entry = str(payload.get("logEntry") or "").strip()
+    if not node_id:
+        raise KeyError("nodeId")
+    if not log_entry:
+        raise KeyError("logEntry")
+
+    actor = _memory_tool_actor(execution_context)
+    source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        version = node_repository.append_memory_log_entry(
+            node_id,
+            log_entry,
+            {
+                "changeReason": str(payload.get("changeReason") or "append-memory-log"),
+                "createdBy": actor,
+                "updatedBy": actor,
+                "sourceWorkTreeNodeId": source_work_tree_node_id,
+            },
+        )
+        updated_node = node_repository.get_node(node_id)
+        return {
+            "status": "appended",
+            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+            "version": _memory_version_payload(version),
+            "summary": normalize_excerpt(
+                f"Appended memory log to node {updated_node.title if updated_node is not None else node_id}.",
+                160,
+            ),
+        }
+
+
+def submit_memory_proposal_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    node_id = str(payload.get("nodeId") or "").strip()
+    proposal = str(payload.get("proposal") or "").strip()
+    if not node_id:
+        raise KeyError("nodeId")
+    if not proposal:
+        raise KeyError("proposal")
+
+    actor = _memory_tool_actor(execution_context)
+    source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        node = node_repository.get_node(node_id)
+        if node is None:
+            raise KeyError(f"Node {node_id} not found.")
+        proposal_node = node_repository.create_node(
+            {
+                "projectId": node.project_id,
+                "spaceId": node.space_id,
+                "branchId": node.branch_id,
+                "parentId": node.id,
+                "rootBranch": node.root_branch,
+                "nodeType": "task",
+                "status": "temporary",
+                "title": str(payload.get("title") or normalize_excerpt(f"Memory proposal for {node.title}", 72)),
+                "content": "\n".join(
+                    part
+                    for part in [
+                        f"Target node: {node.id}",
+                        f"Target latest version: {node.latest_version_id}",
+                        f"Proposal: {proposal}",
+                        f"Rationale: {str(payload.get('rationale') or '').strip()}" if payload.get("rationale") else None,
+                    ]
+                    if part
+                ),
+                "sourceWorkTreeNodeId": source_work_tree_node_id,
+                "createdBy": actor,
+                "updatedBy": actor,
+                "changeReason": "memory-proposal",
+            }
+        )
+        return {
+            "status": "proposed",
+            "proposalNode": _memory_node_payload(proposal_node),
+            "targetNodeId": node.id,
+            "targetLatestVersionId": node.latest_version_id,
+            "summary": normalize_excerpt(f"Created memory proposal under node {node.title}.", 160),
+        }
+
+
+def forget_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
+    execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
+    node_id = str(payload.get("nodeId") or "").strip()
+    if not node_id:
+        raise KeyError("nodeId")
+
+    actor = _memory_tool_actor(execution_context)
+    source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        node_repository = NodeRepository(session)
+        node = node_repository.get_node(node_id)
+        if node is None:
+            raise KeyError(f"Node {node_id} not found.")
+        version = node_repository.append_version(
+            node_id,
+            {
+                "status": str(payload.get("status") or "archived"),
+                "mergedIntoNodeId": str(payload.get("mergedIntoNodeId")) if payload.get("mergedIntoNodeId") is not None else None,
+                "changeReason": str(payload.get("reason") or "forget-memory-node"),
+                "createdBy": actor,
+                "updatedBy": actor,
+                "sourceWorkTreeNodeId": source_work_tree_node_id,
+            },
+        )
+        updated_node = node_repository.get_node(node_id)
+        return {
+            "status": "forgotten",
+            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+            "version": _memory_version_payload(version),
+            "summary": normalize_excerpt(f"Soft-forgot memory node {node.title}.", 160),
+        }
 
 
 plugin = TextMemoryModule()

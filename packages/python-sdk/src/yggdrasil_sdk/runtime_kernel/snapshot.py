@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
+from ..contracts import WorkContextStack
 
 _logger = logging.getLogger(__name__)
 
@@ -39,6 +40,11 @@ def _int_metric(value: Any, default: int = 0) -> int:
 
 
 def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[str, Any]) -> dict[str, Any]:
+    pointer_state = _runtime_pointer_state(
+        str(request.get("taskId") or ""),
+        str(request.get("agentRunId") or ""),
+        request,
+    )
     request_state = {
         key: deepcopy(request.get(key))
         for key in (
@@ -64,6 +70,7 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
             "effectiveContextWindow",
             "windowRestartRatio",
             "windowRestartThreshold",
+            "maxUncompressedTailBeforeDecompress",
             "forcedWindowRestartBudget",
             "memoryWriteTagsEnabled",
             "responseRequirements",
@@ -71,7 +78,7 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
         )
         if request.get(key) is not None
     }
-    for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites"):
+    for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites", "workContextStack"):
         value = request.get(key)
         if isinstance(value, dict):
             request_state[key] = deepcopy(value)
@@ -86,6 +93,11 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
         "memoryRetrievalState",
         deepcopy(request.get("memoryRetrievalState")) if isinstance(request.get("memoryRetrievalState"), dict) else {},
     )
+    if pointer_state["workContextStack"] is not None:
+        request_state["workContextStack"] = deepcopy(pointer_state["workContextStack"])
+    for key in ("currentNodeId", "workingNodeAnnotation", "pcMemo", "topFrameId", "stackDigest"):
+        if pointer_state.get(key) is not None:
+            request_state[key] = pointer_state[key]
     request_state.update(
         {
             "windowIndex": runtime_metrics.get("windowIndex"),
@@ -125,6 +137,102 @@ def _stable_digest(value: Any) -> str | None:
     if not serialized:
         return None
     return sha256(serialized.encode("utf-8")).hexdigest()[:12]
+
+
+def _bootstrap_work_context_stack(
+    task_id: str,
+    agent_run_id: str,
+    *,
+    current_node_id: str | None,
+    working_node_annotation: str | None,
+    existing_stack: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    stack_payload = dict(existing_stack or {})
+    if current_node_id is None:
+        if not stack_payload:
+            return None
+        try:
+            return WorkContextStack.model_validate(stack_payload).model_dump(by_alias=True, mode="json")
+        except Exception:
+            return stack_payload
+
+    annotation = str(working_node_annotation or f"<Working_Node: {current_node_id}>").strip()
+    top_frame_id = str(stack_payload.get("topFrameId") or stack_payload.get("top_frame_id") or f"frame-{current_node_id}").strip()
+    root_frame_id = str(stack_payload.get("rootFrameId") or stack_payload.get("root_frame_id") or top_frame_id).strip()
+    frames = stack_payload.get("frames") if isinstance(stack_payload.get("frames"), list) else []
+    if not frames:
+        entry_context_digest = _stable_digest(
+            {
+                "taskId": task_id,
+                "agentRunId": agent_run_id,
+                "nodeId": current_node_id,
+                "workingNodeAnnotation": annotation,
+            }
+        ) or f"stack-{current_node_id}"
+        frames = [
+            {
+                "id": top_frame_id,
+                "nodeId": current_node_id,
+                "parentFrameId": None,
+                "stackDepth": 0,
+                "workingNodeAnnotation": annotation,
+                "entryContextDigest": entry_context_digest,
+                "frameHeader": annotation,
+                "childCompletionSummaries": [],
+                "cursorState": None,
+                "status": "active",
+            }
+        ]
+    normalized_payload = {
+        **stack_payload,
+        "version": "0.2.0",
+        "taskId": task_id,
+        "agentRunId": agent_run_id,
+        "rootFrameId": root_frame_id,
+        "topFrameId": top_frame_id,
+        "frames": frames,
+        "cachePolicy": stack_payload.get("cachePolicy") or stack_payload.get("cache_policy") or "preserve-prefix",
+    }
+    try:
+        return WorkContextStack.model_validate(normalized_payload).model_dump(by_alias=True, mode="json")
+    except Exception:
+        return normalized_payload
+
+
+def _runtime_pointer_state(task_id: str, agent_run_id: str, request: dict[str, Any]) -> dict[str, Any]:
+    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
+    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else {}
+    current_node_id = str(
+        request.get("currentNodeId")
+        or work_tree.get("currentNodeId")
+        or memory_retrieval_state.get("workTreeNodeId")
+        or ""
+    ).strip() or None
+    working_node_annotation = str(
+        request.get("workingNodeAnnotation")
+        or work_tree.get("workingNodeAnnotation")
+        or (f"<Working_Node: {current_node_id}>" if current_node_id is not None else "")
+    ).strip() or None
+    pc_memo = str(request.get("pcMemo") or work_tree.get("pcMemo") or "").strip() or None
+    existing_stack = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
+    work_context_stack = _bootstrap_work_context_stack(
+        task_id,
+        agent_run_id,
+        current_node_id=current_node_id,
+        working_node_annotation=working_node_annotation,
+        existing_stack=existing_stack,
+    )
+    top_frame_id = str((work_context_stack or {}).get("topFrameId") or request.get("topFrameId") or "").strip() or None
+    stack_digest = str((work_context_stack or {}).get("stackDigest") or request.get("stackDigest") or "").strip() or None
+    return {
+        "currentNodeId": current_node_id,
+        "workingNodeAnnotation": working_node_annotation,
+        "pcMemo": pc_memo,
+        "topFrameId": top_frame_id,
+        "stackDigest": stack_digest,
+        "workContextStack": work_context_stack,
+    }
 
 
 def _carry_forward_ref_ids(values: Any, *, limit: int = 8) -> list[str]:
@@ -318,6 +426,7 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         request,
         request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {},
     )
+    pointer_state = _runtime_pointer_state(task_id, agent_run_id, runtime_request_state)
     blockers: list[str] = []
 
     try:
@@ -435,6 +544,11 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         safeStopReason=str(snapshot_delta.get("safeStopReason") or request.get("safeStopReason", "manual-pause")),
         createdAt=utc_now(),
         safeToPause=safe_to_pause,
+        currentNodeId=pointer_state["currentNodeId"],
+        workingNodeAnnotation=pointer_state["workingNodeAnnotation"],
+        pcMemo=pointer_state["pcMemo"],
+        topFrameId=pointer_state["topFrameId"],
+        stackDigest=pointer_state["stackDigest"],
         blockers=blockers,
     )
     return {
@@ -507,6 +621,9 @@ def _build_restart_snapshot_state(task_id: str, payload: dict[str, Any] | None =
     if current_context_state and not carry_forward_context:
         runtime_metrics["carryForwardLossCount"] = int(runtime_metrics["carryForwardLossCount"]) + 1
 
+    restart_request_state = _build_restart_request_state(request, runtime_metrics)
+    pointer_state = _runtime_pointer_state(task_id, agent_run_id, restart_request_state)
+
     snapshot = TaskSnapshotSummary(
         id=snapshot_id,
         appId=app_id,
@@ -530,11 +647,11 @@ def _build_restart_snapshot_state(task_id: str, payload: dict[str, Any] | None =
                 "windowRestartThreshold": runtime_metrics["windowRestartThreshold"],
                 "forcedWindowRestartBudget": runtime_metrics["forcedWindowRestartBudget"],
                 "carryForwardSummary": normalize_excerpt(str(carry_forward_context[0].get("content") or ""), 240) if carry_forward_context else None,
-                "requestState": _build_restart_request_state(request, runtime_metrics),
+                "requestState": restart_request_state,
             },
             {
                 "kind": "runtime-request-state",
-                "requestState": _build_restart_request_state(request, runtime_metrics),
+                "requestState": restart_request_state,
             },
         ],
         resumeMessage=str(
@@ -545,6 +662,11 @@ def _build_restart_snapshot_state(task_id: str, payload: dict[str, Any] | None =
         safeStopReason="context-window-restart",
         createdAt=utc_now(),
         safeToPause=True,
+        currentNodeId=pointer_state["currentNodeId"],
+        workingNodeAnnotation=pointer_state["workingNodeAnnotation"],
+        pcMemo=pointer_state["pcMemo"],
+        topFrameId=pointer_state["topFrameId"],
+        stackDigest=pointer_state["stackDigest"],
         blockers=[],
     )
     return {
@@ -686,6 +808,7 @@ def save_pending_tool_calls_snapshot(
     if isinstance(request_state, dict) and request_state:
         pending_action["requestState"] = request_state
     pending_action["checksum"] = _compute_snapshot_checksum(pending_action)
+    pointer_state = _runtime_pointer_state(task_id, agent_run_id, request_state if isinstance(request_state, dict) else {})
     resume_message = (
         f"Resume task {task_id}: execute {len(pending_tool_calls)} pending tool call(s) "
         f"from round {round_index}, then continue agent loop."
@@ -708,6 +831,11 @@ def save_pending_tool_calls_snapshot(
         safeStopReason="safe-shutdown-pending-tool-calls",
         createdAt=utc_now(),
         safeToPause=True,
+        currentNodeId=pointer_state["currentNodeId"],
+        workingNodeAnnotation=pointer_state["workingNodeAnnotation"],
+        pcMemo=pointer_state["pcMemo"],
+        topFrameId=pointer_state["topFrameId"],
+        stackDigest=pointer_state["stackDigest"],
         blockers=[],
     )
 

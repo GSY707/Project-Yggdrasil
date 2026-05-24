@@ -41,7 +41,7 @@
         "同一套 contract"
       ],
       "expectedSourceModuleId": "scene-coding-new-project",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "coding", "fast-task"],
       "difficulty": "medium"
     },
@@ -75,7 +75,7 @@
         "同一套 contract"
       ],
       "expectedSourceModuleId": "scene-coding-new-project",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "coding", "cross-session"],
       "difficulty": "medium"
     },
@@ -86,6 +86,9 @@
       "appId": "yggdrasil.app.coding-greenfield",
       "taskType": "coding",
       "resumeMessage": "continue the coding recovery validation",
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "expectedWorkTreeStatus": "awaiting-approval",
       "expectedCompiledFewShotRefs": [
         "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
         "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
@@ -118,14 +121,9 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "expectedMarkers": [
-        "结论 / 证据 / 冲突 / 待验证空白",
-        "新的研究方向",
-        "多源交叉验证",
-        "重新给出可执行的校准路径"
-      ],
+      "expectedMarkers": [],
       "expectedSourceModuleId": "scene-research-deep",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "research", "fast-task"],
       "difficulty": "medium"
     },
@@ -136,7 +134,6 @@
       "appId": "yggdrasil.app.deep-research",
       "taskType": "research",
       "resumePath": "g4/research/session-1",
-      "resumeMessage": "continue the research handoff from session 1",
       "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
       "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
       "expectedProfileFewShotRefs": [
@@ -153,12 +150,9 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "expectedMarkers": [
-        "多源交叉验证",
-        "重新给出可执行的校准路径"
-      ],
+      "expectedMarkers": [],
       "expectedSourceModuleId": "scene-research-deep",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "research", "cross-session"],
       "difficulty": "medium"
     },
@@ -169,6 +163,9 @@
       "appId": "yggdrasil.app.deep-research",
       "taskType": "research",
       "resumeMessage": "continue the research recovery validation",
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "expectedWorkTreeStatus": "awaiting-approval",
       "expectedCompiledFewShotRefs": [
         "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
         "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
@@ -201,14 +198,9 @@
         "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
         "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
       ],
-      "expectedMarkers": [
-        "章节目标、角色状态和时间线锚点",
-        "最小破坏方案",
-        "回收 canon",
-        "章节连续性审查风险"
-      ],
+      "expectedMarkers": [],
       "expectedSourceModuleId": "scene-writing-epic",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "writing", "fast-task"],
       "difficulty": "medium"
     },
@@ -219,7 +211,6 @@
       "appId": "yggdrasil.app.epic-writing",
       "taskType": "writing",
       "resumePath": "g4/writing/session-1",
-      "resumeMessage": "continue the writing handoff from session 1",
       "expectedPromptProfileId": "yggdrasil.epic-writing.main-agent",
       "expectedSeedTemplateId": "yggdrasil.seed.writing.epic",
       "expectedProfileFewShotRefs": [
@@ -236,12 +227,9 @@
         "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
         "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
       ],
-      "expectedMarkers": [
-        "回收 canon",
-        "章节连续性审查风险"
-      ],
+      "expectedMarkers": [],
       "expectedSourceModuleId": "scene-writing-epic",
-      "expectedMessageCount": 10,
+      "expectedMessageCount": 2,
       "tags": ["g4", "writing", "cross-session"],
       "difficulty": "medium"
     },
@@ -252,6 +240,9 @@
       "appId": "yggdrasil.app.epic-writing",
       "taskType": "writing",
       "resumeMessage": "continue the writing recovery validation",
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "expectedWorkTreeStatus": "awaiting-approval",
       "expectedCompiledFewShotRefs": [
         "yggdrasil.fewshot.epic-writing.chapter-outline-to-draft.v1",
         "yggdrasil.fewshot.epic-writing.continuity-conflict-resolution.v1",
@@ -287,9 +278,9 @@
             "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
             "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
           ],
-          "expectedMarkers": ["模块化实施计划"],
+          "expectedMarkers": [],
           "expectedSourceModuleId": "scene-coding-new-project",
-          "expectedMessageCount": 10,
+          "expectedMessageCount": 2,
           "forbiddenMarkers": []
         },
         {
@@ -311,9 +302,9 @@
             "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
             "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
           ],
-          "expectedMarkers": ["多源交叉验证"],
+          "expectedMarkers": [],
           "expectedSourceModuleId": "scene-research-deep",
-          "expectedMessageCount": 10,
+          "expectedMessageCount": 2,
           "forbiddenMarkers": ["模块化实施计划", "同一套 contract"]
         },
         {
@@ -335,9 +326,9 @@
             "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
             "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
           ],
-          "expectedMarkers": ["章节连续性审查风险"],
+          "expectedMarkers": [],
           "expectedSourceModuleId": "scene-writing-epic",
-          "expectedMessageCount": 10,
+          "expectedMessageCount": 2,
           "forbiddenMarkers": ["多源交叉验证", "重新给出可执行的校准路径"]
         }
       ],

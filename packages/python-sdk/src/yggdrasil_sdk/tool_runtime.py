@@ -135,6 +135,18 @@ def _load_tool_callable(implementation_ref: str) -> Any:
     return getattr(module, attribute_name)
 
 
+def _source_work_tree_node_id(root_mount: dict[str, Any]) -> str | None:
+    direct_value = str(root_mount.get("currentNodeId") or "").strip()
+    if direct_value:
+        return direct_value
+    takeover_protocol = root_mount.get("takeoverProtocol") if isinstance(root_mount.get("takeoverProtocol"), dict) else {}
+    work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
+    work_tree_current_node_id = str(work_tree.get("currentNodeId") or "").strip()
+    if work_tree_current_node_id:
+        return work_tree_current_node_id
+    return None
+
+
 def execute_registered_tool(
     tool_name: str,
     arguments: dict[str, Any],
@@ -163,6 +175,7 @@ def execute_registered_tool(
         "taskGoal": getattr(task, "goal", None),
         "currentFocus": getattr(task, "current_focus", None),
         "currentObjective": getattr(task, "current_objective", None),
+        "sourceWorkTreeNodeId": _source_work_tree_node_id(root_mount),
         "rootMount": root_mount,
         "currentContext": current_context,
         "activeCapabilities": list(root_mount.get("activeCapabilities") or []),

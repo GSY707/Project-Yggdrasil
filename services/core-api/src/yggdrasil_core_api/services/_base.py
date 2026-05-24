@@ -70,8 +70,13 @@ from yggdrasil_sdk.persistence.orm import (
     TaskSnapshotORM,
 )
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
+from yggdrasil_sdk.runtime_kernel import approve_task_completion as approve_runtime_task_completion
+from yggdrasil_sdk.runtime_kernel import post_task_mailbox_message as post_runtime_task_mailbox_message
 from yggdrasil_sdk.runtime_kernel import queue_main_agent_execution as queue_runtime_task_execution
+from yggdrasil_sdk.runtime_kernel import record_task_side_channel_event as post_runtime_side_channel_event
+from yggdrasil_sdk.runtime_kernel import request_task_revision as request_runtime_task_revision
 from yggdrasil_sdk.runtime_kernel import request_task_pause as request_runtime_task_pause
+from yggdrasil_sdk.runtime_kernel.takeover import load_persisted_task_takeover_protocol
 from yggdrasil_sdk.support import read_json
 
 

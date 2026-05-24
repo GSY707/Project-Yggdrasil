@@ -123,6 +123,12 @@ class RuntimeRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def _task_and_project(self, task_id: str) -> tuple[TaskORM, str]:
+        task = self.session.get(TaskORM, task_id)
+        if task is None:
+            raise KeyError(f"Task {task_id} not found.")
+        return task, task.project_id
+
     def create_model_route_decision(self, payload: dict[str, Any]) -> ModelRouteDecision:
         task_id = str(payload.get("taskId")) if payload.get("taskId") is not None else None
         agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
@@ -313,6 +319,176 @@ class RuntimeRepository:
         if status:
             statement = statement.where(ModelInvocationORM.status == status)
         return [_model_invocation_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def create_mailbox_message(self, payload: dict[str, Any]) -> MailboxMessageRecord:
+        task_id = str(payload.get("taskId") or "").strip()
+        if not task_id:
+            raise KeyError("Mailbox message requires taskId.")
+        task, project_id = self._task_and_project(task_id)
+        agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
+        if agent_run_id is not None and self.session.get(AgentRunORM, agent_run_id) is None:
+            raise KeyError(f"Agent run {agent_run_id} not found.")
+        sender = _actor(payload.get("sender") or payload.get("createdBy") or {"type": "agent", "id": "system"})
+        record = MailboxMessageRecord(
+            id=str(payload.get("id") or new_id("mailbox", task_id, utc_now().isoformat())),
+            projectId=str(payload.get("projectId") or project_id),
+            taskId=task.id,
+            agentRunId=agent_run_id,
+            sender=sender,
+            messageKind=str(payload.get("messageKind") or "message"),
+            subject=str(payload.get("subject") or payload.get("messageKind") or "Mailbox message"),
+            body=str(payload.get("body") or payload.get("summary") or payload.get("subject") or ""),
+            workTreeNodeId=str(payload.get("workTreeNodeId")) if payload.get("workTreeNodeId") is not None else None,
+            wakeOnMessage=bool(payload.get("wakeOnMessage", True)),
+            status=str(payload.get("status") or "pending"),
+            payloadRef=_external_ref(payload.get("payloadRef")),
+            createdAt=payload.get("createdAt") or utc_now(),
+            deliveredAt=payload.get("deliveredAt"),
+            acknowledgedAt=payload.get("acknowledgedAt"),
+        )
+        model = MailboxMessageORM(
+            id=record.id,
+            project_id=record.project_id,
+            task_id=record.task_id,
+            agent_run_id=record.agent_run_id,
+            sender=record.sender.model_dump(mode="json"),
+            message_kind=record.message_kind,
+            subject=record.subject,
+            body=record.body,
+            work_tree_node_id=record.work_tree_node_id,
+            wake_on_message=record.wake_on_message,
+            status=record.status,
+            payload_ref=record.payload_ref.model_dump(mode="json") if record.payload_ref is not None else None,
+            created_at=record.created_at,
+            delivered_at=record.delivered_at,
+            acknowledged_at=record.acknowledged_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _mailbox_message_record(model)
+
+    def list_mailbox_messages(
+        self,
+        *,
+        task_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[MailboxMessageRecord]:
+        statement = sa.select(MailboxMessageORM).order_by(MailboxMessageORM.created_at.asc()).limit(limit)
+        if task_id:
+            statement = statement.where(MailboxMessageORM.task_id == task_id)
+        if status:
+            statement = statement.where(MailboxMessageORM.status == status)
+        return [_mailbox_message_record(model) for model in self.session.execute(statement).scalars().all()]
+
+    def update_mailbox_message_status(
+        self,
+        *,
+        task_id: str,
+        message_ids: list[str],
+        status: str,
+    ) -> list[MailboxMessageRecord]:
+        if not message_ids:
+            return []
+        statement = (
+            sa.select(MailboxMessageORM)
+            .where(MailboxMessageORM.task_id == task_id)
+            .where(MailboxMessageORM.id.in_(message_ids))
+            .order_by(MailboxMessageORM.created_at.asc())
+        )
+        models = self.session.execute(statement).scalars().all()
+        now = utc_now()
+        for model in models:
+            model.status = status
+            if status == "delivered":
+                model.delivered_at = now
+            if status == "acknowledged":
+                model.acknowledged_at = now
+                model.delivered_at = model.delivered_at or now
+        self.session.flush()
+        return [_mailbox_message_record(model) for model in models]
+
+    def get_mailbox_state(self, task_id: str) -> dict[str, Any]:
+        self._task_and_project(task_id)
+        pending_count = int(
+            self.session.execute(
+                sa.select(sa.func.count())
+                .select_from(MailboxMessageORM)
+                .where(MailboxMessageORM.task_id == task_id)
+                .where(MailboxMessageORM.status == "pending")
+            ).scalar_one()
+            or 0
+        )
+        wake_on_message = any(
+            bool(item)
+            for item in self.session.execute(
+                sa.select(MailboxMessageORM.wake_on_message)
+                .where(MailboxMessageORM.task_id == task_id)
+                .where(MailboxMessageORM.status == "pending")
+                .limit(32)
+            ).scalars().all()
+        )
+        return {
+            "status": "pending" if pending_count > 0 else "idle",
+            "pendingCount": pending_count,
+            "wakeOnMessage": wake_on_message if pending_count > 0 else True,
+        }
+
+    def create_side_channel_event(self, payload: dict[str, Any]) -> SideChannelEventRecord:
+        task_id = str(payload.get("taskId") or "").strip()
+        if not task_id:
+            raise KeyError("Side-channel event requires taskId.")
+        task, project_id = self._task_and_project(task_id)
+        agent_run_id = str(payload.get("agentRunId")) if payload.get("agentRunId") is not None else None
+        if agent_run_id is not None and self.session.get(AgentRunORM, agent_run_id) is None:
+            raise KeyError(f"Agent run {agent_run_id} not found.")
+        source = _actor(payload.get("source") or payload.get("createdBy") or {"type": "agent", "id": "system"})
+        record = SideChannelEventRecord(
+            id=str(payload.get("id") or new_id("side", task_id, utc_now().isoformat())),
+            projectId=str(payload.get("projectId") or project_id),
+            taskId=task.id,
+            agentRunId=agent_run_id,
+            source=source,
+            eventKind=str(payload.get("eventKind") or "notification"),
+            level=str(payload.get("level") or "info"),
+            summary=str(payload.get("summary") or payload.get("body") or payload.get("eventKind") or ""),
+            workTreeNodeId=str(payload.get("workTreeNodeId")) if payload.get("workTreeNodeId") is not None else None,
+            payloadRef=_external_ref(payload.get("payloadRef")),
+            createdAt=payload.get("createdAt") or utc_now(),
+        )
+        model = SideChannelEventORM(
+            id=record.id,
+            project_id=record.project_id,
+            task_id=record.task_id,
+            agent_run_id=record.agent_run_id,
+            source=record.source.model_dump(mode="json"),
+            event_kind=record.event_kind,
+            level=record.level,
+            summary=record.summary,
+            work_tree_node_id=record.work_tree_node_id,
+            payload_ref=record.payload_ref.model_dump(mode="json") if record.payload_ref is not None else None,
+            created_at=record.created_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return _side_channel_event_record(model)
+
+    def list_side_channel_events(
+        self,
+        *,
+        task_id: str | None = None,
+        agent_run_id: str | None = None,
+        level: str | None = None,
+        limit: int = 100,
+    ) -> list[SideChannelEventRecord]:
+        statement = sa.select(SideChannelEventORM).order_by(SideChannelEventORM.created_at.desc()).limit(limit)
+        if task_id:
+            statement = statement.where(SideChannelEventORM.task_id == task_id)
+        if agent_run_id:
+            statement = statement.where(SideChannelEventORM.agent_run_id == agent_run_id)
+        if level:
+            statement = statement.where(SideChannelEventORM.level == level)
+        return [_side_channel_event_record(model) for model in self.session.execute(statement).scalars().all()]
 
 class OutboxRepository:
     def __init__(self, session: Session) -> None:

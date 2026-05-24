@@ -288,6 +288,11 @@ class TaskRepository:
                 created_at=summary.created_at,
                 consumed_at=None,
                 safe_to_pause=summary.safe_to_pause,
+                current_node_id=summary.current_node_id,
+                working_node_annotation=summary.working_node_annotation,
+                pc_memo=summary.pc_memo,
+                top_frame_id=summary.top_frame_id,
+                stack_digest=summary.stack_digest,
                 blockers=list(summary.blockers),
             )
             self.session.add(snapshot)

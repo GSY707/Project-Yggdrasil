@@ -10,9 +10,12 @@ from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
 from yggdrasil_context_pruning.plugin import ContextPruningModule
 from yggdrasil_sdk import PromptAssetRepository, TaskRepository, get_persistence_runtime, resolve_workspace_root
+from yggdrasil_sdk.contracts import TaskSnapshotSummary
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.orm import RetrievalRequestORM
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
+from yggdrasil_sdk.runtime_kernel import post_task_mailbox_message
+from yggdrasil_sdk.support import new_id, utc_now
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 import yggdrasil_sdk.runtime_kernel.execution_loop_part_b as runtime_execution_loop_part_b
 from yggdrasil_worker.registry import run_worker_once
@@ -20,6 +23,365 @@ from yggdrasil_worker.registry import run_worker_once
 
 client = TestClient(runtime_app)
 pytestmark = pytest.mark.slow
+
+
+def test_main_agent_start_without_active_work_enters_standby_without_running_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_start_standby",
+                "title": "冷启动待机",
+                "goal": "",
+                "status": "draft",
+            }
+        )
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append(request_payload)
+        return {
+            "assistantText": "不应执行到模型调用。",
+            "invocation": {
+                "id": "inv_start_standby_1",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_start_standby",
+                "traceId": "trace_start_standby",
+            },
+            "usage": {
+                "inputTokens": 1,
+                "outputTokens": 1,
+                "totalTokens": 2,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    started = client.post("/runtime/tasks/task_start_standby/start", json={})
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "standby"
+    assert processed["result"]["rootMount"]["startupMode"] == "standby"
+    assert invoke_calls == []
+
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        task = task_repository.get_task("task_start_standby")
+        runs = task_repository.list_agent_runs("task_start_standby")
+        assert task is not None
+        assert task.status == "queued"
+        assert runs == []
+
+
+def test_main_agent_start_with_current_work_node_uses_resume_node_startup_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_start_resume_node",
+                "title": "热启动恢复当前节点",
+                "goal": "验证 start 路径在已有工作节点时直接进入当前节点而不是回退 bootstrap。",
+                "status": "draft",
+                "currentObjective": "继续执行 node-run。",
+                "currentFocus": "node-run",
+                "resumeMessage": "继续沿当前节点执行。",
+                "budgetState": {
+                    "tokenBudgetTotal": 1200,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append(request_payload)
+        return {
+            "assistantText": "已沿当前工作节点继续执行。",
+            "invocation": {
+                "id": "inv_start_resume_node_1",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_start_resume_node",
+                "traceId": "trace_start_resume_node",
+            },
+            "usage": {
+                "inputTokens": 48,
+                "outputTokens": 20,
+                "totalTokens": 68,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    started = client.post(
+        "/runtime/tasks/task_start_resume_node/start",
+        json={
+            "currentObjective": "继续执行 node-run。",
+            "currentFocus": "node-run",
+            "currentNodeId": "node-run",
+            "workingNodeAnnotation": "<Working_Node: node-run>",
+            "pcMemo": "continue:node-run",
+            "takeoverProtocol": {
+                "id": "takeover_start_resume_node",
+                "version": "0.1.0",
+                "taskId": "task_start_resume_node",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "execute",
+                "status": "prepared",
+                "objective": "继续执行 node-run。",
+                "objectiveSummary": "继续执行 node-run。",
+                "ambiguities": [],
+                "constraints": [],
+                "plan": [],
+                "workTree": {
+                    "version": "0.1.0",
+                    "rootObjective": "继续执行 node-run。",
+                    "status": "active",
+                    "currentNodeId": "node-run",
+                    "nodes": [
+                        {
+                            "id": "node-run",
+                            "title": "继续执行 node-run",
+                            "phase": "executing",
+                            "status": "in-progress",
+                            "planStepIds": [],
+                            "constraintIds": [],
+                            "dependsOn": [],
+                            "expectedEvidence": [],
+                            "recoveryAnchor": "resume:node-run",
+                        }
+                    ],
+                    "recoveryAnchor": "resume:node-run",
+                    "entropyBudgetRemaining": 9,
+                },
+                "deliverySections": [],
+                "verificationItems": [],
+                "metrics": {
+                    "planQualityScore0_100": 91.0,
+                    "reworkCount": 0,
+                    "reworkRate": 0.0,
+                    "clarificationNeeded": False,
+                    "deliveryCompletenessScore0_100": 0.0,
+                    "verificationPassRate": 0.0,
+                },
+                "appliedModules": ["task-takeover"],
+                "hookTrace": [],
+            },
+            "currentContext": [
+                {
+                    "id": "ctx_resume_node",
+                    "title": "继续当前节点",
+                    "content": "当前任务已经有稳定工作节点，应直接恢复而不是重建初始计划。",
+                    "importance": 0.9,
+                }
+            ],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert len(invoke_calls) == 1, processed["result"].get("detail")
+    assert invoke_calls[0]["startupMode"] == "resume-node"
+    assert invoke_calls[0]["currentNodeId"] == "node-run"
+    assert invoke_calls[0]["workingNodeAnnotation"] == "<Working_Node: node-run>"
+    assert invoke_calls[0]["memoryRetrievalState"]["workTreeNodeId"] == "node-run"
+
+    with runtime.session_scope() as session:
+        retrieval_requests = session.execute(sa.select(RetrievalRequestORM).order_by(RetrievalRequestORM.created_at.asc())).scalars().all()
+        assert any(record.work_tree_node_id == "node-run" for record in retrieval_requests)
+
+
+def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_mailbox_wake",
+                "title": "邮箱唤醒待机任务",
+                "goal": "",
+                "status": "queued",
+            }
+        )
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append(request_payload)
+        return {
+            "assistantText": "result: 已消费 mailbox 消息并继续主循环。 evidence: mailbox 消息已注入上下文并消费。 pending: 无。 incomplete: 无。",
+            "invocation": {
+                "id": "inv_mailbox_wake_1",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_mailbox_wake",
+                "traceId": "trace_mailbox_wake",
+            },
+            "usage": {
+                "inputTokens": 32,
+                "outputTokens": 16,
+                "totalTokens": 48,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    delivered = post_task_mailbox_message(
+        "task_mailbox_wake",
+        {
+            "sender": {"type": "agent", "id": "subagent"},
+            "messageKind": "subagent-completion",
+            "subject": "Summarize child result",
+            "body": "Child finished and needs parent synthesis.",
+            "wakeOnMessage": True,
+        },
+    )
+    assert delivered["mailboxState"]["pendingCount"] == 1
+    assert delivered["wakeResult"]["status"] == "queued"
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "awaiting-approval"
+    assert len(invoke_calls) == 1
+    assert invoke_calls[0]["startupMode"] == "bootstrap"
+    assert any(item.get("kind") == "mailbox-message" for item in invoke_calls[0]["currentContext"])
+
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        task = task_repository.get_task("task_mailbox_wake")
+        messages = runtime_repository.list_mailbox_messages(task_id="task_mailbox_wake", limit=10)
+        assert task is not None
+        assert task.status == "awaiting-approval"
+        assert messages[0].status == "delivered"
+
+
+def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task = task_repository.create_task(
+            {
+                "id": "task_corrupted_snapshot",
+                "title": "损坏快照恢复拒绝",
+                "goal": "验证损坏 snapshot 会拒绝恢复并保留错误原因。",
+                "status": "paused",
+                "resumeMessage": "尝试从损坏快照恢复。",
+            }
+        )
+        run = task_repository.create_agent_run(
+            task.id,
+            {
+                "id": "run_corrupted_snapshot",
+                "status": "paused",
+                "selectedModel": "gpt-5.4",
+                "selectedProvider": "copilot",
+            },
+        )
+        snapshot = task_repository.create_snapshot(
+            TaskSnapshotSummary(
+                id="snapshot_corrupted_resume",
+                appId=task.app_id,
+                taskId=task.id,
+                agentRunId=run.id,
+                projectId=task.project_id,
+                branchId=task.branch_id,
+                snapshotType="restart",
+                status="restorable",
+                resumeToken=new_id("resume", task.id, run.id),
+                contextRef={"type": "package-entry", "locator": f"runtime/tasks/{task.id}/snapshots/{run.id}/context"},
+                rootMountRef={"type": "package-entry", "locator": f"runtime/tasks/{task.id}/snapshots/{run.id}/root-mount"},
+                pendingWrites=[],
+                pendingActions=[
+                    {
+                        "kind": "window-restart",
+                        "sourceWindowIndex": 1,
+                        "targetWindowIndex": 2,
+                        "requestState": {
+                            "currentNodeId": "node-corrupted",
+                            "workingNodeAnnotation": "<Working_Node: node-corrupted>",
+                        },
+                        "checksum": "broken-checksum",
+                    }
+                ],
+                resumeMessage="继续恢复损坏快照。",
+                safeStopReason="context-window-restart",
+                createdAt=utc_now(),
+                safeToPause=True,
+                blockers=[],
+            )
+        )
+        task_repository.update_task(
+            task.id,
+            {
+                "status": "paused",
+                "activeSnapshotId": snapshot.id,
+                "pauseRequested": False,
+            },
+        )
+
+    resumed = client.post(
+        "/runtime/tasks/task_corrupted_snapshot/resume",
+        json={"resumeToken": snapshot.resume_token},
+    )
+    assert resumed.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "failed"
+    assert "snapshot integrity check failed" in str(processed["result"]["detail"]).lower()
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        refreshed_task = task_repository.get_task("task_corrupted_snapshot")
+        refreshed_snapshot = task_repository.get_snapshot("snapshot_corrupted_resume")
+        assert refreshed_task is not None
+        assert refreshed_task.status == "failed"
+        assert refreshed_snapshot is not None
+        assert refreshed_snapshot.status == "created"
+        assert len(refreshed_snapshot.blockers) == 1
+        assert refreshed_snapshot.blockers[0].startswith("snapshot-corrupted:checksum-mismatch: expected=broken-checksum, actual=")
 
 def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
@@ -48,6 +410,13 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
         invoke_calls.append({
             "resumeMessage": request_payload.get("resumeMessage"),
             "restartMetrics": request_payload.get("runtimeMetrics"),
+            "currentNodeId": request_payload.get("currentNodeId"),
+            "workingNodeAnnotation": request_payload.get("workingNodeAnnotation"),
+            "retrievalWorkTreeNodeId": (
+                request_payload.get("memoryRetrievalState", {}).get("workTreeNodeId")
+                if isinstance(request_payload.get("memoryRetrievalState"), dict)
+                else None
+            ),
         })
         return {
             "assistantText": "已根据 carry-forward package 继续执行并完成当前窗口目标。",
@@ -99,49 +468,16 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
 
     first_run = run_worker_once("agent-runtime")
     assert first_run["status"] == "processed"
-    assert first_run["result"]["status"] == "restarting"
-    assert first_run["result"]["snapshot"]["snapshotType"] == "restart"
-    assert first_run["result"]["queuedWorkItem"]["command"] == "resume"
-    restart_window_artifact = first_run["result"]["windowExecutionArtifact"]
-    restart_window_path = Path(resolve_workspace_root()) / restart_window_artifact["artifactRef"]["locator"]
-    restart_window_payload = json.loads(restart_window_path.read_text(encoding="utf-8"))
-    assert restart_window_payload["transitionOutcome"] == "restart-requested"
-    assert restart_window_payload["restartTrigger"] == "effectiveContextWindow"
-    assert restart_window_payload["targetSnapshotId"] == first_run["result"]["snapshot"]["id"]
-    assert restart_window_payload["windowIndex"] == 1
-    restart_request_state = next(
-        action["requestState"]
-        for action in first_run["result"]["snapshot"]["pendingActions"]
-        if isinstance(action, dict) and action.get("kind") == "runtime-request-state"
-    )
-    restart_context = client.get(
-        "/runtime/package-entry",
-        params={"locator": first_run["result"]["snapshot"]["contextRef"]["locator"]},
-    )
-    assert restart_context.status_code == 200
-    restart_carry_forward = restart_context.json()["payload"][0]
-    assert restart_request_state["memoryRetrievalState"]["requestId"]
-    assert restart_request_state["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
-    assert restart_carry_forward["pointerPackage"]["handoffMode"] == "execution-pointer"
-    assert restart_carry_forward["pointerPackage"]["workTreeCurrentNodeId"] is not None
-    assert restart_carry_forward["pointerPackage"]["retrievalFingerprint"] is not None
-    assert "Carry-forward execution pointer W1 -> W2" in restart_carry_forward["content"]
+    assert first_run["result"]["status"] == "failed"
+    assert "restart is deprecated" in str(first_run["result"].get("detail") or "")
     assert invoke_calls == []
 
-    second_run = run_worker_once("agent-runtime")
-    assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] == "completed"
-    assert len(invoke_calls) == 1
-    completed_window_artifact = second_run["result"]["windowExecutionArtifact"]
-    completed_window_path = Path(resolve_workspace_root()) / completed_window_artifact["artifactRef"]["locator"]
-    completed_window_payload = json.loads(completed_window_path.read_text(encoding="utf-8"))
-    assert completed_window_payload["transitionOutcome"] == "completed"
-    assert completed_window_payload["windowIndex"] == 2
-    assert completed_window_payload["memoryRetrievalState"]["requestId"] is not None
-    assert completed_window_payload["workTreeCurrentNodeId"] is not None
-    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["memoryRetrievalState"]["requestId"]
-    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["memoryRetrievalState"]["summary"] is not None
-    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
+    failed_window_artifact = first_run["result"]["windowExecutionArtifact"]
+    failed_window_path = Path(resolve_workspace_root()) / failed_window_artifact["artifactRef"]["locator"]
+    failed_window_payload = json.loads(failed_window_path.read_text(encoding="utf-8"))
+    assert failed_window_payload["transitionOutcome"] == "failed-window-overflow"
+    assert failed_window_payload["restartTrigger"] == "effectiveContextWindow"
+    assert failed_window_payload["windowIndex"] == 1
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -149,17 +485,148 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
         task = task_repository.get_task("task_window_restart")
         runs = task_repository.list_agent_runs("task_window_restart")
         assert task is not None
-        assert task.status == "completed"
-        assert task.restart_count == 1
-        assert task.window_index == 2
-        assert task.cumulative_window_span_tokens >= 120
-        assert len(runs) == 2
-        run_by_window_index = {run.window_index: run for run in runs}
-        previous_run = run_by_window_index[1]
-        latest_run = run_by_window_index[2]
-        assert latest_run.parent_run_id == previous_run.id
-        assert latest_run.window_index == 2
-        assert previous_run.window_index == 1
+        assert task.status == "failed"
+        assert task.window_index == 1
+        assert len(runs) == 1
+        assert runs[0].status == "failed"
+
+
+def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current_focus(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_retrieval_work_tree_focus",
+                "title": "retrieval 使用工作树焦点",
+                "goal": "验证 stale currentFocus 不会压过 work tree 当前节点。",
+                "status": "draft",
+                "currentObjective": "继续执行当前工作树节点。",
+                "currentFocus": "stale-ui-focus",
+                "budgetState": {
+                    "tokenBudgetTotal": 1200,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append(
+            {
+                "currentFocus": request_payload.get("currentFocus"),
+                "currentNodeId": request_payload.get("currentNodeId"),
+                "workingNodeAnnotation": request_payload.get("workingNodeAnnotation"),
+                "retrievalWorkTreeNodeId": (
+                    request_payload.get("memoryRetrievalState", {}).get("workTreeNodeId")
+                    if isinstance(request_payload.get("memoryRetrievalState"), dict)
+                    else None
+                ),
+                "retrievalSummary": (
+                    request_payload.get("memoryRetrievalState", {}).get("summary")
+                    if isinstance(request_payload.get("memoryRetrievalState"), dict)
+                    else None
+                ),
+            }
+        )
+        return {
+            "assistantText": "result: 已沿当前工作树节点继续执行。 evidence: 已完成。 pending: 无。 incomplete: 无。",
+            "invocation": {
+                "id": "inv_retrieval_work_tree_focus",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_retrieval_work_tree_focus",
+                "traceId": "trace_retrieval_work_tree_focus",
+            },
+            "usage": {"inputTokens": 64, "outputTokens": 32, "totalTokens": 96},
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {"compilePromptMs": 0.0, "modelToolLoopMs": 0.0},
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    started = client.post(
+        "/runtime/tasks/task_retrieval_work_tree_focus/start",
+        json={
+            "currentFocus": "stale-ui-focus",
+            "currentObjective": "继续执行当前工作树节点。",
+            "takeoverProtocol": {
+                "id": "takeover_task_retrieval_work_tree_focus",
+                "version": "0.2.0",
+                "taskId": "task_retrieval_work_tree_focus",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "execute",
+                "status": "executing",
+                "objective": "继续执行当前工作树节点。",
+                "objectiveSummary": "让 retrieval 与运行时指针使用 work tree。",
+                "ambiguities": [],
+                "constraints": [],
+                "plan": [],
+                "workTree": {
+                    "version": "0.2.0",
+                    "id": "work_tree_task_retrieval_work_tree_focus",
+                    "taskId": "task_retrieval_work_tree_focus",
+                    "rootNodeId": "root",
+                    "rootObjective": "继续执行当前工作树节点。",
+                    "status": "active",
+                    "currentNodeId": "child-focus",
+                    "loadedNodeIds": ["root", "child-focus"],
+                    "activePathNodeIds": ["root", "child-focus"],
+                    "pcMemo": "continue:child-focus",
+                    "entropyBudgetRemaining": 8,
+                    "versionCounter": 1,
+                    "nodes": [
+                        {
+                            "id": "root",
+                            "title": "根节点",
+                            "parentNodeId": None,
+                            "questionsItAnswers": ["最终交付是什么"],
+                            "nodeText": "根节点。",
+                            "localGoal": "根节点。",
+                            "workingNodeAnnotation": "<Working_Node: root>",
+                            "phase": "delivery",
+                            "status": "in-progress",
+                            "childNodeIds": ["child-focus"],
+                            "detailLevel": 0,
+                            "recoveryAnchor": "resume:root",
+                        },
+                        {
+                            "id": "child-focus",
+                            "title": "真实当前节点",
+                            "parentNodeId": "root",
+                            "questionsItAnswers": ["当前应执行什么"],
+                            "nodeText": "真实当前工作节点。",
+                            "localGoal": "继续执行真实当前工作节点。",
+                            "workingNodeAnnotation": "<Working_Node: child-focus>",
+                            "phase": "executing",
+                            "status": "in-progress",
+                            "childNodeIds": [],
+                            "detailLevel": 1,
+                            "recoveryAnchor": "resume:child-focus",
+                        },
+                    ],
+                },
+            },
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "continuing"
+    assert len(invoke_calls) == 1
+    assert invoke_calls[0]["currentFocus"] != "stale-ui-focus"
+    assert isinstance(invoke_calls[0]["workingNodeAnnotation"], str)
+    assert invoke_calls[0]["workingNodeAnnotation"].startswith("<Working_Node:")
+    assert invoke_calls[0]["retrievalWorkTreeNodeId"] is not None
+    assert invoke_calls[0]["retrievalSummary"] is not None
 
 
 def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
@@ -261,6 +728,12 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         assert artifact.app_id == DEFAULT_APP_ID
         assert artifact.prompt_profile_version_id
         assert artifact.compiled_messages_ref is not None
+        assert set(artifact.boot_sections.keys()) == {
+            "physical_interface",
+            "world_roots",
+            "behavior_constitution",
+            "scene_recovery",
+        }
         assert artifact.work_tree_snapshot is not None
         assert artifact.takeover_protocol_snapshot is not None
         assert artifact.work_tree_snapshot["currentNodeId"] is not None
@@ -277,7 +750,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         assert request_payload["promptMetadata"]["runType"] == "main"
         assert request_payload["promptMetadata"]["takeoverProtocol"]["objective"] == "完成首次执行并进入 safe-stop。"
         assert request_payload["promptMetadata"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
-        assert request_payload["promptMetadata"]["takeoverProtocol"]["workTree"]["status"] == "planned"
+        assert request_payload["promptMetadata"]["takeoverProtocol"]["workTree"]["status"] == "active"
         response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
         assert isinstance(response_payload["assistantText"], str)
@@ -313,7 +786,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
 
     second_run = run_worker_once("agent-runtime")
     assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] == "completed"
+    assert second_run["result"]["status"] == "awaiting-approval"
     assert second_run["result"]["runtimeTimings"]["totalMs"] >= 0
     assert second_run["result"]["resume"] is not None
     assert second_run["result"]["rehydration"] is not None
@@ -328,7 +801,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
         assert task is not None
-        assert task.status == "completed"
+        assert task.status == "awaiting-approval"
         assert task.active_snapshot_id is None
         runs = task_repository.list_agent_runs("task_runtime")
         assert len(runs) == 2
@@ -356,7 +829,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         ]
         assert len(execution_notes) == 2
     assert second_run["result"]["takeoverProtocol"] is not None
-    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "completed"
+    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
     assert second_run["result"]["takeoverProtocolRef"] is not None
 
 

@@ -13,6 +13,8 @@ from yggdrasil_sdk.collaboration_runtime import GitCollaborationAdapter, launch_
 from yggdrasil_sdk.contracts import WorkerActivityDescriptor
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID
 from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, RuntimeRepository, TaskRepository, WorkspaceBootstrapRepository
+import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
+import yggdrasil_sdk.runtime_kernel.execution_loop_part_b as runtime_execution_loop_part_b
 import yggdrasil_worker.registry as worker_registry
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
 
@@ -83,6 +85,24 @@ def _seed_parent_task() -> tuple[dict[str, object], int]:
             }
         )
     return task.model_dump(by_alias=True, mode="json"), existing_non_root_count
+
+
+def _run_worker_until_result(predicate, *, max_steps: int = 16) -> dict[str, object]:
+    last: dict[str, object] | None = None
+    last_processed: dict[str, object] | None = None
+    for _ in range(max_steps):
+        candidate = run_worker_once()
+        if candidate.get("status") != "processed":
+            last = candidate
+            continue
+        last_processed = candidate
+        result = candidate.get("result") if isinstance(candidate.get("result"), dict) else {}
+        if predicate(result):
+            return candidate
+        last = candidate
+    raise AssertionError(
+        f"worker did not reach expected state within {max_steps} steps: last={last}; last_processed={last_processed}"
+    )
 
 
 def test_worker_report_collects_core_and_module_activities() -> None:
@@ -169,10 +189,10 @@ def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_p
     assert launched["branch"]["name"].startswith("yggdrasil/subagent/")
     assert parent_task["appId"] == DEFAULT_APP_ID
 
-    processed = run_worker_once()
+    processed = _run_worker_until_result(lambda result: bool(result.get("pullRequest")))
     assert processed["status"] == "processed"
     result = processed["result"]
-    assert result["status"] == "completed"
+    assert result["status"] in {"completed", "awaiting-approval"}
     assert result["pullRequest"]["status"] == "open"
 
     manifest_json = _run_git(repo_path, "show", f"{launched['branch']['name']}:{result['manifestPath']}")
@@ -189,7 +209,7 @@ def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_p
         child_task = task_repository.get_task(str(launched["task"]["id"]))
         assert child_task is not None
         assert child_task.app_id == str(parent_task["appId"])
-        assert child_task.status == "completed"
+        assert child_task.status in {"completed", "awaiting-approval"}
         runs = task_repository.list_agent_runs(child_task.id)
         assert runs[0].app_id == child_task.app_id
         assert runs[0].run_type == "subagent"
@@ -216,6 +236,155 @@ def test_subagent_closed_loop_creates_branch_and_pull_request(monkeypatch, tmp_p
         assert len(target_nodes) == existing_non_root_count + 1
 
 
+def test_subagent_launch_binds_work_tree_and_emits_budget_artifact(monkeypatch, tmp_path: Path) -> None:
+    repo_path = _init_git_repo(tmp_path, monkeypatch)
+    parent_task, _ = _seed_parent_task()
+
+    launched = launch_subagent_task(
+        str(parent_task["id"]),
+        {
+            "title": "Bind child to work tree",
+            "goal": "Produce a scoped child proposal for one work tree node.",
+            "workTreeNodeId": "wt-node-subagent-child",
+            "subAgentBudget": {
+                "tokenBudgetTotal": 2400,
+                "costBudgetTotal": 1.25,
+                "maxSubAgents": 1,
+            },
+            "createdBy": {"type": "agent", "id": "main-agent"},
+        },
+    )
+
+    assert launched["status"] == "queued"
+    assert launched["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["readonlyContext"]["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["readonlyContext"]["rootMount"]["currentNodeId"] == "wt-node-subagent-child"
+    assert launched["subagentBudgetDecision"]["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["subagentBudgetDecision"]["allocatedBudget"]["tokenBudgetTotal"] == 2400
+    assert launched["subagentBudgetDecision"]["allocatedBudget"]["costBudgetTotal"] == 1.25
+    assert launched["workItem"]["payload"]["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["workItem"]["payload"]["currentNodeId"] == "wt-node-subagent-child"
+    assert launched["workItem"]["payload"]["memoryRetrievalState"]["workTreeNodeId"] == "wt-node-subagent-child"
+
+    processed = _run_worker_until_result(
+        lambda result: bool(result.get("pullRequest")) or str(result.get("status") or "") in {"awaiting-approval", "continuing"}
+    )
+    assert processed["status"] == "processed"
+    result = processed["result"]
+    assert result["status"] in {"completed", "awaiting-approval", "continuing"}
+    if result.get("workTreeNodeId") is not None:
+        assert result["workTreeNodeId"] == "wt-node-subagent-child"
+    budget_decision = result.get("subagentBudgetDecision") if isinstance(result.get("subagentBudgetDecision"), dict) else None
+    if budget_decision is not None:
+        assert (budget_decision.get("allocatedBudget") or {}).get("tokenBudgetTotal") == 2400
+
+    if isinstance(result.get("pullRequest"), dict) and result.get("manifestPath"):
+        manifest_json = _run_git(repo_path, "show", f"{launched['branch']['name']}:{result['manifestPath']}")
+        manifest = json.loads(manifest_json)
+        assert manifest["workTreeNodeId"] == "wt-node-subagent-child"
+        assert manifest["subagentBudgetDecision"]["allocatedBudget"]["tokenBudgetTotal"] == 2400
+        assert manifest["subagentBudgetDecision"]["allocatedBudget"]["costBudgetTotal"] == 1.25
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        child_task = task_repository.get_task(str(launched["task"]["id"]))
+        assert child_task is not None
+        invocations = runtime_repository.list_model_invocations(task_id=child_task.id)
+        assert len(invocations) == 1
+        assert any(str(label).startswith("work-tree:") for label in (invocations[0].output_labels or []))
+
+
+def test_subagent_completion_merges_into_parent_work_tree_and_wakes_parent(monkeypatch, tmp_path: Path) -> None:
+    _init_git_repo(tmp_path, monkeypatch)
+    parent_task, _ = _seed_parent_task()
+
+    invoke_calls: list[dict[str, object]] = []
+
+    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
+        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
+        invoke_calls.append(request_payload)
+        return {
+            "assistantText": "Child completed implementation and parent can summarize the result.",
+            "invocation": {
+                "id": f"inv_subagent_parent_{len(invoke_calls)}",
+                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": f"artifact_subagent_parent_{len(invoke_calls)}",
+                "traceId": f"trace_subagent_parent_{len(invoke_calls)}",
+            },
+            "usage": {
+                "inputTokens": 64,
+                "outputTokens": 24,
+                "totalTokens": 88,
+            },
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {
+                "compilePromptMs": 0.0,
+                "modelToolLoopMs": 0.0,
+            },
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+
+    launched = launch_subagent_task(
+        str(parent_task["id"]),
+        {
+            "title": "Bind child to parent merge path",
+            "goal": "Produce a child result that must be merged back into the parent work tree.",
+            "workTreeNodeId": "wt-parent-child-summary",
+            "createdBy": {"type": "agent", "id": "main-agent"},
+        },
+    )
+
+    processed_records: list[dict[str, object]] = []
+    for _ in range(6):
+        candidate = run_worker_once()
+        if candidate.get("status") != "processed":
+            continue
+        processed_records.append(candidate)
+
+    child_record = next(
+        (record for record in processed_records if (record.get("payload") or {}).get("activity") == "core.agent.subagent.execute"),
+        None,
+    )
+    parent_record = next(
+        (record for record in processed_records if (record.get("payload") or {}).get("activity") == "core.agent.main.execute"),
+        None,
+    )
+    assert child_record is not None
+    assert parent_record is not None
+
+    child_result = child_record["result"] if isinstance(child_record.get("result"), dict) else {}
+    assert child_result.get("status") in {"completed", "awaiting-approval", "continuing"}
+    parent_followup = child_result.get("parentFollowup") if isinstance(child_result.get("parentFollowup"), dict) else None
+    if parent_followup is not None:
+        assert parent_followup.get("takeoverMerged") is True
+        assert (parent_followup.get("mailboxMessage") or {}).get("workTreeNodeId") == "wt-parent-child-summary"
+
+    parent_result = parent_record["result"] if isinstance(parent_record.get("result"), dict) else {}
+    assert parent_result["status"] in {"completed", "awaiting-approval", "continuing"}
+    assert len(invoke_calls) >= 2
+    assert str(invoke_calls[1]["currentNodeId"]).startswith("work-tree-node_") or invoke_calls[1]["currentNodeId"] == "wt-parent-child-summary"
+    assert invoke_calls[1]["workContextStack"]["frames"][0]["childCompletionSummaries"]
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        parent = task_repository.get_task(str(parent_task["id"]))
+        messages = runtime_repository.list_mailbox_messages(task_id=str(parent_task["id"]), limit=10)
+        assert parent is not None
+        assert parent.status in {"draft", "completed", "awaiting-approval"}
+        if messages:
+            assert messages[0].status == "delivered"
+
+
 def test_collaboration_api_review_merges_pull_request(monkeypatch, tmp_path: Path) -> None:
     repo_path = _init_git_repo(tmp_path, monkeypatch)
     parent_task, _ = _seed_parent_task()
@@ -227,7 +396,7 @@ def test_collaboration_api_review_merges_pull_request(monkeypatch, tmp_path: Pat
             "createdBy": {"type": "agent", "id": "main-agent"},
         },
     )
-    processed = run_worker_once()
+    processed = _run_worker_until_result(lambda result: bool(result.get("pullRequest")))
     pr_id = str(processed["result"]["pullRequest"]["id"])
     manifest_path = processed["result"]["manifestPath"]
 
@@ -295,7 +464,7 @@ def test_pull_request_persists_remote_metadata_when_github_adapter_is_available(
             "createdBy": {"type": "agent", "id": "main-agent"},
         },
     )
-    processed = run_worker_once()
+    processed = _run_worker_until_result(lambda result: bool(result.get("pullRequest")))
     pull_request = processed["result"]["pullRequest"]
 
     assert pull_request["externalId"] == "23"

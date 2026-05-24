@@ -18,6 +18,12 @@ class TaskServiceMixin:
         request["command"] = "resume"
         return queue_runtime_task_execution(task_id, request)
 
+    def approve_task_completion(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return approve_runtime_task_completion(task_id, dict(payload or {}))
+
+    def request_task_revision(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return request_runtime_task_revision(task_id, dict(payload or {}))
+
     def get_task(self, task_id: str) -> dict[str, object]:
         with self.runtime.session_scope() as session:
             WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -30,13 +36,19 @@ class TaskServiceMixin:
             snapshots = task_repository.list_snapshots(task_id)
             decisions = runtime_repository.list_model_route_decisions(task_id=task_id)
             invocations = runtime_repository.list_model_invocations(task_id=task_id, limit=50)
+            mailbox_messages = runtime_repository.list_mailbox_messages(task_id=task_id, limit=50)
+            side_channel_events = runtime_repository.list_side_channel_events(task_id=task_id, limit=50)
+            mailbox_state = runtime_repository.get_mailbox_state(task_id)
         return {
             "task": task.model_dump(by_alias=True, mode="json"),
             "agentRuns": [run.model_dump(by_alias=True, mode="json") for run in runs],
             "snapshots": [snapshot.model_dump(by_alias=True, mode="json") for snapshot in snapshots],
-            "runtimeControl": self._task_runtime_control_summary(task, snapshots),
+            "runtimeControl": self._task_runtime_control_summary(task, snapshots, runs),
             "routeDecisions": [decision.model_dump(by_alias=True, mode="json") for decision in decisions],
             "modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations],
+            "mailboxState": mailbox_state,
+            "mailboxMessages": [message.model_dump(by_alias=True, mode="json") for message in mailbox_messages],
+            "sideChannelEvents": [event.model_dump(by_alias=True, mode="json") for event in side_channel_events],
         }
 
     def create_task(self, payload: dict[str, Any]) -> dict[str, object]:
@@ -105,6 +117,41 @@ class TaskServiceMixin:
                 limit=limit,
             )
         return {"modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations]}
+
+    def list_task_mailbox_messages(self, task_id: str, *, status: str | None = None, limit: int = 100) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            runtime_repository = RuntimeRepository(session)
+            messages = runtime_repository.list_mailbox_messages(task_id=task_id, status=status, limit=limit)
+            mailbox_state = runtime_repository.get_mailbox_state(task_id)
+        return {
+            "mailboxState": mailbox_state,
+            "mailboxMessages": [message.model_dump(by_alias=True, mode="json") for message in messages],
+        }
+
+    def post_task_mailbox_message(self, task_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        return post_runtime_task_mailbox_message(task_id, dict(payload or {}))
+
+    def list_task_side_channel_events(
+        self,
+        task_id: str,
+        *,
+        agent_run_id: str | None = None,
+        level: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        with self.runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            events = RuntimeRepository(session).list_side_channel_events(
+                task_id=task_id,
+                agent_run_id=agent_run_id,
+                level=level,
+                limit=limit,
+            )
+        return {"sideChannelEvents": [event.model_dump(by_alias=True, mode="json") for event in events]}
+
+    def post_task_side_channel_event(self, task_id: str, payload: dict[str, Any]) -> dict[str, object]:
+        return post_runtime_side_channel_event(task_id, dict(payload or {}))
 
     def create_route_decision(self, payload: dict[str, Any]) -> dict[str, object]:
         with self.runtime.session_scope() as session:

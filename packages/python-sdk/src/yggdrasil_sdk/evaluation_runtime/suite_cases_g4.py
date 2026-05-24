@@ -665,6 +665,9 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
     task_type = str(case_payload.get("taskType") or "generic")
     expected_few_shot_refs = [str(item) for item in case_payload.get("expectedCompiledFewShotRefs") or []]
     expected_scenario = str(case_payload.get("expectedScenario") or "").strip()
+    expected_result_status = str(case_payload.get("expectedResultStatus") or "awaiting-approval")
+    expected_task_status = str(case_payload.get("expectedTaskStatus") or expected_result_status)
+    expected_work_tree_status = str(case_payload.get("expectedWorkTreeStatus") or expected_task_status)
     task = _seed_runtime_task(
         str(case_payload.get("taskId") or new_id("task", app_id, task_type, "g4-recovery", stable=False)),
         app_id=app_id,
@@ -675,6 +678,54 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
         resume_message=str(case_payload.get("resumeMessage") or "continue the recovery validation"),
     )
     client = TestClient(runtime_app)
+
+    def _root_only_takeover_protocol(task_id: str) -> dict[str, Any]:
+        objective = str(case_payload.get("currentObjective") or "Pause, resume, and preserve the official scene contract.")
+        return {
+            "id": f"takeover_{task_id}",
+            "version": "0.1.0",
+            "taskId": task_id,
+            "taskType": task_type,
+            "runType": "main",
+            "currentPhase": "execute",
+            "status": "executing",
+            "objective": objective,
+            "objectiveSummary": objective,
+            "ambiguities": [],
+            "constraints": [],
+            "plan": [],
+            "workTree": {
+                "version": "0.2.0",
+                "id": f"work_tree_{task_id}",
+                "taskId": task_id,
+                "rootNodeId": "root",
+                "rootObjective": objective,
+                "status": "active",
+                "currentNodeId": "root",
+                "loadedNodeIds": ["root"],
+                "activePathNodeIds": ["root"],
+                "pcMemo": "continue:root",
+                "entropyBudgetRemaining": 8,
+                "versionCounter": 1,
+                "nodes": [
+                    {
+                        "id": "root",
+                        "title": "root",
+                        "parentNodeId": None,
+                        "questionsItAnswers": ["next step"],
+                        "nodeText": "Deliver the final result on the root node.",
+                        "localGoal": "Deliver the final result on the root node.",
+                        "workingNodeAnnotation": "<Working_Node: root>",
+                        "phase": "delivery",
+                        "status": "in-progress",
+                        "childNodeIds": [],
+                        "detailLevel": 0,
+                        "recoveryAnchor": "resume:root",
+                    }
+                ],
+            },
+        }
+
     start_payload = {
         "appId": app_id,
         "taskType": task_type,
@@ -699,6 +750,8 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
         "temperature": float(case_payload.get("temperature") or 0.1),
         "maxTokens": int(case_payload.get("maxTokens") or 240),
     }
+    if not case_payload.get("takeoverProtocol"):
+        start_payload["takeoverProtocol"] = _root_only_takeover_protocol(task["id"])
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
     if started.status_code != 202:
         raise RuntimeError(f"g4 runtime recovery start failed: {started.text}")
@@ -725,7 +778,7 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
     if resumed.status_code != 202:
         raise RuntimeError(f"g4 runtime recovery resume failed: {resumed.text}")
     second = run_worker_once("agent-runtime")
-    if (second.get("result") or {}).get("status") != "completed":
+    if (second.get("result") or {}).get("status") != expected_result_status:
         raise RuntimeError(f"g4 runtime recovery completion failed: {json.dumps(second, ensure_ascii=False)}")
 
     runtime = get_persistence_runtime()
@@ -750,16 +803,30 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
         raise RuntimeError("g4 runtime recovery scenario drifted during pause/resume")
     if prompt_artifact.app_id != app_id:
         raise RuntimeError("g4 runtime recovery persisted prompt artifact under the wrong app scope")
+    if persisted_task is None or str(persisted_task.status or "") != expected_task_status:
+        raise RuntimeError(
+            f"g4 runtime recovery task status drifted: expected {expected_task_status}, got {persisted_task.status if persisted_task is not None else 'missing'}"
+        )
+
+    takeover_protocol = dict((second.get("result") or {}).get("takeoverProtocol") or {})
+    work_tree_status = str((takeover_protocol.get("workTree") or {}).get("status") or "") if takeover_protocol else ""
+    if expected_work_tree_status and work_tree_status != expected_work_tree_status:
+        raise RuntimeError(
+            f"g4 runtime recovery work tree drifted: expected {expected_work_tree_status}, got {work_tree_status or 'missing'}"
+        )
 
     return {
         "appId": app_id,
         "taskId": task["id"],
         "pauseStatus": (first.get("result") or {}).get("status"),
         "resumeStatus": (second.get("result") or {}).get("status"),
+        "expectedResultStatus": expected_result_status,
+        "expectedTaskStatus": expected_task_status,
         "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
         "fewShotRefs": list(prompt_metadata.get("fewShotRefs") or []),
         "scenario": prompt_artifact.scenario,
         "taskStatus": persisted_task.status if persisted_task is not None else None,
+        "workTreeStatus": work_tree_status,
     }
 
 
@@ -807,6 +874,8 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     expected_prompt_profile_id = str(case_payload.get("expectedPromptProfileId") or "")
     expected_seed_template_id = str(case_payload.get("expectedSeedTemplateId") or "")
     expected_few_shot_refs = [str(item) for item in case_payload.get("expectedCompiledFewShotRefs") or []]
+    expected_result_status = str(case_payload.get("expectedResultStatus") or "awaiting-approval")
+    expected_task_status = str(case_payload.get("expectedTaskStatus") or expected_result_status)
     task_id = str(case_payload.get("taskId") or new_id("task", app_id, task_type, requested_provider, stable=False))
     candidate_models = [
         dict(candidate)
@@ -869,13 +938,13 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         processed = run_worker_once("agent-runtime")
         result_payload = dict(processed.get("result") or {})
         processed_runs.append(processed)
-        if result_payload.get("status") == "restarting":
+        if result_payload.get("status") in {"restarting", "continuing"}:
             if len(processed_runs) >= max_window_cycles:
                 raise RuntimeError(
                     f"g4 provider matrix exceeded maxWindowCycles={max_window_cycles}: {json.dumps(processed_runs[-1], ensure_ascii=False)}"
                 )
             continue
-        if result_payload.get("status") != "completed":
+        if result_payload.get("status") != expected_result_status:
             raise RuntimeError(f"g4 provider matrix worker failed: {json.dumps(processed, ensure_ascii=False)}")
         break
 
@@ -914,6 +983,11 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         raise RuntimeError("g4 provider matrix seed template drifted from the official scene contract")
     if expected_few_shot_refs and list(prompt_metadata.get("fewShotRefs") or []) != expected_few_shot_refs:
         raise RuntimeError("g4 provider matrix few-shot refs drifted from the official scene contract")
+    final_task_status = str((persisted_task.status if persisted_task is not None else None) or result_payload.get("status") or "")
+    if final_task_status != expected_task_status:
+        raise RuntimeError(
+            f"g4 provider matrix final task status drifted: expected {expected_task_status}, got {final_task_status or 'missing'}"
+        )
 
     invocation_rows = [
         {
@@ -984,7 +1058,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     token_usage = _g4_token_usage(invocation, response_payload)
     context_length_observations = _g4_context_length_observations(response_payload)
     max_context_length_tokens = _g4_max_context_length_tokens(context_length_observations)
-    restart_success_rate = 1.0 if task_record.get("status") == "completed" else 0.0
+    restart_success_rate = 1.0 if final_task_status == expected_task_status else 0.0
     acceptance_pass = int(scorecard_row.get("acceptance_pass_0_1") or 0)
     restart_stability_report = _g4_restart_stability_report(
         case_payload,
@@ -1040,12 +1114,12 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "minimalWorksetThreshold0_1": float(case_payload.get("acceptanceMinMinimalWorksetRatio0_1") or 0.0),
         "acceptancePass0_1": acceptance_pass,
         "officialAcceptancePassed0_1": 1 if contract_verification["passed"] else 0,
-        "goalCompletion0_1": 1 if invocation.status == "completed" else 0,
-        "deliveryCompletion0_1": 1 if acceptance_pass == 1 and contract_verification["passed"] else 0,
+        "goalCompletion0_1": 1 if final_task_status == expected_task_status else 0,
+        "deliveryCompletion0_1": 1 if final_task_status == expected_task_status and acceptance_pass == 1 and contract_verification["passed"] else 0,
         "parityPairKey": str(case_payload.get("parityPairKey") or ""),
         "parityRole": str(case_payload.get("parityRole") or ""),
         "qualityDeltaThreshold0_100": float(case_payload.get("qualityDeltaThreshold0_100") or 8.0),
-        "pass": invocation.status == "completed" and acceptance_pass == 1,
+        "pass": final_task_status == expected_task_status and acceptance_pass == 1,
         "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
         "auditLevel": audit_level,
     }

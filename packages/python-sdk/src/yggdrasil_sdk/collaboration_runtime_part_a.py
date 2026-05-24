@@ -141,6 +141,83 @@ def _derive_child_budget(parent_budget: BudgetState, requested_budget: dict[str,
     )
 
 
+def _normalized_optional_text(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
+
+
+def _subagent_work_tree_node_id(request: dict[str, Any]) -> str | None:
+    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
+    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else {}
+    return (
+        _normalized_optional_text(request.get("currentNodeId"))
+        or _normalized_optional_text(request.get("workTreeNodeId"))
+        or _normalized_optional_text(work_tree.get("currentNodeId"))
+        or _normalized_optional_text(memory_retrieval_state.get("workTreeNodeId"))
+    )
+
+
+def _build_subagent_budget_decision(
+    parent_budget: BudgetState,
+    child_budget: BudgetState,
+    requested_budget: dict[str, Any] | None,
+    *,
+    work_tree_node_id: str | None,
+) -> dict[str, Any]:
+    reasons = [f"Parent childBudgetMode={parent_budget.child_budget_mode}."]
+    if requested_budget:
+        reasons.append("Applied explicit subAgentBudget input when deriving the child budget envelope.")
+    else:
+        reasons.append("No explicit subAgentBudget was provided; the child budget was derived from the parent remainder.")
+    if parent_budget.max_sub_agents is not None:
+        reasons.append("Reserved one maxSubAgents slot from the parent task budget.")
+    if work_tree_node_id is not None:
+        reasons.append(f"Bound the child execution to work tree node {work_tree_node_id}.")
+    else:
+        reasons.append("No explicit work tree node binding was provided for this child execution.")
+    reasons.append("Model selection remains a runtime routing decision; this artifact freezes the budget envelope and node binding only.")
+    return {
+        "workTreeNodeId": work_tree_node_id,
+        "parentChildBudgetMode": parent_budget.child_budget_mode,
+        "requestedBudget": dict(requested_budget or {}),
+        "allocatedBudget": child_budget.model_dump(by_alias=True, mode="json"),
+        "remainingParentBudgetBeforeLaunch": {
+            "tokenBudgetTotal": _remaining_int(parent_budget.token_budget_total, parent_budget.token_budget_used),
+            "costBudgetTotal": _remaining_float(parent_budget.cost_budget_total, parent_budget.cost_budget_used),
+            "maxSubAgents": parent_budget.max_sub_agents,
+        },
+        "reasons": reasons,
+    }
+
+
+def _prepare_subagent_request(
+    request: dict[str, Any],
+    *,
+    work_tree_node_id: str | None,
+    budget_decision: dict[str, Any],
+) -> dict[str, Any]:
+    prepared = dict(request)
+    prepared["subagentBudgetDecision"] = budget_decision
+    if work_tree_node_id is None:
+        return prepared
+
+    prepared.setdefault("currentNodeId", work_tree_node_id)
+    prepared.setdefault("workTreeNodeId", work_tree_node_id)
+
+    memory_retrieval_state = dict(prepared.get("memoryRetrievalState") or {})
+    memory_retrieval_state.setdefault("workTreeNodeId", work_tree_node_id)
+    prepared["memoryRetrievalState"] = memory_retrieval_state
+
+    takeover_protocol = dict(prepared.get("takeoverProtocol") or {})
+    work_tree = dict(takeover_protocol.get("workTree") or {})
+    work_tree.setdefault("currentNodeId", work_tree_node_id)
+    work_tree.setdefault("workingNodeAnnotation", f"<Working_Node: {work_tree_node_id}>")
+    takeover_protocol["workTree"] = work_tree
+    prepared["takeoverProtocol"] = takeover_protocol
+    return prepared
+
+
 def _root_ids(project_id: str, branch_id: str) -> dict[str, str]:
     return {
         root_branch: new_id("node", project_id, branch_id, root_branch, stable=True)
@@ -189,6 +266,8 @@ def _build_readonly_context_package_from_session(
 ) -> tuple[dict[str, Any], str, bool]:
     node_repository = NodeRepository(session)
     context_items = _select_readonly_context_items(node_repository, parent_task, request)
+    work_tree_node_id = _subagent_work_tree_node_id(request)
+    budget_decision = request.get("subagentBudgetDecision") if isinstance(request.get("subagentBudgetDecision"), dict) else None
     identity_refs, context_refs, execution_refs = node_repository.root_mount_refs(
         parent_task.project_id,
         parent_task.branch_id,
@@ -206,6 +285,8 @@ def _build_readonly_context_package_from_session(
         summary_parts.append(f"Objective: {normalize_excerpt(parent_task.current_objective or parent_task.goal, 160)}")
     if parent_task.resume_message:
         summary_parts.append(f"Resume message available: {normalize_excerpt(parent_task.resume_message, 120)}")
+    if work_tree_node_id is not None:
+        summary_parts.append(f"Bound work tree node: {work_tree_node_id}")
 
     root_mount = RootMountPackage(
         id=new_id("mount", parent_task.id, parent_task.project_id, parent_task.branch_id, stable=True),
@@ -233,6 +314,16 @@ def _build_readonly_context_package_from_session(
     ]
     root_mount["spaceId"] = parent_task.space_id
     root_mount["source"] = "database"
+    if work_tree_node_id is not None:
+        root_mount["currentNodeId"] = work_tree_node_id
+        root_mount["workTreeNodeId"] = work_tree_node_id
+        root_mount["memoryRetrievalState"] = {"workTreeNodeId": work_tree_node_id}
+        root_mount["takeoverProtocol"] = {
+            "workTree": {
+                "currentNodeId": work_tree_node_id,
+                "workingNodeAnnotation": f"<Working_Node: {work_tree_node_id}>",
+            }
+        }
     package = {
         "id": new_id("subctx", parent_task.id, child_task_id, stable=True),
         "mode": "readonly",
@@ -248,6 +339,10 @@ def _build_readonly_context_package_from_session(
         "contextItems": context_items,
         "generatedAt": utc_now().isoformat(),
     }
+    if work_tree_node_id is not None:
+        package["workTreeNodeId"] = work_tree_node_id
+    if budget_decision is not None:
+        package["subagentBudgetDecision"] = budget_decision
     locator = f"runtime/tasks/{child_task_id}/readonly-context/current"
     cached = _cache_package_entry(RedisCoordinator(get_persistence_runtime().settings), locator, package)
     return package, locator, cached
@@ -524,7 +619,20 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
             created_by=actor,
         )
 
-        child_budget = _derive_child_budget(parent_task.budget, request.get("subAgentBudget") if isinstance(request.get("subAgentBudget"), dict) else None)
+        requested_budget = request.get("subAgentBudget") if isinstance(request.get("subAgentBudget"), dict) else None
+        work_tree_node_id = _subagent_work_tree_node_id(request)
+        child_budget = _derive_child_budget(parent_task.budget, requested_budget)
+        budget_decision = _build_subagent_budget_decision(
+            parent_task.budget,
+            child_budget,
+            requested_budget,
+            work_tree_node_id=work_tree_node_id,
+        )
+        request = _prepare_subagent_request(
+            request,
+            work_tree_node_id=work_tree_node_id,
+            budget_decision=budget_decision,
+        )
         child_task = task_repository.create_task(
             {
                 "appId": parent_task.app_id,
@@ -572,6 +680,8 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
                 "parentTaskId": parent_task.id,
                 "childBranchId": child_branch.id,
                 "readonlyContextRef": readonly_ref,
+                "workTreeNodeId": work_tree_node_id,
+                "subagentBudgetDecision": budget_decision,
             },
         )
         task_created_event = _record_package_event(
@@ -611,6 +721,8 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
         "task": child_task.model_dump(by_alias=True, mode="json"),
         "readonlyContext": readonly_context,
         "readonlyContextRef": readonly_ref,
+        "workTreeNodeId": work_tree_node_id,
+        "subagentBudgetDecision": budget_decision,
         "outboxRecord": task_created_event.model_dump(by_alias=True, mode="json"),
         "workItem": work_item,
         "queue": AGENT_RUNTIME_QUEUE,

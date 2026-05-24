@@ -32,9 +32,15 @@ class RuntimeServiceMixin:
             "statusCounts": status_counts,
         }
 
-    def _task_runtime_control_summary(self, task, snapshots: list[Any]) -> dict[str, object]:
+    def _task_runtime_control_summary(self, task, snapshots: list[Any], runs: list[Any]) -> dict[str, object]:
         latest_snapshot = snapshots[0] if snapshots else None
         latest_restorable_snapshot = next((snapshot for snapshot in snapshots if snapshot.status == "restorable"), None)
+        latest_run = runs[0] if runs else None
+        latest_takeover_protocol = (
+            load_persisted_task_takeover_protocol(task.id, latest_run.id)
+            if latest_run is not None
+            else None
+        )
         restorable_count = len([snapshot for snapshot in snapshots if snapshot.status == "restorable"])
         consumed_count = len([snapshot for snapshot in snapshots if snapshot.status == "consumed"])
 
@@ -57,11 +63,18 @@ class RuntimeServiceMixin:
             "resumeStatus": resume_status,
             "canResume": bool(task.status == "paused" and latest_restorable_snapshot is not None),
             "canRequestPause": bool(task.status in {"queued", "running", "pause-requested"}),
+            "canApprove": bool(task.status == "awaiting-approval"),
+            "canRequestRevision": bool(task.status == "awaiting-approval"),
             "recommendedResumeToken": latest_restorable_snapshot.resume_token if latest_restorable_snapshot is not None else None,
             "recommendedResumeMessage": (
                 latest_restorable_snapshot.resume_message
                 if latest_restorable_snapshot is not None
                 else task.resume_message
+            ),
+            "recommendedRevisionNodeId": (
+                latest_takeover_protocol.work_tree.current_node_id
+                if latest_takeover_protocol is not None and latest_takeover_protocol.work_tree is not None
+                else None
             ),
             "latestSnapshot": latest_snapshot.model_dump(by_alias=True, mode="json") if latest_snapshot is not None else None,
             "latestRestorableSnapshot": (

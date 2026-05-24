@@ -332,6 +332,11 @@ class TaskSnapshotORM(Base):
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
     safe_to_pause: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, default=True)
+    current_node_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    working_node_annotation: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    pc_memo: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    top_frame_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    stack_digest: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     blockers: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
 
 
@@ -469,6 +474,48 @@ class OutboxRecordORM(Base):
     available_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     published_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class MailboxMessageORM(Base):
+    __tablename__ = "mailbox_messages"
+    __table_args__ = (
+        sa.Index("ix_mailbox_messages_task_status_created", "task_id", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    sender: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    message_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    body: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    work_tree_node_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    wake_on_message: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, default=True)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="pending", index=True)
+    payload_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    acknowledged_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+
+
+class SideChannelEventORM(Base):
+    __tablename__ = "side_channel_events"
+    __table_args__ = (
+        sa.Index("ix_side_channel_events_task_created", "task_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    source: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    event_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    level: Mapped[str] = mapped_column(sa.String(16), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+    work_tree_node_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    payload_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
 
 
@@ -646,6 +693,7 @@ class PromptCompileArtifactORM(Base):
     task_type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     scenario: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     registered_tools: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
+    boot_sections: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False, default=dict)
     system_sections: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
     user_sections: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
     work_tree_snapshot: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)

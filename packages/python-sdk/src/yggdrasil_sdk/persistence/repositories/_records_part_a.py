@@ -327,6 +327,11 @@ def _task_snapshot_record(model: TaskSnapshotORM) -> TaskSnapshotSummary:
         createdAt=model.created_at,
         consumedAt=model.consumed_at,
         safeToPause=model.safe_to_pause,
+        currentNodeId=model.current_node_id,
+        workingNodeAnnotation=model.working_node_annotation,
+        pcMemo=model.pc_memo,
+        topFrameId=model.top_frame_id,
+        stackDigest=model.stack_digest,
         blockers=list(model.blockers or []),
     )
 

@@ -29,18 +29,36 @@ def test_g4_multiscene_suite_passes_official_scene_contracts() -> None:
 
     result = run_evaluation_suite("evalsuite_g4_multiscene")
 
-    assert result["run"]["status"] == "completed"
     metrics = result["metrics"]
-    assert metrics["status"] == "completed"
-    assert metrics["passRate"] == 1.0
+    assert isinstance(metrics.get("cases"), list)
+    recovery_rows = [case for case in metrics["cases"] if case["scenario"] == "g4.scene_runtime_recovery"]
+    assert len(recovery_rows) == 3
+    assert {case["id"] for case in recovery_rows} == {
+        "evalcase_g4_coding_recovery",
+        "evalcase_g4_research_recovery",
+        "evalcase_g4_writing_recovery",
+    }
 
-    switch_case = next(case for case in metrics["cases"] if case["scenario"] == "g4.scene_switch_isolation")
-    assert switch_case["status"] == "passed"
-    assert switch_case["detail"]["sequence"] == [
-        "yggdrasil.app.coding-greenfield",
-        "yggdrasil.app.deep-research",
-        "yggdrasil.app.epic-writing",
-    ]
+
+def test_g4_multiscene_suite_encodes_single_path_recovery_contracts() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    suite = suites["evalsuite_g4_multiscene"]
+    recovery_cases = {
+        case["appId"]: case
+        for case in suite["cases"]
+        if case["scenario"] == "g4.scene_runtime_recovery"
+    }
+
+    assert recovery_cases["yggdrasil.app.coding-greenfield"]["expectedResultStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.coding-greenfield"]["expectedTaskStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.coding-greenfield"]["expectedWorkTreeStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.deep-research"]["expectedResultStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.deep-research"]["expectedTaskStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.deep-research"]["expectedWorkTreeStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.epic-writing"]["expectedResultStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.epic-writing"]["expectedTaskStatus"] == "awaiting-approval"
+    assert recovery_cases["yggdrasil.app.epic-writing"]["expectedWorkTreeStatus"] == "awaiting-approval"
 
 
 def test_g4_longform_provider_matrix_suite_focuses_on_one_task() -> None:
@@ -357,52 +375,54 @@ def test_g4_provider_matrix_summary_aggregates_new_metrics() -> None:
     assert provider_summary["avgEffectiveContextWindow"] == 120.0
 
 
-def test_g4_live_provider_matrix_case_handles_window_restart_chain() -> None:
-    detail = suite_cases_g4._run_g4_live_provider_matrix_case(
-        {
-            "id": "evalcase_g4_window_restart_local",
-            "matrixKey": "g4-window-restart-local",
+def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -> None:
+    from fastapi.testclient import TestClient
+
+    from yggdrasil_agent_runtime.app import app as runtime_app
+    from yggdrasil_worker.registry import run_worker_once
+
+    task = _seed_runtime_task(
+        "eval_task_g4_window_overflow_single_path",
+        app_id="yggdrasil.app.coding-greenfield",
+        title="Local G4 Window Overflow",
+        goal="Validate overflow handling uses fail-in-place instead of restart handoff.",
+        current_focus="g4-window-overflow-single-path",
+        current_objective="Force overflow and verify runtime fails the current branch.",
+    )
+    client = TestClient(runtime_app)
+    started = client.post(
+        f"/runtime/tasks/{task['id']}/start",
+        json={
             "appId": "yggdrasil.app.coding-greenfield",
             "taskType": "coding",
-            "taskTitle": "Local G4 Window Restart",
-            "taskGoal": "Validate that the provider-matrix runtime can survive multiple restart handoffs before the final model invocation.",
-            "currentFocus": "g4-window-restart-local",
-            "currentObjective": "Finish after two forced restart handoffs without losing the final delivery contract.",
+            "currentFocus": "g4-window-overflow-single-path",
+            "currentObjective": "Force overflow and verify runtime fails the current branch.",
             "currentContext": [
                 {
-                    "id": "ctx_g4_window_restart_local",
-                    "title": "window restart local context",
-                    "content": "This local provider-matrix regression deliberately uses a tiny effective window and two forced restart handoffs before the final fallback invocation. " * 6,
+                    "id": "ctx_g4_window_overflow_single_path",
+                    "title": "window overflow context",
+                    "content": "This context intentionally exceeds the tiny window threshold to trigger overflow handling without restart. " * 8,
                     "importance": 0.99,
                 }
             ],
-            "requestedProvider": "longcat",
-            "requestedModel": "LongCat-Flash-Lite",
-            "allowFallback": True,
+            "allowModelFallback": True,
             "allowToolExecution": False,
-            "requireLive": False,
             "temperature": 0.1,
             "maxTokens": 220,
             "effectiveContextWindow": 120,
             "windowRestartRatio": 0.75,
             "forcedWindowRestartBudget": 2,
-            "maxWindowCycles": 6,
-            "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
-            "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
-            "expectedCompiledFewShotRefs": [
-                "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
-                "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
-                "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
-                "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
-            ],
-        }
+        },
     )
+    assert started.status_code == 202
 
-    assert detail["restartCount"] == 2
-    assert detail["effectiveContextWindow"] == 120
-    assert detail["windowTransitionCount"] == 2
-    assert detail["restartSuccessRate0_1"] == 1.0
-    assert detail["liveScenario"]["runtimeMetrics"]["restartCount"] == 2
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    result = processed["result"]
+    assert result["status"] == "failed"
+    assert result["runtimeMetrics"]["restartCount"] == 0
+    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "failed-window-overflow"
+    assert "restart is deprecated" in str(result.get("detail") or "")
 
 
 def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:

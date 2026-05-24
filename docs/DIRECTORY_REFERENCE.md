@@ -1,3 +1,9 @@
+| `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档（2026-05-23）：基于 `docs/new/` 三份新方案，给出 Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁的落地步骤 |
+| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：冻结 Boot Prompt 四段、RootMountPackage v0.2、启动模式、待机循环、WorkContextStack 栈式运行、独立 mailbox 表、Fork 动态预算、记忆工具、多 Agent、上下文窗口和结束批准 |
+| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：冻结工作树作为动态工作记忆和执行栈的节点 schema、Working Node 标签、WorkContextStack/push/pop、LOD 拓扑、状态机、节点摘要、冲突处理和 v0.1 兼容升级 |
+| `docs/new/工作树.md` | 新工作树方案：把工作树定义为“我要干什么”分支下的动态工作记忆与执行栈，强调节点 schema、LOD 拓扑、Working Node 标签、摘要上浮和冲突仲裁 |
+| `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，不承载具体业务知识 |
+| `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心重新定义生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent、邮箱和分期 |
 | `docs/research/project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md` | 记忆树理论目标差距评估（2026-05-17）：围绕"全部记忆上树、窗口仅最小子任务工作集"给出实现现状、主要差距与量化结论（综合完成度 59/100，差距 41/100） |
 | `docs/research/specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md` | P2 推理执行稳态化详细代码实现规范入口（已拆分索引）：聚合任务14/15/16/17与集成验收导航 |
 | `docs/research/specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md` | P2 任务14实现规范：LLM 调用与预算治理（预检/后检、硬 fail 边界、budgetCheckResult） |
@@ -20,10 +26,12 @@
 | `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
 | `scripts/benchmarks/sqlite_concurrency_benchmark.py` | SQLite 并发基准单 profile 执行脚本：支持 baseline/optimized 配置、节点写入与快照争用场景测试、JSON 结果输出 |
 | `scripts/benchmarks/sqlite_concurrency_compare.py` | SQLite 并发前后对比脚本：串行运行 baseline 与 optimized，输出吞吐/p95/锁错误对比报告 |
+| `migrations/versions/7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py` | Runtime 邮箱/侧信道迁移：新增 `mailbox_messages` 与 `side_channel_events` 表及其索引，补齐 P6 持久化落库 |
+| `migrations/versions/6c4e1f2b8a77_prompt_compile_boot_sections.py` | Prompt 编译工件迁移：为 `prompt_compile_artifacts` 增加 `boot_sections`，持久化 Boot Prompt 四段 |
 | `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/20 更新：补充“世界树计划正式项目定义”执行版、“新增特性，工作流”草稿入口和 `project-definition/` 拆分支撑文档；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/24 更新：`runtime_kernel/takeover.py` 已从初始化器升级为正式 reducer，负责 work tree/context stack 推进、child/sibling continuation、revision reopen 与 approval finalize；`execution_loop_transitions.py` 已形成完整 P4 闭环：子节点完成自动续跑 sibling/parent，根节点完成进入 `awaiting-approval`，并通过控制面 approve/revision 闭环；`execution_loop_part_a.py` / `execution_loop_part_b.py` 现已支持以 `work-node-create` 助手输出标签在正式主循环里动态扩树、在 retrieval 查询中优先使用 work tree 当前节点语义，并在异常/预算失败时把当前节点写回 `failed + failureSummary`；`execution_loop_transitions.py` 还会为 continuation/pause/restart 输出独立 `workContextStackRef` 栈快照引用；P5 现已补齐并发安全闭环：`tool_runtime.py` 会向正式工具透传 `sourceWorkTreeNodeId`，`modules/text-memory/` 暴露 `read_node` / `read_index` / `update_memory_with_version` / `append_memory_log` / `submit_memory_proposal` / `forget_node` 等正式记忆工具，`append_memory_log` 现通过仓储层原子追加避免并发日志静默覆盖，`prompting.py` 也已明确“正式记忆工具优先、`<memory-write>` 旁路次之”，并在宽节点或高冲突场景优先引导创建细分子节点做空间隔离；P6 已完成闭环：`collaboration_runtime_part_a.py` / `collaboration_runtime_part_b.py` 不仅为 sub-agent launch/worker/PR manifest 透传 `workTreeNodeId` 与 `subagentBudgetDecision`，还会把 child completion summary 合并回 parent work tree 与 `childCompletionSummaries`，再通过独立 `mailbox_messages` / `side_channel_events` 持久化表、对应 Alembic 迁移 `7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py`、`runtime/tasks/{taskId}/mailbox` / `side-channel` API 和 `execution_loop_part_b.py` 的 mailbox 注入路径唤醒 parent 继续汇总；`runtime_kernel/root_mount.py` 现在优先从仓储读取 mailbox state 并返回 `mailboxMessages`，`takeover.py` 也已补齐 `load_persisted_work_context_stack()` 与 parent merge helper；`services/core-api/.../tasks.py` 与 `services/agent-runtime/app.py` 新增 `approve-completion` / `request-revision` 路由，`runtime_service.py` 暴露 `canApprove/canRequestRevision/recommendedRevisionNodeId`；`packages/frontend-sdk/src/types.ts` 与 `apps/web/app/components/task-detail-page.tsx` 现已把这些运行时控制字段、mailbox state/message 和 side-channel event 正式接到任务详情页；P7 门禁已统一到单路径：`tests/test_runtime_p4_foundation.py` 覆盖显式传递与默认请求两种入口，均进入 `awaiting-approval`，不再保留 legacy `completed` 快速路径；`prompting.py` 会把 `work_context_stack` 和 `childCompletionSummaries` 暴露给模型；`contracts.py` 修复了显式 root-only v0.2 work tree 被错误包裹成自引用 root 的兼容升级问题。此前 2026/5/24 更新：`runtime_kernel/root_mount.py` 现已输出中文语义根指针、`SYS_ROOT_PROTOCOL`、启动加载顺序、tool/capability index、mailbox/standby 状态与 `startupMode`，`execution_loop_part_b.py` 在 retrieval 前优先恢复 `currentNodeId/Working_Node/pcMemo`、对无活动工作 `start` 直接走 `standby` 短路，并把损坏 snapshot 的 blocker 持久化；`execution_loop_transitions.py` 在根节点交付时切到 `awaiting-approval`，并要求 work tree 节点先写 `executionSummary`；2026/5/23 更新：补充提示词、启动流程、工作流程重做执行文档、`docs/new/` 三份新方案入口，以及 Agent 运行时/工作树 v0.2 正式规格；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
 
 ---
 
@@ -149,6 +157,7 @@ apps/
 **关键说明：**
 - `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（`:8000`）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
+- `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性。
 
 ---
 
@@ -185,7 +194,7 @@ services/
 │               ├── prompting.py    # /prompting/ - Prompt 管理
 │               ├── runtime.py      # /runtime/ - 运行时状态
 │               ├── specs.py        # /specs/ - 规格查询
-│               ├── tasks.py        # /tasks/ - 任务生命周期
+│               ├── tasks.py        # /tasks/ - 任务生命周期与 P4 approve/revision 控制面
 │               ├── training.py     # /training/ - 训练实验
 │               └── workbench.py    # /workbench/ - 总览数据
 │
@@ -194,7 +203,7 @@ services/
 │   └── src/yggdrasil_agent_runtime/
 │       ├── main.py                 # 服务启动入口
 │       ├── app.py                  # FastAPI 应用实例
-│       └── runtime.py              # Agent 执行主逻辑（任务分发、LLM 调用闭环）
+│       └── runtime.py              # Agent 执行主逻辑（任务分发、LLM 调用闭环；现导出 approve/revision 运行时控制）
 │
 ├── module-host/                    # 模块宿主服务（:8002）
 │   ├── pyproject.toml
@@ -239,7 +248,7 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已拆分为 execution_loop_part_a/b + transitions，入口文件保留兼容导出）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已拆分为 execution_loop_part_a/b + transitions，入口文件保留兼容导出；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
 │       ├── llm_runtime.py          # LLM 调用封装兼容门面（实现拆分到 llm_runtime_part_a/b；保留原导入路径）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -247,7 +256,7 @@ packages/
 │       ├── application_runtime.py  # 应用配置加载与初始化
 │       │
 │       ├── # ── Prompt 管理 ──────────────────────────────
-│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 的 response requirements 现内置 memory-write 标签语法提示，并追加 memory_retrieval_state 结构化节；few-shot 现折叠为系统示例块并在恢复态跳过，结构化 formatter 默认统一中文标签
+│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 已增加 bootSections 四段（physical_interface/world_roots/behavior_constitution/scene_recovery），其中 physical_interface 现在只保留稳定接口绑定与实际 tool/capability inventory，场景化 tool policy 已移出 boot；恢复态会规范化 Working_Node / currentNodeId / memoryRetrievalState.workTreeNodeId / pcMemo，并在 P4 路径附带 `work_context_stack` / `childCompletionSummaries`，few-shot 仍在恢复态自动跳过
 │       ├── prompt_modules/
 │       │   ├── compiler.py         # PromptCompiler 核心（模板 + 记忆 → 最终 Prompt）
 │       │   └── formatters.py       # 不同格式的 Prompt 输出渲染
@@ -290,14 +299,17 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse 的 runtimeControl approve/revision、mailbox 与 side-channel 契约
 ```
 
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
-- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
-- `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 提供执行节点级进度；当前完成判定仍由 runtime 在写入执行结果后直接落 `completed`，而不是由独立 verifier 二次裁决。
-- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，用于核查当前 prompt 是否确实基于记忆树工作集而非旧摘要上下文；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本，结构化说明默认统一为中文标签。
+- `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
+- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态；当前 retrieval 还支持“压缩段尾部自动解压”判定：当最后一个 `carry-forward-package` 之后的未压缩段数量在 `1..n`（`maxUncompressedTailBeforeDecompress`，默认 `1`）时，不再对检索结果执行 carry-forward trim。当前运行时单一路径下，窗口超阈值已弃用 restart handoff：先依赖 context-pruning（含“前缀基础规则保护 + 尾部 n+1 缓冲”的可压缩范围约束），若压缩后仍超阈值则直接把当前支线标记为 failed。
+- 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
+- `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，子节点完成会自动续跑 sibling/parent，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。
+- `runtime_kernel/execution_loop_part_b.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复。
+- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
 - `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；`llm_runtime.py` 已拆分为 `llm_runtime_part_a.py`/`llm_runtime_part_b.py` 并保持原导入路径，避免外部调用改动。
 - `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录。
@@ -446,9 +458,16 @@ docs/
 ├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
 ├── P2_TASK_14_17_FILE_STATUS_AUDIT.md # P2 任务14-17 文件现状审计：成本预算检查、工具执行隔离、runtime metrics、safe-stop机制全景分析，6项关键缺失+6项重要缺失
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
+│   ├── ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md
+│   │                               #   提示词、启动流程、工作流程重做执行文档：Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
 │   │                               #   功能形态分类与提示词功能检查计划：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径
 │   └── ...                         #   其他开发专题文档同顶层速览
+│
+├── new/                            # 新方案草稿与当前重做输入材料
+│   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
+│   ├── 元提示词.md                  # 新 Boot Prompt 方案：I/O 绑定、根指针、行为宪法和现场恢复
+│   └── 世界树计划正式项目定义.md    # 正式项目定义草稿与用户笔记：生命周期、根内容、能力、工具、工作树与分期
 │
 ├── adr/                            # 架构决策记录 (Architecture Decision Records)
 │   ├── README.md                   # ADR 索引
@@ -472,6 +491,8 @@ docs/
 │
 ├── specs/                          # 数据与 API 规格
 │   ├── README.md                   # 规格索引
+│   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
+│   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
 │   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格
@@ -615,9 +636,10 @@ migrations/
 
 **关联配置：**
 - 根目录 `alembic.ini`：迁移工具主配置
-- `packages/python-sdk/src/yggdrasil_sdk/persistence/models.py`：ORM 模型（迁移的源）
+- `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`：ORM 模型（迁移的源）
 
 **当前迁移头补充：**
+- `migrations/versions/5f7c2e9a1b44_task_snapshot_runtime_pointer_fields.py`：为 task_snapshots 补 currentNodeId / workingNodeAnnotation / pcMemo / topFrameId / stackDigest，支撑 P1 的 v0.2 工作树恢复指针与 WorkContextStack 持久化。
 - `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
 - `migrations/versions/a91c2e7d4f33_memory_tree_worktree_audit_fields.py`：为 nodes / retrieval_requests / model_invocations / assets / prompt_compile_artifacts 补 work tree 审计字段，支撑“记忆树即全部记忆”的 snapshot、rehydrate 与多模态/关系发现闭环。
 
@@ -641,6 +663,7 @@ tests/
 │                                   # appId 过滤语义与 M9 control-plane suite 回归
 ├── test_prompting_runtime.py       # PromptCompiler 链路端到端
 ├── test_runtime_and_pruning.py     # 迁移索引文件（运行时/裁剪专项测试已拆分到 tests/runtime）
+├── test_runtime_p4_foundation.py   # P4/P7 基础回归：work tree reducer、awaiting-approval、单路径运行态与 approval/revision 闭环
 ├── runtime/
 │   ├── test_runtime_core_and_memory.py
 │   │                               # 运行时核心挂载、上下文裁剪、记忆树物化与 memory-write 标签回归
@@ -657,7 +680,7 @@ tests/
 ├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径、workspace sandbox 复制边界）
 ├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
-├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成
+├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成（含 awaiting-approval/continuing、parent wake 与 work-tree 合并语义）
 ├── test_secret_hygiene.py          # 仓库凭据泄露与文档回归检查
 │
 ├── # ── Phase 1 专项测试（质量巩固） ────────────────────────
@@ -768,9 +791,12 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/README.md` | research 目录组织导航：按用途分类为路线图、项目评估、完成报告、规范设计、技术分析和历史归档 |
-| `docs/research/世界树计划正式项目定义.md` | 世界树计划正式执行定义 v0.1 入口：以 LLM 为核心，将代码定位为记忆、身体、边界、协作和反馈世界，并索引拆分支撑文档 |
-| `docs/research/project-definition/` | 正式项目定义支撑文档：哲学与心理学基础、运行语义与验收，作为正式定义的组成部分 |
-| `docs/research/新增特性，工作流.md` | 以空间深度切片、DLL 式能力加载、软中断、多 Agent 协作、语义冲突仲裁和拉取式消息队列为核心的新工作流草稿 |
+| `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档：把 `docs/new/` 方案转成可分阶段实现、验证和回滚的工程任务，现已纳入 WorkContextStack 栈式上下文主流程 |
+| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮重做的启动、Boot Prompt、待机、栈式运行、上下文窗口、独立 mailbox、多 Agent、Fork 动态预算和批准结束正式规格 |
+| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮重做的工作树节点、执行栈、WorkContextStack push/pop、LOD 下潜/上浮、Working Node 标签、摘要和冲突处理正式规格 |
+| `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并记录生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent 与项目分期 |
+| `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、Working Node 标签和语义冲突仲裁 |
+| `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
 | `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
@@ -804,10 +830,10 @@ docs/
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` |
-| Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompt_modules/compiler.py` |
+| Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
 | 某个 API 的业务逻辑 | `services/core-api/src/yggdrasil_core_api/services/<resource>_service.py` |
-| 数据库 ORM 模型 | `packages/python-sdk/src/yggdrasil_sdk/persistence/models.py` |
+| 数据库 ORM 模型 | `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py` |
 | 数据契约/Pydantic 模型 | `packages/python-sdk/src/yggdrasil_sdk/contracts.py` |
 | 领域对象定义 | `packages/python-sdk/src/yggdrasil_sdk/domain.py` |
 | Hook 事件清单 | `docs/protocols/hook-contracts-v0.1.md` |

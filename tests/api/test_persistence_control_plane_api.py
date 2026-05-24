@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
+import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
 
 from yggdrasil_core_api.app import app
 from yggdrasil_sdk import (
@@ -17,6 +18,7 @@ from yggdrasil_sdk import (
     run_evaluation_suite,
     utc_now,
 )
+from yggdrasil_sdk.contracts import TaskTakeoverProtocol
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.repositories import RuntimeRepository, WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import ensure_state_subdir, relative_workspace_path, resolve_workspace_root, write_json
@@ -55,6 +57,125 @@ def _seed_seed_template_version(prompt_repository: PromptAssetRepository, *, ver
 
 client = TestClient(app)
 pytestmark = pytest.mark.slow
+
+
+def _awaiting_approval_takeover_protocol(task_id: str) -> dict[str, object]:
+    return {
+        "id": f"takeover_{task_id}",
+        "version": "0.1.0",
+        "taskId": task_id,
+        "taskType": "coding",
+        "runType": "main",
+        "currentPhase": "deliver",
+        "status": "verified",
+        "objective": "完成最终交付并等待人工批准。",
+        "objectiveSummary": "两个子节点已经完成，当前停在根节点等待批准。",
+        "ambiguities": [],
+        "constraints": [],
+        "plan": [],
+        "workTree": {
+            "version": "0.2.0",
+            "id": f"work_tree_{task_id}",
+            "taskId": task_id,
+            "rootNodeId": "root",
+            "rootObjective": "完成最终交付并等待人工批准。",
+            "status": "awaiting-approval",
+            "currentNodeId": "root",
+            "loadedNodeIds": ["root", "child-1", "child-2"],
+            "activePathNodeIds": ["root"],
+            "pcMemo": "等待批准",
+            "entropyBudgetRemaining": 6,
+            "versionCounter": 3,
+            "nodes": [
+                {
+                    "id": "root",
+                    "title": "最终交付",
+                    "parentNodeId": None,
+                    "questionsItAnswers": ["最终结果是什么"],
+                    "nodeText": "整合两个子节点输出为最终答案。",
+                    "localGoal": "整合两个子节点输出为最终答案。",
+                    "workingNodeAnnotation": "<Working_Node: root>",
+                    "executionSummary": "根节点已经整合两个子节点并形成最终答案。",
+                    "phase": "delivery",
+                    "status": "completed",
+                    "childNodeIds": ["child-1", "child-2"],
+                    "recoveryAnchor": "resume:root",
+                },
+                {
+                    "id": "child-1",
+                    "title": "第一段证据",
+                    "parentNodeId": "root",
+                    "questionsItAnswers": ["第一段证据是否齐全"],
+                    "nodeText": "整理第一段证据。",
+                    "localGoal": "整理第一段证据。",
+                    "workingNodeAnnotation": "<Working_Node: child-1>",
+                    "executionSummary": "第一段证据已齐全。",
+                    "phase": "executing",
+                    "status": "completed",
+                    "childNodeIds": [],
+                    "recoveryAnchor": "resume:child-1",
+                },
+                {
+                    "id": "child-2",
+                    "title": "第二段证据",
+                    "parentNodeId": "root",
+                    "questionsItAnswers": ["第二段证据是否齐全"],
+                    "nodeText": "整理第二段证据。",
+                    "localGoal": "整理第二段证据。",
+                    "workingNodeAnnotation": "<Working_Node: child-2>",
+                    "executionSummary": "第二段证据已齐全。",
+                    "phase": "executing",
+                    "status": "completed",
+                    "childNodeIds": [],
+                    "recoveryAnchor": "resume:child-2",
+                },
+            ],
+        },
+        "deliverySections": [],
+        "verificationItems": [],
+        "metrics": {
+            "planQualityScore0_100": 95.0,
+            "reworkCount": 0,
+            "reworkRate": 0.0,
+            "clarificationNeeded": False,
+            "deliveryCompletenessScore0_100": 100.0,
+            "verificationPassRate": 1.0,
+        },
+        "appliedModules": ["task-takeover"],
+        "hookTrace": [],
+    }
+
+
+def _seed_awaiting_approval_task(task_id: str, run_id: str) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task = task_repository.create_task(
+            {
+                "id": task_id,
+                "title": f"{task_id} awaiting approval",
+                "goal": "验证 awaiting-approval 控制面。",
+                "status": "awaiting-approval",
+                "currentObjective": "等待批准或重新打开修订。",
+                "currentFocus": "awaiting-approval",
+            }
+        )
+        task_repository.create_agent_run(
+            task.id,
+            {
+                "id": run_id,
+                "status": "completed",
+                "selectedModel": "gpt-5.4",
+                "selectedProvider": "copilot",
+            },
+        )
+        runtime_takeover.persist_task_takeover_protocol(
+            TaskTakeoverProtocol.model_validate(_awaiting_approval_takeover_protocol(task_id)),
+            task_id=task.id,
+            run_id=run_id,
+        )
+
 
 def test_core_api_exposes_task_control_actions() -> None:
     created_task = client.post(
@@ -177,6 +298,41 @@ def test_core_api_exposes_task_control_actions() -> None:
     overview_cards = overview_response.json()["cards"]
     assert overview_cards["pausedTasks"] >= 0
     assert overview_cards["restorableSnapshots"] >= 1
+
+
+def test_core_api_exposes_awaiting_approval_controls() -> None:
+    _seed_awaiting_approval_task("task_api_approve_completion", "run_api_approve_completion")
+    detail_response = client.get("/tasks/task_api_approve_completion")
+    assert detail_response.status_code == 200
+    runtime_control = detail_response.json()["runtimeControl"]
+    assert runtime_control["canApprove"] is True
+    assert runtime_control["canRequestRevision"] is True
+    assert runtime_control["recommendedRevisionNodeId"] == "root"
+
+    approve_response = client.post("/tasks/task_api_approve_completion/approve-completion")
+    assert approve_response.status_code == 200
+    approve_payload = approve_response.json()
+    assert approve_payload["status"] == "completed"
+    assert approve_payload["task"]["status"] == "completed"
+    assert approve_payload["takeoverProtocol"]["workTree"]["status"] == "completed"
+
+    _seed_awaiting_approval_task("task_api_request_revision", "run_api_request_revision")
+    revision_response = client.post(
+        "/tasks/task_api_request_revision/request-revision",
+        json={
+            "nodeId": "child-2",
+            "reason": "补充第二段证据。",
+        },
+    )
+    assert revision_response.status_code == 202
+    revision_payload = revision_response.json()
+    assert revision_payload["status"] == "queued"
+    assert revision_payload["task"]["status"] == "queued"
+    assert revision_payload["workItem"]["command"] == "start"
+    assert revision_payload["workItem"]["payload"]["currentNodeId"] == "child-2"
+    assert revision_payload["workItem"]["payload"]["topFrameId"] == "frame-child-2"
+    assert revision_payload["takeoverProtocol"]["workTree"]["currentNodeId"] == "child-2"
+    assert revision_payload["takeoverProtocol"]["workTree"]["status"] == "active"
 
 
 def test_core_api_exposes_m9_resource_and_prompt_control_planes() -> None:

@@ -48,6 +48,31 @@ def _is_contract_protected_item(item: dict[str, Any]) -> bool:
     )
 
 
+def _is_foundation_context_item(item: dict[str, Any]) -> bool:
+    kind = str(item.get("kind") or "").strip().lower()
+    if kind in {"carry-forward-package", "retrieval-summary", "mailbox-message"}:
+        return True
+    return _is_contract_protected_item(item)
+
+
+def _compression_range_bounds(
+    current_context: list[dict[str, Any]],
+    *,
+    max_uncompressed_tail_before_decompress: int,
+) -> tuple[int, int]:
+    prefix_guard_count = 0
+    for item in current_context:
+        if isinstance(item, dict) and _is_foundation_context_item(item):
+            prefix_guard_count += 1
+            continue
+        break
+
+    # Keep at least n+1 trailing items outside compression to avoid immediate auto-decompress bounce.
+    tail_guard_count = max(max_uncompressed_tail_before_decompress, 0) + 1
+    compressible_end_index = len(current_context) - tail_guard_count - 1
+    return prefix_guard_count, compressible_end_index
+
+
 class ContextPruningModule(BaseModulePlugin):
     module_id = "context-pruning"
 
@@ -129,6 +154,14 @@ class ContextPruningModule(BaseModulePlugin):
             or budget.get("tokenBudgetTotal")
             or 1200
         )
+        max_uncompressed_tail_before_decompress = max(
+            int(payload.get("maxUncompressedTailBeforeDecompress") or 1),
+            0,
+        )
+        compression_start_index, compression_end_index = _compression_range_bounds(
+            current_context,
+            max_uncompressed_tail_before_decompress=max_uncompressed_tail_before_decompress,
+        )
 
         scored_items: list[dict[str, Any]] = []
         for index, item in enumerate(current_context):
@@ -143,8 +176,10 @@ class ContextPruningModule(BaseModulePlugin):
             scored_items.append(
                 {
                     "ref": item_ref,
+                    "index": index,
                     "score": score,
                     "tokens": _estimated_tokens(item),
+                    "inCompressibleRange": compression_start_index <= index <= compression_end_index,
                     "item": item,
                 }
             )
@@ -161,13 +196,14 @@ class ContextPruningModule(BaseModulePlugin):
             ref = scored_item["ref"]
             tokens = scored_item["tokens"]
             is_protected = ref.id in protected_ids
-            if is_protected or retained_tokens + tokens <= max_retained_tokens:
+            is_range_guarded = not bool(scored_item.get("inCompressibleRange"))
+            if is_protected or is_range_guarded or retained_tokens + tokens <= max_retained_tokens:
                 retained_refs.append(ref)
                 retained_tokens += tokens
                 keep_reasons.append(
                     {
                         "ref": ref.model_dump(by_alias=True, mode="json"),
-                        "reason": "protected" if is_protected else "within-budget",
+                        "reason": "protected" if is_protected else "range-guard" if is_range_guarded else "within-budget",
                     }
                 )
                 continue
@@ -214,6 +250,11 @@ class ContextPruningModule(BaseModulePlugin):
             "kept": keep_reasons,
             "droppedOrCompressed": drop_reasons,
         }
+        response["compressionRange"] = {
+            "startIndex": compression_start_index,
+            "endIndex": compression_end_index,
+            "maxUncompressedTailBeforeDecompress": max_uncompressed_tail_before_decompress,
+        }
         return response
 
     def execute(self, payload: dict[str, object]) -> dict[str, object]:
@@ -222,7 +263,7 @@ class ContextPruningModule(BaseModulePlugin):
         normalized_plan = {
             key: value
             for key, value in raw_plan.items()
-            if key not in {"estimatedRetainedTokens", "estimatedCompressedTokens", "pruningReport"}
+            if key not in {"estimatedRetainedTokens", "estimatedCompressedTokens", "pruningReport", "compressionRange"}
         }
         pruning_plan = ContextPruningPlan.model_validate(normalized_plan)
         executed_plan = pruning_plan.model_copy(update={"status": "executed"})

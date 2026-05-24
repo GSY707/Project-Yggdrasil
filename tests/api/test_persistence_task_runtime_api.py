@@ -230,6 +230,67 @@ def test_core_api_exposes_model_invocations_and_llm_summary() -> None:
     assert overview["recentModelInvocations"]
 
 
+def test_core_api_exposes_task_mailbox_and_side_channel() -> None:
+    created_task = client.post(
+        "/tasks",
+        json={
+            "id": "task_api_mailbox",
+            "title": "邮箱与侧信道 API 测试",
+            "goal": "验证 runtime mailbox 与 side-channel 已走正式持久化链路。",
+            "status": "queued",
+        },
+    )
+    assert created_task.status_code == 201
+
+    mailbox_response = client.post(
+        "/runtime/tasks/task_api_mailbox/mailbox",
+        json={
+            "sender": {"type": "agent", "id": "subagent"},
+            "messageKind": "subagent-completion",
+            "subject": "Child finished integration slice",
+            "body": "Child completed implementation and is waiting for parent summarization.",
+            "workTreeNodeId": "wt-node-mailbox",
+            "wakeOnMessage": True,
+        },
+    )
+    assert mailbox_response.status_code == 201
+    mailbox_payload = mailbox_response.json()
+    assert mailbox_payload["mailboxMessage"]["messageKind"] == "subagent-completion"
+    assert mailbox_payload["mailboxState"]["pendingCount"] == 1
+    assert mailbox_payload["sideChannelEvent"]["eventKind"] == "mailbox.subagent-completion"
+
+    list_mailbox = client.get("/runtime/tasks/task_api_mailbox/mailbox")
+    assert list_mailbox.status_code == 200
+    assert list_mailbox.json()["mailboxState"]["pendingCount"] == 1
+    assert len(list_mailbox.json()["mailboxMessages"]) == 1
+
+    side_channel_response = client.post(
+        "/runtime/tasks/task_api_mailbox/side-channel",
+        json={
+            "source": {"type": "module", "id": "runtime-kernel"},
+            "eventKind": "context-warning",
+            "level": "warning",
+            "summary": "Context window is nearing the restart threshold.",
+            "workTreeNodeId": "wt-node-mailbox",
+        },
+    )
+    assert side_channel_response.status_code == 201
+    assert side_channel_response.json()["sideChannelEvent"]["eventKind"] == "context-warning"
+
+    list_side_channel = client.get("/runtime/tasks/task_api_mailbox/side-channel")
+    assert list_side_channel.status_code == 200
+    event_kinds = {item["eventKind"] for item in list_side_channel.json()["sideChannelEvents"]}
+    assert "mailbox.subagent-completion" in event_kinds
+    assert "context-warning" in event_kinds
+
+    task_detail = client.get("/tasks/task_api_mailbox")
+    assert task_detail.status_code == 200
+    detail_payload = task_detail.json()
+    assert detail_payload["mailboxState"]["pendingCount"] == 1
+    assert len(detail_payload["mailboxMessages"]) == 1
+    assert len(detail_payload["sideChannelEvents"]) >= 2
+
+
 def test_core_api_supports_shared_spaces_mounts_and_permission_tuples() -> None:
     created_space = client.post(
         "/collaboration/spaces",

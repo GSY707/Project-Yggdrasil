@@ -52,6 +52,12 @@ def test_compile_runtime_prompt_for_main_coding_uses_existing_project_seed() -> 
     assert compiled.prompt_profile_id == "yggdrasil.software-factory.main-agent"
     assert compiled.seed_template_id == "yggdrasil.seed.coding.inherit-project"
     assert compiled.scenario == "coding.inherit-project"
+    assert set(compiled.boot_sections.keys()) == {
+        "physical_interface",
+        "world_roots",
+        "behavior_constitution",
+        "scene_recovery",
+    }
     assert "深潜研究员与继承开发者" in compiled.messages[0]["content"]
     assert "subagent_pr.create" in compiled.messages[0]["content"]
     assert "当前可见模块能力" in compiled.messages[0]["content"]
@@ -165,6 +171,8 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
     assert compiled.takeover_protocol.objective == "把 Gate 2 接管协议注入 Prompt。"
     assert "目标摘要: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[-1]["content"]
     assert "工作树:" in compiled.messages[-1]["content"]
+    assert "计划步骤数: 1" in compiled.messages[-1]["content"]
+    assert "1. [plan] 形成计划" not in compiled.messages[-1]["content"]
     assert "计划质量: 92.0" in compiled.messages[-1]["content"]
 
 
@@ -342,4 +350,158 @@ def test_compile_runtime_prompt_resume_path_omits_few_shot_examples() -> None:
     assert "few_shot_examples" not in compiled.system_sections
     assert "范围、模块边界和主链路" not in compiled.messages[0]["content"]
     assert "resume_message" not in compiled.user_sections
+    assert "<Working_Node: " in compiled.user_sections["scene_recovery"]
+    assert "恢复路径: restart-snapshot" in compiled.user_sections["scene_recovery"]
     assert compiled.messages[1]["content"].count("继续执行同一任务。") == 1
+
+
+def test_boot_behavior_constitution_is_stable_and_scene_specific_text_stays_outside_boot() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(),
+        current_context=[],
+        request={"appId": "yggdrasil.app.software-factory", "codingMode": "existing-project"},
+        resume_path=None,
+    )
+
+    assert "场景偏好与执行倾向" not in compiled.boot_sections["behavior_constitution"]
+    assert "行为宪法" in compiled.boot_sections["behavior_constitution"]
+    assert "场景偏好与执行倾向" in compiled.system_sections["scene_preferences"]
+    assert "高风险或不可逆操作必须显式请求确认。" not in compiled.boot_sections["physical_interface"]
+    assert "工具使用偏好:" in compiled.system_sections["tool_usage_preferences"]
+    assert "高风险或不可逆操作必须显式请求确认。" in compiled.system_sections["tool_usage_preferences"]
+
+
+def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_tags() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["text-memory", "shared-memory", "task-takeover"]),
+        current_context=[],
+        request={"appId": "yggdrasil.app.software-factory", "codingMode": "existing-project"},
+        resume_path=None,
+    )
+
+    tool_policy = compiled.system_sections["tool_usage_preferences"]
+    response_requirements = compiled.user_sections["response_requirements"]
+
+    assert "记忆修改优先级:" in tool_policy
+    assert "默认优先使用正式记忆工具" in tool_policy
+    assert "只有在需要不中断当前回答、且修改足够轻量时，才使用 <memory-write>" in tool_policy
+    assert "节点过宽、存在多个独立主题或冲突风险高时，优先创建细分子节点做空间隔离" in tool_policy
+    assert "latestVersionId 冲突时，不要静默覆盖" in tool_policy
+    assert "记忆修改默认优先使用正式记忆工具" in response_requirements
+    assert "<memory-write title=\"...\" rootBranch=\"context\">" in response_requirements
+
+
+def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(
+            title="窗口重启恢复",
+            goal="验证恢复态提示唯一性。",
+            resume_message="来自任务的旧恢复提示。",
+        ),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(resumeMessage="来自 root mount 的恢复提示。"),
+        current_context=[],
+        request={
+            "appId": "yggdrasil.app.coding-greenfield",
+            "codingMode": "new-project",
+            "resumeMessage": "来自请求的恢复提示。",
+            "restartMessage": "来自请求的重启提示。",
+        },
+        resume_path="restart-window-2",
+    )
+
+    assert "来自请求的重启提示。" in compiled.user_sections["scene_recovery"]
+    assert "来自请求的恢复提示。" not in compiled.user_sections["scene_recovery"]
+    assert "来自 root mount 的恢复提示。" not in compiled.user_sections["scene_recovery"]
+    assert compiled.messages[1]["content"].count("来自请求的重启提示。") == 1
+
+
+def test_resume_prompt_canonicalizes_working_node_and_memory_pointer() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(title="恢复态指针一致性", goal="验证恢复态 prompt 的节点指针一致。"),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(
+            currentNodeId="node-root",
+            workingNodeAnnotation="<Working_Node: node-root>",
+            pcMemo="pc:node-root",
+        ),
+        current_context=[],
+        request={
+            "appId": "yggdrasil.app.software-factory",
+            "workingNodeAnnotation": "<Working_Node: node-wrong>",
+            "memoryRetrievalState": {
+                "summary": "retrieval summary",
+                "requestId": "retr-1",
+                "workTreeNodeId": "node-memory",
+                "matchedNodeRefs": [],
+                "materializedNodeIds": [],
+            },
+            "takeoverProtocol": {
+                "id": "takeover_pointer_test",
+                "version": "0.1.0",
+                "taskId": "task_takeover_pointer_test",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "execute",
+                "status": "prepared",
+                "objective": "继续执行当前节点。",
+                "objectiveSummary": "继续执行当前节点。",
+                "ambiguities": [],
+                "constraints": [],
+                "plan": [],
+                "workTree": {
+                    "version": "0.1.0",
+                    "rootObjective": "继续执行当前节点。",
+                    "status": "active",
+                    "currentNodeId": "node-takeover",
+                    "nodes": [
+                        {
+                            "id": "node-takeover",
+                            "title": "执行当前节点",
+                            "phase": "executing",
+                            "status": "in-progress",
+                            "planStepIds": [],
+                            "constraintIds": [],
+                            "dependsOn": [],
+                            "expectedEvidence": [],
+                            "recoveryAnchor": "resume:node-takeover",
+                        }
+                    ],
+                    "recoveryAnchor": "resume:node-takeover",
+                    "entropyBudgetRemaining": 8,
+                    "pcMemo": "pc:node-takeover",
+                },
+                "deliverySections": [],
+                "verificationItems": [],
+                "metrics": {
+                    "planQualityScore0_100": 90.0,
+                    "reworkCount": 0,
+                    "reworkRate": 0.0,
+                    "clarificationNeeded": False,
+                    "deliveryCompletenessScore0_100": 0.0,
+                    "verificationPassRate": 0.0,
+                },
+                "appliedModules": ["task-takeover"],
+                "hookTrace": [],
+            },
+        },
+        resume_path="snapshot",
+    )
+
+    assert "工作节点标签: <Working_Node: node-root>" in compiled.user_sections["scene_recovery"]
+    assert "currentNodeId: node-root" in compiled.user_sections["scene_recovery"]
+    assert "pcMemo: pc:node-root" in compiled.user_sections["scene_recovery"]
+    assert "工作树节点: node-root" in compiled.user_sections["memory_retrieval_state"]
+    assert "当前节点=node-root" in compiled.user_sections["takeover_protocol"]
+    assert compiled.takeover_protocol is not None
+    assert compiled.takeover_protocol.work_tree is not None
+    assert compiled.takeover_protocol.work_tree.current_node_id == "node-root"
+    assert compiled.takeover_protocol.work_tree.pc_memo == "pc:node-root"

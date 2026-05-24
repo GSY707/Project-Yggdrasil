@@ -126,6 +126,42 @@ def _outbox_record(model: OutboxRecordORM) -> OutboxRecord:
         createdAt=model.created_at,
     )
 
+
+def _mailbox_message_record(model: MailboxMessageORM) -> MailboxMessageRecord:
+    return MailboxMessageRecord(
+        id=model.id,
+        projectId=model.project_id,
+        taskId=model.task_id,
+        agentRunId=model.agent_run_id,
+        sender=_actor(model.sender),
+        messageKind=model.message_kind,
+        subject=model.subject,
+        body=model.body,
+        workTreeNodeId=model.work_tree_node_id,
+        wakeOnMessage=model.wake_on_message,
+        status=model.status,
+        payloadRef=_external_ref(model.payload_ref),
+        createdAt=model.created_at,
+        deliveredAt=model.delivered_at,
+        acknowledgedAt=model.acknowledged_at,
+    )
+
+
+def _side_channel_event_record(model: SideChannelEventORM) -> SideChannelEventRecord:
+    return SideChannelEventRecord(
+        id=model.id,
+        projectId=model.project_id,
+        taskId=model.task_id,
+        agentRunId=model.agent_run_id,
+        source=_actor(model.source),
+        eventKind=model.event_kind,
+        level=model.level,
+        summary=model.summary,
+        workTreeNodeId=model.work_tree_node_id,
+        payloadRef=_external_ref(model.payload_ref),
+        createdAt=model.created_at,
+    )
+
 def _ensure_branch_roots(
     session: Session,
     *,
@@ -376,6 +412,7 @@ def _prompt_compile_artifact_record(model: PromptCompileArtifactORM) -> PromptCo
         taskType=model.task_type,
         scenario=model.scenario,
         registeredTools=list(model.registered_tools or []),
+        bootSections=dict(model.boot_sections or {}),
         systemSections=dict(model.system_sections or {}),
         userSections=dict(model.user_sections or {}),
         workTreeSnapshot=dict(model.work_tree_snapshot or {}) if model.work_tree_snapshot is not None else None,

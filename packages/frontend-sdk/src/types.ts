@@ -448,10 +448,52 @@ export interface TaskRuntimeControlSummary {
   resumeStatus: string;
   canResume: boolean;
   canRequestPause: boolean;
+  canApprove: boolean;
+  canRequestRevision: boolean;
   recommendedResumeToken?: string | null;
   recommendedResumeMessage?: string | null;
+  recommendedRevisionNodeId?: string | null;
   latestSnapshot?: SnapshotRecord | null;
   latestRestorableSnapshot?: SnapshotRecord | null;
+}
+
+export interface MailboxStateSummary {
+  status: string;
+  pendingCount: number;
+  wakeOnMessage: boolean;
+  [key: string]: unknown;
+}
+
+export interface MailboxMessageRecord {
+  id: string;
+  taskId: string;
+  agentRunId?: string | null;
+  sender?: { type: string; id: string } | null;
+  messageKind: string;
+  subject: string;
+  body: string;
+  workTreeNodeId?: string | null;
+  wakeOnMessage: boolean;
+  status: string;
+  payloadRef?: { type: string; locator: string } | null;
+  createdAt: string;
+  deliveredAt?: string | null;
+  acknowledgedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SideChannelEventRecord {
+  id: string;
+  taskId: string;
+  agentRunId?: string | null;
+  source?: { type: string; id: string } | null;
+  eventKind: string;
+  level: string;
+  summary: string;
+  workTreeNodeId?: string | null;
+  payloadRef?: { type: string; locator: string } | null;
+  createdAt: string;
+  [key: string]: unknown;
 }
 
 export interface EvaluationCaseDefinition {
@@ -576,6 +618,9 @@ export interface TaskDetailResponse {
   runtimeControl: TaskRuntimeControlSummary;
   routeDecisions: RouteDecisionRecord[];
   modelInvocations: ModelInvocationRecord[];
+  mailboxState: MailboxStateSummary;
+  mailboxMessages: MailboxMessageRecord[];
+  sideChannelEvents: SideChannelEventRecord[];
 }
 
 export interface TaskControlActionResponse {

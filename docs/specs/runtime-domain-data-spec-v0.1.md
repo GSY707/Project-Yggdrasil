@@ -105,12 +105,17 @@ Task:
 - running -> pause-requested
 - pause-requested -> paused
 - paused -> queued
-- running -> restart-requested
-- restart-requested -> restarting
-- restarting -> running
+- running -> restart-requested （legacy / stress）
+- restart-requested -> restarting （legacy / stress）
+- restarting -> running （legacy / stress）
 - running -> completed
 - running -> failed
 - running -> cancelled
+
+默认策略说明：
+
+- 默认路径下，窗口超阈值不再进入 restart 流程。
+- 超阈值处理顺序为：先执行 context pruning；若压缩后仍超阈值，当前支线直接 `running -> failed`。
 
 ### 4.3 约束
 
@@ -201,7 +206,7 @@ TaskSnapshot:
 ### 6.2 约束
 
 - pause 只能在 safe-stop 语义满足时生成可恢复快照。
-- restart 快照必须把 carry-forward package 写入 `contextRef`，并通过 `pendingActions.requestState` 保留下一窗口的 `windowIndex`、`restartCount`、`effectiveContextWindow` 与相关 handoff 元数据。
+- restart 快照（legacy / stress）必须把 carry-forward package 写入 `contextRef`，并通过 `pendingActions.requestState` 保留下一窗口的 `windowIndex`、`restartCount`、`effectiveContextWindow` 与相关 handoff 元数据。
 - 当启用 stress 口径时，restart 快照可以通过 `forcedWindowRestartBudget` 驱动多次受控 handoff；每次 handoff 后该预算必须单调递减。
 - consumed 快照不能再次作为恢复入口。
 
@@ -242,6 +247,10 @@ ContextPruningPlan:
   retainedRefs: [EntityRef]
   compressedRefs: [EntityRef]
   droppedRefs: [EntityRef]
+  compressionRange:
+    startIndex: integer
+    endIndex: integer
+    maxUncompressedTailBeforeDecompress: integer
   rationale: string
   status: proposed | executed | verified | failed
   createdBy: ActorRef
@@ -252,6 +261,9 @@ ContextPruningPlan:
 
 - 困难任务上下文修剪在任何风险级别都不要求人工确认。
 - 但所有修剪动作必须留下 ContextPruningPlan 和审计记录。
+- 压缩范围必须受起止约束：
+  - 起点：基础规则前缀（合同锚点、关键恢复锚点、系统摘要）不得进入压缩区间。
+  - 终点：尾部至少保留 `maxUncompressedTailBeforeDecompress + 1` 个未压缩段，避免“刚压完即触发自动解压”。
 
 ## 9. ToolDescriptor
 

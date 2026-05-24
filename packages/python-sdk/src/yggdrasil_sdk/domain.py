@@ -272,7 +272,7 @@ class TaskRecord(BaseModel):
     branch_id: str = Field(alias="branchId")
     title: str
     goal: str
-    status: Literal["draft", "queued", "running", "pause-requested", "paused", "restart-requested", "restarting", "completed", "failed", "cancelled"]
+    status: Literal["draft", "queued", "running", "pause-requested", "paused", "restart-requested", "restarting", "awaiting-approval", "completed", "failed", "cancelled"]
     current_focus: str | None = Field(default=None, alias="currentFocus")
     current_objective: str | None = Field(default=None, alias="currentObjective")
     resume_message: str | None = Field(default=None, alias="resumeMessage")
@@ -364,6 +364,42 @@ class OutboxRecord(BaseModel):
     available_at: datetime = Field(alias="availableAt")
     published_at: datetime | None = Field(default=None, alias="publishedAt")
     last_error: str | None = Field(default=None, alias="lastError")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class MailboxMessageRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    task_id: str = Field(alias="taskId")
+    agent_run_id: str | None = Field(default=None, alias="agentRunId")
+    sender: ActorRef
+    message_kind: str = Field(alias="messageKind")
+    subject: str
+    body: str
+    work_tree_node_id: str | None = Field(default=None, alias="workTreeNodeId")
+    wake_on_message: bool = Field(default=True, alias="wakeOnMessage")
+    status: Literal["pending", "delivered", "acknowledged"]
+    payload_ref: ExternalRef | None = Field(default=None, alias="payloadRef")
+    created_at: datetime = Field(alias="createdAt")
+    delivered_at: datetime | None = Field(default=None, alias="deliveredAt")
+    acknowledged_at: datetime | None = Field(default=None, alias="acknowledgedAt")
+
+
+class SideChannelEventRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    project_id: str = Field(alias="projectId")
+    task_id: str = Field(alias="taskId")
+    agent_run_id: str | None = Field(default=None, alias="agentRunId")
+    source: ActorRef
+    event_kind: str = Field(alias="eventKind")
+    level: Literal["info", "warning", "error"]
+    summary: str
+    work_tree_node_id: str | None = Field(default=None, alias="workTreeNodeId")
+    payload_ref: ExternalRef | None = Field(default=None, alias="payloadRef")
     created_at: datetime = Field(alias="createdAt")
 
 
@@ -506,6 +542,7 @@ class PromptCompileArtifactRecord(BaseModel):
     task_type: str = Field(alias="taskType")
     scenario: str | None = None
     registered_tools: list[dict[str, Any]] = Field(default_factory=list, alias="registeredTools")
+    boot_sections: dict[str, str] = Field(default_factory=dict, alias="bootSections")
     system_sections: dict[str, str] = Field(default_factory=dict, alias="systemSections")
     user_sections: dict[str, str] = Field(default_factory=dict, alias="userSections")
     work_tree_snapshot: dict[str, Any] | None = Field(default=None, alias="workTreeSnapshot")

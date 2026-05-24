@@ -1,12 +1,13 @@
-# 数据规格索引 v0.1
+# 数据规格索引
 
 - 文档状态：Candidate
-- 更新时间：2026-05-15
+- 更新时间：2026-05-23
 - 目标：模块开发者只看规格即可实现模块，不需要查其他模块代码。
 - 关联文档：
   - [PRD v0.1](../PRD-v0.1.md)
   - [协议索引](../protocols/README.md)
-  - [Agent 运行时协议 v0.1](agent-runtime-protocol-v0.1.md)
+  - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md)
+  - [工作树协议 v0.2](work-tree-protocol-v0.2.md)
 
 ## 1. 使用原则
 
@@ -17,6 +18,13 @@
 - 模块之间通过规格、协议和事件通信，不通过读取彼此内部表结构或内部代码通信。
 
 ## 2. 文档列表
+
+### 当前重做入口（v0.2）
+
+- [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md) - 冻结 Boot Prompt、启动、待机、运行、上下文窗口、多 Agent 与结束批准语义。
+- [工作树协议 v0.2](work-tree-protocol-v0.2.md) - 冻结工作树作为动态工作记忆和执行栈的节点 schema、状态机、Working Node 标签、摘要上浮和冲突语义。
+
+### 现有 v0.1 规格（兼容参考）
 
 - [通用数据约定 v0.1](common-data-conventions-v0.1.md)
 - [任务接管协议 v0.1](task-takeover-protocol-v0.1.md)
@@ -31,11 +39,12 @@
 ## 3. 阅读顺序
 
 1. 先读通用数据约定。
-2. 再读任务接管协议，确认目标/约束/计划/验证/交付的正式结构。
-3. 再读工作树协议，确认 runtime 如何把计划投影成可恢复执行树。
-4. 再读你所属模块的主领域规格。
-5. 然后读协议文档，确认 manifest、hook、事件的接入方式。
-6. 最后读运行时协议，确认触发时机与上下文装配方式。
+2. 若参与提示词、启动流程或工作流程重做，先读 Agent 运行时协议 v0.2。
+3. 再读工作树协议 v0.2，确认 runtime 如何维护当前工作节点、动态下潜、摘要上浮和结束批准。
+4. 再读任务接管协议 v0.1，确认旧 takeover plan 如何作为 v0.2 工作树初始建议和兼容输入。
+5. 再读你所属模块的主领域规格。
+6. 然后读协议文档，确认 manifest、hook、事件的接入方式。
+7. 最后按需要回读 v0.1 规格，处理旧 artifact 兼容。
 
 ## 4. 模块开发最低合规要求
 
@@ -48,6 +57,17 @@
 - 它失败时会进入什么状态，恢复时依赖什么快照或补偿数据。
 
 ## 5. 当前冻结范围
+
+v0.2 已冻结以下重做边界：
+
+- Boot Prompt 四段：物理接口、根指针、行为宪法、程序计数器恢复。
+- RootMountPackage v0.2：语义根指针、索引地图、当前工作节点、邮箱和侧信道占位。
+- WorkTreeProtocol v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack 栈式上下文、摘要上浮、等待批准完成。
+- 启动模式：cold-standby、hot-resume、work-node-active、approval-review（`restart-recovery` 仅保留为 legacy/stress 兼容输入，不作为默认执行路径）。
+- 运行模式：以当前工作树节点为权威指针，`currentFocus` 只作为 UI 摘要。
+- 邮箱：使用独立 `mailbox` 表作为主存储，outbox/event 只承载投递和审计。
+- Fork：按模型能力、节点复杂度、上下文窗口和成本动态分配预算，并保留父 Agent 合并预算。
+- 兼容策略：v0.1 artifact 必须可读并升级，v0.2 作为默认且唯一运行路径。
 
 当前 v0.1 已冻结以下数据边界：
 

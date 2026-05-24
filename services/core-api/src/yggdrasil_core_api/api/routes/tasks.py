@@ -74,6 +74,34 @@ def resume_task(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+@router.post("/{task_id}/approve-completion")
+def approve_task_completion(
+    task_id: str,
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.approve_task_completion(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{task_id}/request-revision", status_code=status.HTTP_202_ACCEPTED)
+def request_task_revision(
+    task_id: str,
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.request_task_revision(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
 @router.post("/{task_id}/runs", status_code=status.HTTP_201_CREATED)
 def create_agent_run(
     task_id: str,

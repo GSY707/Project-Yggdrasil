@@ -19,6 +19,10 @@ _MEMORY_WRITE_TAG_PATTERN = re.compile(
     r"<memory-write(?P<attrs>[^>]*)>(?P<content>.*?)</memory-write>",
     re.IGNORECASE | re.DOTALL,
 )
+_WORK_TREE_ACTION_TAG_PATTERN = re.compile(
+    r"<work-node-create(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-create>",
+    re.IGNORECASE | re.DOTALL,
+)
 _MEMORY_WRITE_ATTR_PATTERN = re.compile(
     r"(?P<name>[A-Za-z][A-Za-z0-9_-]*)\s*=\s*(?P<quote>[\"'])(?P<value>.*?)(?P=quote)",
     re.DOTALL,
@@ -90,6 +94,7 @@ def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
     )
     if threshold <= 0 and effective_context_window > 0:
         threshold = max(1, min(effective_context_window, int(effective_context_window * restart_ratio)))
+    max_uncompressed_tail_before_decompress = _max_uncompressed_tail_before_decompress(request)
 
     return {
         "windowIndex": max(
@@ -123,6 +128,7 @@ def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
         "windowRestartRatio": restart_ratio,
         "windowRestartThreshold": threshold,
         "windowSpanTokens": max(_int_metric(request_metrics.get("windowSpanTokens"), 0), 0),
+        "maxUncompressedTailBeforeDecompress": max_uncompressed_tail_before_decompress,
     }
 
 
@@ -234,14 +240,7 @@ def _coerce_takeover_protocol(candidate: Any) -> TaskTakeoverProtocol | None:
 
 
 def _work_tree_node_id_from_request(request: dict[str, Any]) -> str | None:
-    protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
-    if protocol is not None and protocol.work_tree is not None and protocol.work_tree.current_node_id is not None:
-        return str(protocol.work_tree.current_node_id)
-    candidate = request.get("workTreeNodeId")
-    if candidate is None:
-        return None
-    normalized = str(candidate).strip()
-    return normalized or None
+    return _runtime_pointer_fields(request).get("currentNodeId")
 
 
 def _assistant_text_summary(text: str, limit: int = 240) -> str | None:
@@ -389,6 +388,7 @@ def _build_window_execution_record(
 ) -> dict[str, Any]:
     takeover_protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
     work_tree = takeover_protocol.work_tree if takeover_protocol is not None else None
+    pointer_state = _runtime_pointer_state(str(task.id), str(run.id), request)
     memory_state = _window_execution_memory_state(request)
     assistant_text = str((llm_result or {}).get("assistantText") or "")
     memory_tag_write_result = memory_tag_write_result or {}
@@ -406,6 +406,10 @@ def _build_window_execution_record(
             "workTreeCurrentNodeId": work_tree.current_node_id if work_tree is not None else None,
             "workTreeStatus": work_tree.status if work_tree is not None else None,
             "workTreeRecoveryAnchor": work_tree.recovery_anchor if work_tree is not None else None,
+            "workingNodeAnnotation": pointer_state.get("workingNodeAnnotation"),
+            "pcMemo": pointer_state.get("pcMemo"),
+            "topFrameId": pointer_state.get("topFrameId"),
+            "stackDigest": pointer_state.get("stackDigest"),
             "retrievalFingerprint": memory_state.get("retrievalFingerprint"),
             "protectedRefIds": protected_ref_ids,
         }
@@ -443,9 +447,14 @@ def _build_window_execution_record(
         "preRetrievalContextCount": len([item for item in (pre_retrieval_context or []) if isinstance(item, dict)]),
         "preRetrievalContextTokenEstimate": _estimate_context_tokens(pre_retrieval_context or []),
         "protectedRefIds": protected_ref_ids,
+        "currentNodeId": pointer_state.get("currentNodeId") or (work_tree.current_node_id if work_tree is not None else None),
         "workTreeCurrentNodeId": work_tree.current_node_id if work_tree is not None else None,
         "workTreeStatus": work_tree.status if work_tree is not None else None,
         "workTreeRecoveryAnchor": work_tree.recovery_anchor if work_tree is not None else None,
+        "workingNodeAnnotation": pointer_state.get("workingNodeAnnotation"),
+        "pcMemo": pointer_state.get("pcMemo"),
+        "topFrameId": pointer_state.get("topFrameId"),
+        "stackDigest": pointer_state.get("stackDigest"),
         "memoryRetrievalState": memory_state,
         "memoryTagWrites": {
             "detectedCount": max(_int_metric(memory_tag_write_result.get("detectedCount"), 0), 0),
@@ -684,8 +693,54 @@ def _trim_context_items_to_token_budget(context_items: list[dict[str, Any]], tok
     return trimmed_items
 
 
-def _should_trim_retrieved_context(current_context: list[dict[str, Any]]) -> bool:
-    return any(str(item.get("kind") or "") == "carry-forward-package" for item in current_context if isinstance(item, dict))
+def _max_uncompressed_tail_before_decompress(request: dict[str, Any] | None) -> int:
+    if not isinstance(request, dict):
+        return 1
+    request_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
+    return max(
+        _int_metric(
+            request.get("maxUncompressedTailBeforeDecompress"),
+            _int_metric(request_metrics.get("maxUncompressedTailBeforeDecompress"), 1),
+        ),
+        0,
+    )
+
+
+def _count_uncompressed_tail_segments(current_context: list[dict[str, Any]]) -> int | None:
+    last_compressed_index = None
+    for index, item in enumerate(current_context):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("kind") or "") == "carry-forward-package":
+            last_compressed_index = index
+    if last_compressed_index is None:
+        return None
+
+    tail_count = 0
+    for item in current_context[last_compressed_index + 1 :]:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("kind") or "") == "carry-forward-package":
+            continue
+        tail_count += 1
+    return tail_count
+
+
+def _should_trim_retrieved_context(current_context: list[dict[str, Any]], *, request: dict[str, Any] | None = None) -> bool:
+    has_compressed_segment = any(
+        str(item.get("kind") or "") == "carry-forward-package"
+        for item in current_context
+        if isinstance(item, dict)
+    )
+    if not has_compressed_segment:
+        return False
+
+    # Auto-decompress when the trailing uncompressed segment count is small enough.
+    tail_count = _count_uncompressed_tail_segments(current_context)
+    max_tail = _max_uncompressed_tail_before_decompress(request)
+    if tail_count is not None and 0 < tail_count <= max_tail:
+        return False
+    return True
 
 
 def _parse_memory_write_tag_attributes(attribute_text: str) -> dict[str, str]:
@@ -775,6 +830,173 @@ def _extract_assistant_memory_write_tags(assistant_text: str, *, enabled: bool) 
         "writes": parsed_writes,
         "blocked": blocked,
         "detectedCount": len(parsed_writes) + len(blocked),
+    }
+
+
+def _split_structured_tag_values(value: str | None, *, fallback: list[str] | None = None) -> list[str]:
+    parts = [
+        normalize_excerpt(str(item).strip(), 120)
+        for item in re.split(r"[|;\n]+", str(value or ""))
+        if str(item).strip()
+    ]
+    normalized = [item for item in parts if item]
+    if normalized:
+        return normalized
+    return [item for item in (fallback or []) if str(item).strip()]
+
+
+def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) -> dict[str, Any]:
+    if not enabled:
+        return {
+            "cleanAssistantText": str(assistant_text or "").strip(),
+            "actions": [],
+            "blocked": [],
+            "detectedCount": 0,
+        }
+
+    parsed_actions: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        raw_tag = str(match.group(0) or "")
+        attributes = _parse_memory_write_tag_attributes(str(match.group("attrs") or ""))
+        title = str(attributes.get("title") or "").strip()
+        parent_node_id = str(attributes.get("parentnodeid") or "").strip() or None
+        content = str(match.group("content") or "").strip()
+        local_goal = content or str(attributes.get("goal") or "").strip() or title
+        if not title:
+            blocked.append(
+                {
+                    "status": "blocked",
+                    "reason": "missing-title",
+                    "tagPreview": normalize_excerpt(raw_tag, 160),
+                }
+            )
+            return ""
+        parsed_actions.append(
+            {
+                "rawTag": raw_tag,
+                "title": title,
+                "parentNodeId": parent_node_id,
+                "phase": str(attributes.get("phase") or "executing").strip() or "executing",
+                "localGoal": local_goal,
+                "questionsItAnswers": _split_structured_tag_values(attributes.get("questions"), fallback=[title]),
+                "expectedEvidence": _split_structured_tag_values(attributes.get("evidence"), fallback=[]),
+            }
+        )
+        return ""
+
+    stripped = _WORK_TREE_ACTION_TAG_PATTERN.sub(_replace, assistant_text)
+    clean_text = re.sub(r"\n{3,}", "\n\n", stripped).strip()
+    return {
+        "cleanAssistantText": clean_text,
+        "actions": parsed_actions,
+        "blocked": blocked,
+        "detectedCount": len(parsed_actions) + len(blocked),
+    }
+
+
+def _apply_parsed_assistant_work_tree_actions(
+    *,
+    task_id: str,
+    agent_run_id: str,
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    takeover_protocol: TaskTakeoverProtocol | None,
+    parsed_actions: dict[str, Any] | None,
+) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None, dict[str, Any]]:
+    action_payload = parsed_actions if isinstance(parsed_actions, dict) else {}
+    blocked = [dict(item) for item in action_payload.get("blocked") or [] if isinstance(item, dict)]
+    actions = [dict(item) for item in action_payload.get("actions") or [] if isinstance(item, dict)]
+    work_context_stack = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
+
+    if takeover_protocol is None or takeover_protocol.work_tree is None or not actions:
+        return takeover_protocol, _coerce_work_context_stack(work_context_stack), {
+            "detectedCount": int(action_payload.get("detectedCount") or len(blocked)),
+            "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),
+            "applied": [],
+            "blocked": blocked,
+        }
+
+    current_node = _current_work_tree_node(takeover_protocol)
+    default_parent_node_id = (
+        current_node.id
+        if current_node is not None
+        else takeover_protocol.work_tree.current_node_id or takeover_protocol.work_tree.root_node_id
+    )
+    updated_protocol = takeover_protocol
+    updated_stack = _coerce_work_context_stack(work_context_stack)
+    applied: list[dict[str, Any]] = []
+
+    for action in actions:
+        try:
+            updated_protocol, updated_stack, created_node = create_child_work_node(
+                updated_protocol,
+                task_id=task_id,
+                agent_run_id=agent_run_id,
+                title=str(action.get("title") or "").strip() or "Untitled work node",
+                phase=str(action.get("phase") or "executing").strip() or "executing",
+                parent_node_id=str(action.get("parentNodeId") or "").strip() or default_parent_node_id,
+                questions_it_answers=[
+                    str(item)
+                    for item in action.get("questionsItAnswers") or []
+                    if str(item).strip()
+                ]
+                or [str(action.get("title") or "").strip() or "Untitled work node"],
+                local_goal=str(action.get("localGoal") or action.get("title") or "").strip() or None,
+                expected_evidence=[
+                    str(item)
+                    for item in action.get("expectedEvidence") or []
+                    if str(item).strip()
+                ],
+                work_context_stack=updated_stack,
+                activate=not applied,
+            )
+            applied.append(
+                {
+                    "status": "applied",
+                    "title": created_node.title,
+                    "parentNodeId": created_node.parent_node_id,
+                    "childNodeId": created_node.id,
+                    "workingNodeAnnotation": created_node.working_node_annotation,
+                    "activated": len(applied) == 0,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            blocked.append(
+                {
+                    "status": "blocked",
+                    "reason": "create-child-failed",
+                    "title": str(action.get("title") or "").strip() or None,
+                    "detail": str(exc),
+                }
+            )
+
+    if applied and updated_protocol is not None and updated_protocol.work_tree is not None:
+        updated_protocol, updated_stack = sync_takeover_runtime_state(
+            request,
+            root_mount,
+            updated_protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            current_focus=_work_tree_focus_label(updated_protocol),
+            work_context_stack=updated_stack,
+        )
+
+    transition = {
+        "transition": "enter-child",
+        "requiresContinuation": bool(applied),
+        "currentNodeId": updated_protocol.work_tree.current_node_id if updated_protocol is not None and updated_protocol.work_tree is not None else None,
+        "nextNodeId": applied[0]["childNodeId"] if applied else None,
+        "currentFocus": _work_tree_focus_label(updated_protocol) if applied else request.get("currentFocus"),
+        "createdNodeIds": [item["childNodeId"] for item in applied],
+    }
+    return updated_protocol, updated_stack, {
+        "detectedCount": int(action_payload.get("detectedCount") or (len(applied) + len(blocked))),
+        "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),
+        "applied": applied,
+        "blocked": blocked,
+        **transition,
     }
 
 
