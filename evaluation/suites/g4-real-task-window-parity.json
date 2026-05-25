@@ -52,59 +52,257 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.98 },
-        { "path": "docs/protocols/event-contracts-v0.1.md", "title": "event contracts", "importance": 0.97 },
-        { "path": "docs/protocols/hook-contracts-v0.1.md", "title": "hook contracts", "importance": 0.97 },
-        { "path": "docs/specs/runtime-domain-data-spec-v0.1.md", "title": "runtime domain spec", "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "importance": 0.97 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "importance": 0.97 },
-        { "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md", "title": "roadmap research", "importance": 0.99 },
-        { "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md", "title": "historical long-task baseline", "importance": 0.97 },
-        { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
-        { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
-        { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 280, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
-        { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
-        { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 260, "importance": 0.94 },
-        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/protocols/event-contracts-v0.1.md",
+          "title": "event contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/protocols/hook-contracts-v0.1.md",
+          "title": "hook contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/runtime-domain-data-spec-v0.1.md",
+          "title": "runtime domain spec",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md",
+          "title": "roadmap research",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md",
+          "title": "historical long-task baseline",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/g4-closeout-2026-05-15.md",
+          "title": "g4 closeout",
+          "importance": 0.96
+        },
+        {
+          "path": "evaluation/suites/g4-provider-matrix-longform.json",
+          "title": "g4 longform suite",
+          "importance": 0.95
+        },
+        {
+          "path": "evaluation/suites/g4-window-restart-stress.json",
+          "title": "g4 window stress suite",
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "title": "execution loop",
+          "lineStart": 1,
+          "lineEnd": 760,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 420,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "title": "llm runtime metrics path",
+          "lineStart": 520,
+          "lineEnd": 725,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 suite cases",
+          "lineStart": 1,
+          "lineEnd": 620,
+          "importance": 0.97
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 210,
+          "lineEnd": 280,
+          "importance": 0.95
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "title": "real-user live pack",
+          "lineStart": 1,
+          "lineEnd": 340,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "title": "real-user live execution path",
+          "lineStart": 350,
+          "lineEnd": 776,
+          "importance": 0.96
+        },
+        {
+          "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py",
+          "title": "provider gateway",
+          "lineStart": 1,
+          "lineEnd": 220,
+          "importance": 0.95
+        },
+        {
+          "path": "tests/test_g4_multiscene.py",
+          "title": "g4 tests",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.94
+        },
+        {
+          "path": "tests/runtime/test_runtime_restart_and_resume.py",
+          "title": "runtime restart tests",
+          "lineStart": 180,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json",
+          "title": "live stress evidence",
+          "lineStart": 1,
+          "lineEnd": 1012,
+          "importance": 0.99
+        }
       ],
       "currentContextGlobs": [
-        { "pattern": "*.md", "importance": 0.7 },
-        { "pattern": "*.json", "importance": 0.68 },
-        { "pattern": "*.toml", "importance": 0.68 },
-        { "pattern": "*.ini", "importance": 0.68 },
-        { "pattern": "docs/**/*.md", "importance": 0.82 },
-        { "pattern": "infra/**/*.md", "importance": 0.72 },
-        { "pattern": "infra/**/*.yml", "importance": 0.7 },
-        { "pattern": "infra/**/*.yaml", "importance": 0.7 },
-        { "pattern": "evaluation/suites/**/*.json", "importance": 0.8 },
-        { "pattern": "evaluation/fixtures/**/*.md", "importance": 0.76 },
-        { "pattern": "evaluation/fixtures/**/*.json", "importance": 0.74 },
-        { "pattern": "evaluation/fixtures/**/*.csv", "importance": 0.72 },
-        { "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py", "importance": 0.88 },
-        { "pattern": "packages/frontend-sdk/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/frontend-sdk/**/*.tsx", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.json", "importance": 0.72 },
-        { "pattern": "modules/**/src/**/*.py", "importance": 0.78 },
-        { "pattern": "modules/**/yggdrasil.module.yaml", "importance": 0.72 },
-        { "pattern": "modules/**/pyproject.toml", "importance": 0.7 },
-        { "pattern": "services/**/*.py", "importance": 0.76 },
-        { "pattern": "adapters/**/*.py", "importance": 0.78 },
-        { "pattern": "tests/**/*.py", "importance": 0.8 },
-        { "pattern": "apps/web/**/*.ts", "importance": 0.72 },
-        { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
-        { "pattern": "applications/**/*.*", "importance": 0.7 },
-        { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.py", "importance": 0.68 }
+        {
+          "pattern": "*.md",
+          "importance": 0.7
+        },
+        {
+          "pattern": "*.json",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.toml",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.ini",
+          "importance": 0.68
+        },
+        {
+          "pattern": "docs/**/*.md",
+          "importance": 0.82
+        },
+        {
+          "pattern": "infra/**/*.md",
+          "importance": 0.72
+        },
+        {
+          "pattern": "infra/**/*.yml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "infra/**/*.yaml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "evaluation/suites/**/*.json",
+          "importance": 0.8
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.md",
+          "importance": 0.76
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.json",
+          "importance": 0.74
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.csv",
+          "importance": 0.72
+        },
+        {
+          "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py",
+          "importance": 0.88
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.tsx",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.json",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/src/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "modules/**/yggdrasil.module.yaml",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/pyproject.toml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "services/**/*.py",
+          "importance": 0.76
+        },
+        {
+          "pattern": "adapters/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "tests/**/*.py",
+          "importance": 0.8
+        },
+        {
+          "pattern": "apps/web/**/*.ts",
+          "importance": 0.72
+        },
+        {
+          "pattern": "apps/web/**/*.tsx",
+          "importance": 0.72
+        },
+        {
+          "pattern": "applications/**/*.*",
+          "importance": 0.7
+        },
+        {
+          "pattern": "migrations/**/*.py",
+          "importance": 0.7
+        },
+        {
+          "pattern": "scripts/**/*.py",
+          "importance": 0.68
+        }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -125,8 +323,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -158,7 +363,13 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-parity", "real-task", "longcat", "short-window"],
+      "tags": [
+        "g4",
+        "window-parity",
+        "real-task",
+        "longcat",
+        "short-window"
+      ],
       "difficulty": "hard"
     },
     {
@@ -196,59 +407,257 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.98 },
-        { "path": "docs/protocols/event-contracts-v0.1.md", "title": "event contracts", "importance": 0.97 },
-        { "path": "docs/protocols/hook-contracts-v0.1.md", "title": "hook contracts", "importance": 0.97 },
-        { "path": "docs/specs/runtime-domain-data-spec-v0.1.md", "title": "runtime domain spec", "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "importance": 0.97 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "importance": 0.97 },
-        { "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md", "title": "roadmap research", "importance": 0.99 },
-        { "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md", "title": "historical long-task baseline", "importance": 0.97 },
-        { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
-        { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
-        { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 280, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
-        { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
-        { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 260, "importance": 0.94 },
-        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/protocols/event-contracts-v0.1.md",
+          "title": "event contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/protocols/hook-contracts-v0.1.md",
+          "title": "hook contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/runtime-domain-data-spec-v0.1.md",
+          "title": "runtime domain spec",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md",
+          "title": "roadmap research",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md",
+          "title": "historical long-task baseline",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/g4-closeout-2026-05-15.md",
+          "title": "g4 closeout",
+          "importance": 0.96
+        },
+        {
+          "path": "evaluation/suites/g4-provider-matrix-longform.json",
+          "title": "g4 longform suite",
+          "importance": 0.95
+        },
+        {
+          "path": "evaluation/suites/g4-window-restart-stress.json",
+          "title": "g4 window stress suite",
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "title": "execution loop",
+          "lineStart": 1,
+          "lineEnd": 760,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 420,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "title": "llm runtime metrics path",
+          "lineStart": 520,
+          "lineEnd": 725,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 suite cases",
+          "lineStart": 1,
+          "lineEnd": 620,
+          "importance": 0.97
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 210,
+          "lineEnd": 280,
+          "importance": 0.95
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "title": "real-user live pack",
+          "lineStart": 1,
+          "lineEnd": 340,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "title": "real-user live execution path",
+          "lineStart": 350,
+          "lineEnd": 776,
+          "importance": 0.96
+        },
+        {
+          "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py",
+          "title": "provider gateway",
+          "lineStart": 1,
+          "lineEnd": 220,
+          "importance": 0.95
+        },
+        {
+          "path": "tests/test_g4_multiscene.py",
+          "title": "g4 tests",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.94
+        },
+        {
+          "path": "tests/runtime/test_runtime_restart_and_resume.py",
+          "title": "runtime restart tests",
+          "lineStart": 180,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json",
+          "title": "live stress evidence",
+          "lineStart": 1,
+          "lineEnd": 1012,
+          "importance": 0.99
+        }
       ],
       "currentContextGlobs": [
-        { "pattern": "*.md", "importance": 0.7 },
-        { "pattern": "*.json", "importance": 0.68 },
-        { "pattern": "*.toml", "importance": 0.68 },
-        { "pattern": "*.ini", "importance": 0.68 },
-        { "pattern": "docs/**/*.md", "importance": 0.82 },
-        { "pattern": "infra/**/*.md", "importance": 0.72 },
-        { "pattern": "infra/**/*.yml", "importance": 0.7 },
-        { "pattern": "infra/**/*.yaml", "importance": 0.7 },
-        { "pattern": "evaluation/suites/**/*.json", "importance": 0.8 },
-        { "pattern": "evaluation/fixtures/**/*.md", "importance": 0.76 },
-        { "pattern": "evaluation/fixtures/**/*.json", "importance": 0.74 },
-        { "pattern": "evaluation/fixtures/**/*.csv", "importance": 0.72 },
-        { "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py", "importance": 0.88 },
-        { "pattern": "packages/frontend-sdk/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/frontend-sdk/**/*.tsx", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.json", "importance": 0.72 },
-        { "pattern": "modules/**/src/**/*.py", "importance": 0.78 },
-        { "pattern": "modules/**/yggdrasil.module.yaml", "importance": 0.72 },
-        { "pattern": "modules/**/pyproject.toml", "importance": 0.7 },
-        { "pattern": "services/**/*.py", "importance": 0.76 },
-        { "pattern": "adapters/**/*.py", "importance": 0.78 },
-        { "pattern": "tests/**/*.py", "importance": 0.8 },
-        { "pattern": "apps/web/**/*.ts", "importance": 0.72 },
-        { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
-        { "pattern": "applications/**/*.*", "importance": 0.7 },
-        { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.py", "importance": 0.68 }
+        {
+          "pattern": "*.md",
+          "importance": 0.7
+        },
+        {
+          "pattern": "*.json",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.toml",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.ini",
+          "importance": 0.68
+        },
+        {
+          "pattern": "docs/**/*.md",
+          "importance": 0.82
+        },
+        {
+          "pattern": "infra/**/*.md",
+          "importance": 0.72
+        },
+        {
+          "pattern": "infra/**/*.yml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "infra/**/*.yaml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "evaluation/suites/**/*.json",
+          "importance": 0.8
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.md",
+          "importance": 0.76
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.json",
+          "importance": 0.74
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.csv",
+          "importance": 0.72
+        },
+        {
+          "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py",
+          "importance": 0.88
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.tsx",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.json",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/src/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "modules/**/yggdrasil.module.yaml",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/pyproject.toml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "services/**/*.py",
+          "importance": 0.76
+        },
+        {
+          "pattern": "adapters/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "tests/**/*.py",
+          "importance": 0.8
+        },
+        {
+          "pattern": "apps/web/**/*.ts",
+          "importance": 0.72
+        },
+        {
+          "pattern": "apps/web/**/*.tsx",
+          "importance": 0.72
+        },
+        {
+          "pattern": "applications/**/*.*",
+          "importance": 0.7
+        },
+        {
+          "pattern": "migrations/**/*.py",
+          "importance": 0.7
+        },
+        {
+          "pattern": "scripts/**/*.py",
+          "importance": 0.68
+        }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -269,8 +678,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。"
@@ -298,7 +714,13 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-parity", "real-task", "longcat", "long-window"],
+      "tags": [
+        "g4",
+        "window-parity",
+        "real-task",
+        "longcat",
+        "long-window"
+      ],
       "difficulty": "hard"
     },
     {
@@ -336,59 +758,257 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.98 },
-        { "path": "docs/protocols/event-contracts-v0.1.md", "title": "event contracts", "importance": 0.97 },
-        { "path": "docs/protocols/hook-contracts-v0.1.md", "title": "hook contracts", "importance": 0.97 },
-        { "path": "docs/specs/runtime-domain-data-spec-v0.1.md", "title": "runtime domain spec", "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "importance": 0.97 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "importance": 0.97 },
-        { "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md", "title": "roadmap research", "importance": 0.99 },
-        { "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md", "title": "historical long-task baseline", "importance": 0.97 },
-        { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
-        { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
-        { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 320, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
-        { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
-        { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 320, "importance": 0.94 },
-        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/protocols/event-contracts-v0.1.md",
+          "title": "event contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/protocols/hook-contracts-v0.1.md",
+          "title": "hook contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/runtime-domain-data-spec-v0.1.md",
+          "title": "runtime domain spec",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md",
+          "title": "roadmap research",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md",
+          "title": "historical long-task baseline",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/g4-closeout-2026-05-15.md",
+          "title": "g4 closeout",
+          "importance": 0.96
+        },
+        {
+          "path": "evaluation/suites/g4-provider-matrix-longform.json",
+          "title": "g4 longform suite",
+          "importance": 0.95
+        },
+        {
+          "path": "evaluation/suites/g4-window-restart-stress.json",
+          "title": "g4 window stress suite",
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "title": "execution loop",
+          "lineStart": 1,
+          "lineEnd": 760,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 420,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "title": "llm runtime metrics path",
+          "lineStart": 520,
+          "lineEnd": 725,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 suite cases",
+          "lineStart": 1,
+          "lineEnd": 620,
+          "importance": 0.97
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 210,
+          "lineEnd": 320,
+          "importance": 0.95
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "title": "real-user live pack",
+          "lineStart": 1,
+          "lineEnd": 340,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "title": "real-user live execution path",
+          "lineStart": 350,
+          "lineEnd": 776,
+          "importance": 0.96
+        },
+        {
+          "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py",
+          "title": "provider gateway",
+          "lineStart": 1,
+          "lineEnd": 220,
+          "importance": 0.95
+        },
+        {
+          "path": "tests/test_g4_multiscene.py",
+          "title": "g4 tests",
+          "lineStart": 1,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": "tests/runtime/test_runtime_restart_and_resume.py",
+          "title": "runtime restart tests",
+          "lineStart": 180,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json",
+          "title": "live stress evidence",
+          "lineStart": 1,
+          "lineEnd": 1012,
+          "importance": 0.99
+        }
       ],
       "currentContextGlobs": [
-        { "pattern": "*.md", "importance": 0.7 },
-        { "pattern": "*.json", "importance": 0.68 },
-        { "pattern": "*.toml", "importance": 0.68 },
-        { "pattern": "*.ini", "importance": 0.68 },
-        { "pattern": "docs/**/*.md", "importance": 0.82 },
-        { "pattern": "infra/**/*.md", "importance": 0.72 },
-        { "pattern": "infra/**/*.yml", "importance": 0.7 },
-        { "pattern": "infra/**/*.yaml", "importance": 0.7 },
-        { "pattern": "evaluation/suites/**/*.json", "importance": 0.8 },
-        { "pattern": "evaluation/fixtures/**/*.md", "importance": 0.76 },
-        { "pattern": "evaluation/fixtures/**/*.json", "importance": 0.74 },
-        { "pattern": "evaluation/fixtures/**/*.csv", "importance": 0.72 },
-        { "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py", "importance": 0.88 },
-        { "pattern": "packages/frontend-sdk/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/frontend-sdk/**/*.tsx", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.json", "importance": 0.72 },
-        { "pattern": "modules/**/src/**/*.py", "importance": 0.78 },
-        { "pattern": "modules/**/yggdrasil.module.yaml", "importance": 0.72 },
-        { "pattern": "modules/**/pyproject.toml", "importance": 0.7 },
-        { "pattern": "services/**/*.py", "importance": 0.76 },
-        { "pattern": "adapters/**/*.py", "importance": 0.78 },
-        { "pattern": "tests/**/*.py", "importance": 0.8 },
-        { "pattern": "apps/web/**/*.ts", "importance": 0.72 },
-        { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
-        { "pattern": "applications/**/*.*", "importance": 0.7 },
-        { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.py", "importance": 0.68 }
+        {
+          "pattern": "*.md",
+          "importance": 0.7
+        },
+        {
+          "pattern": "*.json",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.toml",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.ini",
+          "importance": 0.68
+        },
+        {
+          "pattern": "docs/**/*.md",
+          "importance": 0.82
+        },
+        {
+          "pattern": "infra/**/*.md",
+          "importance": 0.72
+        },
+        {
+          "pattern": "infra/**/*.yml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "infra/**/*.yaml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "evaluation/suites/**/*.json",
+          "importance": 0.8
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.md",
+          "importance": 0.76
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.json",
+          "importance": 0.74
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.csv",
+          "importance": 0.72
+        },
+        {
+          "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py",
+          "importance": 0.88
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.tsx",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.json",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/src/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "modules/**/yggdrasil.module.yaml",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/pyproject.toml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "services/**/*.py",
+          "importance": 0.76
+        },
+        {
+          "pattern": "adapters/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "tests/**/*.py",
+          "importance": 0.8
+        },
+        {
+          "pattern": "apps/web/**/*.ts",
+          "importance": 0.72
+        },
+        {
+          "pattern": "apps/web/**/*.tsx",
+          "importance": 0.72
+        },
+        {
+          "pattern": "applications/**/*.*",
+          "importance": 0.7
+        },
+        {
+          "pattern": "migrations/**/*.py",
+          "importance": 0.7
+        },
+        {
+          "pattern": "scripts/**/*.py",
+          "importance": 0.68
+        }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -409,8 +1029,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。"
@@ -438,7 +1065,14 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-parity", "real-task", "deepseek", "short-window", "paid-approved"],
+      "tags": [
+        "g4",
+        "window-parity",
+        "real-task",
+        "deepseek",
+        "short-window",
+        "paid-approved"
+      ],
       "difficulty": "hard"
     },
     {
@@ -482,59 +1116,257 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.98 },
-        { "path": "docs/protocols/event-contracts-v0.1.md", "title": "event contracts", "importance": 0.97 },
-        { "path": "docs/protocols/hook-contracts-v0.1.md", "title": "hook contracts", "importance": 0.97 },
-        { "path": "docs/specs/runtime-domain-data-spec-v0.1.md", "title": "runtime domain spec", "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "importance": 0.97 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "importance": 0.97 },
-        { "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md", "title": "roadmap research", "importance": 0.99 },
-        { "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md", "title": "historical long-task baseline", "importance": 0.97 },
-        { "path": "docs/research/g4-closeout-2026-05-15.md", "title": "g4 closeout", "importance": 0.96 },
-        { "path": "evaluation/suites/g4-provider-matrix-longform.json", "title": "g4 longform suite", "importance": 0.95 },
-        { "path": "evaluation/suites/g4-window-restart-stress.json", "title": "g4 window stress suite", "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py", "title": "execution loop", "lineStart": 1, "lineEnd": 760, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 420, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py", "title": "llm runtime metrics path", "lineStart": 520, "lineEnd": 725, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 suite cases", "lineStart": 1, "lineEnd": 620, "importance": 0.97 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 210, "lineEnd": 320, "importance": 0.95 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py", "title": "real-user live pack", "lineStart": 1, "lineEnd": 340, "importance": 0.96 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py", "title": "real-user live execution path", "lineStart": 350, "lineEnd": 776, "importance": 0.96 },
-        { "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py", "title": "provider gateway", "lineStart": 1, "lineEnd": 220, "importance": 0.95 },
-        { "path": "tests/test_g4_multiscene.py", "title": "g4 tests", "lineStart": 1, "lineEnd": 320, "importance": 0.94 },
-        { "path": "tests/runtime/test_runtime_restart_and_resume.py", "title": "runtime restart tests", "lineStart": 180, "lineEnd": 320, "importance": 0.94 },
-        { "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json", "title": "live stress evidence", "lineStart": 1, "lineEnd": 1012, "importance": 0.99 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/protocols/event-contracts-v0.1.md",
+          "title": "event contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/protocols/hook-contracts-v0.1.md",
+          "title": "hook contracts",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/runtime-domain-data-spec-v0.1.md",
+          "title": "runtime domain spec",
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md",
+          "title": "roadmap research",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/g4-long-task-window-restart-baseline-2026-05-15.md",
+          "title": "historical long-task baseline",
+          "importance": 0.97
+        },
+        {
+          "path": "docs/research/g4-closeout-2026-05-15.md",
+          "title": "g4 closeout",
+          "importance": 0.96
+        },
+        {
+          "path": "evaluation/suites/g4-provider-matrix-longform.json",
+          "title": "g4 longform suite",
+          "importance": 0.95
+        },
+        {
+          "path": "evaluation/suites/g4-window-restart-stress.json",
+          "title": "g4 window stress suite",
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "title": "execution loop",
+          "lineStart": 1,
+          "lineEnd": 760,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 420,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "title": "llm runtime metrics path",
+          "lineStart": 520,
+          "lineEnd": 725,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 suite cases",
+          "lineStart": 1,
+          "lineEnd": 620,
+          "importance": 0.97
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 210,
+          "lineEnd": 320,
+          "importance": 0.95
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "title": "real-user live pack",
+          "lineStart": 1,
+          "lineEnd": 340,
+          "importance": 0.96
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "title": "real-user live execution path",
+          "lineStart": 350,
+          "lineEnd": 776,
+          "importance": 0.96
+        },
+        {
+          "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py",
+          "title": "provider gateway",
+          "lineStart": 1,
+          "lineEnd": 220,
+          "importance": 0.95
+        },
+        {
+          "path": "tests/test_g4_multiscene.py",
+          "title": "g4 tests",
+          "lineStart": 1,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": "tests/runtime/test_runtime_restart_and_resume.py",
+          "title": "runtime restart tests",
+          "lineStart": 180,
+          "lineEnd": 320,
+          "importance": 0.94
+        },
+        {
+          "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json",
+          "title": "live stress evidence",
+          "lineStart": 1,
+          "lineEnd": 1012,
+          "importance": 0.99
+        }
       ],
       "currentContextGlobs": [
-        { "pattern": "*.md", "importance": 0.7 },
-        { "pattern": "*.json", "importance": 0.68 },
-        { "pattern": "*.toml", "importance": 0.68 },
-        { "pattern": "*.ini", "importance": 0.68 },
-        { "pattern": "docs/**/*.md", "importance": 0.82 },
-        { "pattern": "infra/**/*.md", "importance": 0.72 },
-        { "pattern": "infra/**/*.yml", "importance": 0.7 },
-        { "pattern": "infra/**/*.yaml", "importance": 0.7 },
-        { "pattern": "evaluation/suites/**/*.json", "importance": 0.8 },
-        { "pattern": "evaluation/fixtures/**/*.md", "importance": 0.76 },
-        { "pattern": "evaluation/fixtures/**/*.json", "importance": 0.74 },
-        { "pattern": "evaluation/fixtures/**/*.csv", "importance": 0.72 },
-        { "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py", "importance": 0.88 },
-        { "pattern": "packages/frontend-sdk/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/frontend-sdk/**/*.tsx", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.ts", "importance": 0.74 },
-        { "pattern": "packages/contracts/**/*.json", "importance": 0.72 },
-        { "pattern": "modules/**/src/**/*.py", "importance": 0.78 },
-        { "pattern": "modules/**/yggdrasil.module.yaml", "importance": 0.72 },
-        { "pattern": "modules/**/pyproject.toml", "importance": 0.7 },
-        { "pattern": "services/**/*.py", "importance": 0.76 },
-        { "pattern": "adapters/**/*.py", "importance": 0.78 },
-        { "pattern": "tests/**/*.py", "importance": 0.8 },
-        { "pattern": "apps/web/**/*.ts", "importance": 0.72 },
-        { "pattern": "apps/web/**/*.tsx", "importance": 0.72 },
-        { "pattern": "applications/**/*.*", "importance": 0.7 },
-        { "pattern": "migrations/**/*.py", "importance": 0.7 },
-        { "pattern": "scripts/**/*.py", "importance": 0.68 }
+        {
+          "pattern": "*.md",
+          "importance": 0.7
+        },
+        {
+          "pattern": "*.json",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.toml",
+          "importance": 0.68
+        },
+        {
+          "pattern": "*.ini",
+          "importance": 0.68
+        },
+        {
+          "pattern": "docs/**/*.md",
+          "importance": 0.82
+        },
+        {
+          "pattern": "infra/**/*.md",
+          "importance": 0.72
+        },
+        {
+          "pattern": "infra/**/*.yml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "infra/**/*.yaml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "evaluation/suites/**/*.json",
+          "importance": 0.8
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.md",
+          "importance": 0.76
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.json",
+          "importance": 0.74
+        },
+        {
+          "pattern": "evaluation/fixtures/**/*.csv",
+          "importance": 0.72
+        },
+        {
+          "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py",
+          "importance": 0.88
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/frontend-sdk/**/*.tsx",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.ts",
+          "importance": 0.74
+        },
+        {
+          "pattern": "packages/contracts/**/*.json",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/src/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "modules/**/yggdrasil.module.yaml",
+          "importance": 0.72
+        },
+        {
+          "pattern": "modules/**/pyproject.toml",
+          "importance": 0.7
+        },
+        {
+          "pattern": "services/**/*.py",
+          "importance": 0.76
+        },
+        {
+          "pattern": "adapters/**/*.py",
+          "importance": 0.78
+        },
+        {
+          "pattern": "tests/**/*.py",
+          "importance": 0.8
+        },
+        {
+          "pattern": "apps/web/**/*.ts",
+          "importance": 0.72
+        },
+        {
+          "pattern": "apps/web/**/*.tsx",
+          "importance": 0.72
+        },
+        {
+          "pattern": "applications/**/*.*",
+          "importance": 0.7
+        },
+        {
+          "pattern": "migrations/**/*.py",
+          "importance": 0.7
+        },
+        {
+          "pattern": "scripts/**/*.py",
+          "importance": 0.68
+        }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -555,8 +1387,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -588,10 +1427,25 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-parity", "real-task", "deepseek", "long-window", "paid-approved"],
+      "tags": [
+        "g4",
+        "window-parity",
+        "real-task",
+        "deepseek",
+        "long-window",
+        "paid-approved"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "legacy-repo-specific",
+  "suiteRoleNote": "This suite predates the real-task conventions v0.1. Task goals are heavily repo-specific. Retained for backward compatibility but not a template for new real tasks.",
+  "conventions": {
+    "conformsTo": null,
+    "violations": [
+      "repo-self-reference",
+      "embedded-planning",
+      "multi-section-structure"
+    ]
+  }
 }
-
-

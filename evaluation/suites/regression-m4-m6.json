@@ -14,22 +14,36 @@
       "id": "evalcase_memory_pipeline",
       "title": "M4 Memory Import And Retrieval",
       "scenario": "m4.memory_import_retrieval",
-      "tags": ["m4", "memory", "retrieval"],
+      "tags": [
+        "m4",
+        "memory",
+        "retrieval"
+      ],
       "difficulty": "medium"
     },
     {
       "id": "evalcase_main_agent_runtime",
       "title": "M5 Main Agent Pause Resume Loop",
       "scenario": "m5.main_agent_pause_resume",
-      "tags": ["m5", "runtime", "safe-stop"],
+      "tags": [
+        "m5",
+        "runtime",
+        "safe-stop"
+      ],
       "difficulty": "hard"
     },
     {
       "id": "evalcase_subagent_pr",
       "title": "M6 Sub-Agent Pull Request Loop",
       "scenario": "m6.subagent_pr_loop",
-      "tags": ["m6", "subagent", "collaboration"],
+      "tags": [
+        "m6",
+        "subagent",
+        "collaboration"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "regression",
+  "suiteRoleNote": "Fixed regression suite for CI/CD gate verification."
 }

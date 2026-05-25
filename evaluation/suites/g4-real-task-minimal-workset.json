@@ -52,15 +52,63 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
-        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
-        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md",
+          "title": "memory tree optimization playbook",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md",
+          "title": "parity rerun log audit",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 520,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 live parity handler",
+          "lineStart": 640,
+          "lineEnd": 970,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 180,
+          "lineEnd": 450,
+          "importance": 0.98
+        }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -81,8 +129,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -114,7 +169,14 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "longcat", "short-window"],
+      "tags": [
+        "g4",
+        "real-task",
+        "minimal-workset",
+        "window-parity",
+        "longcat",
+        "short-window"
+      ],
       "difficulty": "hard"
     },
     {
@@ -158,15 +220,63 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
-        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
-        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md",
+          "title": "memory tree optimization playbook",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md",
+          "title": "parity rerun log audit",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 520,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 live parity handler",
+          "lineStart": 640,
+          "lineEnd": 970,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 180,
+          "lineEnd": 450,
+          "importance": 0.98
+        }
       ],
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
@@ -187,8 +297,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -220,7 +337,14 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "longcat", "long-window"],
+      "tags": [
+        "g4",
+        "real-task",
+        "minimal-workset",
+        "window-parity",
+        "longcat",
+        "long-window"
+      ],
       "difficulty": "hard"
     },
     {
@@ -264,15 +388,63 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
-        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
-        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md",
+          "title": "memory tree optimization playbook",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md",
+          "title": "parity rerun log audit",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 520,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 live parity handler",
+          "lineStart": 640,
+          "lineEnd": 970,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 180,
+          "lineEnd": 450,
+          "importance": 0.98
+        }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -293,8 +465,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -326,7 +505,15 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "deepseek", "short-window", "paid-approved"],
+      "tags": [
+        "g4",
+        "real-task",
+        "minimal-workset",
+        "window-parity",
+        "deepseek",
+        "short-window",
+        "paid-approved"
+      ],
       "difficulty": "hard"
     },
     {
@@ -370,15 +557,63 @@
         }
       ],
       "currentContextFiles": [
-        { "path": "README.md", "title": "repo entry README", "importance": 0.99 },
-        { "path": "docs/DIRECTORY_REFERENCE.md", "title": "directory reference", "importance": 0.99 },
-        { "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md", "title": "memory tree optimization playbook", "importance": 0.99 },
-        { "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md", "title": "parity rerun log audit", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/agent-runtime-protocol-v0.1.md", "title": "agent runtime protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "docs/specs/work-tree-protocol-v0.1.md", "title": "work tree protocol", "lineStart": 1, "lineEnd": 260, "importance": 0.98 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py", "title": "snapshot runtime", "lineStart": 1, "lineEnd": 520, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live parity handler", "lineStart": 640, "lineEnd": 970, "importance": 0.99 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py", "title": "g4 scorer aggregation", "lineStart": 180, "lineEnd": 450, "importance": 0.98 }
+        {
+          "path": "README.md",
+          "title": "repo entry README",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/DIRECTORY_REFERENCE.md",
+          "title": "directory reference",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md",
+          "title": "memory tree optimization playbook",
+          "importance": 0.99
+        },
+        {
+          "path": "docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md",
+          "title": "parity rerun log audit",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+          "title": "agent runtime protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "docs/specs/work-tree-protocol-v0.1.md",
+          "title": "work tree protocol",
+          "lineStart": 1,
+          "lineEnd": 260,
+          "importance": 0.98
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+          "title": "snapshot runtime",
+          "lineStart": 1,
+          "lineEnd": 520,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+          "title": "g4 live parity handler",
+          "lineStart": 640,
+          "lineEnd": 970,
+          "importance": 0.99
+        },
+        {
+          "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+          "title": "g4 scorer aggregation",
+          "lineStart": 180,
+          "lineEnd": 450,
+          "importance": 0.98
+        }
       ],
       "requestedProvider": "deepseek_direct",
       "requestedModel": "deepseek-v4-pro",
@@ -399,8 +634,15 @@
         "acceptance 对照结论",
         "风险与下一步"
       ],
-      "acceptanceRequiredPhrases": ["高价值"],
-      "acceptanceRequiredAnyPhrases": ["等价", "不等价", "equivalent", "not equivalent"],
+      "acceptanceRequiredPhrases": [
+        "高价值"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "等价",
+        "不等价",
+        "equivalent",
+        "not equivalent"
+      ],
       "acceptanceRejectPhrases": [
         "我会先总结当前局势，再给出最稳妥的下一步",
         "我会按这个顺序推进，确保每一步都可验证。",
@@ -432,8 +674,26 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "minimal-workset", "window-parity", "deepseek", "long-window", "paid-approved"],
+      "tags": [
+        "g4",
+        "real-task",
+        "minimal-workset",
+        "window-parity",
+        "deepseek",
+        "long-window",
+        "paid-approved"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "legacy-repo-specific",
+  "suiteRoleNote": "This suite predates the real-task conventions v0.1. Task goals are heavily repo-specific. Retained for backward compatibility but not a template for new real tasks.",
+  "conventions": {
+    "conformsTo": null,
+    "violations": [
+      "repo-self-reference",
+      "embedded-planning",
+      "multi-section-structure"
+    ]
+  }
 }

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SUITES_DIR = REPO_ROOT / "evaluation" / "suites"
 SLOW_TEST_FILES = {
     "tests/test_m9_acceptance.py",
     "tests/test_m8_runtime.py",
@@ -41,3 +43,13 @@ def test_nightly_slow_job_runs_in_parallel() -> None:
     nightly = _read_repo_file(".github/workflows/nightly.yml")
 
     assert "uv run pytest -m slow -n auto --dist loadfile" in nightly
+
+
+def test_all_suite_files_have_role_metadata() -> None:
+    """Every suite JSON in evaluation/suites/ must declare a suiteRole field."""
+    missing: list[str] = []
+    for path in sorted(SUITES_DIR.glob("*.json")):
+        suite = json.loads(path.read_text(encoding="utf-8"))
+        if "suiteRole" not in suite:
+            missing.append(path.name)
+    assert not missing, "Suites missing suiteRole: " + ", ".join(missing)

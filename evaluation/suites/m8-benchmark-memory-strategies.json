@@ -21,35 +21,53 @@
     "strategyLeaderboard": [
       {
         "name": "memory-tree",
-        "minAvgCombinedScore": 0.70,
+        "minAvgCombinedScore": 0.7,
         "minAvgContextCoverage": 0.75,
-        "minAvgAnswerCoverage": 0.50,
+        "minAvgAnswerCoverage": 0.5,
         "description": "记忆树检索：依赖 nodePayloads、边关系、子节点名称与自然语言摘要扩展上下文，预期显著优于扁平向量对照"
       },
       {
         "name": "vector-flat",
         "minAvgCombinedScore": 0.45,
         "minAvgContextCoverage": 0.55,
-        "minAvgAnswerCoverage": 0.30,
+        "minAvgAnswerCoverage": 0.3,
         "description": "扁平向量 baseline（evaluation 层对照）：lexical similarity 扁平扫描，不依赖记忆树结构"
       },
       {
         "name": "no-memory",
-        "minAvgCombinedScore": 0.00,
-        "minAvgContextCoverage": 0.00,
-        "minAvgAnswerCoverage": 0.00,
+        "minAvgCombinedScore": 0.0,
+        "minAvgContextCoverage": 0.0,
+        "minAvgAnswerCoverage": 0.0,
         "description": "无记忆对照组：不挂载任何上下文，回答只能依赖模型先验知识，预期最低"
       }
     ],
     "contextCoverage": {
-      "memory-tree": {"min": 0.75, "target": 0.85},
-      "vector-flat": {"min": 0.55, "target": 0.70},
-      "no-memory":   {"min": 0.00, "target": 0.10}
+      "memory-tree": {
+        "min": 0.75,
+        "target": 0.85
+      },
+      "vector-flat": {
+        "min": 0.55,
+        "target": 0.7
+      },
+      "no-memory": {
+        "min": 0.0,
+        "target": 0.1
+      }
     },
     "answerCoverage": {
-      "memory-tree": {"min": 0.50, "target": 0.65},
-      "vector-flat": {"min": 0.30, "target": 0.45},
-      "no-memory":   {"min": 0.00, "target": 0.05}
+      "memory-tree": {
+        "min": 0.5,
+        "target": 0.65
+      },
+      "vector-flat": {
+        "min": 0.3,
+        "target": 0.45
+      },
+      "no-memory": {
+        "min": 0.0,
+        "target": 0.05
+      }
     }
   },
   "cases": [
@@ -69,7 +87,13 @@
       "topK": 4,
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-Flash-Lite",
-      "tags": ["m8", "benchmark", "memory-tree", "vector-flat", "no-memory"],
+      "tags": [
+        "m8",
+        "benchmark",
+        "memory-tree",
+        "vector-flat",
+        "no-memory"
+      ],
       "difficulty": "hard"
     },
     {
@@ -89,8 +113,15 @@
       "topK": 5,
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-Flash-Lite",
-      "tags": ["m8", "benchmark", "observability", "ops"],
+      "tags": [
+        "m8",
+        "benchmark",
+        "observability",
+        "ops"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "benchmark",
+  "suiteRoleNote": "Performance and strategy benchmark suite."
 }

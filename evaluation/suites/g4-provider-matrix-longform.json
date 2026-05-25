@@ -66,7 +66,13 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "provider-matrix", "longform", "coding", "deepseek"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "longform",
+        "coding",
+        "deepseek"
+      ],
       "difficulty": "hard"
     },
     {
@@ -123,8 +129,16 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "provider-matrix", "longform", "coding", "longcat"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "longform",
+        "coding",
+        "longcat"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "provider-matrix",
+  "suiteRoleNote": "Provider capability comparison and parity verification."
 }

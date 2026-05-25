@@ -24,7 +24,13 @@
         "model artifact",
         "恢复"
       ],
-      "tags": ["m9", "shared-memory", "multimodal", "relation-discovery", "training-lab"],
+      "tags": [
+        "m9",
+        "shared-memory",
+        "multimodal",
+        "relation-discovery",
+        "training-lab"
+      ],
       "difficulty": "hard"
     },
     {
@@ -40,8 +46,15 @@
         "resume",
         "挂载"
       ],
-      "tags": ["m9", "pause-resume", "runtime", "memory-tree"],
+      "tags": [
+        "m9",
+        "pause-resume",
+        "runtime",
+        "memory-tree"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "regression",
+  "suiteRoleNote": "Fixed regression suite for CI/CD gate verification."
 }
