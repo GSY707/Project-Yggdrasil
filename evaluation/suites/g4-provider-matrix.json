@@ -46,7 +46,12 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "provider-matrix", "coding", "deepseek"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "coding",
+        "deepseek"
+      ],
       "difficulty": "hard"
     },
     {
@@ -83,7 +88,12 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "provider-matrix", "coding", "longcat"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "coding",
+        "longcat"
+      ],
       "difficulty": "hard"
     },
     {
@@ -120,7 +130,12 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "tags": ["g4", "provider-matrix", "research", "deepseek"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "research",
+        "deepseek"
+      ],
       "difficulty": "hard"
     },
     {
@@ -157,7 +172,12 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "tags": ["g4", "provider-matrix", "research", "longcat"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "research",
+        "longcat"
+      ],
       "difficulty": "hard"
     },
     {
@@ -194,7 +214,12 @@
         "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
         "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
       ],
-      "tags": ["g4", "provider-matrix", "writing", "deepseek"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "writing",
+        "deepseek"
+      ],
       "difficulty": "hard"
     },
     {
@@ -231,8 +256,15 @@
         "yggdrasil.fewshot.scene-writing-epic.canon-before-draft.v1",
         "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
       ],
-      "tags": ["g4", "provider-matrix", "writing", "longcat"],
+      "tags": [
+        "g4",
+        "provider-matrix",
+        "writing",
+        "longcat"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "provider-matrix",
+  "suiteRoleNote": "Provider capability comparison and parity verification."
 }

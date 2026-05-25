@@ -17,7 +17,9 @@
       "scenario": "g4.scene_prompt_contract",
       "appId": "yggdrasil.app.coding-greenfield",
       "taskType": "coding",
-      "request": {"codingMode": "new-project"},
+      "request": {
+        "codingMode": "new-project"
+      },
       "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
       "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
       "expectedProfileFewShotRefs": [
@@ -42,7 +44,11 @@
       ],
       "expectedSourceModuleId": "scene-coding-new-project",
       "expectedMessageCount": 2,
-      "tags": ["g4", "coding", "fast-task"],
+      "tags": [
+        "g4",
+        "coding",
+        "fast-task"
+      ],
       "difficulty": "medium"
     },
     {
@@ -51,7 +57,9 @@
       "scenario": "g4.scene_resume_contract",
       "appId": "yggdrasil.app.coding-greenfield",
       "taskType": "coding",
-      "request": {"codingMode": "new-project"},
+      "request": {
+        "codingMode": "new-project"
+      },
       "resumePath": "g4/coding/session-1",
       "resumeMessage": "continue the coding handoff from session 1",
       "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
@@ -76,7 +84,11 @@
       ],
       "expectedSourceModuleId": "scene-coding-new-project",
       "expectedMessageCount": 2,
-      "tags": ["g4", "coding", "cross-session"],
+      "tags": [
+        "g4",
+        "coding",
+        "cross-session"
+      ],
       "difficulty": "medium"
     },
     {
@@ -96,7 +108,11 @@
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
       "expectedScenario": "coding.new-project",
-      "tags": ["g4", "coding", "recovery"],
+      "tags": [
+        "g4",
+        "coding",
+        "recovery"
+      ],
       "difficulty": "hard"
     },
     {
@@ -124,7 +140,11 @@
       "expectedMarkers": [],
       "expectedSourceModuleId": "scene-research-deep",
       "expectedMessageCount": 2,
-      "tags": ["g4", "research", "fast-task"],
+      "tags": [
+        "g4",
+        "research",
+        "fast-task"
+      ],
       "difficulty": "medium"
     },
     {
@@ -153,7 +173,11 @@
       "expectedMarkers": [],
       "expectedSourceModuleId": "scene-research-deep",
       "expectedMessageCount": 2,
-      "tags": ["g4", "research", "cross-session"],
+      "tags": [
+        "g4",
+        "research",
+        "cross-session"
+      ],
       "difficulty": "medium"
     },
     {
@@ -173,7 +197,11 @@
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
       "expectedScenario": "research.deep",
-      "tags": ["g4", "research", "recovery"],
+      "tags": [
+        "g4",
+        "research",
+        "recovery"
+      ],
       "difficulty": "hard"
     },
     {
@@ -201,7 +229,11 @@
       "expectedMarkers": [],
       "expectedSourceModuleId": "scene-writing-epic",
       "expectedMessageCount": 2,
-      "tags": ["g4", "writing", "fast-task"],
+      "tags": [
+        "g4",
+        "writing",
+        "fast-task"
+      ],
       "difficulty": "medium"
     },
     {
@@ -230,7 +262,11 @@
       "expectedMarkers": [],
       "expectedSourceModuleId": "scene-writing-epic",
       "expectedMessageCount": 2,
-      "tags": ["g4", "writing", "cross-session"],
+      "tags": [
+        "g4",
+        "writing",
+        "cross-session"
+      ],
       "difficulty": "medium"
     },
     {
@@ -250,7 +286,11 @@
         "yggdrasil.fewshot.scene-writing-epic.chapter-continuity-audit.v1"
       ],
       "expectedScenario": "writing.epic",
-      "tags": ["g4", "writing", "recovery"],
+      "tags": [
+        "g4",
+        "writing",
+        "recovery"
+      ],
       "difficulty": "hard"
     },
     {
@@ -261,7 +301,9 @@
         {
           "appId": "yggdrasil.app.coding-greenfield",
           "taskType": "coding",
-          "request": {"codingMode": "new-project"},
+          "request": {
+            "codingMode": "new-project"
+          },
           "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
           "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
           "expectedProfileFewShotRefs": [
@@ -305,7 +347,10 @@
           "expectedMarkers": [],
           "expectedSourceModuleId": "scene-research-deep",
           "expectedMessageCount": 2,
-          "forbiddenMarkers": ["模块化实施计划", "同一套 contract"]
+          "forbiddenMarkers": [
+            "模块化实施计划",
+            "同一套 contract"
+          ]
         },
         {
           "appId": "yggdrasil.app.epic-writing",
@@ -329,11 +374,20 @@
           "expectedMarkers": [],
           "expectedSourceModuleId": "scene-writing-epic",
           "expectedMessageCount": 2,
-          "forbiddenMarkers": ["多源交叉验证", "重新给出可执行的校准路径"]
+          "forbiddenMarkers": [
+            "多源交叉验证",
+            "重新给出可执行的校准路径"
+          ]
         }
       ],
-      "tags": ["g4", "multiscene", "isolation"],
+      "tags": [
+        "g4",
+        "multiscene",
+        "isolation"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "regression",
+  "suiteRoleNote": "Fixed regression suite for CI/CD gate verification."
 }

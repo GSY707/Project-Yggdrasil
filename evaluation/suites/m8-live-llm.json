@@ -27,7 +27,13 @@
       "maxToolRounds": 8,
       "maxTokens": 320,
       "temperature": 0.15,
-      "tags": ["m8", "live", "longcat", "llm", "preview-default"],
+      "tags": [
+        "m8",
+        "live",
+        "longcat",
+        "llm",
+        "preview-default"
+      ],
       "difficulty": "hard"
     },
     {
@@ -43,9 +49,20 @@
       "maxToolRounds": 8,
       "maxTokens": 420,
       "temperature": 0.1,
-      "requiredTools": ["text_memory.retrieve", "context_pruning.plan"],
-      "tags": ["m8", "live", "longcat", "tool-calling", "flash-lite-compare"],
+      "requiredTools": [
+        "text_memory.retrieve",
+        "context_pruning.plan"
+      ],
+      "tags": [
+        "m8",
+        "live",
+        "longcat",
+        "tool-calling",
+        "flash-lite-compare"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "benchmark",
+  "suiteRoleNote": "Performance and strategy benchmark suite."
 }

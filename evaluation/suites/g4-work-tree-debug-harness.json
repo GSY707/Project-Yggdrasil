@@ -1,0 +1,193 @@
+{
+  "id": "evalsuite_g4_work_tree_debug_harness",
+  "name": "G4 Work-Tree Debug Harness",
+  "domain": "generic",
+  "suiteRole": "runtime-debug-harness",
+  "suiteRoleNote": "Intentionally pre-configures takeover protocols, nested work trees, and step sequences. Tests runtime node switching, leaf failure bubble, approval stops, and sibling continuation. NOT for evaluating agent planning ability.",
+  "conventions": {
+    "conformsTo": null,
+    "exemptionReason": "Runtime semantic verification requires pre-configured work tree and prescribed execution steps per real-task-test-conventions-v0.1 §4."
+  },
+  "metricRefs": [
+    "pass-rate",
+    "pause-resume",
+    "scene-isolation"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:work-tree:debug-harness",
+  "cases": [
+    {
+      "id": "evalcase_g4_wt_debug_child_continuation",
+      "title": "Work-Tree Debug: Child Continuation (child-1 → child-2 → root)",
+      "scenario": "g4.scene_runtime_recovery",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "Work-Tree Child Continuation Debug",
+      "taskGoal": "Validate that the runtime correctly processes child-1 completion, transitions to child-2, and bubbles the result back to root with awaiting-approval status.",
+      "currentFocus": "g4-wt-debug-child-continuation",
+      "currentObjective": "Verify child node continuation and root convergence.",
+      "resumeMessage": "continue the work-tree child continuation debug flow",
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "expectedWorkTreeStatus": "awaiting-approval",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedScenario": "coding.new-project",
+      "takeoverProtocol": {
+        "version": "0.1.0",
+        "runType": "main",
+        "currentPhase": "execute",
+        "status": "executing",
+        "objective": "Complete child-1, then child-2, then converge at root.",
+        "objectiveSummary": "Two-child continuation debug",
+        "ambiguities": [],
+        "constraints": [],
+        "plan": [],
+        "workTree": {
+          "version": "0.2.0",
+          "rootNodeId": "root",
+          "rootObjective": "Complete child-1, then child-2, then converge at root.",
+          "status": "active",
+          "currentNodeId": "child-1",
+          "loadedNodeIds": ["root", "child-1", "child-2"],
+          "activePathNodeIds": ["root", "child-1"],
+          "pcMemo": "continue:child-1",
+          "entropyBudgetRemaining": 6,
+          "versionCounter": 1,
+          "nodes": [
+            {
+              "id": "root",
+              "title": "root",
+              "parentNodeId": null,
+              "questionsItAnswers": ["final convergence"],
+              "nodeText": "Converge child results into final answer.",
+              "localGoal": "Converge child results into final answer.",
+              "workingNodeAnnotation": "",
+              "phase": "waiting",
+              "status": "in-progress",
+              "childNodeIds": ["child-1", "child-2"],
+              "detailLevel": 0,
+              "recoveryAnchor": "resume:root"
+            },
+            {
+              "id": "child-1",
+              "title": "child-1",
+              "parentNodeId": "root",
+              "questionsItAnswers": ["first subtask"],
+              "nodeText": "Complete the first subtask.",
+              "localGoal": "Complete the first subtask.",
+              "workingNodeAnnotation": "<Working_Node: child-1>",
+              "phase": "delivery",
+              "status": "in-progress",
+              "childNodeIds": [],
+              "detailLevel": 1,
+              "recoveryAnchor": "resume:child-1"
+            },
+            {
+              "id": "child-2",
+              "title": "child-2",
+              "parentNodeId": "root",
+              "questionsItAnswers": ["second subtask"],
+              "nodeText": "Complete the second subtask.",
+              "localGoal": "Complete the second subtask.",
+              "workingNodeAnnotation": "",
+              "phase": "pending",
+              "status": "pending",
+              "childNodeIds": [],
+              "detailLevel": 1,
+              "recoveryAnchor": "resume:child-2"
+            }
+          ]
+        }
+      },
+      "tags": ["g4", "work-tree", "debug-harness", "child-continuation"],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_wt_debug_approval_stop",
+      "title": "Work-Tree Debug: Approval Stop Point",
+      "scenario": "g4.scene_runtime_recovery",
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "Work-Tree Approval Stop Debug",
+      "taskGoal": "Validate that the runtime correctly stops at awaiting-approval when the root node completes delivery, and that the approval state is persisted.",
+      "currentFocus": "g4-wt-debug-approval-stop",
+      "currentObjective": "Verify awaiting-approval stop point behavior.",
+      "resumeMessage": "continue the work-tree approval stop debug flow",
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "expectedWorkTreeStatus": "awaiting-approval",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "expectedScenario": "coding.new-project",
+      "tags": ["g4", "work-tree", "debug-harness", "approval-stop"],
+      "difficulty": "medium"
+    },
+    {
+      "id": "evalcase_g4_wt_debug_scene_switch_isolation",
+      "title": "Work-Tree Debug: Scene Switch Isolation",
+      "scenario": "g4.scene_switch_isolation",
+      "sequence": [
+        {
+          "appId": "yggdrasil.app.coding-greenfield",
+          "taskType": "coding",
+          "request": {"codingMode": "new-project"},
+          "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+          "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+          "expectedProfileFewShotRefs": [
+            "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+            "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1"
+          ],
+          "expectedSeedFewShotRefs": [
+            "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+          ],
+          "expectedCompiledFewShotRefs": [
+            "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+            "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+            "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+          ],
+          "expectedMarkers": [],
+          "expectedSourceModuleId": "scene-coding-new-project",
+          "expectedMessageCount": 2,
+          "forbiddenMarkers": []
+        },
+        {
+          "appId": "yggdrasil.app.deep-research",
+          "taskType": "research",
+          "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+          "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+          "expectedProfileFewShotRefs": [
+            "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+            "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1"
+          ],
+          "expectedSeedFewShotRefs": [
+            "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+            "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+          ],
+          "expectedCompiledFewShotRefs": [
+            "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+            "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+            "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+            "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+          ],
+          "expectedMarkers": [],
+          "expectedSourceModuleId": "scene-research-deep",
+          "expectedMessageCount": 2,
+          "forbiddenMarkers": ["模块化实施计划", "同一套 contract"]
+        }
+      ],
+      "tags": ["g4", "work-tree", "debug-harness", "scene-switch-isolation"],
+      "difficulty": "hard"
+    }
+  ]
+}

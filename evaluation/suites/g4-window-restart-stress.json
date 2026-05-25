@@ -53,7 +53,11 @@
       "effectiveContextWindow": 120,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 100,
-      "restartStabilityTiers": [30, 60, 100],
+      "restartStabilityTiers": [
+        30,
+        60,
+        100
+      ],
       "failOnRestartStabilityViolation": true,
       "maxWindowCycles": 120,
       "workspaceProfile": "g4-window-restart-stress",
@@ -65,7 +69,12 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-restart", "stress", "deepseek"],
+      "tags": [
+        "g4",
+        "window-restart",
+        "stress",
+        "deepseek"
+      ],
       "difficulty": "hard"
     },
     {
@@ -110,7 +119,11 @@
       "effectiveContextWindow": 120,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 100,
-      "restartStabilityTiers": [30, 60, 100],
+      "restartStabilityTiers": [
+        30,
+        60,
+        100
+      ],
       "failOnRestartStabilityViolation": true,
       "maxWindowCycles": 120,
       "workspaceProfile": "g4-window-restart-stress",
@@ -122,8 +135,15 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "window-restart", "stress", "longcat"],
+      "tags": [
+        "g4",
+        "window-restart",
+        "stress",
+        "longcat"
+      ],
       "difficulty": "hard"
     }
-  ]
+  ],
+  "suiteRole": "benchmark",
+  "suiteRoleNote": "Performance and strategy benchmark suite."
 }

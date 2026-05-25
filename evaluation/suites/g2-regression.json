@@ -14,9 +14,15 @@
       "id": "evalcase_g2_complex_file_split",
       "title": "G2 Complex File Split Regression",
       "scenario": "g2.complex_file_split_regression",
-      "tags": ["g2", "complex-file-split", "technical-debt"],
+      "tags": [
+        "g2",
+        "complex-file-split",
+        "technical-debt"
+      ],
       "difficulty": "medium",
       "maxLinesPerSplitFile": 600
     }
-  ]
+  ],
+  "suiteRole": "regression",
+  "suiteRoleNote": "Fixed regression suite for CI/CD gate verification."
 }
