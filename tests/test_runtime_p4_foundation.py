@@ -348,6 +348,7 @@ def test_work_tree_reducer_can_create_child_and_sync_stack() -> None:
     assert protocol is not None
     assert stack is not None
     assert [frame.node_id for frame in stack.frames] == ["root"]
+    assert stack.frames[0].prefix_cache_key is not None
 
     protocol, stack, child_node = runtime_takeover.create_child_work_node(
         protocol,
@@ -363,6 +364,8 @@ def test_work_tree_reducer_can_create_child_and_sync_stack() -> None:
     assert protocol.work_tree is not None
     assert protocol.work_tree.current_node_id == child_node.id
     assert [frame.node_id for frame in stack.frames] == ["root", child_node.id]
+    assert all(frame.prefix_cache_key for frame in stack.frames)
+    assert stack.frames[0].prefix_cache_key != stack.frames[-1].prefix_cache_key
     root_node = next(node for node in protocol.work_tree.nodes if node.id == "root")
     assert child_node.id in root_node.child_node_ids
 
@@ -422,6 +425,90 @@ def test_work_tree_reducer_bubbles_completed_children_and_waits_for_approval() -
     assert stack.top_frame_id == "frame-root"
 
 
+def test_work_tree_reducer_continues_next_sibling_after_failed_leaf() -> None:
+    protocol = TaskTakeoverProtocol.model_validate(_nested_takeover_protocol("task_p4_failed_leaf_reducer"))
+    protocol, stack = runtime_takeover.normalize_takeover_runtime_state(
+        protocol,
+        task_id="task_p4_failed_leaf_reducer",
+        agent_run_id="run_p4_failed_leaf_reducer",
+    )
+
+    assert protocol is not None
+    assert stack is not None
+
+    protocol, stack, failure_transition = runtime_takeover.fail_current_work_node(
+        protocol,
+        task_id="task_p4_failed_leaf_reducer",
+        agent_run_id="run_p4_failed_leaf_reducer",
+        failure_summary="子节点一在窗口阶段失败，需要回到父节点重排。",
+        work_context_stack=stack,
+    )
+
+    assert failure_transition["transition"] == "continue-sibling-after-failure"
+    assert failure_transition["requiresContinuation"] is True
+    assert protocol.work_tree is not None
+    assert protocol.work_tree.current_node_id == "child-2"
+    assert failure_transition["nextNodeId"] == "child-2"
+    failed_child = next(node for node in protocol.work_tree.nodes if node.id == "child-1")
+    assert failed_child.status == "failed"
+    assert failed_child.failure_summary is not None
+    assert "窗口阶段失败" in failed_child.failure_summary
+    root_frame = next(frame for frame in stack.frames if frame.node_id == "root")
+    assert [item.child_node_id for item in root_frame.child_completion_summaries] == ["child-1"]
+    assert root_frame.child_completion_summaries[0].status == "failed"
+    assert stack.top_frame_id == "frame-child-2"
+    child_two_frame = next(frame for frame in stack.frames if frame.node_id == "child-2")
+    assert child_two_frame.cursor_state == "continue-next-sibling-after-failure"
+
+
+def test_work_tree_reducer_allows_root_delivery_after_failed_child_summary() -> None:
+    protocol = TaskTakeoverProtocol.model_validate(_nested_takeover_protocol("task_p4_failed_leaf_root_delivery"))
+    protocol, stack = runtime_takeover.normalize_takeover_runtime_state(
+        protocol,
+        task_id="task_p4_failed_leaf_root_delivery",
+        agent_run_id="run_p4_failed_leaf_root_delivery",
+    )
+
+    assert protocol is not None
+    assert stack is not None
+
+    protocol, stack, failure_transition = runtime_takeover.fail_current_work_node(
+        protocol,
+        task_id="task_p4_failed_leaf_root_delivery",
+        agent_run_id="run_p4_failed_leaf_root_delivery",
+        failure_summary="子节点一失败，但父节点应继续汇总其失败摘要。",
+        work_context_stack=stack,
+    )
+
+    assert failure_transition["currentNodeId"] == "child-2"
+
+    protocol, stack, child_two_transition = runtime_takeover.complete_current_work_node(
+        protocol,
+        task_id="task_p4_failed_leaf_root_delivery",
+        agent_run_id="run_p4_failed_leaf_root_delivery",
+        execution_summary="子节点二已经完成真实路径比对。",
+        work_context_stack=stack,
+    )
+
+    assert child_two_transition["transition"] == "bubble-parent"
+    assert protocol.work_tree is not None
+    assert protocol.work_tree.current_node_id == "root"
+
+    protocol, stack, root_transition = runtime_takeover.complete_current_work_node(
+        protocol,
+        task_id="task_p4_failed_leaf_root_delivery",
+        agent_run_id="run_p4_failed_leaf_root_delivery",
+        execution_summary="根节点已经综合失败子节点与完成子节点的摘要，并等待批准。",
+        work_context_stack=stack,
+    )
+
+    assert root_transition["transition"] == "awaiting-approval"
+    assert protocol.work_tree is not None
+    assert protocol.work_tree.status == "awaiting-approval"
+    root_frame = next(frame for frame in stack.frames if frame.node_id == "root")
+    assert [item.status for item in root_frame.child_completion_summaries] == ["failed", "completed"]
+
+
 def test_runtime_single_path_moves_root_delivery_to_awaiting_approval(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -439,7 +526,7 @@ def test_runtime_single_path_moves_root_delivery_to_awaiting_approval(monkeypatc
 
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         return {
-            "assistantText": "result: 已完成最终交付。 evidence: 已生成正式答案与验证线索。 pending: 无。 incomplete: 无。",
+            "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_awaiting_approval_1",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -510,7 +597,7 @@ def test_runtime_default_mode_moves_root_delivery_to_awaiting_approval(monkeypat
 
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         return {
-            "assistantText": "result: 已完成最终交付。 evidence: 已生成正式答案与验证线索。 pending: 无。 incomplete: 无。",
+            "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_default_mode_awaiting_approval_1",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -573,9 +660,9 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
         request = kwargs["request"]
         current_node_id = str(request.get("currentNodeId") or "")
         text_by_node = {
-            "child-1": "result: 子节点一完成。 evidence: 子节点一证据齐全。 pending: child-2。 incomplete: 无。",
-            "child-2": "result: 子节点二完成。 evidence: 子节点二证据齐全。 pending: 汇总 root。 incomplete: 无。",
-            "root": "result: 根节点已汇总两个子节点。 evidence: 已形成最终答案。 pending: 等待批准。 incomplete: 无。",
+            "child-1": "# result\n子节点一完成。\n# evidence\n子节点一证据齐全。\n# pending\nchild-2。\n# incomplete\n无。",
+            "child-2": "# result\n子节点二完成。\n# evidence\n子节点二证据齐全。\n# pending\n汇总 root。\n# incomplete\n无。",
+            "root": "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
         }
         return {
             "assistantText": text_by_node[current_node_id],
@@ -619,6 +706,8 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
     assert first["result"]["status"] == "continuing"
     assert first["result"]["task"]["status"] == "queued"
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling"
+    assert first["result"]["windowExecutionArtifact"]["record"]["topFramePrefixCacheKey"]
+    assert first["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
     assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
     assert first["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
     assert first["result"]["workContextStackRef"] is not None
@@ -628,6 +717,7 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
     assert second["result"]["status"] == "continuing"
     assert second["result"]["task"]["status"] == "queued"
     assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
+    assert second["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
     assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
     assert second["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     root_frame = next(
@@ -642,6 +732,7 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
     assert third["result"]["status"] == "awaiting-approval"
     assert third["result"]["task"]["status"] == "awaiting-approval"
     assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
+    assert third["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["approvalStop0_1"] == 1
     assert third["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
 
     with runtime.session_scope() as session:
@@ -693,7 +784,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
             }
         if current_node_id != "root":
             return {
-                "assistantText": "result: 子节点证据已整理完成。 evidence: 已形成证据摘要。 pending: 汇总 root。 incomplete: 无。",
+                "assistantText": "# result\n子节点证据已整理完成。\n# evidence\n已形成证据摘要。\n# pending\n汇总 root。\n# incomplete\n无。",
                 "invocation": {
                     "id": "inv_p4_dynamic_child_leaf",
                     "resolvedModel": "LongCat-Flash-Lite",
@@ -709,7 +800,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
                 "contextLengthObservations": [],
             }
         return {
-            "assistantText": "result: 根节点已整合子节点摘要并等待批准。 evidence: 已形成最终答案。 pending: 等待批准。 incomplete: 无。",
+            "assistantText": "# result\n根节点已整合子节点摘要并等待批准。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_dynamic_child_root_finalize",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -808,3 +899,131 @@ def test_runtime_single_path_marks_failed_node_summary_on_exception(monkeypatch:
         assert failed_root.status == "failed"
         assert failed_root.failure_summary is not None
         assert "模拟模型调用异常" in failed_root.failure_summary
+
+
+def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_continuation_policy() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_p4_window_overflow_leaf_failure",
+                "title": "P4 窗口溢出叶子失败上浮",
+                "goal": "验证窗口超限会把当前叶子节点标记为失败并回到父节点，同时保留 continuation 的 provider 约束。",
+                "status": "draft",
+                "currentObjective": "在 child-1 上触发窗口超限并回到 root。",
+                "currentFocus": "child-1",
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_p4_window_overflow_leaf_failure/start",
+        json={
+            "currentObjective": "在 child-1 上触发窗口超限并回到 root。",
+            "currentFocus": "child-1",
+            "currentContext": [
+                {
+                    "id": "ctx_overflow_leaf",
+                    "title": "overflow leaf",
+                    "content": "窗口超限叶子失败后要回到父节点。",
+                    "importance": 0.9,
+                }
+            ],
+            "effectiveContextWindow": 64000,
+            "forcedWindowRestartBudget": 1,
+            "allowToolExecution": False,
+            "temperature": 0.1,
+            "maxTokens": 256,
+            "candidateModels": [
+                {
+                    "model": "LongCat-2.0-Preview",
+                    "provider": "longcat",
+                    "quality": 0.82,
+                    "costPer1k": 0.0,
+                    "latencyMs": 760,
+                    "contextWindow": 128000,
+                }
+            ],
+            "takeoverProtocol": _nested_takeover_protocol("task_p4_window_overflow_leaf_failure"),
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling-after-failure"
+
+    queued_payload = processed["result"]["queuedWorkItem"]["payload"]
+    assert queued_payload["currentNodeId"] == "child-2"
+    assert queued_payload["allowToolExecution"] is False
+    assert queued_payload["temperature"] == 0.1
+    assert queued_payload["maxTokens"] == 256
+    assert queued_payload["candidateModels"][0]["provider"] == "longcat"
+    assert queued_payload["candidateModels"][0]["model"] == "LongCat-2.0-Preview"
+
+    queued_protocol = queued_payload["takeoverProtocol"]
+    failed_child = next(node for node in queued_protocol["workTree"]["nodes"] if node["id"] == "child-1")
+    assert failed_child["status"] == "failed"
+    assert "forcedWindowRestartBudget" in str(failed_child["failureSummary"])
+
+    root_frame = next(frame for frame in queued_payload["workContextStack"]["frames"] if frame["nodeId"] == "root")
+    assert root_frame["childCompletionSummaries"][0]["childNodeId"] == "child-1"
+    assert root_frame["childCompletionSummaries"][0]["status"] == "failed"
+    assert queued_payload["workContextStack"]["topFrameId"] == "frame-child-2"
+    child_two_frame = next(frame for frame in queued_payload["workContextStack"]["frames"] if frame["nodeId"] == "child-2")
+    assert child_two_frame["cursorState"] == "continue-next-sibling-after-failure"
+
+
+def test_runtime_provider_exception_leaf_failure_continues_sibling(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_p4_provider_exception_leaf_failure",
+                "title": "P4 provider 异常叶子失败 continuation",
+                "goal": "验证 provider 异常会把当前叶子节点标记 failed 并继续 sibling。",
+                "status": "draft",
+                "currentObjective": "在 child-1 上触发 provider 异常并继续 child-2。",
+                "currentFocus": "child-1",
+            }
+        )
+
+    def _boom(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("Model provider failed after 4 attempts: transient EOF")
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _boom)
+    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _boom)
+
+    started = client.post(
+        "/runtime/tasks/task_p4_provider_exception_leaf_failure/start",
+        json={
+            "currentObjective": "在 child-1 上触发 provider 异常并继续 child-2。",
+            "currentFocus": "child-1",
+            "takeoverProtocol": _nested_takeover_protocol("task_p4_provider_exception_leaf_failure"),
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["task"]["status"] == "queued"
+    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling-after-failure"
+    assert processed["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
+    assert processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
+    failed_child = next(
+        node
+        for node in processed["result"]["takeoverProtocol"]["workTree"]["nodes"]
+        if node["id"] == "child-1"
+    )
+    assert failed_child["status"] == "failed"
+    assert "Model provider failed after 4 attempts" in str(failed_child["failureSummary"])
+    root_frame = next(
+        frame
+        for frame in processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["frames"]
+        if frame["nodeId"] == "root"
+    )
+    assert root_frame["childCompletionSummaries"][0]["childNodeId"] == "child-1"
+    assert root_frame["childCompletionSummaries"][0]["status"] == "failed"

@@ -1,3 +1,7 @@
+| `docs/development/LLM_WORK_ANALYZER.md` | LLM 工作分析器设计与使用说明：说明 run-first 分析器的数据源、粒度、持久化位置、API/CLI 入口与当前限制 |
+| `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：面向任务操作者和评测/排障同学，说明 Web、CLI、API 入口与常见排查流程 |
+| `docs/development/REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md` | 真实任务测试约定与工作树后续任务拆分（2026-05-25）：冻结“默认真实任务应单目标、弱项目内生化、由 agent 自主规划”的出题约定，并把工作树后续工作拆成测试合同、门禁闭环、缓存、硬化、观测五类任务包 |
+| `docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md` | 工作树真实任务调试基线（2026-05-25）：把“设想中的工作树”冻结成真实任务调试模型，补充 real-task debug suite 准备点，并跟踪 failure->sibling continuation、provider/LLM invocation exception continuation 与最新 live rerun 基线 |
 | `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档（2026-05-23）：基于 `docs/new/` 三份新方案，给出 Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁的落地步骤 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：冻结 Boot Prompt 四段、RootMountPackage v0.2、启动模式、待机循环、WorkContextStack 栈式运行、独立 mailbox 表、Fork 动态预算、记忆工具、多 Agent、上下文窗口和结束批准 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：冻结工作树作为动态工作记忆和执行栈的节点 schema、Working Node 标签、WorkContextStack/push/pop、LOD 拓扑、状态机、节点摘要、冲突处理和 v0.1 兼容升级 |
@@ -20,7 +24,9 @@
 | `docs/development/LANGFUSE_TRACE_DATA_LOSS_AUDIT_2026_05_18.md` | Langfuse trace 数据损耗审计（2026-05-18）：对比本地 runtime 工件、Langfuse observation 与五层分析程序的保留字段、缺失字段，以及中间窗口重复的 runtime 根因 |
 | `docs/development/MEMORY_TREE_INFINITE_CONTEXT_OPTIMIZATION_PLAYBOOK_2026_05_18.md` | 记忆树与伪无限上下文窗口优化作战手册（2026-05-18，已补全执行版）：除总体路线外，现已包含执行状态矩阵、当前仓库分析结论、优化优先级、窗口审计命令和具体下一步实现顺序 |
 | `docs/development/FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md` | 功能形态分类与提示词功能检查计划（2026-05-18）：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径 |
+| `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis.py` | LLM 工作分析核心：以 run 为主键拼接 DB 与 state 工件，输出 run/window/turn/tool/artifact/source 多粒度分析，并持久化到 `state/analysis/llm-work/` |
 | `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py` | Langfuse 文本审查模块：以 Langfuse observation 重建窗口骨架，默认输出 LLM 交互文本摘录、重复窗口文本簇和 Langfuse UI 审查焦点；当前已能补读 `runtime/window-executions` 本地工件，用结构化窗口状态增强重复窗口判定与因果分析，并兼容中文化的任务目标/任务说明/当前焦点标签提取 |
+| `scripts/analyze_llm_work_run.py` | LLM 工作分析脚本包装器：按 task/run/invocation 触发正式分析器，并输出 JSON 或 Markdown 报告 |
 | `scripts/analyze_langfuse_real_task_trace.py` | Langfuse 真实任务窗口分析脚本：按 trace 提取 LLM 最终输出、第 6 节结论与逐窗口 snapshot/work tree 历史 |
 | `scripts/analyze_langfuse_real_task_trace_layered.py` | Langfuse 文本审查兼容入口：按 trace 生成 LLM prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点 |
 | `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
@@ -31,7 +37,7 @@
 | `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/24 更新：`runtime_kernel/takeover.py` 已从初始化器升级为正式 reducer，负责 work tree/context stack 推进、child/sibling continuation、revision reopen 与 approval finalize；`execution_loop_transitions.py` 已形成完整 P4 闭环：子节点完成自动续跑 sibling/parent，根节点完成进入 `awaiting-approval`，并通过控制面 approve/revision 闭环；`execution_loop_part_a.py` / `execution_loop_part_b.py` 现已支持以 `work-node-create` 助手输出标签在正式主循环里动态扩树、在 retrieval 查询中优先使用 work tree 当前节点语义，并在异常/预算失败时把当前节点写回 `failed + failureSummary`；`execution_loop_transitions.py` 还会为 continuation/pause/restart 输出独立 `workContextStackRef` 栈快照引用；P5 现已补齐并发安全闭环：`tool_runtime.py` 会向正式工具透传 `sourceWorkTreeNodeId`，`modules/text-memory/` 暴露 `read_node` / `read_index` / `update_memory_with_version` / `append_memory_log` / `submit_memory_proposal` / `forget_node` 等正式记忆工具，`append_memory_log` 现通过仓储层原子追加避免并发日志静默覆盖，`prompting.py` 也已明确“正式记忆工具优先、`<memory-write>` 旁路次之”，并在宽节点或高冲突场景优先引导创建细分子节点做空间隔离；P6 已完成闭环：`collaboration_runtime_part_a.py` / `collaboration_runtime_part_b.py` 不仅为 sub-agent launch/worker/PR manifest 透传 `workTreeNodeId` 与 `subagentBudgetDecision`，还会把 child completion summary 合并回 parent work tree 与 `childCompletionSummaries`，再通过独立 `mailbox_messages` / `side_channel_events` 持久化表、对应 Alembic 迁移 `7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py`、`runtime/tasks/{taskId}/mailbox` / `side-channel` API 和 `execution_loop_part_b.py` 的 mailbox 注入路径唤醒 parent 继续汇总；`runtime_kernel/root_mount.py` 现在优先从仓储读取 mailbox state 并返回 `mailboxMessages`，`takeover.py` 也已补齐 `load_persisted_work_context_stack()` 与 parent merge helper；`services/core-api/.../tasks.py` 与 `services/agent-runtime/app.py` 新增 `approve-completion` / `request-revision` 路由，`runtime_service.py` 暴露 `canApprove/canRequestRevision/recommendedRevisionNodeId`；`packages/frontend-sdk/src/types.ts` 与 `apps/web/app/components/task-detail-page.tsx` 现已把这些运行时控制字段、mailbox state/message 和 side-channel event 正式接到任务详情页；P7 门禁已统一到单路径：`tests/test_runtime_p4_foundation.py` 覆盖显式传递与默认请求两种入口，均进入 `awaiting-approval`，不再保留 legacy `completed` 快速路径；`prompting.py` 会把 `work_context_stack` 和 `childCompletionSummaries` 暴露给模型；`contracts.py` 修复了显式 root-only v0.2 work tree 被错误包裹成自引用 root 的兼容升级问题。此前 2026/5/24 更新：`runtime_kernel/root_mount.py` 现已输出中文语义根指针、`SYS_ROOT_PROTOCOL`、启动加载顺序、tool/capability index、mailbox/standby 状态与 `startupMode`，`execution_loop_part_b.py` 在 retrieval 前优先恢复 `currentNodeId/Working_Node/pcMemo`、对无活动工作 `start` 直接走 `standby` 短路，并把损坏 snapshot 的 blocker 持久化；`execution_loop_transitions.py` 在根节点交付时切到 `awaiting-approval`，并要求 work tree 节点先写 `executionSummary`；2026/5/23 更新：补充提示词、启动流程、工作流程重做执行文档、`docs/new/` 三份新方案入口，以及 Agent 运行时/工作树 v0.2 正式规格；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/25 更新：测试环境默认通过 `tests/conftest.py` 关闭 `LANGFUSE_TRACING_ENABLED`，并在 `README.md` 基础验证章节补充“跑测试前先启动 OTel Collector”的备注，避免导出端点不可达带来的额外等待；同日更新：新增 `llm_work_analysis.py` 作为正式 LLM 工作分析器，按 run 拼接 DB 与 state 工件并产出 run/window/turn/tool/artifact/source 多粒度分析；`scripts/analyze_llm_work_run.py` 与 core-api `/runtime/analysis/runs`、`/tasks/{taskId}/analysis/latest` 已接入这一能力，用于评测与调试；同日继续更新：新增 `REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md`，正式冻结“默认真实任务应尽量弱项目内生化、单目标、由 agent 自主规划”的出题约定，并把工作树后续工作拆成测试合同、门禁闭环、缓存、硬化、观测五类任务包；`runtime_kernel/takeover.py` 现已在非根叶子失败且仍有 sibling 时直接切到下一个 sibling continuation，不再停在父节点等待外部恢复；`execution_loop_part_b.py` 现也把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入同一 failed-leaf continuation 语义，`tests/test_runtime_p4_foundation.py` 新增 provider exception leaf->sibling 回归，`evalsuite_g4_real_task_work_tree_debug` 最新 rerun `evalrun_a1259708b3a14b8a96c1` 已实现 short64k/long128k 双通过与 parity passed；`evaluation/suites/g4-real-task-work-tree-debug.json` 的验收也已改成以 work-tree continuity、结构化 debug 报告和 retrieval drift 为主，不再把 legacy restart/window-span 计数当成硬门槛。此前 2026/5/24 更新：`runtime_kernel/takeover.py` 已从初始化器升级为正式 reducer，负责 work tree/context stack 推进、child/sibling continuation、revision reopen 与 approval finalize；`execution_loop_transitions.py` 已形成完整 P4 闭环：子节点完成自动续跑 sibling/parent，根节点完成进入 `awaiting-approval`，并通过控制面 approve/revision 闭环；`execution_loop_part_a.py` / `execution_loop_part_b.py` 现已支持以 `work-node-create` 助手输出标签在正式主循环里动态扩树、在 retrieval 查询中优先使用 work tree 当前节点语义，并在异常/预算失败时把当前节点写回 `failed + failureSummary`；`execution_loop_transitions.py` 还会为 continuation/pause/restart 输出独立 `workContextStackRef` 栈快照引用；P5 现已补齐并发安全闭环：`tool_runtime.py` 会向正式工具透传 `sourceWorkTreeNodeId`，`modules/text-memory/` 暴露 `read_node` / `read_index` / `update_memory_with_version` / `append_memory_log` / `submit_memory_proposal` / `forget_node` 等正式记忆工具，`append_memory_log` 现通过仓储层原子追加避免并发日志静默覆盖，`prompting.py` 也已明确“正式记忆工具优先、`<memory-write>` 旁路次之”，并在宽节点或高冲突场景优先引导创建细分子节点做空间隔离；P6 已完成闭环：`collaboration_runtime_part_a.py` / `collaboration_runtime_part_b.py` 不仅为 sub-agent launch/worker/PR manifest 透传 `workTreeNodeId` 与 `subagentBudgetDecision`，还会把 child completion summary 合并回 parent work tree 与 `childCompletionSummaries`，再通过独立 `mailbox_messages` / `side_channel_events` 持久化表、对应 Alembic 迁移 `7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py`、`runtime/tasks/{taskId}/mailbox` / `side-channel` API 和 `execution_loop_part_b.py` 的 mailbox 注入路径唤醒 parent 继续汇总；`runtime_kernel/root_mount.py` 现在优先从仓储读取 mailbox state 并返回 `mailboxMessages`，`takeover.py` 也已补齐 `load_persisted_work_context_stack()` 与 parent merge helper；`services/core-api/.../tasks.py` 与 `services/agent-runtime/app.py` 新增 `approve-completion` / `request-revision` 路由，`runtime_service.py` 暴露 `canApprove/canRequestRevision/recommendedRevisionNodeId`；`packages/frontend-sdk/src/types.ts` 与 `apps/web/app/components/task-detail-page.tsx` 现已把这些运行时控制字段、mailbox state/message 和 side-channel event 正式接到任务详情页；P7 门禁已统一到单路径：`tests/test_runtime_p4_foundation.py` 覆盖显式传递与默认请求两种入口，均进入 `awaiting-approval`，不再保留 legacy `completed` 快速路径；`prompting.py` 会把 `work_context_stack` 和 `childCompletionSummaries` 暴露给模型；`contracts.py` 修复了显式 root-only v0.2 work tree 被错误包裹成自引用 root 的兼容升级问题。此前 2026/5/24 更新：`runtime_kernel/root_mount.py` 现已输出中文语义根指针、`SYS_ROOT_PROTOCOL`、启动加载顺序、tool/capability index、mailbox/standby 状态与 `startupMode`，`execution_loop_part_b.py` 在 retrieval 前优先恢复 `currentNodeId/Working_Node/pcMemo`、对无活动工作 `start` 直接走 `standby` 短路，并把损坏 snapshot 的 blocker 持久化；`execution_loop_transitions.py` 在根节点交付时切到 `awaiting-approval`，并要求 work tree 节点先写 `executionSummary`；2026/5/23 更新：补充提示词、启动流程、工作流程重做执行文档、`docs/new/` 三份新方案入口，以及 Agent 运行时/工作树 v0.2 正式规格；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
 
 ---
 
@@ -145,7 +151,7 @@ apps/
     │   ├── observability/          # 调用链路追踪页
     │   ├── prompting/              # Prompt 模板管理与预览页
     │   ├── tasks/
-    │   │   └── [taskId]/           # 任务详情页（动态路由）
+    │   │   └── [taskId]/           # 任务详情页（动态路由，现已挂接 LLM 工作分析摘要与独立分析路由）
     │   ├── training/               # 训练实验管理页
     │   └── components/             # 可复用 React 组件
     ├── lib/                        # 前端工具函数
@@ -157,7 +163,9 @@ apps/
 **关键说明：**
 - `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（`:8000`）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
-- `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性。
+- `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
+- `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
+- `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
 
 ---
 
@@ -192,9 +200,9 @@ services/
 │               ├── observability.py# /observability/ - 追踪数据
 │               ├── outbox.py       # /outbox/ - 事件出箱
 │               ├── prompting.py    # /prompting/ - Prompt 管理
-│               ├── runtime.py      # /runtime/ - 运行时状态
+│               ├── runtime.py      # /runtime/ - 运行时状态、模型调用与 LLM 工作分析入口
 │               ├── specs.py        # /specs/ - 规格查询
-│               ├── tasks.py        # /tasks/ - 任务生命周期与 P4 approve/revision 控制面
+│               ├── tasks.py        # /tasks/ - 任务生命周期、P4 approve/revision 控制面与 latest LLM analysis 入口
 │               ├── training.py     # /training/ - 训练实验
 │               └── workbench.py    # /workbench/ - 总览数据
 │
@@ -305,11 +313,12 @@ packages/
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
-- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态；当前 retrieval 还支持“压缩段尾部自动解压”判定：当最后一个 `carry-forward-package` 之后的未压缩段数量在 `1..n`（`maxUncompressedTailBeforeDecompress`，默认 `1`）时，不再对检索结果执行 carry-forward trim。当前运行时单一路径下，窗口超阈值已弃用 restart handoff：先依赖 context-pruning（含“前缀基础规则保护 + 尾部 n+1 缓冲”的可压缩范围约束），若压缩后仍超阈值则直接把当前支线标记为 failed。
+- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态；当前 retrieval 还支持“压缩段尾部自动解压”判定：当最后一个 `carry-forward-package` 之后的未压缩段数量在 `1..n`（`maxUncompressedTailBeforeDecompress`，默认 `1`）时，不再对检索结果执行 carry-forward trim。当前运行时单一路径下，窗口超阈值已弃用 restart handoff：先依赖 context-pruning（含“前缀基础规则保护 + 尾部 n+1 缓冲”的可压缩范围约束），若压缩后仍超阈值，根节点仍会直接失败，但非根叶子节点现在会写回 `failed + failureSummary`、把失败摘要以 `childCompletionSummaries(status=failed)` 上浮到父节点，并让 continuation 继承 `candidateModels / allowToolExecution / temperature / maxTokens` 等关键执行约束，避免真实 provider 续跑漂移并为前缀缓存保留稳定条件。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
 - `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，子节点完成会自动续跑 sibling/parent，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。
-- `runtime_kernel/execution_loop_part_b.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复。
+- `runtime_kernel/execution_loop_part_b.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
 - `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
+- `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
 - `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；`llm_runtime.py` 已拆分为 `llm_runtime_part_a.py`/`llm_runtime_part_b.py` 并保持原导入路径，避免外部调用改动。
 - `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录。
@@ -577,6 +586,8 @@ evaluation/
                                     #   G4 真实任务窗口对照（repo-wide baseline；现已接入 strict 审计、window-execution 指标、workTreeContinuity/minimalWorkset 正式门禁）
     ├── g4-real-task-minimal-workset.json
                                     #   G4 真实任务最小工作集对照（只保留最小锚点文件，不再注入 repo-wide globs；用于验证“记忆树为主体、窗口为工作集”）
+    ├── g4-real-task-work-tree-debug.json
+                                    #   G4 真实任务工作树调试套件（显式嵌套 takeoverProtocol，从 child 节点起步；现已以 failure->sibling continuation、currentNodeId/context stack/approval 语义为主，不再强绑 legacy restart/span 硬门槛）
     └── g4-window-restart-stress.json
                                     #   G4 官方伪无限上下文窗口 stress（显式 effectiveContextWindow + forcedWindowRestartBudget；LongCat/DeepSeek 正式对照）
 ```
@@ -596,6 +607,7 @@ evaluation/
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:real-task-parity` | `suites/g4-real-task-window-parity.json` |
 | `eval:g4:real-task-minimal-workset` | `suites/g4-real-task-minimal-workset.json` |
+| `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
 | `eval:g4:window-stress` | `suites/g4-window-restart-stress.json` |
 
 ---
@@ -722,6 +734,7 @@ tests/
 
 ```
 scripts/
+├── analyze_llm_work_run.py        # LLM 工作分析脚本包装器：按 task/run/invocation 生成 run/window/turn/tool/artifact/source 报告
 ├── analyze_langfuse_real_task_trace.py # Langfuse trace 分析：恢复真实任务最终输出、结论段与逐窗口快照/工作树历史
 ├── analyze_langfuse_real_task_trace_layered.py # Langfuse 文本审查兼容入口：输出 prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点
 ├── analyze_langfuse_real_task_execution_audit.py # Langfuse 文本审查主入口：面向 Langfuse 文字交互分析的报告生成器，内部可接本地状态增强
@@ -797,6 +810,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并记录生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent 与项目分期 |
 | `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、Working Node 标签和语义冲突仲裁 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复 |
+| `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：说明 Web 页面入口、完整分析页的五层视图、CLI/API 用法和推荐排障流程 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
 | `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |

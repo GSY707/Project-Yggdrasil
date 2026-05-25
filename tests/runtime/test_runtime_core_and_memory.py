@@ -290,7 +290,10 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         return {
             "assistantText": (
-                "已记录本轮运行记忆。\n"
+                "# result\n已记录本轮运行记忆。\n"
+                "# evidence\n通过验证。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。\n"
                 '<memory-write title="运行时记忆策略" rootBranch="context" importance="0.93">'
                 "模型必须始终先从记忆树检索，再决定当前工作集。"
                 "</memory-write>"

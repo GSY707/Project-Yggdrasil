@@ -46,6 +46,33 @@ def list_model_invocations(
     )
 
 
+@router.post("/analysis/runs")
+def analyze_llm_work_run_view(
+    payload: dict[str, Any] = Body(...),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.analyze_llm_work(payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/analysis/runs/{analysis_id}")
+def get_llm_work_analysis(
+    analysis_id: str,
+    granularity: str | None = Query(default=None, alias="granularity"),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.get_llm_work_analysis(analysis_id, granularity=granularity)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.get("/tasks/{task_id}/mailbox")
 def list_task_mailbox_messages(
     task_id: str,

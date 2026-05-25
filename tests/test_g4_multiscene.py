@@ -122,6 +122,194 @@ def test_g4_real_task_minimal_workset_suite_uses_strict_audit_and_no_repo_wide_g
     }
 
 
+def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_protocol() -> None:
+    explicit_protocol = {
+        "id": "takeover_debug_case",
+        "version": "0.1.0",
+        "taskId": "placeholder-task",
+        "taskType": "coding",
+        "runType": "main",
+        "currentPhase": "execute",
+        "status": "executing",
+        "objective": "调试工作树。",
+        "workTree": {
+            "version": "0.2.0",
+            "id": "work_tree_debug_case",
+            "taskId": "placeholder-task",
+            "rootNodeId": "root",
+            "rootObjective": "调试工作树。",
+            "status": "active",
+            "currentNodeId": "child-1",
+            "loadedNodeIds": ["root", "child-1"],
+            "activePathNodeIds": ["root", "child-1"],
+            "pcMemo": "continue:child-1",
+            "entropyBudgetRemaining": 8,
+            "versionCounter": 1,
+            "nodes": [
+                {
+                    "id": "root",
+                    "title": "根节点",
+                    "parentNodeId": None,
+                    "questionsItAnswers": ["最终工作树调试结论是什么"],
+                    "nodeText": "汇总工作树调试结果。",
+                    "localGoal": "汇总工作树调试结果。",
+                    "workingNodeAnnotation": "<Working_Node: root>",
+                    "phase": "delivery",
+                    "status": "in-progress",
+                    "childNodeIds": ["child-1"],
+                    "detailLevel": 0,
+                    "recoveryAnchor": "resume:root",
+                },
+                {
+                    "id": "child-1",
+                    "title": "子节点一",
+                    "parentNodeId": "root",
+                    "questionsItAnswers": ["当前子节点完成了吗"],
+                    "nodeText": "重建目标工作树。",
+                    "localGoal": "重建目标工作树。",
+                    "workingNodeAnnotation": "<Working_Node: child-1>",
+                    "phase": "executing",
+                    "status": "in-progress",
+                    "childNodeIds": [],
+                    "detailLevel": 1,
+                    "recoveryAnchor": "resume:child-1",
+                },
+            ],
+        },
+    }
+
+    start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
+        {
+            "currentFocus": "g4-real-task-work-tree-debug",
+            "currentObjective": "验证显式工作树会被 live case 透传。",
+            "currentContext": [
+                {
+                    "id": "ctx_work_tree_debug",
+                    "title": "work tree debug",
+                    "content": "调试显式嵌套工作树。",
+                    "importance": 1.0,
+                }
+            ],
+            "takeoverProtocol": explicit_protocol,
+            "effectiveContextWindow": 64000,
+            "forcedWindowRestartBudget": 6,
+            "responseRequirements": "输出正式工作树调试报告。",
+        },
+        {"id": "task_live_debug", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
+        app_id="yggdrasil.app.coding-greenfield",
+        task_type="coding",
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+    )
+
+    assert start_payload["takeoverProtocol"]["taskId"] == "task_live_debug"
+    assert start_payload["takeoverProtocol"]["workTree"]["taskId"] == "task_live_debug"
+    assert start_payload["takeoverProtocol"]["workTree"]["currentNodeId"] == "child-1"
+    assert explicit_protocol["taskId"] == "placeholder-task"
+    assert explicit_protocol["workTree"]["taskId"] == "placeholder-task"
+    assert start_payload["candidateModels"][0]["provider"] == "longcat"
+
+
+def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_audit() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    suite = suites["evalsuite_g4_real_task_work_tree_debug"]
+    cases = suite["cases"]
+
+    assert len(cases) == 2
+    assert {case["requestedProvider"] for case in cases} == {"longcat"}
+    assert {case.get("auditLevel") for case in cases} == {"strict"}
+    assert all(not case.get("currentContextGlobs") for case in cases)
+    assert {case["parityPairKey"] for case in cases} == {"g4-real-task-work-tree-debug"}
+    assert {case["takeoverProtocol"]["workTree"]["currentNodeId"] for case in cases} == {"child-1"}
+    assert {
+        tuple(case["acceptanceRequiredSections"])
+        for case in cases
+    } == {
+        (
+            "目标工作树模型",
+            "实际执行路径",
+            "节点与窗口一致性",
+            "失败与上浮语义",
+            "approval 与完成语义",
+            "差距判断",
+            "下一步",
+        )
+    }
+    for case in cases:
+        paths = {item["path"] for item in case["currentContextFiles"]}
+        assert "docs/specs/work-tree-protocol-v0.2.md" in paths
+        assert "docs/specs/agent-runtime-protocol-v0.2.md" in paths
+        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py" in paths
+        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py" in paths
+        assert "tests/test_runtime_p4_foundation.py" in paths
+        assert case["acceptanceMinRestartCount"] == 0
+        assert case["acceptanceMinWindowIndex"] == 1
+        assert case["acceptanceMinCumulativeWindowSpanTokens"] == 0
+
+
+def test_g4_contract_verification_accepts_work_tree_debug_report() -> None:
+    response_text = "\n".join(
+        [
+            "## 1. 目标工作树模型",
+            "工作树应当是执行栈和工作记忆，根节点只负责最终汇总，当前工作由子节点推进。",
+            "## 2. 实际执行路径",
+            "本次真实任务按 child-1 -> child-2 -> root 的路径推进，并在窗口切换后继续沿当前节点恢复。",
+            "## 3. 节点与窗口一致性",
+            "currentNodeId、WorkContextStack top frame、Working_Node 与 retrieval 节点指针保持一致。",
+            "## 4. 失败与上浮语义",
+            "叶子失败时应写 failureSummary 并把失败摘要上浮到父节点，而不是直接把整棵树打死。",
+            "## 5. approval 与完成语义",
+            "根节点完成后应进入 awaiting-approval，而不是直接 completed。",
+            "## 6. 差距判断",
+            "当前真实任务 harness 与目标模型不一致，因为 live case 过去默认 root-only，直到显式 takeoverProtocol 被透传后才具备调试基础。",
+            "## 7. 下一步",
+            "继续用真实任务工件验证窗口级 currentNodeId、stack 与 approval 链路。",
+        ]
+    )
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceRequiredSections": [
+                "目标工作树模型",
+                "实际执行路径",
+                "节点与窗口一致性",
+                "失败与上浮语义",
+                "approval 与完成语义",
+                "差距判断",
+                "下一步",
+            ],
+            "acceptanceRequiredPhrases": ["工作树"],
+            "acceptanceRequiredAnyPhrases": ["一致", "不一致"],
+            "acceptanceRejectPhrases": ["我会先总结当前局势，再给出最稳妥的下一步"],
+            "acceptanceMinRestartCount": 1,
+            "acceptanceMinWindowIndex": 2,
+            "acceptanceMinCumulativeWindowSpanTokens": 150000,
+            "acceptanceMinWorkTreeContinuity0_1": 1.0,
+            "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+            "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+            "acceptanceRequirePrefixCacheKey": True,
+            "acceptanceMinCacheEvidence0_1": 1.0,
+        },
+        response_text,
+        {
+            "restartCount": 1,
+            "windowIndex": 2,
+            "cumulativeWindowSpanTokens": 180000,
+        },
+        {
+            "workTreeContinuity0_1": 1.0,
+            "minimalWorksetRatio0_1": 0.41,
+            "retrievalDriftRate0_1": 0.0,
+            "prefixCacheReady0_1": 1.0,
+            "cacheEvidence0_1": 1.0,
+        },
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is True
+    assert result["issues"] == []
+
+
 def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_allows_it() -> None:
     previous = os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS")
     os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
@@ -281,8 +469,10 @@ def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() ->
                 "responseRequirementsDigest": "resp-1",
                 "restartMessageDigest": "restart-1",
                 "stateFingerprint": "fp-1",
+                "topFramePrefixCacheKey": "prefix-1",
                 "effectiveContextWindow": 100,
                 "currentContextTokenEstimate": 70,
+                "cacheSummary": {"cacheHitInputTokens": 24, "cacheWriteInputTokens": 0},
                 "memoryRetrievalState": {
                     "reverseTraceMode": True,
                     "workTreeNodeId": "wt-node-1",
@@ -294,8 +484,10 @@ def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() ->
                 "responseRequirementsDigest": "resp-2",
                 "restartMessageDigest": "restart-2",
                 "stateFingerprint": "fp-2",
+                "topFramePrefixCacheKey": "prefix-2",
                 "effectiveContextWindow": 100,
                 "currentContextTokenEstimate": 20,
+                "cacheSummary": {"cacheHitInputTokens": 0, "cacheWriteInputTokens": 12},
                 "memoryRetrievalState": {
                     "reverseTraceMode": True,
                     "workTreeNodeId": "wt-node-2",
@@ -310,6 +502,8 @@ def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() ->
     assert metrics["minimalWorksetRatio0_1"] == 0.55
     assert metrics["planningStubRate0_1"] == 0.5
     assert metrics["retrievalDriftRate0_1"] == 0.0
+    assert metrics["prefixCacheReady0_1"] == 1.0
+    assert metrics["cacheEvidence0_1"] == 1.0
 
 
 def test_g4_provider_matrix_summary_aggregates_new_metrics() -> None:

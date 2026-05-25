@@ -92,6 +92,7 @@ http://localhost:3000
 |------|------|------|
 | 总览 | `/` | 系统状态、快捷入口 |
 | 任务 | `/tasks` | 任务列表与管理 |
+| 任务分析 | `/tasks/{taskId}/analysis` | 查看单任务的 LLM 运行窗口、轮次、工具和工件分析 |
 | 节点 | `/nodes` | 记忆树节点浏览 |
 | 协作 | `/collaboration` | PR 审查与合并 |
 | 资产 | `/assets` | 文件与多媒体资产 |
@@ -135,7 +136,35 @@ http://localhost:3000
 - **记忆操作**：Agent 读取和写入了哪些记忆节点
 - **PromptCompiler 产物**：实际发送给模型的完整 Prompt
 
-### 5.3 暂停与恢复任务
+任务详情页现在还提供 **LLM 工作分析摘要**：
+
+- 直接显示窗口数、轮次数、工具执行数和工件覆盖率
+- 可刷新最新分析结果
+- 可跳转到完整分析页 `/tasks/{taskId}/analysis`
+
+如需完整排查手册，参见 `docs/LLM_WORK_ANALYZER_USER_GUIDE.md`。
+
+### 5.3 使用 LLM 工作分析页
+
+LLM 工作分析页专门用于回看单任务的运行过程，而不是只看最终结果。
+
+页面会展示：
+
+- **Coverage**：request/response/prompt/metrics/takeover/work-context-stack 等工件覆盖率
+- **Windows**：每一窗的 objective、focus、work tree 锚点、检索摘要和交付摘要
+- **Turns**：每轮 finish reason、工具调用数、失败数和延迟
+- **Tools**：工具名、执行结果、sourceWorkTreeNodeId、失败摘要
+- **Artifacts**：对应原始工件文件位置
+
+推荐做法：
+
+1. 先看 Coverage，确认分析结论是否建立在完整工件之上。
+2. 再看 Windows，定位哪一窗开始偏航。
+3. 最后用 Tools 和 Artifacts 做细查。
+
+> **提示**：如果任务刚结束，先点“刷新分析”再查看完整分析页，能减少读到旧结果的概率。
+
+### 5.4 暂停与恢复任务
 
 当任务运行中时，可以点击「暂停」将任务挂起。任务的完整状态会被快照保存。
 
@@ -143,11 +172,11 @@ http://localhost:3000
 
 > **注意**：暂停仅在 Agent 执行到安全检查点时生效，不会在 LLM 调用中途强制中断。
 
-### 5.4 任务的 Safe Stop
+### 5.5 任务的 Safe Stop
 
 如需立即停止任务（而不是暂停），使用 **Safe Stop**。系统会等待当前 LLM 调用完成后安全终止，避免数据损坏。
 
-### 5.5 Sub-Agent 任务
+### 5.6 Sub-Agent 任务
 
 某些应用场景会自动启动 Sub-Agent 处理子任务。Sub-Agent 在独立的记忆分支工作，完成后通过 PR 机制提交修改（参见[协作与 PR](#8-协作与-pr)）。
 

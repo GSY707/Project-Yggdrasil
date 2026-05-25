@@ -21,6 +21,7 @@
     "eval:g4:window-stress": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_window_restart_stress",
     "eval:g4:real-task-parity": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_window_parity",
     "eval:g4:real-task-minimal-workset": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_minimal_workset",
+    "eval:g4:work-tree-debug": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_debug",
     "release:check": "corepack pnpm run check:python:syntax && uv run pytest -q && corepack pnpm run eval:regression && corepack pnpm run eval:m8:benchmark && corepack pnpm run eval:m9:control-plane && corepack pnpm run eval:g2:regression && corepack pnpm run eval:g4:multiscene && corepack pnpm run web:lint && corepack pnpm run web:typecheck && corepack pnpm run web:build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",

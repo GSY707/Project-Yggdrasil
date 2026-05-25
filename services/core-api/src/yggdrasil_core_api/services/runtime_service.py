@@ -1,4 +1,5 @@
 from ._base import *  # noqa: F403,F401
+from yggdrasil_sdk.llm_work_analysis import analyze_llm_work_run, load_persisted_llm_work_analysis
 
 class RuntimeServiceMixin:
     def health_report(self) -> dict[str, object]:
@@ -8,6 +9,24 @@ class RuntimeServiceMixin:
             "database": self.runtime.ping_database(),
             "redis": self.coordinator.ping(),
         }
+
+    def analyze_llm_work(self, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        request = dict(payload or {})
+        return analyze_llm_work_run(
+            task_id=str(request.get("taskId") or "").strip() or None,
+            run_id=str(request.get("runId") or "").strip() or None,
+            invocation_id=str(request.get("invocationId") or "").strip() or None,
+            granularities=request.get("granularity"),
+            persist=bool(request.get("persist", True)),
+            workspace_root=self.workspace_root,
+        )
+
+    def get_llm_work_analysis(self, analysis_id: str, *, granularity: str | None = None) -> dict[str, object]:
+        return load_persisted_llm_work_analysis(
+            analysis_id,
+            granularities=granularity,
+            workspace_root=self.workspace_root,
+        )
 
     def _llm_summary(self, session) -> dict[str, object]:
         status_counts = self._status_counts(session, ModelInvocationORM, ModelInvocationORM.status)

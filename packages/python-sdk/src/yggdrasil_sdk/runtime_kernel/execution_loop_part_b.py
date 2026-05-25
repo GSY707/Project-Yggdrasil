@@ -295,6 +295,129 @@ def _mark_takeover_execution_failed(
     except Exception:  # noqa: BLE001
         return takeover_protocol, request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None, None
 
+
+def _queue_takeover_failure_continuation(
+    *,
+    session,
+    coordinator: RedisCoordinator,
+    task_repository: TaskRepository,
+    task,
+    run,
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    takeover_protocol: TaskTakeoverProtocol | None,
+    failure_transition: dict[str, Any] | None,
+    detail: str,
+    runtime_metrics: dict[str, Any],
+    current_context: list[dict[str, Any]],
+    pre_retrieval_context: list[dict[str, Any]] | None,
+    protected_items: list[dict[str, Any]] | None,
+    transition_stage: str,
+    continuation_suffix: str,
+    resume_event_payload: dict[str, Any] | None,
+    rehydration_result: dict[str, Any] | None,
+):
+    stack_payload = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
+    if not (
+        isinstance(failure_transition, dict)
+        and bool(failure_transition.get("requiresContinuation"))
+        and takeover_protocol is not None
+        and takeover_protocol.work_tree is not None
+        and isinstance(stack_payload, dict)
+    ):
+        return None
+    takeover_protocol_ref = persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
+    stack_model = WorkContextStack.model_validate(stack_payload)
+    work_context_stack_ref = persist_stack_snapshot(stack_model, task_id=task.id, run_id=run.id).model_dump(mode="json")
+    continuation_payload = build_takeover_continuation_request(
+        request,
+        protocol=takeover_protocol,
+        work_context_stack=stack_model,
+        parent_run_id=run.id,
+        current_focus=(failure_transition or {}).get("currentFocus") if isinstance(failure_transition, dict) else None,
+    )
+    continuation_payload["workContextStackRef"] = work_context_stack_ref
+    queued_work_item = {
+        "activity": "core.agent.main.execute",
+        "taskId": task.id,
+        "command": "start",
+        "requestedAt": utc_now().isoformat(),
+        "payload": continuation_payload,
+    }
+    queue_depth = coordinator.enqueue_job(AGENT_RUNTIME_QUEUE, queued_work_item)
+    continuation_locator = f"agent-runtime/tasks/{task.id}/continuations/{run.id}/{continuation_suffix}"
+    _cache_package_entry(
+        coordinator,
+        continuation_locator,
+        {
+            "sourceRunId": run.id,
+            "currentNodeId": continuation_payload.get("currentNodeId"),
+            "topFrameId": continuation_payload.get("topFrameId"),
+            "stackDigest": continuation_payload.get("stackDigest"),
+            "workContextStackRef": work_context_stack_ref,
+            "transition": (failure_transition or {}).get("transition"),
+            "queueDepth": queue_depth,
+        },
+    )
+    continuation_event = _persist_runtime_event(
+        session,
+        project_id=task.project_id,
+        aggregate_type="task",
+        aggregate_id=task.id,
+        event_type="task.continuation.queued",
+        locator=continuation_locator,
+    )
+    run = task_repository.update_agent_run(
+        run.id,
+        {
+            "status": "completed",
+            "windowIndex": runtime_metrics.get("windowIndex") or task.window_index or 1,
+            "restartCount": runtime_metrics.get("restartCount") or task.restart_count or 0,
+            "cumulativeWindowSpanTokens": runtime_metrics.get("cumulativeWindowSpanTokens") or task.cumulative_window_span_tokens or 0,
+        },
+    )
+    task = task_repository.update_task(
+        task.id,
+        {
+            "status": "queued",
+            "currentFocus": (failure_transition or {}).get("currentFocus") or detail,
+            "windowIndex": runtime_metrics.get("windowIndex") or task.window_index or 1,
+            "restartCount": runtime_metrics.get("restartCount") or task.restart_count or 0,
+            "cumulativeWindowSpanTokens": runtime_metrics.get("cumulativeWindowSpanTokens") or task.cumulative_window_span_tokens or 0,
+            "carryForwardLossCount": runtime_metrics.get("carryForwardLossCount") or task.carry_forward_loss_count or 0,
+        },
+    )
+    window_execution_artifact = _persist_window_execution_artifact(
+        session,
+        task=task,
+        run=run,
+        record=_build_window_execution_record(
+            task=task,
+            run=run,
+            request=request,
+            root_mount=root_mount,
+            runtime_metrics=runtime_metrics,
+            current_context=current_context,
+            pre_retrieval_context=pre_retrieval_context,
+            protected_items=protected_items,
+            transition_stage=transition_stage,
+            transition_outcome=str((failure_transition or {}).get("transition") or "bubble-parent-after-failure"),
+            resume_path=(resume_event_payload or {}).get("resumePath") if isinstance(resume_event_payload, dict) else None,
+            source_snapshot_id=(resume_event_payload or {}).get("snapshot", {}).get("id") if isinstance((resume_event_payload or {}).get("snapshot"), dict) else None,
+            rehydration_result=rehydration_result,
+        ),
+    )
+    return {
+        "task": task,
+        "run": run,
+        "takeoverProtocolRef": takeover_protocol_ref,
+        "queuedWorkItem": queued_work_item,
+        "queueDepth": queue_depth,
+        "workContextStackRef": work_context_stack_ref,
+        "windowExecutionArtifact": window_execution_artifact,
+        "continuationEvent": continuation_event,
+    }
+
 def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]:
     task_id = str(work_item.get("taskId"))
     request = work_item.get("payload") if isinstance(work_item.get("payload"), dict) else {}
@@ -847,6 +970,123 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     if takeover_protocol is not None and takeover_protocol.work_tree is not None
                     else None
                 )
+                stack_payload = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
+                if (
+                    isinstance(failure_transition, dict)
+                    and bool(failure_transition.get("requiresContinuation"))
+                    and takeover_protocol is not None
+                    and takeover_protocol.work_tree is not None
+                    and isinstance(stack_payload, dict)
+                ):
+                    stack_model = WorkContextStack.model_validate(stack_payload)
+                    work_context_stack_ref = persist_stack_snapshot(stack_model, task_id=task_id, run_id=run.id).model_dump(mode="json")
+                    continuation_payload = build_takeover_continuation_request(
+                        request,
+                        protocol=takeover_protocol,
+                        work_context_stack=stack_model,
+                        parent_run_id=run.id,
+                        current_focus=(failure_transition or {}).get("currentFocus") if isinstance(failure_transition, dict) else None,
+                    )
+                    continuation_payload["workContextStackRef"] = work_context_stack_ref
+                    queued_work_item = {
+                        "activity": "core.agent.main.execute",
+                        "taskId": task_id,
+                        "command": "start",
+                        "requestedAt": utc_now().isoformat(),
+                        "payload": continuation_payload,
+                    }
+                    queue_depth = coordinator.enqueue_job(AGENT_RUNTIME_QUEUE, queued_work_item)
+                    continuation_locator = f"agent-runtime/tasks/{task.id}/continuations/{run.id}/window-overflow"
+                    _cache_package_entry(
+                        coordinator,
+                        continuation_locator,
+                        {
+                            "sourceRunId": run.id,
+                            "currentNodeId": continuation_payload.get("currentNodeId"),
+                            "topFrameId": continuation_payload.get("topFrameId"),
+                            "stackDigest": continuation_payload.get("stackDigest"),
+                            "workContextStackRef": work_context_stack_ref,
+                            "transition": (failure_transition or {}).get("transition"),
+                            "queueDepth": queue_depth,
+                            "restartTrigger": restart_trigger,
+                        },
+                    )
+                    continuation_event = _persist_runtime_event(
+                        session,
+                        project_id=task.project_id,
+                        aggregate_type="task",
+                        aggregate_id=task.id,
+                        event_type="task.continuation.queued",
+                        locator=continuation_locator,
+                    )
+                    run = task_repository.update_agent_run(
+                        run.id,
+                        {
+                            "status": "completed",
+                            "windowIndex": runtime_metrics["windowIndex"],
+                            "restartCount": runtime_metrics["restartCount"],
+                            "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                        },
+                    )
+                    task = task_repository.update_task(
+                        task_id,
+                        {
+                            "status": "queued",
+                            "currentFocus": (failure_transition or {}).get("currentFocus") or "window-overflow-bubbled",
+                            "windowIndex": runtime_metrics["windowIndex"],
+                            "restartCount": runtime_metrics["restartCount"],
+                            "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                            "carryForwardLossCount": runtime_metrics["carryForwardLossCount"],
+                        },
+                    )
+                    window_execution_artifact = _persist_window_execution_artifact(
+                        session,
+                        task=task,
+                        run=run,
+                        record=_build_window_execution_record(
+                            task=task,
+                            run=run,
+                            request=request,
+                            root_mount=root_mount,
+                            runtime_metrics=runtime_metrics,
+                            current_context=effective_context,
+                            pre_retrieval_context=pre_retrieval_context,
+                            protected_items=protected_items,
+                            transition_stage="window-restart",
+                            transition_outcome=str((failure_transition or {}).get("transition") or "bubble-parent-after-failure"),
+                            resume_path=(resume_event_payload or {}).get("resumePath") if isinstance(resume_event_payload, dict) else None,
+                            restart_trigger=restart_trigger,
+                            source_snapshot_id=(resume_event_payload or {}).get("snapshot", {}).get("id") if isinstance((resume_event_payload or {}).get("snapshot"), dict) else None,
+                            rehydration_result=rehydration_result,
+                        ),
+                    )
+                    runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                    return {
+                        "status": "continuing",
+                        "taskId": task_id,
+                        "task": task.model_dump(by_alias=True, mode="json"),
+                        "run": run.model_dump(by_alias=True, mode="json"),
+                        "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                        "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json"),
+                        "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
+                        "queuedWorkItem": queued_work_item,
+                        "queueDepth": queue_depth,
+                        "workContextStackRef": work_context_stack_ref,
+                        "pruning": pruning_result,
+                        "pruningEvents": pruning_events,
+                        "runtimeMetrics": dict(runtime_metrics),
+                        "windowExecutionArtifact": window_execution_artifact,
+                        "outboxRecords": {
+                            "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
+                            "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                            "continuationQueued": continuation_event.model_dump(by_alias=True, mode="json"),
+                            "windowExecutionPersisted": window_execution_artifact["outboxRecord"],
+                        },
+                        "resume": resume_event_payload,
+                        "rehydration": rehydration_result,
+                        "detail": overflow_detail,
+                        "runtimeTimings": dict(runtime_timings),
+                    }
                 run = task_repository.update_agent_run(
                     run.id,
                     {
@@ -969,6 +1209,134 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "resumeToken": snap_result.get("resumeToken"),
                     "persisted": snap_result.get("persisted"),
                     "pendingToolCallCount": len(_shutdown_exc.pending_tool_calls),
+                }
+            except Exception as exc:
+                runtime_timings["llmInvocationMs"] = _elapsed_ms(llm_invoke_started_at)
+                failure_detail = str(exc)
+                failure_transition = None
+                takeover_protocol, _, failure_transition = _mark_takeover_execution_failed(
+                    request=request,
+                    root_mount=root_mount,
+                    takeover_protocol=takeover_protocol,
+                    task_id=task_id,
+                    agent_run_id=run.id,
+                    failure_summary=failure_detail,
+                )
+                continuation_result = _queue_takeover_failure_continuation(
+                    session=session,
+                    coordinator=coordinator,
+                    task_repository=task_repository,
+                    task=task,
+                    run=run,
+                    request=request,
+                    root_mount=root_mount,
+                    takeover_protocol=takeover_protocol,
+                    failure_transition=failure_transition,
+                    detail=failure_detail,
+                    runtime_metrics=runtime_metrics,
+                    current_context=effective_context,
+                    pre_retrieval_context=pre_retrieval_context,
+                    protected_items=protected_items,
+                    transition_stage="window-delivery",
+                    continuation_suffix="invocation-failure",
+                    resume_event_payload=resume_event_payload,
+                    rehydration_result=rehydration_result,
+                )
+                if continuation_result is not None:
+                    runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                    return {
+                        "status": "continuing",
+                        "taskId": task_id,
+                        "task": continuation_result["task"].model_dump(by_alias=True, mode="json"),
+                        "run": continuation_result["run"].model_dump(by_alias=True, mode="json"),
+                        "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                        "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                        "takeoverProtocolRef": continuation_result["takeoverProtocolRef"].model_dump(mode="json") if continuation_result["takeoverProtocolRef"] is not None else None,
+                        "queuedWorkItem": continuation_result["queuedWorkItem"],
+                        "queueDepth": continuation_result["queueDepth"],
+                        "workContextStackRef": continuation_result["workContextStackRef"],
+                        "pruning": pruning_result,
+                        "pruningEvents": pruning_events,
+                        "runtimeMetrics": dict(runtime_metrics),
+                        "windowExecutionArtifact": continuation_result["windowExecutionArtifact"],
+                        "outboxRecords": {
+                            "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
+                            "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                            "continuationQueued": continuation_result["continuationEvent"].model_dump(by_alias=True, mode="json"),
+                            "windowExecutionPersisted": continuation_result["windowExecutionArtifact"]["outboxRecord"],
+                        },
+                        "resume": resume_event_payload,
+                        "rehydration": rehydration_result,
+                        "detail": failure_detail,
+                        "runtimeTimings": dict(runtime_timings),
+                    }
+                takeover_protocol_ref = (
+                    persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
+                    if takeover_protocol is not None and takeover_protocol.work_tree is not None
+                    else None
+                )
+                run = task_repository.update_agent_run(
+                    run.id,
+                    {
+                        "status": "failed",
+                        "windowIndex": runtime_metrics["windowIndex"],
+                        "restartCount": runtime_metrics["restartCount"],
+                        "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                    },
+                )
+                task = task_repository.update_task(
+                    task_id,
+                    {
+                        "status": "failed",
+                        "currentFocus": (failure_transition or {}).get("currentFocus") or f"execution-failed: {failure_detail}",
+                        "windowIndex": runtime_metrics["windowIndex"],
+                        "restartCount": runtime_metrics["restartCount"],
+                        "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+                        "carryForwardLossCount": runtime_metrics["carryForwardLossCount"],
+                    },
+                )
+                window_execution_artifact = _persist_window_execution_artifact(
+                    session,
+                    task=task,
+                    run=run,
+                    record=_build_window_execution_record(
+                        task=task,
+                        run=run,
+                        request=request,
+                        root_mount=root_mount,
+                        runtime_metrics=runtime_metrics,
+                        current_context=effective_context,
+                        pre_retrieval_context=pre_retrieval_context,
+                        protected_items=protected_items,
+                        transition_stage="window-delivery",
+                        transition_outcome="failed",
+                        resume_path=(resume_event_payload or {}).get("resumePath") if isinstance(resume_event_payload, dict) else None,
+                        source_snapshot_id=snapshot.id if snapshot is not None and command == "resume" else None,
+                        rehydration_result=rehydration_result,
+                    ),
+                )
+                runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
+                return {
+                    "status": "failed",
+                    "taskId": task_id,
+                    "task": task.model_dump(by_alias=True, mode="json"),
+                    "run": run.model_dump(by_alias=True, mode="json"),
+                    "routeDecision": route_decision.model_dump(by_alias=True, mode="json"),
+                    "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
+                    "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
+                    "pruning": pruning_result,
+                    "pruningEvents": pruning_events,
+                    "runtimeMetrics": dict(runtime_metrics),
+                    "windowExecutionArtifact": window_execution_artifact,
+                    "outboxRecords": {
+                        "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
+                        "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                        "windowExecutionPersisted": window_execution_artifact["outboxRecord"],
+                    },
+                    "resume": resume_event_payload,
+                    "rehydration": rehydration_result,
+                    "detail": failure_detail,
+                    "runtimeTimings": dict(runtime_timings),
                 }
             runtime_timings["llmInvocationMs"] = _elapsed_ms(llm_invoke_started_at)
             actual_input_tokens = int(llm_result["usage"].get("inputTokens", input_tokens))
@@ -1321,7 +1689,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         task_id,
                         statuses={"initializing", "mounting", "running", "completed", "failed"},
                     )
-                    if latest_run is None:
+                    if latest_run is None and "budget exceeded before the next execution step" not in str(exc):
                         runtime_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
                         latest_run = task_repository.create_agent_run(
                             task_id,

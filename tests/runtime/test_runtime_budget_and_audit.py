@@ -211,7 +211,7 @@ def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["status"] == "awaiting-approval"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -249,6 +249,120 @@ def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
         assert "toolExecutionCount" in response_payload
 
 
+def test_runtime_no_tool_prompt_does_not_expose_registered_tools(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "no-tool-model",
+                "provider": "no-tool-provider",
+                "quality": 0.8,
+                "costPer1k": 0.001,
+                "latencyMs": 50,
+                "contextWindow": 1_000_000,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "no-tool-provider",
+            "model": "no-tool-model",
+            "outputText": "# Result\n直接输出最终报告，不调用任何工具。\n# Evidence\n无需工具进行校验。",
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 120,
+                "outputTokens": 60,
+                "totalTokens": 180,
+            },
+            "costUsed": 0.0,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "# Result\n直接输出最终报告，不调用任何工具。\n# Evidence\n无需工具进行校验。"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 60,
+                    "total_tokens": 180,
+                },
+            },
+            "requestPayload": {
+                "model": "no-tool-model",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 50.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_no_tool_prompt",
+                "title": "no tool prompt",
+                "goal": "验证 allowToolExecution=false 时 prompt 不再暴露结构化工具。",
+                "status": "draft",
+                "currentObjective": "输出一份无需工具的最终说明。",
+                "currentFocus": "no-tool-prompt",
+                "budgetState": {
+                    "tokenBudgetTotal": 1000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_no_tool_prompt/start",
+        json={
+            "auditLevel": "strict",
+            "allowToolExecution": False,
+            "currentFocus": "no-tool-prompt",
+            "currentContext": [
+                {
+                    "id": "ctx_no_tool",
+                    "title": "no tool context",
+                    "content": "这个任务必须直接基于挂载上下文回答，不允许读取仓库文件或调用任何工具。",
+                    "importance": 0.9,
+                }
+            ],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "awaiting-approval"
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        prompt_repository = PromptAssetRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        invocations = runtime_repository.list_model_invocations(task_id="task_no_tool_prompt")
+        assert len(invocations) == 1
+        artifact = prompt_repository.get_prompt_compile_artifact(str(invocations[0].prompt_compile_artifact_id))
+        assert artifact is not None
+        assert artifact.compiled_messages_ref is not None
+
+        compiled_path = Path(resolve_workspace_root()) / artifact.compiled_messages_ref.locator
+        compiled_payload = json.loads(compiled_path.read_text(encoding="utf-8"))
+
+    compiled_text = "\n".join(str(message.get("content") or "") for message in compiled_payload["messages"])
+    assert "当前没有通过模块 hook 暴露的结构化工具描述。" in compiled_text
+    assert "mcp.read.read_file" not in compiled_text
+    assert "mcp.execute.run_command" not in compiled_text
+
+
 def test_runtime_response_payload_tracks_token_usage_and_context_lengths(monkeypatch) -> None:
     langfuse_start_calls: list[dict[str, object]] = []
     langfuse_finish_calls: list[dict[str, object]] = []
@@ -284,7 +398,7 @@ def test_runtime_response_payload_tracks_token_usage_and_context_lengths(monkeyp
             "mode": "live",
             "provider": "metrics-provider",
             "model": "metrics-model",
-            "outputText": "已生成一份长任务实现计划。",
+            "outputText": "已生成一份长任务实现计划。\n\n# Result\n已生成一份长任务实现计划。\n# Evidence\n经过本地运行测试确认指标落盘。",
             "finishReason": "stop",
             "usage": {
                 "inputTokens": 3200,
@@ -302,7 +416,7 @@ def test_runtime_response_payload_tracks_token_usage_and_context_lengths(monkeyp
                 "choices": [
                     {
                         "finish_reason": "stop",
-                        "message": {"role": "assistant", "content": "已生成一份长任务实现计划。"},
+                        "message": {"role": "assistant", "content": "已生成一份长任务实现计划。\n\n# Result\n已生成一份长任务实现计划。\n# Evidence\n经过本地运行测试确认指标落盘。"},
                     }
                 ],
                 "usage": {
@@ -365,7 +479,7 @@ def test_runtime_response_payload_tracks_token_usage_and_context_lengths(monkeyp
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["status"] == "awaiting-approval"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()

@@ -239,7 +239,12 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
         invoke_calls.append(request_payload)
         return {
-            "assistantText": "result: 已消费 mailbox 消息并继续主循环。 evidence: mailbox 消息已注入上下文并消费。 pending: 无。 incomplete: 无。",
+            "assistantText": (
+                "# result\n已消费 mailbox 消息并继续主循环。\n"
+                "# evidence\nmailbox 消息已注入上下文并消费。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ),
             "invocation": {
                 "id": "inv_mailbox_wake_1",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -532,7 +537,12 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
             }
         )
         return {
-            "assistantText": "result: 已沿当前工作树节点继续执行。 evidence: 已完成。 pending: 无。 incomplete: 无。",
+            "assistantText": (
+                "# result\n已沿当前工作树节点继续执行。\n"
+                "# evidence\n已完成。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ),
             "invocation": {
                 "id": "inv_retrieval_work_tree_focus",
                 "resolvedModel": "LongCat-Flash-Lite",

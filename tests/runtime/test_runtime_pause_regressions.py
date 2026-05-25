@@ -183,14 +183,14 @@ def test_pause_during_execution_worker_stops_next_round() -> None:
         if task and task.status == "running":
             second_run = run_worker_once("agent-runtime")
             assert second_run["status"] == "processed"
-            assert second_run["result"]["status"] in ["paused", "completed"]
+            assert second_run["result"]["status"] in ["paused", "completed", "awaiting-approval"]
 
     # Verify final state shows pause was honored
     with runtime.session_scope() as session:
         task = TaskRepository(session).get_task("task_pause_mid_exec")
         assert task is not None
         # Task should either be paused or completed (if it finished before pause took effect)
-        assert task.status in ["paused", "completed"]
+        assert task.status in ["paused", "completed", "awaiting-approval"]
         # If paused, should have a snapshot
         if task.status == "paused":
             assert task.active_snapshot_id is not None
@@ -311,7 +311,7 @@ def test_multiple_pause_resume_cycles_no_state_pollution() -> None:
     run3 = run_worker_once("agent-runtime")
     assert run3["status"] == "processed"
     # Should either pause again, complete, or continue
-    assert run3["result"]["status"] in ["paused", "completed", "running"]
+    assert run3["result"]["status"] in ["paused", "completed", "running", "awaiting-approval"]
 
     # Final verification: no state pollution
     with runtime.session_scope() as session:

@@ -244,6 +244,10 @@ def _finalize_execution_transition(
 				result_status = "failed"
 				task_status = "failed"
 				transition_outcome = "failed"
+			elif isinstance(transition_state, dict) and transition_state.get("transition") == "delivery-gate-blocked":
+				result_status = "failed"
+				task_status = "failed"
+				transition_outcome = "delivery-gate-blocked"
 			elif bool((transition_state or {}).get("requiresContinuation")) and work_context_stack is not None:
 				work_context_stack_ref = _persist_work_context_stack_ref(
 					work_context_stack,

@@ -196,13 +196,17 @@ def _g4_window_execution_metrics(records: list[dict[str, Any]]) -> dict[str, Any
             "minimalWorksetRatio0_1": 0.0,
             "planningStubRate0_1": 0.0,
             "retrievalDriftRate0_1": 0.0,
+            "prefixCacheReady0_1": 0.0,
+            "cacheEvidence0_1": 0.0,
         }
 
     minimal_workset_ratios: list[float] = []
     continuity_flags: list[bool] = []
+    prefix_cache_flags: list[bool] = []
     planning_stub_count = 0
     drift_checks = 0
     drift_hits = 0
+    cache_evidence_hits = 0
 
     for record in records:
         llm = record.get("llm") if isinstance(record.get("llm"), dict) else {}
@@ -216,11 +220,23 @@ def _g4_window_execution_metrics(records: list[dict[str, Any]]) -> dict[str, Any
         memory_state = record.get("memoryRetrievalState") if isinstance(record.get("memoryRetrievalState"), dict) else {}
         retrieval_node_id = str(memory_state.get("workTreeNodeId") or "").strip()
         reverse_trace_mode = bool(memory_state.get("reverseTraceMode"))
+        work_tree_debug = record.get("workTreeDebug") if isinstance(record.get("workTreeDebug"), dict) else {}
+        cache_summary = record.get("cacheSummary") if isinstance(record.get("cacheSummary"), dict) else {}
 
         continuity_ok = bool(work_tree_node_id and response_digest and restart_digest and state_fingerprint)
         if reverse_trace_mode:
             continuity_ok = continuity_ok and bool(retrieval_node_id)
         continuity_flags.append(continuity_ok)
+        prefix_cache_flags.append(
+            bool(
+                str(record.get("topFramePrefixCacheKey") or work_tree_debug.get("topFramePrefixCacheKey") or "").strip()
+            )
+        )
+        if max(
+            _g4_int_metric(cache_summary.get("cacheHitInputTokens"), 0),
+            _g4_int_metric(cache_summary.get("cacheWriteInputTokens"), 0),
+        ) > 0:
+            cache_evidence_hits += 1
 
         if work_tree_node_id and retrieval_node_id:
             drift_checks += 1
@@ -249,6 +265,8 @@ def _g4_window_execution_metrics(records: list[dict[str, Any]]) -> dict[str, Any
         "minimalWorksetRatio0_1": minimal_workset_ratio,
         "planningStubRate0_1": planning_stub_rate,
         "retrievalDriftRate0_1": retrieval_drift_rate,
+        "prefixCacheReady0_1": 1.0 if prefix_cache_flags and all(prefix_cache_flags) else 0.0,
+        "cacheEvidence0_1": 1.0 if cache_evidence_hits > 0 else 0.0,
     }
 
 
@@ -270,6 +288,8 @@ def _g4_contract_verification_results(
     min_minimal_workset_ratio = case_payload.get("acceptanceMinMinimalWorksetRatio0_1")
     max_planning_stub_rate = case_payload.get("acceptanceMaxPlanningStubRate0_1")
     max_retrieval_drift_rate = case_payload.get("acceptanceMaxRetrievalDriftRate0_1")
+    require_prefix_cache_key = bool(case_payload.get("acceptanceRequirePrefixCacheKey", False))
+    min_cache_evidence = case_payload.get("acceptanceMinCacheEvidence0_1")
     window_execution_metrics = window_execution_metrics or {}
 
     enabled = any(
@@ -285,6 +305,8 @@ def _g4_contract_verification_results(
             min_minimal_workset_ratio is not None,
             max_planning_stub_rate is not None,
             max_retrieval_drift_rate is not None,
+            require_prefix_cache_key,
+            min_cache_evidence is not None,
         )
     )
     checks: list[dict[str, Any]] = []
@@ -440,6 +462,31 @@ def _g4_contract_verification_results(
         )
         if actual > expected:
             issues.append(f"retrievalDriftRate0_1 超限: actual={actual}, expected<={expected}")
+
+    if require_prefix_cache_key:
+        actual = float(window_execution_metrics.get("prefixCacheReady0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-require-prefix-cache-key",
+                "returncode": 0 if actual >= 1.0 else 1,
+                "detail": f"prefixCacheReady0_1={actual}, expected=1.0",
+            }
+        )
+        if actual < 1.0:
+            issues.append(f"prefixCacheReady0_1 不足: actual={actual}, expected=1.0")
+
+    if min_cache_evidence is not None:
+        expected = max(float(min_cache_evidence), 0.0)
+        actual = float(window_execution_metrics.get("cacheEvidence0_1") or 0.0)
+        checks.append(
+            {
+                "command": "g4-min-cache-evidence",
+                "returncode": 0 if actual >= expected else 1,
+                "detail": f"cacheEvidence0_1={actual}, expected>={expected}",
+            }
+        )
+        if actual < expected:
+            issues.append(f"cacheEvidence0_1 不足: actual={actual}, expected>={expected}")
 
     return {
         "enabled": enabled,
@@ -857,6 +904,63 @@ def _run_g4_scene_switch_isolation_case(case: dict[str, Any] | None = None) -> d
     }
 
 
+def _g4_bind_takeover_protocol(task_id: str, protocol_payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(protocol_payload, dict):
+        return None
+    bound_protocol = dict(protocol_payload)
+    bound_protocol["taskId"] = task_id
+    work_tree_payload = bound_protocol.get("workTree")
+    if isinstance(work_tree_payload, dict):
+        updated_work_tree = dict(work_tree_payload)
+        updated_work_tree["taskId"] = task_id
+        bound_protocol["workTree"] = updated_work_tree
+    return bound_protocol
+
+
+def _g4_live_provider_matrix_start_payload(
+    case_payload: dict[str, Any],
+    task: dict[str, Any],
+    *,
+    app_id: str,
+    task_type: str,
+    candidate_models: list[dict[str, Any]],
+) -> dict[str, Any]:
+    start_payload = {
+        "appId": app_id,
+        "taskType": task_type,
+        "currentFocus": str(case_payload.get("currentFocus") or task.get("currentFocus") or "g4-live"),
+        "currentObjective": str(case_payload.get("currentObjective") or task.get("currentObjective") or "g4 live task"),
+        "currentContext": _g4_current_context(case_payload),
+        "protectedItems": case_payload.get("protectedItems") or [],
+        "allowModelFallback": bool(case_payload.get("allowFallback", False)),
+        "allowToolExecution": bool(case_payload.get("allowToolExecution", False)),
+        "temperature": float(case_payload.get("temperature") or 0.1),
+        "maxTokens": int(case_payload.get("maxTokens") or 320),
+    }
+    if case_payload.get("auditLevel") is not None:
+        start_payload["auditLevel"] = str(case_payload.get("auditLevel") or "default")
+    if case_payload.get("effectiveContextWindow") is not None:
+        start_payload["effectiveContextWindow"] = int(case_payload["effectiveContextWindow"])
+    if case_payload.get("windowRestartRatio") is not None:
+        start_payload["windowRestartRatio"] = float(case_payload["windowRestartRatio"])
+    if case_payload.get("windowRestartThreshold") is not None:
+        start_payload["windowRestartThreshold"] = int(case_payload["windowRestartThreshold"])
+    if case_payload.get("forcedWindowRestartBudget") is not None:
+        start_payload["forcedWindowRestartBudget"] = int(case_payload["forcedWindowRestartBudget"])
+    if case_payload.get("maxToolRounds") is not None:
+        start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
+    if case_payload.get("responseRequirements") is not None:
+        start_payload["responseRequirements"] = str(case_payload["responseRequirements"])
+    if case_payload.get("restartMessage") is not None:
+        start_payload["restartMessage"] = str(case_payload["restartMessage"])
+    if candidate_models:
+        start_payload["candidateModels"] = [dict(candidate) for candidate in candidate_models]
+    takeover_protocol = _g4_bind_takeover_protocol(str(task.get("id") or ""), case_payload.get("takeoverProtocol"))
+    if takeover_protocol is not None:
+        start_payload["takeoverProtocol"] = takeover_protocol
+    return start_payload
+
+
 def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from datetime import datetime, timedelta
     import os
@@ -898,36 +1002,13 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         cost_budget_total=float(case_payload.get("costBudgetTotal") or 5.0),
     )
     client = TestClient(runtime_app)
-    start_payload = {
-        "appId": app_id,
-        "taskType": task_type,
-        "currentFocus": str(case_payload.get("currentFocus") or task.get("currentFocus") or "g4-live"),
-        "currentObjective": str(case_payload.get("currentObjective") or task.get("currentObjective") or "g4 live task"),
-        "currentContext": _g4_current_context(case_payload),
-        "protectedItems": case_payload.get("protectedItems") or [],
-        "allowModelFallback": bool(case_payload.get("allowFallback", False)),
-        "allowToolExecution": bool(case_payload.get("allowToolExecution", False)),
-        "temperature": float(case_payload.get("temperature") or 0.1),
-        "maxTokens": int(case_payload.get("maxTokens") or 320),
-    }
-    if case_payload.get("auditLevel") is not None:
-        start_payload["auditLevel"] = str(case_payload.get("auditLevel") or "default")
-    if case_payload.get("effectiveContextWindow") is not None:
-        start_payload["effectiveContextWindow"] = int(case_payload["effectiveContextWindow"])
-    if case_payload.get("windowRestartRatio") is not None:
-        start_payload["windowRestartRatio"] = float(case_payload["windowRestartRatio"])
-    if case_payload.get("windowRestartThreshold") is not None:
-        start_payload["windowRestartThreshold"] = int(case_payload["windowRestartThreshold"])
-    if case_payload.get("forcedWindowRestartBudget") is not None:
-        start_payload["forcedWindowRestartBudget"] = int(case_payload["forcedWindowRestartBudget"])
-    if case_payload.get("maxToolRounds") is not None:
-        start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
-    if case_payload.get("responseRequirements") is not None:
-        start_payload["responseRequirements"] = str(case_payload["responseRequirements"])
-    if case_payload.get("restartMessage") is not None:
-        start_payload["restartMessage"] = str(case_payload["restartMessage"])
-    if candidate_models:
-        start_payload["candidateModels"] = candidate_models
+    start_payload = _g4_live_provider_matrix_start_payload(
+        case_payload,
+        task,
+        app_id=app_id,
+        task_type=task_type,
+        candidate_models=candidate_models,
+    )
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
     if started.status_code != 202:
         raise RuntimeError(f"g4 provider matrix start failed: {started.text}")
@@ -1110,6 +1191,8 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "minimalWorksetRatio0_1": window_execution_metrics["minimalWorksetRatio0_1"],
         "planningStubRate0_1": window_execution_metrics["planningStubRate0_1"],
         "retrievalDriftRate0_1": window_execution_metrics["retrievalDriftRate0_1"],
+        "prefixCacheReady0_1": window_execution_metrics.get("prefixCacheReady0_1", 0.0),
+        "cacheEvidence0_1": window_execution_metrics.get("cacheEvidence0_1", 0.0),
         "workTreeContinuityThreshold0_1": float(case_payload.get("acceptanceMinWorkTreeContinuity0_1") or 0.0),
         "minimalWorksetThreshold0_1": float(case_payload.get("acceptanceMinMinimalWorksetRatio0_1") or 0.0),
         "acceptancePass0_1": acceptance_pass,

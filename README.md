@@ -100,6 +100,8 @@ corepack pnpm web:dev
 
 ### 基础验证
 
+- 运行 `uv run pytest -q` 前请先确保本地 OTel Collector 已启动（例如执行 `corepack pnpm infra:up`），避免 observability 导出端点不可达导致额外等待。
+
 ```powershell
 uv run pytest -q
 corepack pnpm web:typecheck
@@ -122,6 +124,7 @@ corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
 corepack pnpm eval:g4:window-stress
 corepack pnpm eval:g4:real-task-parity
+corepack pnpm eval:g4:work-tree-debug
 ```
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-2.0-Preview`，并保留 `longcat/LongCat-Flash-Lite` 作为对照 case；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
@@ -133,6 +136,8 @@ corepack pnpm eval:g4:real-task-parity
 `corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
 
 `corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。
+
+`corepack pnpm eval:g4:work-tree-debug` 是当前仓库的真实任务工作树调试入口：它不再把 provider 锁定当主目标，而是预置显式嵌套 `takeoverProtocol`，让真实任务从子节点起步，重点检查 `currentNodeId`、`WorkContextStack`、叶子失败上浮、窗口 continuation 和 `awaiting-approval` 语义是否符合工作树 v0.2 设想。
 
 如果要在 live suite 或 `pilot-live` 中使用付费 provider（例如 `deepseek_direct / deepseek-v4-pro`），除了配置 API key 之外，还必须显式设置 `YGGDRASIL_ALLOW_PAID_MODELS=1`；否则 paid candidate 不会进入 runtime catalog。
 

@@ -633,6 +633,234 @@ export interface TaskControlActionResponse {
   [key: string]: unknown;
 }
 
+export interface LlmWorkAnalysisRef {
+  type: string;
+  locator: string;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisCacheSummary {
+  inputTokens?: number;
+  cacheHitInputTokens?: number;
+  cacheWriteInputTokens?: number;
+  nonCacheInputTokens?: number;
+  trackedInputTokens?: number;
+  cacheHitWindowCount?: number;
+  cacheWriteWindowCount?: number;
+  cacheHitRatio0_1?: number;
+  cacheWriteRatio0_1?: number;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisWorkTreeTimelineEntry {
+  step?: number;
+  windowIndex: number;
+  invocationId?: string | null;
+  nodeId?: string | null;
+  topFrameId?: string | null;
+  topFramePrefixCacheKey?: string | null;
+  transitionOutcome?: string | null;
+  continuationReason?: string | null;
+  reworkReason?: string | null;
+  nodeChanged0_1?: number | null;
+  frameChanged0_1?: number | null;
+  prefixCacheChanged0_1?: number | null;
+  approvalStop0_1?: number | null;
+  childBubble0_1?: number | null;
+  mixedOutcome0_1?: number | null;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisWindowWorkTreeDebug {
+  frameCount?: number;
+  activePathNodeIds?: string[];
+  activePathFrameIds?: string[];
+  topFrameId?: string | null;
+  topFrameNodeId?: string | null;
+  topFramePrefixCacheKey?: string | null;
+  continuationReason?: string | null;
+  reworkReason?: string | null;
+  approvalStop0_1?: number | null;
+  childBubble0_1?: number | null;
+  mixedOutcome0_1?: number | null;
+  childStatusCounts?: Record<string, number>;
+  recentChildCompletionSummaries?: Array<Record<string, unknown>>;
+  framePath?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisSummaryWorkTreeDebug {
+  distinctNodeIds?: string[];
+  distinctNodeCount?: number;
+  distinctPrefixCacheKeys?: string[];
+  distinctPrefixCacheKeyCount?: number;
+  continuationReasons?: string[];
+  nodeSwitchCount?: number;
+  frameSwitchCount?: number;
+  prefixCacheChangeCount?: number;
+  approvalStopCount?: number;
+  childBubbleCount?: number;
+  mixedOutcomeWindowCount?: number;
+  latestNodeId?: string | null;
+  latestPrefixCacheKey?: string | null;
+  timeline?: LlmWorkAnalysisWorkTreeTimelineEntry[];
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisWindowRecord {
+  windowIndex: number;
+  invocationId?: string | null;
+  status?: string;
+  requestedModel?: string | null;
+  requestedProvider?: string | null;
+  resolvedModel?: string | null;
+  resolvedProvider?: string | null;
+  promptCompileArtifactId?: string | null;
+  createdAt?: string | null;
+  finishReason?: string | null;
+  assistantTextSummary?: string | null;
+  currentObjective?: string | null;
+  currentFocus?: string | null;
+  sourceSnapshotId?: string | null;
+  targetSnapshotId?: string | null;
+  restartTrigger?: string | null;
+  resumePath?: string | null;
+  transitionStage?: string | null;
+  transitionOutcome?: string | null;
+  workTreeCurrentNodeId?: string | null;
+  workTreeStatus?: string | null;
+  workTreeRecoveryAnchor?: string | null;
+  topFrameId?: string | null;
+  topFramePrefixCacheKey?: string | null;
+  memoryRetrievalState?: {
+    matchedNodeCount?: number;
+    materializedNodeCount?: number;
+    retrievalFingerprint?: string | null;
+    [key: string]: unknown;
+  } | null;
+  cacheSummary?: LlmWorkAnalysisCacheSummary | null;
+  runtimeMetrics?: Record<string, unknown> | null;
+  toolExecutionCount?: number;
+  roundCount?: number;
+  planningStub0_1?: number | null;
+  workTreeDebug?: LlmWorkAnalysisWindowWorkTreeDebug | null;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisTurnRecord {
+  turnId: string;
+  invocationId?: string | null;
+  windowIndex: number;
+  roundIndex: number;
+  mode?: string | null;
+  finishReason?: string | null;
+  latencyMs?: number | null;
+  firstTokenLatencyMs?: number | null;
+  reasoningContentPresent?: boolean;
+  toolCallCount?: number;
+  toolCalls?: string[];
+  toolFailureCount?: number;
+  assistantTextPreview?: string | null;
+  rawSummary?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisToolRecord {
+  toolExecutionId: string;
+  invocationId?: string | null;
+  windowIndex: number;
+  roundIndex?: number | null;
+  toolName?: string | null;
+  success?: boolean;
+  durationMs?: number | null;
+  toolCallId?: string | null;
+  status?: string | null;
+  sourceWorkTreeNodeId?: string | null;
+  resultPreview?: string | null;
+  failureSummary?: string | null;
+  detailLevel?: string | null;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisArtifactRecord {
+  kind: string;
+  taskId?: string | null;
+  runId?: string | null;
+  invocationId?: string | null;
+  locator?: string | null;
+  path?: string | null;
+  exists: boolean;
+  [key: string]: unknown;
+}
+
+export interface LlmWorkAnalysisResponse {
+  analysis: {
+    analysisId: string;
+    kind: string;
+    version: string;
+    generatedAt: string;
+    mode: string;
+    analysisRef?: LlmWorkAnalysisRef | null;
+    markdownRef?: LlmWorkAnalysisRef | null;
+    [key: string]: unknown;
+  };
+  selector: {
+    taskId: string;
+    runId?: string | null;
+    invocationId?: string | null;
+    [key: string]: unknown;
+  };
+  task?: TaskSummaryRecord;
+  agentRun?: AgentRunRecord | null;
+  summary?: {
+    taskId?: string;
+    runId?: string | null;
+    invocationCount: number;
+    windowCount: number;
+    turnCount: number;
+    toolExecutionCount: number;
+    restartCount: number;
+    latestWindowIndex: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostUsed: number;
+    fallbackInvocationCount: number;
+    failedInvocationCount: number;
+    restorableSnapshotCount: number;
+    mailboxMessageCount: number;
+    pendingMailboxCount: number;
+    warningEventCount: number;
+    errorEventCount: number;
+    cacheHitInputTokens?: number;
+    cacheWriteInputTokens?: number;
+    nonCacheInputTokens?: number;
+    cacheSummary?: LlmWorkAnalysisCacheSummary | null;
+    workTreeDebug?: LlmWorkAnalysisSummaryWorkTreeDebug | null;
+    [key: string]: unknown;
+  };
+  coverage?: {
+    invocationCount: number;
+    windowCount: number;
+    turnCount: number;
+    toolCount: number;
+    requestArtifactsAvailable: number;
+    responseArtifactsAvailable: number;
+    promptArtifactsAvailable: number;
+    metricsArtifactsAvailable: number;
+    windowExecutionArtifactsAvailable: number;
+    detailedToolRecords: number;
+    hasTakeoverProtocol: boolean;
+    hasWorkContextStack: boolean;
+    [key: string]: unknown;
+  };
+  windows?: LlmWorkAnalysisWindowRecord[];
+  turns?: LlmWorkAnalysisTurnRecord[];
+  tools?: LlmWorkAnalysisToolRecord[];
+  artifacts?: LlmWorkAnalysisArtifactRecord[];
+  sources?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface NodeDetailResponse {
   node: NodeSummaryRecord;
   versions: NodeVersionRecord[];

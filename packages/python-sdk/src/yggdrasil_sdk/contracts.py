@@ -64,6 +64,99 @@ def _stable_contract_digest(payload: Any) -> str:
     return sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
+def _normalized_child_completion_payloads(values: Any) -> list[dict[str, Any]]:
+    normalized_payloads: list[dict[str, Any]] = []
+    for item in values or []:
+        payload = _raw_work_tree_node_payload(item)
+        child_node_id = _normalized_string(payload.get("childNodeId") or payload.get("child_node_id"))
+        if child_node_id is None:
+            continue
+        normalized_payloads.append(
+            {
+                "childNodeId": child_node_id,
+                "status": _normalized_string(payload.get("status")) or "completed",
+                "summary": _normalized_string(payload.get("summary")) or "",
+            }
+        )
+    return normalized_payloads
+
+
+def build_work_context_prefix_cache_key(
+    frame: Any,
+    *,
+    parent_prefix_cache_key: str | None = None,
+) -> str:
+    payload = _raw_work_tree_node_payload(frame)
+    node_id = _normalized_string(payload.get("nodeId") or payload.get("node_id")) or "work-tree-node"
+    frame_id = _normalized_string(payload.get("id")) or f"frame-{node_id}"
+    working_node_annotation = (
+        _normalized_string(payload.get("workingNodeAnnotation") or payload.get("working_node_annotation"))
+        or _working_node_annotation(node_id)
+        or ""
+    )
+    entry_context_digest = _normalized_string(payload.get("entryContextDigest") or payload.get("entry_context_digest")) or _stable_contract_digest(
+        {"nodeId": node_id, "frameId": frame_id}
+    )
+    return _stable_contract_digest(
+        {
+            "frameId": frame_id,
+            "nodeId": node_id,
+            "parentFrameId": _normalized_string(payload.get("parentFrameId") or payload.get("parent_frame_id")),
+            "stackDepth": int(payload.get("stackDepth") or payload.get("stack_depth") or 0),
+            "workingNodeAnnotation": working_node_annotation,
+            "entryContextDigest": entry_context_digest,
+            "frameHeader": _normalized_string(payload.get("frameHeader") or payload.get("frame_header")) or "",
+            "cursorState": _normalized_string(payload.get("cursorState") or payload.get("cursor_state")),
+            "childCompletionSummaries": _normalized_child_completion_payloads(
+                payload.get("childCompletionSummaries") or payload.get("child_completion_summaries") or []
+            ),
+            "parentPrefixCacheKey": _normalized_string(parent_prefix_cache_key),
+        }
+    )
+
+
+def normalize_work_context_frames_payload(frames: list[Any] | None) -> list[dict[str, Any]]:
+    normalized_frames: list[dict[str, Any]] = []
+    parent_frame_id: str | None = None
+    parent_prefix_cache_key: str | None = None
+    for depth, frame in enumerate(frames or []):
+        payload = _raw_work_tree_node_payload(frame)
+        node_id = _normalized_string(payload.get("nodeId") or payload.get("node_id")) or "work-tree-node"
+        frame_id = _normalized_string(payload.get("id")) or f"frame-{node_id}"
+        normalized_payload: dict[str, Any] = {
+            **payload,
+            "id": frame_id,
+            "nodeId": node_id,
+            "parentFrameId": parent_frame_id,
+            "stackDepth": depth,
+            "workingNodeAnnotation": (
+                _normalized_string(payload.get("workingNodeAnnotation") or payload.get("working_node_annotation"))
+                or _working_node_annotation(node_id)
+                or ""
+            ),
+            "entryContextDigest": _normalized_string(payload.get("entryContextDigest") or payload.get("entry_context_digest")) or _stable_contract_digest(
+                {"nodeId": node_id, "frameId": frame_id}
+            ),
+            "frameHeader": _normalized_string(payload.get("frameHeader") or payload.get("frame_header"))
+            or _normalized_string(payload.get("workingNodeAnnotation") or payload.get("working_node_annotation"))
+            or _working_node_annotation(node_id)
+            or "",
+            "childCompletionSummaries": payload.get("childCompletionSummaries") or payload.get("child_completion_summaries") or [],
+            "cursorState": _normalized_string(payload.get("cursorState") or payload.get("cursor_state")),
+            "status": _normalized_string(payload.get("status")) or "active",
+        }
+        if payload.get("frameLocalTranscriptRef") is not None or payload.get("frame_local_transcript_ref") is not None:
+            normalized_payload["frameLocalTranscriptRef"] = payload.get("frameLocalTranscriptRef") or payload.get("frame_local_transcript_ref")
+        normalized_payload["prefixCacheKey"] = build_work_context_prefix_cache_key(
+            normalized_payload,
+            parent_prefix_cache_key=parent_prefix_cache_key,
+        )
+        normalized_frames.append(normalized_payload)
+        parent_frame_id = frame_id
+        parent_prefix_cache_key = normalized_payload["prefixCacheKey"]
+    return normalized_frames
+
+
 def _working_node_annotation(node_id: Any) -> str | None:
     normalized = _normalized_string(node_id)
     if normalized is None:
@@ -418,6 +511,9 @@ class RuntimeMetricsSnapshot(BaseModel):
     restart_count: int = Field(alias="restartCount")
     total_tokens_used: int = Field(alias="totalTokensUsed")
     total_cost_used: float = Field(alias="totalCostUsed")
+    cache_hit_input_tokens: int = Field(default=0, alias="cacheHitInputTokens")
+    cache_write_input_tokens: int = Field(default=0, alias="cacheWriteInputTokens")
+    non_cache_input_tokens: int = Field(default=0, alias="nonCacheInputTokens")
     cumulative_window_span_tokens: int = Field(alias="cumulativeWindowSpanTokens")
     carry_forward_loss_count: int = Field(alias="carryForwardLossCount")
     tool_round_count: int = Field(alias="toolRoundCount")
@@ -879,7 +975,11 @@ class WorkContextChildCompletionSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     child_node_id: str = Field(alias="childNodeId")
+    status: Literal["completed", "failed"] = "completed"
     summary: str
+    summary_type: Literal["execution-result", "failure-reason", "process-description"] = Field(
+        default="execution-result", alias="summaryType"
+    )
     evidence_refs: list[EntityRef] = Field(default_factory=list, alias="evidenceRefs")
     completed_at: datetime = Field(default_factory=_contracts_utcnow, alias="completedAt")
 
@@ -924,6 +1024,7 @@ class WorkContextFrame(BaseModel):
         )
         data.setdefault("frameHeader", data.get("frame_header") or data.get("workingNodeAnnotation") or data["workingNodeAnnotation"])
         data.setdefault("childCompletionSummaries", data.get("child_completion_summaries") or [])
+        data["prefixCacheKey"] = _normalized_string(data.get("prefixCacheKey") or data.get("prefix_cache_key")) or build_work_context_prefix_cache_key(data)
         return data
 
 
@@ -946,7 +1047,7 @@ class WorkContextStack(BaseModel):
         if isinstance(value, cls):
             return value
         data = dict(value or {})
-        frames = [_raw_work_tree_node_payload(frame) for frame in data.get("frames") or []]
+        frames = normalize_work_context_frames_payload(data.get("frames") or [])
         root_frame_id = _normalized_string(data.get("rootFrameId") or data.get("root_frame_id"))
         top_frame_id = _normalized_string(data.get("topFrameId") or data.get("top_frame_id"))
         if frames:
@@ -976,6 +1077,7 @@ class TaskTakeoverVerificationItem(BaseModel):
     label: str
     status: Literal["passed", "warning", "failed", "not-run"]
     detail: str | None = None
+    gate_mode: Literal["hard", "advisory"] = Field(default="advisory", alias="gateMode")
 
 
 class TaskTakeoverDeliverySection(BaseModel):

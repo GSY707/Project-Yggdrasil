@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import type { TaskControlActionResponse, TaskDetailResponse } from "@yggdrasil/frontend-sdk";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
 import { ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+import { TaskLlmWorkAnalysisView } from "./task-llm-work-analysis";
 
 export function TaskDetailPage({ taskId }: { taskId: string }) {
   const { data, error, isLoading, reload } = useApiResource<TaskDetailResponse>(`/tasks/${encodeURIComponent(taskId)}`);
@@ -103,6 +105,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         summary={<>目标：{taskDetail.task.goal}</>}
         actions={
           <>
+            <Link className="ghost-button" href={`/tasks/${encodeURIComponent(taskId)}/analysis`}>
+              LLM 工作分析
+            </Link>
             {taskDetail.runtimeControl.canRequestPause ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitPauseRequest()} type="button">
                 {activeAction === "pause" ? "正在提交暂停" : "请求暂停"}
@@ -154,6 +159,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           </div>
         </div>
       </section>
+
+      <TaskLlmWorkAnalysisView mode="compact" taskId={taskId} />
 
       <Surface>
         <p className="section-kicker">Runtime Control</p>

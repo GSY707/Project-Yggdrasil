@@ -27,6 +27,8 @@ def invoke_runtime_completion(
     audit_level = _runtime_audit_level(request)
     local_runtime_timings: dict[str, float] = {}
     local_started_at = perf_counter()
+    allow_tool_execution = bool(request.get("allowToolExecution", True))
+    prompt_registered_tools = registered_tools if allow_tool_execution else []
 
     compile_prompt_started_at = perf_counter()
     compiled_prompt = compile_runtime_prompt(
@@ -37,7 +39,7 @@ def invoke_runtime_completion(
         current_context=current_context,
         request=request,
         resume_path=resume_path,
-        registered_tools=registered_tools,
+        registered_tools=prompt_registered_tools,
     )
     local_runtime_timings["compilePromptMs"] = _elapsed_ms(compile_prompt_started_at)
     prompt_metadata = compiled_prompt.model_dump(by_alias=True, mode="json", exclude={"messages"})
@@ -47,7 +49,6 @@ def invoke_runtime_completion(
     thinking_mode = _requested_thinking_mode(request)
     reasoning_effort = _requested_reasoning_effort(request)
     allow_fallback = bool(request.get("allowModelFallback", True))
-    allow_tool_execution = bool(request.get("allowToolExecution", True))
     build_tool_specs_started_at = perf_counter()
     tool_specs = build_llm_tool_specs(compiled_prompt.registered_tools) if allow_tool_execution else []
     registered_tools_by_name = {
@@ -317,6 +318,23 @@ def invoke_runtime_completion(
                 budget_overrun_result = post_check.model_dump(by_alias=True, mode="json")
                 round_modes.append(str(result.get("mode") or "unknown"))
                 tool_calls = [call for call in result.get("toolCalls") or [] if isinstance(call, dict) and call.get("name")]
+
+                # Runtime hard block: strip unexpected tool calls when allowToolExecution=false.
+                if tool_calls and not allow_tool_execution:
+                    record_log(
+                        service_name,
+                        "warning",
+                        f"Runtime hard-blocked {len(tool_calls)} tool call(s) because allowToolExecution=false.",
+                        attributes={
+                            "taskId": task.id,
+                            "agentRunId": run.id,
+                            "invocationId": invocation.id,
+                            "blockedToolCalls": [str(c.get("name")) for c in tool_calls[:5]],
+                        },
+                        workspace_root=workspace_root,
+                    )
+                    tool_calls = []
+
                 current_tool_round_signature = _tool_round_signature(tool_calls) if tool_calls else None
                 if tool_calls and current_tool_round_signature == last_tool_round_signature and _is_idempotent_tool_round(tool_calls, registered_tools_by_name):
                     duplicate_tool_round_streak += 1

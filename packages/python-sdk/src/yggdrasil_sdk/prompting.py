@@ -751,7 +751,8 @@ def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
             frame_label = frame.frame_header or frame.working_node_annotation or frame.node_id
             lines.append(f"- {frame_label}")
             for item in frame.child_completion_summaries[-4:]:
-                lines.append(f"  - {item.child_node_id}: {normalize_excerpt(item.summary, 120)}")
+                status_label = f"[{item.status}] " if item.status != "completed" else ""
+                lines.append(f"  - {status_label}{item.child_node_id}: {normalize_excerpt(item.summary, 120)}")
     return "\n".join(lines)
 
 

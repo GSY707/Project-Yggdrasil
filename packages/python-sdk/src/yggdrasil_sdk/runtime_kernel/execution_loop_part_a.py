@@ -145,6 +145,10 @@ def _build_runtime_metrics_snapshot(
         for execution in tool_executions
         if isinstance(execution, dict) and not bool(execution.get("success"))
     )
+    input_tokens = max(_int_metric(usage.get("inputTokens"), 0), 0)
+    cache_hit_input_tokens = max(_int_metric(usage.get("cacheHitInputTokens"), 0), 0)
+    cache_write_input_tokens = max(_int_metric(usage.get("cacheWriteInputTokens"), 0), 0)
+    non_cache_input_tokens = max(_int_metric(usage.get("nonCacheInputTokens"), max(input_tokens - cache_hit_input_tokens, 0)), 0)
     tool_round_count = len(
         [
             summary
@@ -157,6 +161,9 @@ def _build_runtime_metrics_snapshot(
         restartCount=max(_int_metric(runtime_metrics.get("restartCount"), 0), 0),
         totalTokensUsed=max(_int_metric(usage.get("totalTokens"), 0), 0),
         totalCostUsed=max(_float_metric(llm_result.get("costUsed"), 0.0), 0.0),
+        cacheHitInputTokens=cache_hit_input_tokens,
+        cacheWriteInputTokens=cache_write_input_tokens,
+        nonCacheInputTokens=non_cache_input_tokens,
         cumulativeWindowSpanTokens=max(_int_metric(runtime_metrics.get("cumulativeWindowSpanTokens"), 0), 0),
         carryForwardLossCount=max(_int_metric(runtime_metrics.get("carryForwardLossCount"), 0), 0),
         toolRoundCount=tool_round_count,
@@ -364,6 +371,132 @@ def _window_execution_memory_state(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _window_execution_cache_summary(llm_result: dict[str, Any] | None) -> dict[str, Any]:
+    usage = (llm_result or {}).get("usage") if isinstance((llm_result or {}).get("usage"), dict) else {}
+    input_tokens = max(_int_metric(usage.get("inputTokens"), 0), 0)
+    cache_hit_input_tokens = max(_int_metric(usage.get("cacheHitInputTokens"), 0), 0)
+    cache_write_input_tokens = max(_int_metric(usage.get("cacheWriteInputTokens"), 0), 0)
+    non_cache_input_tokens = max(_int_metric(usage.get("nonCacheInputTokens"), max(input_tokens - cache_hit_input_tokens, 0)), 0)
+    tracked_input_tokens = max(input_tokens, cache_hit_input_tokens + cache_write_input_tokens + non_cache_input_tokens, 0)
+    denominator = tracked_input_tokens if tracked_input_tokens > 0 else 1
+    return {
+        "inputTokens": input_tokens,
+        "cacheHitInputTokens": cache_hit_input_tokens,
+        "cacheWriteInputTokens": cache_write_input_tokens,
+        "nonCacheInputTokens": non_cache_input_tokens,
+        "trackedInputTokens": tracked_input_tokens,
+        "cacheHitRatio0_1": round(cache_hit_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
+        "cacheWriteRatio0_1": round(cache_write_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
+    }
+
+
+def _coerce_work_context_stack_payload(candidate: Any) -> dict[str, Any] | None:
+    if isinstance(candidate, WorkContextStack):
+        return candidate.model_dump(by_alias=True, mode="json")
+    if not isinstance(candidate, dict):
+        return None
+    try:
+        return WorkContextStack.model_validate(candidate).model_dump(by_alias=True, mode="json")
+    except Exception:
+        return candidate
+
+
+def _window_execution_work_tree_debug(
+    work_context_stack: dict[str, Any] | None,
+    *,
+    current_node_id: str | None,
+    transition_outcome: str,
+    resume_path: str | None,
+    restart_trigger: str | None,
+) -> dict[str, Any]:
+    stack_payload = _coerce_work_context_stack_payload(work_context_stack)
+    frame_path: list[dict[str, Any]] = []
+    child_status_counts: dict[str, int] = {}
+    recent_child_completion_summaries: list[dict[str, Any]] = []
+    active_path_node_ids: list[str] = []
+    active_path_frame_ids: list[str] = []
+    top_frame_id: str | None = None
+    top_frame_node_id: str | None = current_node_id
+    top_frame_prefix_cache_key: str | None = None
+    continuation_reason: str | None = None
+    if isinstance(stack_payload, dict):
+        frames = stack_payload.get("frames") if isinstance(stack_payload.get("frames"), list) else []
+        for frame in frames:
+            if not isinstance(frame, dict):
+                continue
+            frame_id = str(frame.get("id") or "").strip() or None
+            node_id = str(frame.get("nodeId") or "").strip() or None
+            prefix_cache_key = str(frame.get("prefixCacheKey") or "").strip() or None
+            cursor_state = str(frame.get("cursorState") or "").strip() or None
+            child_summaries = [
+                item
+                for item in frame.get("childCompletionSummaries") or []
+                if isinstance(item, dict)
+            ]
+            frame_path.append(
+                {
+                    "frameId": frame_id,
+                    "nodeId": node_id,
+                    "parentFrameId": str(frame.get("parentFrameId") or "").strip() or None,
+                    "stackDepth": max(_int_metric(frame.get("stackDepth"), 0), 0),
+                    "status": str(frame.get("status") or "active").strip() or "active",
+                    "cursorState": cursor_state,
+                    "frameHeader": str(frame.get("frameHeader") or "").strip() or None,
+                    "prefixCacheKey": prefix_cache_key,
+                    "childCompletionCount": len(child_summaries),
+                    "childCompletionStatuses": [str(item.get("status") or "completed") for item in child_summaries],
+                }
+            )
+            if frame_id is not None:
+                active_path_frame_ids.append(frame_id)
+            if node_id is not None:
+                active_path_node_ids.append(node_id)
+            for summary in child_summaries:
+                status = str(summary.get("status") or "completed").strip() or "completed"
+                child_status_counts[status] = child_status_counts.get(status, 0) + 1
+                recent_child_completion_summaries.append(
+                    {
+                        "frameId": frame_id,
+                        "nodeId": node_id,
+                        "childNodeId": str(summary.get("childNodeId") or "").strip() or None,
+                        "status": status,
+                        "summary": normalize_excerpt(str(summary.get("summary") or ""), 160) or None,
+                    }
+                )
+            if frame_id == stack_payload.get("topFrameId"):
+                top_frame_id = frame_id
+                top_frame_node_id = node_id or top_frame_node_id
+                top_frame_prefix_cache_key = prefix_cache_key
+                continuation_reason = cursor_state or continuation_reason
+        if top_frame_id is None and frame_path:
+            top_frame_id = frame_path[-1].get("frameId")
+            top_frame_node_id = frame_path[-1].get("nodeId") or top_frame_node_id
+            top_frame_prefix_cache_key = frame_path[-1].get("prefixCacheKey")
+            continuation_reason = frame_path[-1].get("cursorState") or continuation_reason
+    continuation_reason = continuation_reason or resume_path or restart_trigger
+    rework_reason: str | None = None
+    if transition_outcome in {"continue-sibling-after-failure", "failed-window-overflow", "failed"}:
+        rework_reason = restart_trigger or continuation_reason or transition_outcome
+    elif restart_trigger:
+        rework_reason = restart_trigger
+    return {
+        "frameCount": len(frame_path),
+        "activePathNodeIds": active_path_node_ids,
+        "activePathFrameIds": active_path_frame_ids,
+        "topFrameId": top_frame_id,
+        "topFrameNodeId": top_frame_node_id,
+        "topFramePrefixCacheKey": top_frame_prefix_cache_key,
+        "continuationReason": continuation_reason,
+        "reworkReason": rework_reason,
+        "approvalStop0_1": 1 if transition_outcome == "awaiting-approval" else 0,
+        "childBubble0_1": 1 if transition_outcome in {"bubble-parent", "continue-sibling", "continue-sibling-after-failure"} else 0,
+        "mixedOutcome0_1": 1 if child_status_counts.get("completed", 0) > 0 and child_status_counts.get("failed", 0) > 0 else 0,
+        "childStatusCounts": child_status_counts,
+        "recentChildCompletionSummaries": recent_child_completion_summaries[-6:],
+        "framePath": frame_path,
+    }
+
+
 def _build_window_execution_record(
     *,
     task,
@@ -397,6 +530,15 @@ def _build_window_execution_record(
     restart_message = request.get("restartMessage") or task.restart_message or root_mount.get("resumeMessage")
     restart_message_digest = _stable_digest(restart_message)
     output_labels = _model_invocation_output_labels(request, memory_tag_write_result) if llm_result is not None else []
+    work_context_stack_payload = pointer_state.get("workContextStack") if isinstance(pointer_state.get("workContextStack"), dict) else None
+    cache_summary = _window_execution_cache_summary(llm_result)
+    work_tree_debug = _window_execution_work_tree_debug(
+        work_context_stack_payload,
+        current_node_id=pointer_state.get("currentNodeId") or (work_tree.current_node_id if work_tree is not None else None),
+        transition_outcome=transition_outcome,
+        resume_path=resume_path,
+        restart_trigger=restart_trigger,
+    )
     state_fingerprint = _stable_digest(
         {
             "currentObjective": request.get("currentObjective"),
@@ -409,6 +551,7 @@ def _build_window_execution_record(
             "workingNodeAnnotation": pointer_state.get("workingNodeAnnotation"),
             "pcMemo": pointer_state.get("pcMemo"),
             "topFrameId": pointer_state.get("topFrameId"),
+            "topFramePrefixCacheKey": work_tree_debug.get("topFramePrefixCacheKey"),
             "stackDigest": pointer_state.get("stackDigest"),
             "retrievalFingerprint": memory_state.get("retrievalFingerprint"),
             "protectedRefIds": protected_ref_ids,
@@ -429,6 +572,8 @@ def _build_window_execution_record(
         "targetSnapshotId": target_snapshot_id,
         "nextWindowIndex": next_window_index,
         "restartTrigger": restart_trigger,
+        "transitionStage": transition_stage,
+        "transitionOutcome": transition_outcome,
         "windowIndex": max(_int_metric(runtime_metrics.get("windowIndex"), 1), 1),
         "restartCount": max(_int_metric(runtime_metrics.get("restartCount"), 0), 0),
         "effectiveContextWindow": max(_int_metric(runtime_metrics.get("effectiveContextWindow"), 0), 0),
@@ -454,8 +599,11 @@ def _build_window_execution_record(
         "workingNodeAnnotation": pointer_state.get("workingNodeAnnotation"),
         "pcMemo": pointer_state.get("pcMemo"),
         "topFrameId": pointer_state.get("topFrameId"),
+        "topFramePrefixCacheKey": work_tree_debug.get("topFramePrefixCacheKey"),
         "stackDigest": pointer_state.get("stackDigest"),
         "memoryRetrievalState": memory_state,
+        "cacheSummary": cache_summary,
+        "workTreeDebug": work_tree_debug,
         "memoryTagWrites": {
             "detectedCount": max(_int_metric(memory_tag_write_result.get("detectedCount"), 0), 0),
             "appliedCount": len([item for item in memory_tag_write_result.get("applied") or [] if isinstance(item, dict)]),
@@ -493,6 +641,13 @@ def _persist_window_execution_artifact(
     artifact_path = artifact_dir / f"{task.id}-{run.id}.json"
     write_json(artifact_path, record)
     artifact_ref = ExternalRef(type="file", locator=relative_workspace_path(artifact_path, workspace_root))
+    history_ref_payload = None
+    invocation_id = str(record.get("invocationId") or "").strip()
+    if invocation_id:
+        history_dir = ensure_state_subdir("runtime/window-executions/by-invocation", workspace_root)
+        history_path = history_dir / f"{invocation_id}.json"
+        write_json(history_path, record)
+        history_ref_payload = ExternalRef(type="file", locator=relative_workspace_path(history_path, workspace_root)).model_dump(mode="json")
     event = _persist_runtime_event(
         session,
         project_id=task.project_id,
@@ -504,6 +659,7 @@ def _persist_window_execution_artifact(
     return {
         "runId": run.id,
         "artifactRef": artifact_ref.model_dump(mode="json"),
+        "historyRef": history_ref_payload,
         "record": record,
         "outboxRecord": event.model_dump(by_alias=True, mode="json"),
     }

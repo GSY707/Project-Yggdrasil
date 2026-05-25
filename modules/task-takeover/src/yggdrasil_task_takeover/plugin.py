@@ -19,11 +19,33 @@ from yggdrasil_sdk.support import new_id, normalize_excerpt
 
 
 _SECTION_MARKERS: dict[str, tuple[str, ...]] = {
-    "result": ("result", "results", "结论", "结果", "final result", "outcome"),
-    "evidence": ("evidence", "verification", "验证", "证据", "tests", "test", "proof"),
-    "pending": ("pending", "待确认", "open questions", "follow-up", "follow up"),
-    "incomplete": ("incomplete", "未完成", "remaining", "remaining work", "limitations", "residual risks"),
+    "result": (
+        "result", "results", "结论", "结果", "final result", "outcome",
+        "summary", "总结", "answer", "answer summary", "conclusion",
+    ),
+    "evidence": (
+        "evidence", "verification", "验证", "证据", "tests", "test",
+        "proof", "validation", "supporting evidence", "验证结果",
+        "test results", "测试结果",
+    ),
+    "pending": (
+        "pending", "待确认", "open questions", "follow-up", "follow up",
+        "待处理", "open items", "risks", "风险", "assumptions", "假设",
+    ),
+    "incomplete": (
+        "incomplete", "未完成", "remaining", "remaining work",
+        "limitations", "residual risks", "todo", "待办",
+        "known issues", "已知问题", "gaps", "缺口",
+    ),
 }
+
+_SECTION_WEIGHTS: dict[str, float] = {
+    "result": 0.40,
+    "evidence": 0.30,
+    "pending": 0.15,
+    "incomplete": 0.15,
+}
+
 
 
 def _text(value: Any) -> str:
@@ -97,11 +119,44 @@ def _compute_plan_quality(plan_steps: list[dict[str, object]], constraints: list
 
 
 def _match_section(label: str) -> str | None:
+    """Match a markdown heading to a delivery section name."""
     normalized = label.strip().strip("#").strip().strip(":：").lower()
+    # 精确匹配
     for section, markers in _SECTION_MARKERS.items():
         if normalized in markers:
             return section
+    # 前缀匹配 — 处理 "结果与说明" 类标题
+    for section, markers in _SECTION_MARKERS.items():
+        if any(normalized.startswith(marker) for marker in markers):
+            return section
     return None
+
+
+_EVIDENCE_INFER_MARKERS = {"验证", "测试", "test", "pass", "通过", "assert", "确认"}
+_PENDING_INFER_MARKERS = {"待确认", "open", "follow", "risk", "风险", "assume", "假设"}
+_INCOMPLETE_INFER_MARKERS = {"todo", "未完成", "remaining", "待办", "known issue", "已知问题", "gap", "缺口"}
+
+
+def _infer_missing_sections(buckets: dict[str, list[str]]) -> None:
+    """从 result 桶中推断缺失的 evidence/incomplete/pending 内容。"""
+    for target_section, markers in (
+        ("evidence", _EVIDENCE_INFER_MARKERS),
+        ("pending", _PENDING_INFER_MARKERS),
+        ("incomplete", _INCOMPLETE_INFER_MARKERS),
+    ):
+        if buckets[target_section]:
+            continue
+        promoted: list[str] = []
+        remaining: list[str] = []
+        for line in buckets["result"]:
+            lower = line.lower()
+            if any(m in lower for m in markers):
+                promoted.append(line)
+            else:
+                remaining.append(line)
+        if promoted:
+            buckets[target_section] = promoted
+            buckets["result"] = remaining
 
 
 def _parse_delivery_sections(model_output: str) -> list[dict[str, object]]:
@@ -127,6 +182,8 @@ def _parse_delivery_sections(model_output: str) -> list[dict[str, object]]:
         buckets[current_section].append(line)
 
     payload: list[dict[str, object]] = []
+    # 尝试从 result 桶推断缺失的 sections
+    _infer_missing_sections(buckets)
     for section in ("result", "evidence", "pending", "incomplete"):
         content = "\n".join(item for item in buckets[section] if item.strip()).strip()
         payload.append(
@@ -143,13 +200,13 @@ def _parse_delivery_sections(model_output: str) -> list[dict[str, object]]:
 def _verification_items(delivery_sections: list[dict[str, object]]) -> list[dict[str, object]]:
     sections_by_name = {str(item.get("section")): item for item in delivery_sections}
     required = {
-        "result": "必须有明确结果总结。",
-        "evidence": "必须有支撑结果的证据或验证。",
-        "pending": "必须交代仍待确认的前提或风险。",
-        "incomplete": "必须交代未完成项或明确写无。",
+        "result": ("必须有明确结果总结。", "hard"),
+        "evidence": ("必须有支撑结果的证据或验证。", "hard"),
+        "pending": ("必须交代仍待确认的前提或风险。", "advisory"),
+        "incomplete": ("必须交代未完成项或明确写无。", "advisory"),
     }
     items: list[dict[str, object]] = []
-    for section, detail in required.items():
+    for section, (detail, gate_mode) in required.items():
         item = sections_by_name.get(section) or {}
         status = "passed" if item.get("status") == "present" else "failed"
         items.append(
@@ -158,6 +215,7 @@ def _verification_items(delivery_sections: list[dict[str, object]]) -> list[dict
                 label=f"delivery.{section}",
                 status=status,
                 detail=detail,
+                gateMode=gate_mode,
             ).model_dump(by_alias=True, mode="json")
         )
     return items
@@ -171,10 +229,15 @@ def _verification_pass_rate(items: list[dict[str, object]]) -> float:
 
 
 def _delivery_completeness(delivery_sections: list[dict[str, object]]) -> float:
+    """加权计算 delivery 完整度分数。"""
     if not delivery_sections:
         return 0.0
-    present = len([item for item in delivery_sections if item.get("status") == "present"])
-    return round(present / len(delivery_sections) * 100.0, 2)
+    total_weight = 0.0
+    for item in delivery_sections:
+        section = str(item.get("section") or "")
+        if item.get("status") == "present" and section in _SECTION_WEIGHTS:
+            total_weight += _SECTION_WEIGHTS[section]
+    return round(total_weight * 100.0, 2)
 
 
 def _rework_metrics(plan_steps: list[dict[str, object]], verification_items: list[dict[str, object]]) -> tuple[int, float]:

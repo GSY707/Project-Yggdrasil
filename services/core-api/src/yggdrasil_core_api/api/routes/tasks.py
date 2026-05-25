@@ -26,6 +26,20 @@ def get_task(task_id: str, service: WorkspaceService = Depends(get_workspace_ser
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task not found: {task_id}") from exc
 
 
+@router.get("/{task_id}/analysis/latest")
+def get_latest_task_llm_work_analysis(
+    task_id: str,
+    granularity: str | None = Query(default=None, alias="granularity"),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.get_latest_task_llm_work_analysis(task_id, granularity=granularity)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task not found: {task_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_task(
     payload: dict[str, Any] = Body(...),

@@ -25,3 +25,4 @@ packages = ["src/yggdrasil_sdk"]
 
 [project.scripts]
 yggdrasil-ops = "yggdrasil_sdk.ops_cli:main"
+yggdrasil-llm-work-analysis = "yggdrasil_sdk.llm_work_analysis:main"

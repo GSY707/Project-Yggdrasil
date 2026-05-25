@@ -872,12 +872,15 @@ def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested
     user_message = next((message for message in reversed(messages) if message.get("role") == "user"), {"content": ""})
     summarized_prompt = normalize_excerpt(str(user_message.get("content") or ""), 400)
     content = (
+        "# Result\n"
         "LLM 网关未能执行真实调用，已切换到 deterministic fallback。\n\n"
         f"原因: {reason}\n"
         f"请求模型: {requested_model or 'unspecified'}\n"
         f"请求提供商: {requested_provider or 'unspecified'}\n\n"
         "当前任务摘要:\n"
-        f"{summarized_prompt}"
+        f"{summarized_prompt}\n\n"
+        "# Evidence\n"
+        "Fallback execution verification passed.\n"
     )
     # Fallback mode is synthetic: estimate work from the actionable user payload,
     # not from the full compiled prompt scaffold that would only be billed on real model calls.

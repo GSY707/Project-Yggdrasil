@@ -1,4 +1,5 @@
 from ._base import *  # noqa: F403,F401
+from yggdrasil_sdk.llm_work_analysis import analyze_llm_work_run, load_latest_task_llm_work_analysis
 
 class TaskServiceMixin:
     def list_tasks(self, *, status: str | None = None, app_id: str | None = None, limit: int = 100) -> dict[str, object]:
@@ -50,6 +51,22 @@ class TaskServiceMixin:
             "mailboxMessages": [message.model_dump(by_alias=True, mode="json") for message in mailbox_messages],
             "sideChannelEvents": [event.model_dump(by_alias=True, mode="json") for event in side_channel_events],
         }
+
+    def get_latest_task_llm_work_analysis(self, task_id: str, *, granularity: str | None = None) -> dict[str, object]:
+        try:
+            return load_latest_task_llm_work_analysis(
+                task_id,
+                granularities=granularity,
+                workspace_root=self.workspace_root,
+            )
+        except KeyError:
+            self.get_task(task_id)
+            return analyze_llm_work_run(
+                task_id=task_id,
+                granularities=granularity,
+                persist=True,
+                workspace_root=self.workspace_root,
+            )
 
     def create_task(self, payload: dict[str, Any]) -> dict[str, object]:
         with self.runtime.session_scope() as session:

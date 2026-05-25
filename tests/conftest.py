@@ -88,6 +88,7 @@ def persistence_env(_shared_db, tmp_path, monkeypatch):
     state_dir = state_root / "state"
     monkeypatch.setenv("YGGDRASIL_STATE_ROOT", state_root.as_posix())
     monkeypatch.setenv("YGGDRASIL_DISABLE_LIVE_LLM", "1")
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "0")
     reset_persistence_runtime()
     invalidate_application_catalog_cache()
     invalidate_catalog_cache()

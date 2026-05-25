@@ -234,8 +234,10 @@ def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_ma
     (source_workspace / "README.md").write_text(readme_text, encoding="utf-8")
     (source_workspace / "docs" / "DIRECTORY_REFERENCE.md").write_text(directory_text, encoding="utf-8")
 
+    import yggdrasil_sdk.ops_runtime_live_part_a as ops_runtime_live_part_a
     monkeypatch.setattr(ops_runtime_live, "resolve_workspace_root", lambda: source_workspace)
     monkeypatch.setattr(ops_runtime_live, "_run_git_command", lambda *args: "")
+    monkeypatch.setattr(ops_runtime_live_part_a, "_run_git_command", lambda *args: "")
 
     ops_runtime_live._prepare_ci01_baseline(target_workspace)
 
@@ -482,6 +484,7 @@ def test_langfuse_client_uses_local_base_url_and_project_keys(monkeypatch) -> No
 
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "1")
     monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setattr(observability_exporters, "LangfuseClient", FakeLangfuseClient)
     observability_exporters._STATE._langfuse_client = None

@@ -507,6 +507,7 @@ def merge_child_takeover_completion_into_parent(
             parent_node_id=target_node_id,
             child_summary=WorkContextChildCompletionSummary(
                 childNodeId=child_protocol.work_tree.current_node_id if child_protocol is not None and child_protocol.work_tree is not None else (child_task_id or target_node_id),
+                status="completed",
                 summary=merged_summary,
                 evidenceRefs=normalized_evidence_refs,
                 completedAt=now,
@@ -831,7 +832,11 @@ def _node_children_terminal(work_tree: WorkTreeProtocol, node_id: str) -> bool:
     child_ids = node.child_node_ids or [item.id for item in work_tree.nodes if item.parent_node_id == node.id]
     if not child_ids:
         return True
-    return all(node_by_id.get(child_id) is not None and node_by_id[child_id].status in {"completed", "skipped"} for child_id in child_ids if child_id in node_by_id)
+    return all(
+        node_by_id.get(child_id) is not None and node_by_id[child_id].status in {"completed", "failed", "skipped"}
+        for child_id in child_ids
+        if child_id in node_by_id
+    )
 
 
 def complete_current_work_node(
@@ -898,7 +903,9 @@ def complete_current_work_node(
     next_node_id: str | None = None
     child_summary = WorkContextChildCompletionSummary(
         childNodeId=current_node.id,
+        status="completed",
         summary=summary,
+        summaryType="execution-result",
         evidenceRefs=evidence_refs or [],
         completedAt=now,
     )
@@ -1025,12 +1032,88 @@ def fail_current_work_node(
     )
     if normalized_protocol is None or normalized_stack is None:
         raise ValueError("Failed to normalize failed work-tree state.")
+    if current_node.parent_node_id is None:
+        return normalized_protocol, normalized_stack, {
+            "transition": "failed",
+            "requiresContinuation": False,
+            "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
+            "currentFocus": normalize_excerpt(f"失败节点: {current_node.title}", 96) or "failed",
+        }
+
+    failure_child_summary = WorkContextChildCompletionSummary(
+        childNodeId=current_node.id,
+        status="failed",
+        summary=failure,
+        summaryType="failure-reason",
+        evidenceRefs=[],
+        completedAt=now,
+    )
+    normalized_stack = append_child_completion_summary(
+        normalized_stack,
+        parent_node_id=current_node.parent_node_id,
+        child_summary=failure_child_summary,
+    )
+    next_sibling = pick_next_sibling_work_node(normalized_protocol, node_id=current_node.id)
+    if next_sibling is not None:
+        normalized_protocol, normalized_stack = switch_current_work_node(
+            normalized_protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            node_id=next_sibling.id,
+            work_context_stack=normalized_stack,
+            cursor_state="continue-next-sibling-after-failure",
+        )
+        return normalized_protocol, normalized_stack, {
+            "transition": "continue-sibling-after-failure",
+            "requiresContinuation": True,
+            "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
+            "nextNodeId": next_sibling.id,
+            "currentFocus": _work_tree_focus_label(normalized_protocol),
+        }
+    normalized_protocol, normalized_stack = bubble_to_parent_work_node(
+        normalized_protocol,
+        task_id=task_id,
+        agent_run_id=agent_run_id,
+        work_context_stack=normalized_stack,
+        node_id=current_node.id,
+        cursor_state="resume-parent-after-child-failure",
+    )
     return normalized_protocol, normalized_stack, {
-        "transition": "failed",
-        "requiresContinuation": False,
+        "transition": "bubble-parent-after-failure",
+        "requiresContinuation": True,
         "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
-        "currentFocus": normalize_excerpt(f"失败节点: {current_node.title}", 96) or "failed",
+        "nextNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
+        "currentFocus": _work_tree_focus_label(normalized_protocol),
     }
+
+
+def _check_delivery_hard_gates(protocol: TaskTakeoverProtocol) -> bool:
+    """检查 hard gate 类型的 verification item 是否全部 passed。"""
+    for item in protocol.verification_items:
+        gate_mode = "advisory"
+        status = "not-run"
+        if isinstance(item, dict):
+            gate_mode = item.get("gateMode", "advisory")
+            status = item.get("status", "not-run")
+        elif hasattr(item, "gate_mode"):
+            gate_mode = item.gate_mode
+            status = item.status
+        if gate_mode == "hard" and status != "passed":
+            return False
+    return True
+
+
+def _blocked_gate_labels(protocol: TaskTakeoverProtocol) -> list[str]:
+    """返回所有 blocked 的 hard gate 的 label。"""
+    labels: list[str] = []
+    for item in protocol.verification_items:
+        if isinstance(item, dict):
+            if item.get("gateMode") == "hard" and item.get("status") != "passed":
+                labels.append(str(item.get("label") or item.get("id") or "unknown"))
+        elif hasattr(item, "gate_mode"):
+            if item.gate_mode == "hard" and item.status != "passed":
+                labels.append(item.label)
+    return labels
 
 
 def advance_takeover_after_delivery(
@@ -1044,6 +1127,17 @@ def advance_takeover_after_delivery(
 ) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None, dict[str, Any]]:
     if protocol is None:
         return None, None, {"transition": "completed", "requiresContinuation": False, "currentFocus": "completed"}
+    
+    # Hard gate check: if result or evidence is missing, don't complete
+    if protocol is not None and protocol.verification_items:
+        if not _check_delivery_hard_gates(protocol):
+            return protocol, work_context_stack, {
+                "transition": "delivery-gate-blocked",
+                "requiresContinuation": False,
+                "currentFocus": "delivery-gate-blocked",
+                "blockedGates": _blocked_gate_labels(protocol),
+            }
+
     current_node = _current_work_tree_node(protocol)
     fallback = (
         current_node.execution_summary
@@ -1061,6 +1155,21 @@ def advance_takeover_after_delivery(
     )
 
 
+def format_parent_aggregation_prompt(
+    child_summaries: list[WorkContextChildCompletionSummary],
+) -> str:
+    """生成供父节点使用的子节点摘要聚合文本。"""
+    lines: list[str] = ["## Child Node Summaries"]
+    for idx, cs in enumerate(child_summaries, 1):
+        status_label = "✅ Completed" if cs.status == "completed" else "❌ Failed"
+        lines.append(f"\n### Child {idx}: {cs.child_node_id} [{status_label}]")
+        lines.append(f"**Type**: {cs.summary_type}")
+        lines.append(f"**Summary**: {cs.summary}")
+        if cs.evidence_refs:
+            lines.append(f"**Evidence**: {len(cs.evidence_refs)} ref(s)")
+    return "\n".join(lines)
+
+
 def build_takeover_continuation_request(
     base_request: dict[str, Any],
     *,
@@ -1075,6 +1184,7 @@ def build_takeover_continuation_request(
         "projectId",
         "spaceId",
         "branchId",
+        "taskType",
         "currentObjective",
         "taskObjective",
         "responseRequirements",
@@ -1085,6 +1195,23 @@ def build_takeover_continuation_request(
         "readonlyContextRef",
         "memoryWriteTagsEnabled",
         "requestedBy",
+        "allowModelFallback",
+        "allowToolExecution",
+        "candidateModels",
+        "temperature",
+        "maxTokens",
+        "auditLevel",
+        "registeredTools",
+        "effectiveContextWindow",
+        "windowRestartRatio",
+        "windowRestartThreshold",
+        "maxToolRounds",
+        "maxRetainedTokens",
+        "minQuality",
+        "thinking",
+        "reasoningEffort",
+        "forcedWindowRestartBudget",
+        "maxUncompressedTailBeforeDecompress",
         "selectedModel",
         "selectedProvider",
     ):

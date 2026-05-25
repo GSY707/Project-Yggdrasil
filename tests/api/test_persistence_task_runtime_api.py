@@ -56,6 +56,185 @@ def _seed_seed_template_version(prompt_repository: PromptAssetRepository, *, ver
 client = TestClient(app)
 pytestmark = pytest.mark.slow
 
+
+def _seed_llm_work_runtime_case(*, task_id: str, run_id: str, invocation_id: str) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        task_repository.create_task(
+            {
+                "id": task_id,
+                "title": "LLM 工作分析 API 测试任务",
+                "goal": "验证 runtime analysis API 可以生成与查询分析工件。",
+                "status": "running",
+            }
+        )
+        run = task_repository.create_agent_run(
+            task_id,
+            {
+                "id": run_id,
+                "status": "completed",
+                "selectedModel": "LongCat-2.0-Preview",
+                "selectedProvider": "longcat",
+                "windowIndex": 1,
+                "restartCount": 0,
+            },
+        )
+        runtime_repository.create_model_invocation(
+            {
+                "id": invocation_id,
+                "projectId": "project_default",
+                "taskId": task_id,
+                "agentRunId": run.id,
+                "requestedModel": "LongCat-2.0-Preview",
+                "requestedProvider": "longcat",
+                "resolvedModel": "LongCat-2.0-Preview",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "assistantTextSummary": "API 路由测试用调用。",
+                "inputTokensUsed": 96,
+                "outputTokensUsed": 48,
+                "costUsed": 0.05,
+                "latencyMs": 120.0,
+                "startedAt": utc_now(),
+                "endedAt": utc_now(),
+                "createdAt": utc_now(),
+            }
+        )
+
+    request_path = ensure_state_subdir("llm/requests") / f"{invocation_id}.json"
+    response_path = ensure_state_subdir("llm/responses") / f"{invocation_id}.json"
+    metrics_path = ensure_state_subdir("runtime/metrics") / f"{invocation_id}.json"
+    takeover_path = ensure_state_subdir("runtime/takeover") / f"{task_id}-{run_id}.json"
+    work_context_path = ensure_state_subdir("runtime/work-context-stack") / f"{task_id}-{run_id}.json"
+    window_path = ensure_state_subdir("runtime/window-executions") / f"{task_id}-{run_id}.json"
+    window_history_path = ensure_state_subdir("runtime/window-executions/by-invocation") / f"{invocation_id}.json"
+
+    write_json(
+        request_path,
+        {
+            "invocationId": invocation_id,
+            "taskId": task_id,
+            "agentRunId": run_id,
+            "auditLevel": "default",
+            "toolSpecs": [{"name": "read_file", "description": "Read a file", "parameterCount": 1}],
+        },
+    )
+    write_json(
+        response_path,
+        {
+            "invocationId": invocation_id,
+            "taskId": task_id,
+            "agentRunId": run_id,
+            "auditLevel": "default",
+            "mode": "live",
+            "provider": "longcat",
+            "model": "LongCat-2.0-Preview",
+            "finishReason": "stop",
+            "assistantText": "API 分析已完成。",
+            "usage": {
+                "inputTokens": 96,
+                "outputTokens": 48,
+                "totalTokens": 144,
+                "cacheHitInputTokens": 72,
+                "cacheWriteInputTokens": 6,
+                "nonCacheInputTokens": 18,
+            },
+            "costUsed": 0.05,
+            "toolExecutionSummaries": [
+                {"tool": "read_file", "success": True, "status": "ok", "resultPreview": "README.md"}
+            ],
+            "rounds": [
+                {
+                    "index": 0,
+                    "mode": "live",
+                    "finishReason": "stop",
+                    "latencyMs": 120.0,
+                    "reasoningContentPresent": False,
+                    "toolCalls": [],
+                    "toolFailures": [],
+                }
+            ],
+            "runtimeMetrics": {
+                "windowIndex": 1,
+                "restartCount": 0,
+                "cumulativeWindowSpanTokens": 900,
+            },
+        },
+    )
+    write_json(
+        metrics_path,
+        {
+            "taskId": task_id,
+            "invocationId": invocation_id,
+            "snapshot": {
+                "windowIndex": 1,
+                "restartCount": 0,
+                "cacheHitInputTokens": 72,
+                "cacheWriteInputTokens": 6,
+                "nonCacheInputTokens": 18,
+                "cumulativeWindowSpanTokens": 900,
+            },
+        },
+    )
+    write_json(
+        takeover_path,
+        {"workTree": {"currentNodeId": "wt-api-node", "status": "active", "recoveryAnchor": "resume:wt-api-node"}},
+    )
+    write_json(
+        work_context_path,
+        {
+            "frames": [
+                {
+                    "id": "frame-api",
+                    "nodeId": "wt-api-node",
+                    "frameHeader": "API 调试节点",
+                    "cursorState": "resume:api",
+                }
+            ]
+        },
+    )
+    window_record = {
+        "taskId": task_id,
+        "runId": run_id,
+        "agentRunId": run_id,
+        "invocationId": invocation_id,
+        "windowIndex": 1,
+        "transitionStage": "task-complete",
+        "transitionOutcome": "awaiting-approval",
+        "currentObjective": "验证 API 分析入口",
+        "currentFocus": "生成 latest analysis",
+        "workTreeCurrentNodeId": "wt-api-node",
+        "workTreeStatus": "awaiting-approval",
+        "workTreeRecoveryAnchor": "resume:wt-api-node",
+        "topFrameId": "frame-api",
+        "topFramePrefixCacheKey": "api-prefix-1",
+        "memoryRetrievalState": {"matchedNodeCount": 2, "materializedNodeCount": 0, "retrievalFingerprint": "api-fp"},
+        "cacheSummary": {
+            "inputTokens": 96,
+            "cacheHitInputTokens": 72,
+            "cacheWriteInputTokens": 6,
+            "nonCacheInputTokens": 18,
+            "trackedInputTokens": 96,
+            "cacheHitRatio0_1": 0.75,
+            "cacheWriteRatio0_1": 0.0625,
+        },
+        "workTreeDebug": {
+            "topFrameId": "frame-api",
+            "topFrameNodeId": "wt-api-node",
+            "topFramePrefixCacheKey": "api-prefix-1",
+            "continuationReason": "resume:api",
+            "approvalStop0_1": 1,
+            "childBubble0_1": 0,
+            "mixedOutcome0_1": 0,
+        },
+        "llm": {"planningStub0_1": 0},
+    }
+    write_json(window_path, window_record)
+    write_json(window_history_path, window_record)
+
 def test_core_api_persists_task_and_node_records() -> None:
     created_task = client.post(
         "/tasks",
@@ -289,6 +468,42 @@ def test_core_api_exposes_task_mailbox_and_side_channel() -> None:
     assert detail_payload["mailboxState"]["pendingCount"] == 1
     assert len(detail_payload["mailboxMessages"]) == 1
     assert len(detail_payload["sideChannelEvents"]) >= 2
+
+
+def test_core_api_generates_and_reads_llm_work_analysis() -> None:
+    task_id = "task_api_llm_work"
+    run_id = "run_api_llm_work"
+    invocation_id = "llm_api_llm_work"
+    _seed_llm_work_runtime_case(task_id=task_id, run_id=run_id, invocation_id=invocation_id)
+
+    create_response = client.post(
+        "/runtime/analysis/runs",
+        json={
+            "taskId": task_id,
+            "granularity": "run,window,tool",
+            "persist": True,
+        },
+    )
+    assert create_response.status_code == 200
+    created_payload = create_response.json()
+    assert created_payload["summary"]["windowCount"] == 1
+    assert created_payload["summary"]["cacheSummary"]["cacheHitInputTokens"] == 72
+    assert len(created_payload["windows"]) == 1
+    assert len(created_payload["tools"]) == 1
+
+    analysis_id = created_payload["analysis"]["analysisId"]
+    read_response = client.get(f"/runtime/analysis/runs/{analysis_id}", params={"granularity": "artifact"})
+    assert read_response.status_code == 200
+    read_payload = read_response.json()
+    assert "artifacts" in read_payload
+    assert "windows" not in read_payload
+
+    latest_response = client.get(f"/tasks/{task_id}/analysis/latest", params={"granularity": "window"})
+    assert latest_response.status_code == 200
+    latest_payload = latest_response.json()
+    assert len(latest_payload["windows"]) == 1
+    assert latest_payload["windows"][0]["invocationId"] == invocation_id
+    assert latest_payload["windows"][0]["topFramePrefixCacheKey"] == "api-prefix-1"
 
 
 def test_core_api_supports_shared_spaces_mounts_and_permission_tuples() -> None:

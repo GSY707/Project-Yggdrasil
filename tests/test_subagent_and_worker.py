@@ -306,7 +306,12 @@ def test_subagent_completion_merges_into_parent_work_tree_and_wakes_parent(monke
         request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
         invoke_calls.append(request_payload)
         return {
-            "assistantText": "Child completed implementation and parent can summarize the result.",
+            "assistantText": (
+                "# result\nChild completed implementation and parent can summarize the result.\n"
+                "# evidence\n通过验证。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ),
             "invocation": {
                 "id": f"inv_subagent_parent_{len(invoke_calls)}",
                 "resolvedModel": "LongCat-Flash-Lite",
