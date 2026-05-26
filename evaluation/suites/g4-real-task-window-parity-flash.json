@@ -1,6 +1,6 @@
 {
-  "id": "evalsuite_g4_real_task_window_parity",
-  "name": "G4 Real-Task Window Parity",
+  "id": "evalsuite_g4_real_task_window_parity_flash",
+  "name": "G4 Real-Task Window Parity Flash",
   "domain": "generic",
   "metricRefs": [
     "pass-rate",
@@ -9,7 +9,7 @@
     "restart-success-rate"
   ],
   "subjectKind": "workflow",
-  "subjectRef": "g4:real-task:window-parity",
+  "subjectRef": "g4:real-task:window-parity:flash",
   "cases": [
     {
       "id": "evalcase_g4_real_task_window_parity_longcat_short64k",
@@ -724,11 +724,11 @@
       "difficulty": "hard"
     },
     {
-      "id": "evalcase_g4_real_task_window_parity_deepseek_short64k",
-      "title": "G4 Real Task Window Parity - DeepSeek Short 64k",
+      "id": "evalcase_g4_real_task_window_parity_deepseek_flash_short64k",
+      "title": "G4 Real Task Window Parity - DeepSeek Flash Short 64k",
       "scenario": "g4.live_provider_matrix",
-      "matrixKey": "g4-real-task-window-parity-short64k-deepseek",
-      "parityPairKey": "g4-real-task-window-parity-deepseek",
+      "matrixKey": "g4-real-task-window-parity-short64k-deepseek-flash",
+      "parityPairKey": "g4-real-task-window-parity-deepseek-flash",
       "parityRole": "short",
       "qualityDeltaThreshold0_100": 8.0,
       "appId": "yggdrasil.app.coding-greenfield",
@@ -1011,7 +1011,7 @@
         }
       ],
       "requestedProvider": "deepseek_direct",
-      "requestedModel": "deepseek-v4-pro",
+      "requestedModel": "deepseek-v4-flash",
       "allowFallback": false,
       "allowToolExecution": false,
       "allowPaidModels": true,
@@ -1076,11 +1076,11 @@
       "difficulty": "hard"
     },
     {
-      "id": "evalcase_g4_real_task_window_parity_deepseek_long128k",
-      "title": "G4 Real Task Window Parity - DeepSeek Long 128k",
+      "id": "evalcase_g4_real_task_window_parity_deepseek_flash_long128k",
+      "title": "G4 Real Task Window Parity - DeepSeek Flash Long 128k",
       "scenario": "g4.live_provider_matrix",
-      "matrixKey": "g4-real-task-window-parity-long128k-deepseek",
-      "parityPairKey": "g4-real-task-window-parity-deepseek",
+      "matrixKey": "g4-real-task-window-parity-long128k-deepseek-flash",
+      "parityPairKey": "g4-real-task-window-parity-deepseek-flash",
       "parityRole": "long",
       "qualityDeltaThreshold0_100": 8.0,
       "appId": "yggdrasil.app.coding-greenfield",
@@ -1369,7 +1369,7 @@
         }
       ],
       "requestedProvider": "deepseek_direct",
-      "requestedModel": "deepseek-v4-pro",
+      "requestedModel": "deepseek-v4-flash",
       "allowFallback": false,
       "allowToolExecution": false,
       "allowPaidModels": true,

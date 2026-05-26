@@ -4,8 +4,11 @@
 | `docs/development/REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md` | 真实任务测试约定与工作树后续任务拆分（2026-05-25）：冻结“默认真实任务应单目标、弱项目内生化、由 agent 自主规划”的出题约定，并记录 P1/P2/P3/P5 本轮收口状态 |
 | `docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md` | 工作树真实任务调试基线（2026-05-25）：把“父节点强编排”的工作树目标冻结成真实任务调试模型，并把验收重点转到 child 先回父节点、父节点再决定 sibling/leaf 的路径 |
 | `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档（2026-05-23）：基于 `docs/new/` 三份新方案，给出 Boot Prompt、父节点强编排的工作树 v0.2、有限线性 continuation 轨迹、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁的落地步骤 |
-| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：冻结 Boot Prompt 四段、RootMountPackage v0.2、启动模式、待机循环、父节点强编排、有限线性 continuation 轨迹、记忆工具、多 Agent、上下文窗口和结束批准 |
-| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：冻结工作树作为动态工作记忆和执行栈的节点 schema、父节点强编排、Working Node 标签、WorkContextStack push/pop、有限线性 continuation 轨迹、状态机、节点摘要与冲突处理 |
+| `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` | 世界构建、初次苏醒与任务级工作状态读取实施文档（2026-05-26）：把新三阶段规格翻译成实现层执行计划，明确 root mount 只做世界级/起始状态挂载，任务级工作状态单独读取，并给出 contracts/root_mount/execution_loop/prompting/takeover/snapshot/tests 的落地顺序 |
+| `docs/development/TASK_WORLD_START_STATE_AND_TASK_RUNTIME_SPLIT_2026_05_26.md` | 给低智商 code agent 的任务文档（2026-05-26）：用严格顺序把“起始状态 + 任务级工作状态读取”重构拆成明确待办、测试命令、完成标准和禁止事项，适合直接转交做粗活 |
+| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：继续向新三阶段口径收口，补上“初次苏醒形成起始状态、任务级单独读取工作状态、工具/知识索引优先”的关键约束，同时保留 Boot Prompt、RootMountPackage、上下文窗口和结束批准的正式结构 |
+| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：继续向任务级工作状态口径收口，明确工作树是在任务开始并读取工作状态后挂载到 `[ID: 003 我要干什么]` 语义根下的动态执行栈与工作记忆 |
+| `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把“先建世界 / 再醒来 / 再开始工作”拆成世界级与任务级两层，强调建世界与初次苏醒不得接触具体工作信息，并进一步冻结“工具/知识索引优先、能力/知识到工具的关联召回、起始状态、无损恢复和分层诊断”规则 |
 | `docs/new/工作树.md` | 新工作树方案：把工作树定义为“我要干什么”分支下的动态工作记忆与执行栈，并明确父节点强编排、有限线性 continuation 轨迹和 child 摘要上浮 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，并要求 continuation 优先沿父节点编排位置和最近线性轨迹继续 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心重新定义生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent、邮箱和分期，并明确代码只做边界与警戒 |
@@ -39,7 +42,7 @@
 # 世界树计划 · 目录说明书
 
 > 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/26 更新：`docs/new/世界树计划正式项目定义.md`、`docs/new/工作树.md`、`docs/new/元提示词.md`、`docs/specs/agent-runtime-protocol-v0.2.md`、`docs/specs/work-tree-protocol-v0.2.md`、`docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md`、`docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md` 与 `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` 已统一收口到新目标：父节点强编排、child 完成/失败先回编排父节点、允许有限线性 continuation 轨迹、leaf 拆分尽量交给 LLM、代码只做边界与警戒、根节点仍以 `awaiting-approval` 收口；同日继续落下首轮实现推进：`runtime_kernel/takeover.py` 已把 child 完成/失败后的默认路径改为先回编排父节点，`execution_loop_part_a.py` 新增 `work-node-enter` 助手标签以支持父节点显式进入已有 child，`tests/test_runtime_p4_foundation.py` 已改成锁住 `child -> parent re-orchestrate -> existing child -> parent -> awaiting-approval` 的新路径。2026/5/25 更新：测试环境默认通过 `tests/conftest.py` 关闭 `LANGFUSE_TRACING_ENABLED`，并在 `README.md` 基础验证章节补充“跑测试前先启动 OTel Collector”的备注，避免导出端点不可达带来的额外等待；同日更新：新增 `llm_work_analysis.py` 作为正式 LLM 工作分析器，按 run 拼接 DB 与 state 工件并产出 run/window/turn/tool/artifact/source 多粒度分析；`scripts/analyze_llm_work_run.py` 与 core-api `/runtime/analysis/runs`、`/tasks/{taskId}/analysis/latest` 已接入这一能力，用于评测与调试；同日继续更新：新增 `REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md`，正式冻结“默认真实任务应尽量弱项目内生化、单目标、由 agent 自主规划”的出题约定，并把工作树后续工作拆成测试合同、门禁闭环、缓存、硬化、观测五类任务包；此前 2026/5/24 更新：`runtime_kernel/takeover.py` 已从初始化器升级为正式 reducer，负责 work tree/context stack 推进、revision reopen 与 approval finalize；`execution_loop_transitions.py` 已形成完整 P4 闭环：根节点完成进入 `awaiting-approval`，并通过控制面 approve/revision 闭环；`execution_loop_part_a.py` / `execution_loop_part_b.py` 现已支持以 `work-node-create` 助手输出标签在正式主循环里动态扩树、在 retrieval 查询中优先使用 work tree 当前节点语义，并在异常/预算失败时把当前节点写回 `failed + failureSummary`；`execution_loop_transitions.py` 还会为 continuation/pause/restart 输出独立 `workContextStackRef` 栈快照引用；P5 现已补齐并发安全闭环：`tool_runtime.py` 会向正式工具透传 `sourceWorkTreeNodeId`，`modules/text-memory/` 暴露 `read_node` / `read_index` / `update_memory_with_version` / `append_memory_log` / `submit_memory_proposal` / `forget_node` 等正式记忆工具，`append_memory_log` 现通过仓储层原子追加避免并发日志静默覆盖，`prompting.py` 也已明确“正式记忆工具优先、`<memory-write>` 旁路次之”，并在宽节点或高冲突场景优先引导创建细分子节点做空间隔离；P6 已完成闭环：`collaboration_runtime_part_a.py` / `collaboration_runtime_part_b.py` 不仅为 sub-agent launch/worker/PR manifest 透传 `workTreeNodeId` 与 `subagentBudgetDecision`，还会把 child completion summary 合并回 parent work tree 与 `childCompletionSummaries`，再通过独立 `mailbox_messages` / `side_channel_events` 持久化表、对应 Alembic 迁移 `7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py`、`runtime/tasks/{taskId}/mailbox` / `side-channel` API 和 `execution_loop_part_b.py` 的 mailbox 注入路径唤醒 parent 继续汇总；`runtime_kernel/root_mount.py` 现在优先从仓储读取 mailbox state 并返回 `mailboxMessages`，`takeover.py` 也已补齐 `load_persisted_work_context_stack()` 与 parent merge helper；`services/core-api/.../tasks.py` 与 `services/agent-runtime/app.py` 新增 `approve-completion` / `request-revision` 路由，`runtime_service.py` 暴露 `canApprove/canRequestRevision/recommendedRevisionNodeId`；`packages/frontend-sdk/src/types.ts` 与 `apps/web/app/components/task-detail-page.tsx` 现已把这些运行时控制字段、mailbox state/message 和 side-channel event 正式接到任务详情页；P7 门禁已统一到单路径：`tests/test_runtime_p4_foundation.py` 覆盖显式传递与默认请求两种入口，均进入 `awaiting-approval`，不再保留 legacy `completed` 快速路径；`prompting.py` 会把 `work_context_stack` 和 `childCompletionSummaries` 暴露给模型；`contracts.py` 修复了显式 root-only v0.2 work tree 被错误包裹成自引用 root 的兼容升级问题。此前 2026/5/24 更新：`runtime_kernel/root_mount.py` 现已输出中文语义根指针、`SYS_ROOT_PROTOCOL`、启动加载顺序、tool/capability index、mailbox/standby 状态与 `startupMode`，`execution_loop_part_b.py` 在 retrieval 前优先恢复 `currentNodeId/Working_Node/pcMemo`、对无活动工作 `start` 直接走 `standby` 短路，并把损坏 snapshot 的 blocker 持久化；`execution_loop_transitions.py` 在根节点交付时切到 `awaiting-approval`，并要求 work tree 节点先写 `executionSummary`；2026/5/23 更新：补充提示词、启动流程、工作流程重做执行文档、`docs/new/` 三份新方案入口，以及 Agent 运行时/工作树 v0.2 正式规格；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
-> 2026/5/26 本轮继续同步：`execution_loop_part_b.py` 已恢复 root/single-path overflow 的 carry-forward restart snapshot 续跑，`tests/runtime/test_runtime_restart_and_resume.py` 与 `tests/test_g4_multiscene.py` 已改成锁住 `window-restart-queued` 闭环；`execution_loop_transitions.py` 现对 `delivery-gate-blocked` 增加一次限次纠偏续跑，`tests/test_runtime_p2_delivery_gate.py` 新增“误停补一轮可恢复、二次仍缺段才失败”回归。此前 2026/5/25 同步：`evaluation/suites/g4-real-task-externalized.json` 已作为默认真实任务入口，`g4-real-task-minimal-workset.json` 只保留 legacy 参考，`g4-real-task-work-tree-debug.json` 明确为 `runtime-debug-harness`；`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py` 已把 `delivery.pending` / `delivery.incomplete` 升级为 hard gate，`tests/test_runtime_p2_delivery_gate.py` 新增“缺字段即 delivery-gate-blocked”与“多节点链路 revision -> 复跑 -> approve”回归；`docs/LLM_WORK_ANALYZER_USER_GUIDE.md` 与两份 v0.2 协议文档也已补齐 work-tree debug 固定读法，以及 provider prefix cache 与 runtime continuation cache 的边界说明。
+> 2026/5/26 本轮继续同步：`prompting.py` 的 response requirements 已增强任务编排引导，明确 root 默认负责编排与最终汇总、天然可拆的任务优先下放 child、child 只处理单一局部目标并回父节点交摘要、同一节点连续恢复/重启时优先继续拆分而不是反复在 root 硬写整份交付；`tests/test_prompting_runtime.py` 已补断言锁住这些引导。此前 2026/5/26 同步：新增 `evaluation/suites/g4-real-task-unrelated-dual-live.json` 与 `eval:g4:real-task-unrelated:dual-live`，把“先用与本项目完全无关的题目观察真实执行过程”固定成正式入口；当前题面为外部 incident RCA，同题分别跑 `longcat / LongCat-2.0-Preview` 与 `deepseek_direct / deepseek-v4-flash`，并在主报告后强制追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），避免 unrelated live run 先被 runtime delivery gate 截断。此前 2026/5/26 同步：`execution_loop_part_b.py` 已恢复 root/single-path overflow 的 carry-forward restart snapshot 续跑，`tests/runtime/test_runtime_restart_and_resume.py` 与 `tests/test_g4_multiscene.py` 已改成锁住 `window-restart-queued` 闭环；`execution_loop_transitions.py` 现对 `delivery-gate-blocked` 增加一次限次纠偏续跑，`tests/test_runtime_p2_delivery_gate.py` 新增“误停补一轮可恢复、二次仍缺段才失败”回归。此前 2026/5/25 同步：`evaluation/suites/g4-real-task-externalized.json` 已作为默认真实任务入口，`g4-real-task-minimal-workset.json` 只保留 legacy 参考，`g4-real-task-work-tree-debug.json` 明确为 `runtime-debug-harness`；`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py` 已把 `delivery.pending` / `delivery.incomplete` 升级为 hard gate，`tests/test_runtime_p2_delivery_gate.py` 新增“缺字段即 delivery-gate-blocked”与“多节点链路 revision -> 复跑 -> approve”回归；`docs/LLM_WORK_ANALYZER_USER_GUIDE.md` 与两份 v0.2 协议文档也已补齐 work-tree debug 固定读法，以及 provider prefix cache 与 runtime continuation cache 的边界说明。
 
 ---
 
@@ -471,6 +474,10 @@ docs/
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
 │   ├── WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md
 │   │                               #   世界树 Agent 当前工作逻辑 vs 目标工作逻辑：聚焦父节点强编排、有限线性 continuation 轨迹以及上下文在推进/失败/恢复/交付中的变化
+│   ├── WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md
+│   │                               #   世界构建、初次苏醒与任务级工作状态读取实施文档：把新三阶段规格翻译成 contracts/root_mount/execution_loop/prompting/takeover/snapshot/tests 的实现顺序
+│   ├── TASK_WORLD_START_STATE_AND_TASK_RUNTIME_SPLIT_2026_05_26.md
+│   │                               #   给低智商 code agent 的任务文档：把“起始状态 + 任务级工作状态读取”重构拆成明确步骤、禁止事项、测试命令与完成标准
 │   ├── ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md
 │   │                               #   提示词、启动流程、工作流程重做执行文档：Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
@@ -506,6 +513,7 @@ docs/
 │   ├── README.md                   # 规格索引
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
+│   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
 │   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格
@@ -588,8 +596,12 @@ evaluation/
                                     #   G4 单任务长样本 live provider matrix（先聚焦一个更长的 coding 任务；用于观察长任务 token 与上下文窗口压力）
     ├── g4-real-task-externalized.json
                                     #   G4 默认真实任务入口（single-goal / externalized；用于正式 real-task 合同）
+    ├── g4-real-task-unrelated-dual-live.json
+                                    #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照，并强制 formal delivery footer 以穿过 delivery gate）
     ├── g4-real-task-window-parity.json
-                                    #   G4 真实任务窗口对照（repo-wide baseline；现已接入 strict 审计、window-execution 指标、workTreeContinuity/minimalWorkset 正式门禁）
+                                    #   G4 真实任务窗口对照（repo-wide baseline；现已接入 strict 审计、window-execution 指标、workTreeContinuity/minimalWorkset 正式门禁，并要求 7 段简报后追加 formal delivery footer 以穿过 runtime delivery gate）
+    ├── g4-real-task-window-parity-flash.json
+                                    #   G4 真实任务窗口对照 flash 变体（保留 LongCat 2，对 DeepSeek paid 路径切到 deepseek-v4-flash；用于实际任务 flash live 复跑，同样追加 formal delivery footer 合同）
     ├── g4-real-task-minimal-workset.json
                                     #   G4 真实任务最小工作集 legacy 参考（repo-specific 历史样本；不再作为默认真实任务模板）
     ├── g4-real-task-work-tree-debug.json
@@ -612,6 +624,8 @@ evaluation/
 | `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:real-task-parity` | `suites/g4-real-task-window-parity.json` |
+| `eval:g4:real-task-parity:flash` | `suites/g4-real-task-window-parity-flash.json` |
+| `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
 | `eval:g4:real-task-minimal-workset` | `suites/g4-real-task-minimal-workset.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
 | `eval:g4:window-stress` | `suites/g4-window-restart-stress.json` |
@@ -811,9 +825,12 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/README.md` | research 目录组织导航：按用途分类为路线图、项目评估、完成报告、规范设计、技术分析和历史归档 |
 | `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档：把 `docs/new/` 方案转成可分阶段实现、验证和回滚的工程任务，现已纳入父节点强编排与有限线性 continuation 轨迹主流程 |
+| `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` | 世界构建、初次苏醒与任务级工作状态读取实施文档：把新三阶段口径压成实现层计划，明确本轮先做运行时分层，不在这一轮实现完整世界编译流水线 |
+| `docs/development/TASK_WORLD_START_STATE_AND_TASK_RUNTIME_SPLIT_2026_05_26.md` | 给 code agent 的执行任务文档：用不可误解的顺序指挥粗粒度代码改造，覆盖 contracts/root_mount/execution_loop/prompting/takeover/snapshot 与三组关键测试 |
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
-| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮重做的启动、Boot Prompt、待机、父节点强编排、有限线性 continuation 轨迹、独立 mailbox、多 Agent、Fork 动态预算和批准结束正式规格 |
-| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮重做的工作树节点、执行栈、父节点强编排、WorkContextStack push/pop、有限线性 continuation 轨迹、Working Node 标签、摘要和冲突处理正式规格 |
+| `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
+| `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
+| `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并明确代码只做边界与警戒 |
 | `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、父节点强编排、有限线性 continuation 轨迹和 Working Node 标签 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复，并要求 continuation 优先沿父节点编排位置继续 |

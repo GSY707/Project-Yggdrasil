@@ -1,5 +1,7 @@
 # 提示词、启动流程、工作流程重做执行文档（2026-05-23）
 
+> 2026-05-26 补充：本文件保留 2026-05-23 这轮 Boot Prompt / 工作树重做的工程基线，但其中“启动即带当前工作节点醒来”的口径已不再是最新目标。后续实现应优先参考 [世界构建、初次苏醒与任务级工作状态读取实施文档（2026-05-26）](WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md) 与 [世界构建、初次苏醒与任务启动协议 v0.1](../specs/world-build-awakening-task-start-protocol-v0.1.md)。
+
 ## 0. 来源与结论
 
 本执行文档以 `docs/new/工作树.md`、`docs/new/元提示词.md`、`docs/new/世界树计划正式项目定义.md` 三份材料为准。

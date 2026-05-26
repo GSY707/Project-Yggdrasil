@@ -290,7 +290,8 @@ def test_root_mount_preview_without_active_work_enters_standby() -> None:
     assert mount_package["startupMode"] == "standby"
     assert mount_package["standbyState"]["isStandby"] is True
     assert mount_package["mailboxState"]["status"] == "idle"
-    assert mount_package["semanticRoots"]["execution"]["workingNodeAnnotation"] == "<Working_Node: standby>"
+    assert "currentNodeId" not in mount_package["semanticRoots"]["execution"]
+    assert "workingNodeAnnotation" not in mount_package["semanticRoots"]["execution"]
 
 
 def test_task_takeover_extracts_root_mount_and_startup_contract_constraints() -> None:

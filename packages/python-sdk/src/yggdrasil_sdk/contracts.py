@@ -591,6 +591,24 @@ class RootMountPackage(BaseModel):
     generated_at: datetime = Field(alias="generatedAt")
 
 
+class TaskRuntimeState(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    task_id: str | None = Field(default=None, alias="taskId")
+    phase: Literal["start-state", "task-state-loaded", "lossless-restore"] | None = Field(default=None, alias="phase")
+    task_objective: str | None = Field(default=None, alias="taskObjective")
+    current_focus: str | None = Field(default=None, alias="currentFocus")
+    current_node_id: str | None = Field(default=None, alias="currentNodeId")
+    working_node_annotation: str | None = Field(default=None, alias="workingNodeAnnotation")
+    pc_memo: str | None = Field(default=None, alias="pcMemo")
+    resume_message: str | None = Field(default=None, alias="resumeMessage")
+    restart_message: str | None = Field(default=None, alias="restartMessage")
+    takeover_protocol: TaskTakeoverProtocol | None = Field(default=None, alias="takeoverProtocol")
+    work_context_stack: WorkContextStack | None = Field(default=None, alias="workContextStack")
+    memory_retrieval_state: dict[str, Any] | None = Field(default=None, alias="memoryRetrievalState")
+    budget_state: BudgetState | None = Field(default=None, alias="budgetState")
+
+
 class TaskSnapshotSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -811,7 +829,7 @@ class WorkTreeProtocol(BaseModel):
         current_node_id = _normalized_string(data.get("currentNodeId") or data.get("current_node_id"))
         recovery_anchor = _normalized_string(data.get("recoveryAnchor") or data.get("recovery_anchor"))
 
-        if current_node_id is None:
+        if task_id is not None and current_node_id is None:
             current_node_id = _preferred_work_tree_node_id(nodes)
 
         root_node_id = _normalized_string(data.get("rootNodeId") or data.get("root_node_id"))
@@ -911,7 +929,7 @@ class WorkTreeProtocol(BaseModel):
                 *normalized_nodes,
             ]
 
-        if current_node_id is None and str(data.get("status") or "") not in {"standby", "completed", "failed"}:
+        if task_id is not None and current_node_id is None and str(data.get("status") or "") not in {"standby", "completed", "failed"}:
             current_node_id = _preferred_work_tree_node_id(nodes)
         loaded_node_ids = _normalized_string_list(
             data.get("loadedNodeIds") or data.get("loaded_node_ids") or [node.get("id") for node in nodes]
@@ -952,7 +970,7 @@ class WorkTreeProtocol(BaseModel):
 
     @model_validator(mode="after")
     def _sync_runtime_pointer_fields(self) -> "WorkTreeProtocol":
-        if self.current_node_id is None and self.status not in {"standby", "completed", "failed"}:
+        if self.task_id is not None and self.current_node_id is None and self.status not in {"standby", "completed", "failed"}:
             self.current_node_id = _preferred_work_tree_node_id(self.nodes)
         if self.root_node_id is None and self.nodes:
             self.root_node_id = self.nodes[0].id

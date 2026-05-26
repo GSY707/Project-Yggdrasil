@@ -1,0 +1,207 @@
+{
+  "id": "evalsuite_g4_real_task_unrelated_dual_live",
+  "name": "G4 Real-Task Unrelated Dual Live",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Single unrelated real task mirrored across LongCat 2 and DeepSeek v4 Flash so execution flow can be compared without repository-specific context.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": [
+    "pass-rate",
+    "restart-count",
+    "context-window-span",
+    "restart-success-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:unrelated-dual-live",
+  "cases": [
+    {
+      "id": "evalcase_g4_unrelated_dual_live_incident_rca_longcat2_short64k",
+      "title": "G4 Unrelated Dual Live: Incident RCA - LongCat 2 Short 64k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-unrelated-dual-live-incident-rca-longcat2-short64k",
+      "parityPairKey": "g4-unrelated-dual-live-incident-rca",
+      "parityRole": "longcat2",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "Production Incident Root Cause Analysis",
+      "taskGoal": "Produce a root cause analysis report for a production latency spike in a distributed payment processing system, including timeline reconstruction, contributing factors analysis, and actionable remediation recommendations.",
+      "currentFocus": "g4-unrelated-incident-rca-dual-live",
+      "currentObjective": "Deliver a complete RCA report with clear root cause identification and remediations.",
+      "currentContext": [
+        {
+          "id": "ctx_unrelated_incident_scope",
+          "title": "incident scenario",
+          "content": "At 2026-05-20T14:32:00Z, the payment-gateway service experienced a P99 latency spike from 200ms to 8500ms lasting 47 minutes. During this window, 12% of checkout transactions timed out. The system comprises payment-gateway (Go), order-service (Java), inventory-service (Rust), and a shared PostgreSQL cluster with read replicas. A deployment of inventory-service v3.7.2 occurred at 14:15:00Z introducing a new database index migration.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_unrelated_incident_signals",
+          "title": "observed signals",
+          "content": "Additional observed signals: database write latency climbed from 18ms to 3.4s by 14:34:00Z; connection pool saturation on order-service rose above 95%; read-replica lag peaked at 18 seconds; inventory-service error rate stayed low but its migration held a lock on inventory_reservations for 11 minutes; rollback of v3.7.2 began at 15:02:00Z and latency returned to baseline by 15:19:00Z.",
+          "importance": 0.96
+        },
+        {
+          "id": "ctx_unrelated_incident_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is disabled. Produce a complete root cause analysis report in Markdown. The report must identify the root cause and provide actionable remediation steps. After the main report, append a formal delivery footer with exactly these headings: ## 结果, ## 证据, ## 风险, ## 已知问题.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 8.0,
+      "acceptanceRequiredPhrases": [
+        "## 结果",
+        "## 证据",
+        "## 风险",
+        "## 已知问题"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "root cause",
+        "根因",
+        "remediation",
+        "修复"
+      ],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`"
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 100000,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce a complete root cause analysis report in Markdown. The report must identify the root cause and provide actionable remediation steps. After the main report, append a formal delivery footer with exactly these headings: ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, or planning preambles.",
+      "restartMessage": "Window restart: continue producing the root cause analysis report. Include root cause identification, remediation steps, and the formal delivery footer with ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 6,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 16,
+      "workspaceProfile": "g4-unrelated-incident-rca-dual-live",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": [
+        "g4",
+        "real-task",
+        "unrelated",
+        "dual-live",
+        "incident-rca",
+        "longcat2",
+        "short-window"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "evalcase_g4_unrelated_dual_live_incident_rca_deepseek_flash_short64k",
+      "title": "G4 Unrelated Dual Live: Incident RCA - DeepSeek Flash Short 64k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-unrelated-dual-live-incident-rca-deepseek-flash-short64k",
+      "parityPairKey": "g4-unrelated-dual-live-incident-rca",
+      "parityRole": "deepseek-flash",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.coding-greenfield",
+      "taskType": "coding",
+      "taskTitle": "Production Incident Root Cause Analysis",
+      "taskGoal": "Produce a root cause analysis report for a production latency spike in a distributed payment processing system, including timeline reconstruction, contributing factors analysis, and actionable remediation recommendations.",
+      "currentFocus": "g4-unrelated-incident-rca-dual-live",
+      "currentObjective": "Deliver a complete RCA report with clear root cause identification and remediations.",
+      "currentContext": [
+        {
+          "id": "ctx_unrelated_incident_scope",
+          "title": "incident scenario",
+          "content": "At 2026-05-20T14:32:00Z, the payment-gateway service experienced a P99 latency spike from 200ms to 8500ms lasting 47 minutes. During this window, 12% of checkout transactions timed out. The system comprises payment-gateway (Go), order-service (Java), inventory-service (Rust), and a shared PostgreSQL cluster with read replicas. A deployment of inventory-service v3.7.2 occurred at 14:15:00Z introducing a new database index migration.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_unrelated_incident_signals",
+          "title": "observed signals",
+          "content": "Additional observed signals: database write latency climbed from 18ms to 3.4s by 14:34:00Z; connection pool saturation on order-service rose above 95%; read-replica lag peaked at 18 seconds; inventory-service error rate stayed low but its migration held a lock on inventory_reservations for 11 minutes; rollback of v3.7.2 began at 15:02:00Z and latency returned to baseline by 15:19:00Z.",
+          "importance": 0.96
+        },
+        {
+          "id": "ctx_unrelated_incident_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is disabled. Produce a complete root cause analysis report in Markdown. The report must identify the root cause and provide actionable remediation steps. After the main report, append a formal delivery footer with exactly these headings: ## 结果, ## 证据, ## 风险, ## 已知问题.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-flash",
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "allowPaidModels": true,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 4000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 2.0,
+      "acceptanceRequiredPhrases": [
+        "## 结果",
+        "## 证据",
+        "## 风险",
+        "## 已知问题"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "root cause",
+        "根因",
+        "remediation",
+        "修复"
+      ],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "先读取目录结构",
+        "使用 `mcp.read.list_directory`"
+      ],
+      "acceptanceMinRestartCount": 1,
+      "acceptanceMinWindowIndex": 2,
+      "acceptanceMinCumulativeWindowSpanTokens": 100000,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Produce a complete root cause analysis report in Markdown. The report must identify the root cause and provide actionable remediation steps. After the main report, append a formal delivery footer with exactly these headings: ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, or planning preambles.",
+      "restartMessage": "Window restart: continue producing the root cause analysis report. Include root cause identification, remediation steps, and the formal delivery footer with ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 6,
+      "maxToolRounds": 10,
+      "maxWindowCycles": 16,
+      "workspaceProfile": "g4-unrelated-incident-rca-dual-live",
+      "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+        "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+        "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+      ],
+      "tags": [
+        "g4",
+        "real-task",
+        "unrelated",
+        "dual-live",
+        "incident-rca",
+        "deepseek-v4-flash",
+        "short-window"
+      ],
+      "difficulty": "hard"
+    }
+  ]
+}

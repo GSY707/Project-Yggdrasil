@@ -124,6 +124,8 @@ corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
 corepack pnpm eval:g4:window-stress
 corepack pnpm eval:g4:real-task-parity
+corepack pnpm eval:g4:real-task-parity:flash
+corepack pnpm eval:g4:real-task-unrelated:dual-live
 corepack pnpm eval:g4:work-tree-debug
 ```
 
@@ -135,7 +137,11 @@ corepack pnpm eval:g4:work-tree-debug
 
 `corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
 
-`corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。
+`corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。当前 parity suite 还会在 7 段简报之后强制追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），避免真实任务输出先被 runtime delivery gate 拦截。
+
+`corepack pnpm eval:g4:real-task-parity:flash` 是同一真实任务 parity 的 flash 变体：它保留 `longcat / LongCat-2.0-Preview` 的对照路径，并把 DeepSeek paid case 切到 `deepseek_direct / deepseek-v4-flash`，用于在不改动现有 pro 基线的前提下补跑实际任务效果；输出合同同样包含 7 段简报加 formal delivery footer。
+
+`corepack pnpm eval:g4:real-task-unrelated:dual-live` 是“先用与本项目完全无关的任务看实际执行过程”的最小 live 入口：它固定为同一个外部 incident RCA 题目，分别在 `longcat / LongCat-2.0-Preview` 与 `deepseek_direct / deepseek-v4-flash` 上各跑一遍，并要求主报告后追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），用于直接观察世界树 agent 在 unrelated real-task 下的实际推进方式。
 
 `corepack pnpm eval:g4:work-tree-debug` 是当前仓库的真实任务工作树调试入口：它不再把 provider 锁定当主目标，而是预置显式嵌套 `takeoverProtocol`，让真实任务从子节点起步，重点检查 `currentNodeId`、`WorkContextStack`、叶子失败上浮、窗口 continuation 和 `awaiting-approval` 语义是否符合工作树 v0.2 设想。
 

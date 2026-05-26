@@ -398,6 +398,10 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "<work-node-create ...></work-node-create>" in response_requirements
     assert "<work-node-enter nodeId=\"...\"></work-node-enter>" in response_requirements
     assert "child 完成或失败返回父节点后，由父节点决定下一步" in response_requirements
+    assert "root 节点默认负责编排和最终汇总" in response_requirements
+    assert "child 节点只处理单一局部目标" in response_requirements
+    assert "已经在同一节点连续恢复/重启，优先把当前工作拆成更小的 child 或 leaf" in response_requirements
+    assert "先判断是否已经完成必要的子工作并拿到对应摘要" in response_requirements
 
 
 def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() -> None:

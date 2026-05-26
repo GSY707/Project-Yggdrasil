@@ -36,6 +36,7 @@ from .contracts import (
     RootMountPackage,
     SpecDocumentSummary,
     TaskSnapshotSummary,
+    TaskRuntimeState,
     ToolDescriptor,
     WorkerActivityDescriptor,
 )
@@ -240,6 +241,7 @@ __all__ = [
     "TaskRecord",
     "TaskRepository",
     "TaskSnapshotSummary",
+    "TaskRuntimeState",
     "TrainingRepository",
     "TreePlanRecord",
     "ToolDescriptor",

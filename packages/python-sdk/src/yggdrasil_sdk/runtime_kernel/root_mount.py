@@ -131,11 +131,16 @@ def _resolve_startup_state(
     }
 
 
-def _registered_tool_index(active_capabilities: list[str]) -> list[dict[str, Any]]:
-    return [
-        descriptor.model_dump(by_alias=True, mode="json")
-        for descriptor in resolve_registered_tool_descriptors(active_capabilities)
-    ]
+def _registered_tool_index(active_capabilities: list[str], strip_body: bool = False) -> list[dict[str, Any]]:
+    descriptors = resolve_registered_tool_descriptors(active_capabilities)
+    results = []
+    for descriptor in descriptors:
+        dump = descriptor.model_dump(by_alias=True, mode="json")
+        if strip_body:
+            for key in ["inputSchema", "implementationRef", "timeoutMs", "permissionRequired"]:
+                dump.pop(key, None)
+        results.append(dump)
+    return results
 
 
 def _capability_index(active_capabilities: list[str]) -> list[dict[str, str]]:
@@ -173,7 +178,19 @@ def _semantic_roots(
     context_refs: list[EntityRef],
     execution_refs: list[EntityRef],
     startup_state: dict[str, str | None],
+    is_world_level: bool = True,
 ) -> dict[str, dict[str, Any]]:
+    execution_summary = "通用工作协议、待机入口、工作状态读取入口。" if is_world_level else "工作树、当前工作节点、留言、任务预算和待机队列。"
+    exec_root = {
+        "label": "[ID: 003 我要干什么]",
+        "rootBranch": "execution",
+        "primaryRefId": execution_refs[0].id if execution_refs else None,
+        "summary": execution_summary,
+    }
+    if not is_world_level:
+        exec_root["currentNodeId"] = startup_state.get("currentNodeId")
+        exec_root["workingNodeAnnotation"] = startup_state.get("workingNodeAnnotation")
+        
     return {
         "identity": {
             "label": "[ID: 001 我是谁]",
@@ -187,14 +204,7 @@ def _semantic_roots(
             "primaryRefId": context_refs[0].id if context_refs else None,
             "summary": "项目、世界、环境、来源边界和当前外部状态。",
         },
-        "execution": {
-            "label": "[ID: 003 我要干什么]",
-            "rootBranch": "execution",
-            "primaryRefId": execution_refs[0].id if execution_refs else None,
-            "summary": "工作树、当前工作节点、留言、任务预算和待机队列。",
-            "currentNodeId": startup_state.get("currentNodeId"),
-            "workingNodeAnnotation": startup_state.get("workingNodeAnnotation"),
-        },
+        "execution": exec_root,
     }
 
 
@@ -238,13 +248,21 @@ def _root_mount_runtime_metadata(
     execution_refs: list[EntityRef],
     active_capabilities: list[str],
     mailbox_state: dict[str, Any] | None = None,
+    is_world_level: bool = True,
 ) -> dict[str, Any]:
     startup_state = _resolve_startup_state(payload, task_objective=task_objective, current_focus=current_focus)
+    if is_world_level:
+        startup_state["currentNodeId"] = None
+        startup_state["workingNodeAnnotation"] = None
+        startup_state["pcMemo"] = None
+        startup_state["topFrameId"] = None
+        startup_state["stackDigest"] = None
+        
     capability_index = _capability_index(active_capabilities)
-    tool_index = _registered_tool_index(active_capabilities)
+    tool_index = _registered_tool_index(active_capabilities, strip_body=is_world_level)
     mailbox_state = _mailbox_state(payload, mailbox_state)
     return {
-        "semanticRoots": _semantic_roots(identity_refs, context_refs, execution_refs, startup_state),
+        "semanticRoots": _semantic_roots(identity_refs, context_refs, execution_refs, startup_state, is_world_level),
         "systemRootProtocol": _system_root_protocol(capability_index, tool_index),
         "capabilityIndex": capability_index,
         "toolIndex": tool_index,
@@ -252,11 +270,11 @@ def _root_mount_runtime_metadata(
         "startupMode": startup_state["startupMode"],
         "mailboxState": mailbox_state,
         "standbyState": _standby_state(startup_state, mailbox_state),
-        "currentNodeId": startup_state.get("currentNodeId"),
-        "workingNodeAnnotation": startup_state.get("workingNodeAnnotation"),
-        "pcMemo": startup_state.get("pcMemo"),
-        "topFrameId": startup_state.get("topFrameId"),
-        "stackDigest": startup_state.get("stackDigest"),
+        "currentNodeId": startup_state["currentNodeId"],
+        "workingNodeAnnotation": startup_state["workingNodeAnnotation"],
+        "pcMemo": startup_state["pcMemo"],
+        "topFrameId": startup_state["topFrameId"],
+        "stackDigest": startup_state["stackDigest"],
     }
 
 
@@ -472,6 +490,7 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         execution_refs=execution_refs,
         active_capabilities=active_capabilities,
         mailbox_state=mailbox_state,
+        is_world_level=True,
     )
 
     summary_parts = [
@@ -592,6 +611,86 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
     response["cached"] = _cache_package_entry(coordinator, f"runtime/tasks/{task_id}/root-mount/current", response)
     return response
 
+
+def build_task_runtime_state(
+    task_id: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    phase: Literal["start-state", "task-state-loaded", "lossless-restore"] | None = None,
+) -> TaskRuntimeState:
+    request = payload or {}
+    runtime = get_persistence_runtime()
+    task_record = None
+    
+    current_focus = request.get("currentFocus")
+    task_objective = request.get("taskObjective") or request.get("currentObjective")
+    resume_message = request.get("resumeMessage")
+    restart_message = request.get("restartMessage")
+    
+    try:
+        with runtime.session_scope() as session:
+            task_repository = TaskRepository(session)
+            task_record = task_repository.get_task(task_id)
+            if task_record is not None:
+                current_focus = request.get("currentFocus") or task_record.current_focus
+                task_objective = request.get("taskObjective") or request.get("currentObjective") or task_record.current_objective or task_record.goal
+                resume_message = request.get("resumeMessage") or task_record.resume_message
+                restart_message = request.get("restartMessage") or task_record.restart_message
+                if task_record.active_snapshot_id and not resume_message:
+                    snapshot = task_repository.get_snapshot(task_record.active_snapshot_id)
+                    if snapshot is not None and snapshot.resume_message:
+                        resume_message = snapshot.resume_message
+    except Exception:
+        pass
+
+    pointer_fields = _runtime_pointer_fields(request)
+    
+    takeover_protocol_raw = request.get("takeoverProtocol")
+    takeover_protocol = None
+    if isinstance(takeover_protocol_raw, dict):
+        try:
+            takeover_protocol = TaskTakeoverProtocol.model_validate(takeover_protocol_raw)
+        except Exception:
+            pass
+    elif isinstance(takeover_protocol_raw, TaskTakeoverProtocol):
+        takeover_protocol = takeover_protocol_raw
+        
+    work_context_stack_raw = request.get("workContextStack")
+    work_context_stack = None
+    if isinstance(work_context_stack_raw, dict):
+        try:
+            work_context_stack = WorkContextStack.model_validate(work_context_stack_raw)
+        except Exception:
+            pass
+    elif isinstance(work_context_stack_raw, WorkContextStack):
+        work_context_stack = work_context_stack_raw
+
+    budget_state = _normalize_budget(request)
+    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
+
+    if phase is None:
+        if request.get("resumeToken") is not None or request.get("resumeMessage") is not None or request.get("restartMessage") is not None:
+            phase = "lossless-restore"
+        elif pointer_fields["currentNodeId"] is not None:
+            phase = "task-state-loaded"
+        else:
+            phase = "start-state"
+
+    return TaskRuntimeState(
+        taskId=task_id,
+        phase=phase,
+        taskObjective=str(task_objective) if task_objective is not None else None,
+        currentFocus=str(current_focus) if current_focus is not None else None,
+        currentNodeId=pointer_fields["currentNodeId"],
+        workingNodeAnnotation=pointer_fields["workingNodeAnnotation"],
+        pcMemo=pointer_fields["pcMemo"],
+        resumeMessage=str(resume_message) if resume_message is not None else None,
+        restartMessage=str(restart_message) if restart_message is not None else None,
+        takeoverProtocol=takeover_protocol,
+        workContextStack=work_context_stack,
+        memoryRetrievalState=memory_retrieval_state,
+        budgetState=budget_state,
+    )
 
 
 __all__ = [name for name in globals() if not name.startswith('__')]

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 _logger = logging.getLogger(__name__)
 
 from ..application_runtime import resolve_application_active_capabilities, resolve_runtime_application_id
-from ..contracts import ActorRef, BudgetState, EntityRef, ExternalRef, RootMountPackage, TaskSnapshotSummary, TaskTakeoverProtocol
+from ..contracts import ActorRef, BudgetState, EntityRef, ExternalRef, RootMountPackage, TaskSnapshotSummary, TaskTakeoverProtocol, TaskRuntimeState, WorkContextStack
 from ..hook_runtime import active_module_ids, call_module_hook, collect_hook_results, load_active_module, validate_memory_write
 from ..hooks import HookNames
 from ..llm_runtime import invoke_runtime_completion, load_runtime_candidate_models

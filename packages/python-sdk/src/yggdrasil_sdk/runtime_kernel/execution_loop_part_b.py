@@ -1,6 +1,6 @@
 from .execution_loop_part_a import *  # noqa: F401,F403
 from .execution_loop_transitions import _finalize_execution_transition
-from .root_mount import _elapsed_ms, _infer_task_type
+from .root_mount import _elapsed_ms, _infer_task_type, build_task_runtime_state
 from .snapshot import _build_restart_snapshot_state
 
 
@@ -717,38 +717,67 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 runtime_repository=runtime_repository,
             )
 
-            startup_state = _resolve_startup_state(
-                request,
-                task_objective=request.get("taskObjective") or task.current_objective or task.goal,
-                current_focus=request.get("currentFocus") or task.current_focus,
-                mounted_context_count=len([item for item in current_context if isinstance(item, dict)]),
+            # Determine has_task_input:
+            has_task_input = (
+                command != "start"
+                or bool(request.get("resumeToken"))
+                or bool(request.get("resumeMessage"))
+                or bool(request.get("restartMessage"))
+                or bool(task.active_snapshot_id)
+                or bool(request.get("taskObjective"))
+                or bool(request.get("currentObjective"))
+                or bool(request.get("currentFocus"))
+                or bool(request.get("currentNodeId"))
+                or bool(task.current_objective)
+                or bool(task.goal)
+                or bool(task.current_focus)
+                or len([item for item in current_context if isinstance(item, dict)]) > 0
             )
-            if startup_state["currentNodeId"] is not None:
-                request["currentNodeId"] = startup_state["currentNodeId"]
-            if startup_state["workingNodeAnnotation"] is not None:
-                request["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
-            if startup_state["pcMemo"] is not None:
-                request["pcMemo"] = startup_state["pcMemo"]
-            request["startupMode"] = startup_state["startupMode"]
-            root_mount["startupMode"] = startup_state["startupMode"]
-            root_mount["currentNodeId"] = startup_state["currentNodeId"]
-            root_mount["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
-            root_mount["pcMemo"] = startup_state["pcMemo"]
-            root_mount["topFrameId"] = startup_state["topFrameId"]
-            root_mount["stackDigest"] = startup_state["stackDigest"]
+
+            # Build TaskRuntimeState if task input is available:
+            task_runtime_state = None
+            if has_task_input:
+                task_runtime_state = build_task_runtime_state(
+                    task_id=task.id,
+                    payload=request,
+                )
+                request["taskRuntimeState"] = task_runtime_state
+
+            # Determine startupMode:
+            if not has_task_input:
+                startup_mode = "standby"
+            elif task_runtime_state is not None and task_runtime_state.phase in ("lossless-restore", "task-state-loaded"):
+                startup_mode = "resume-node"
+            else:
+                startup_mode = "bootstrap"
+
+            request["startupMode"] = startup_mode
+            root_mount["startupMode"] = startup_mode
             standby_state = root_mount.get("standbyState") if isinstance(root_mount.get("standbyState"), dict) else {}
             root_mount["standbyState"] = {
                 **standby_state,
-                "isStandby": startup_state["startupMode"] == "standby",
-                "reason": startup_state.get("standbyReason"),
+                "isStandby": startup_mode == "standby",
+                "reason": "no-active-work" if startup_mode == "standby" else None,
             }
-            semantic_roots = root_mount.get("semanticRoots") if isinstance(root_mount.get("semanticRoots"), dict) else {}
-            execution_root = semantic_roots.get("execution") if isinstance(semantic_roots.get("execution"), dict) else None
-            if execution_root is not None:
-                execution_root["currentNodeId"] = startup_state["currentNodeId"]
-                execution_root["workingNodeAnnotation"] = startup_state["workingNodeAnnotation"]
 
-            if command == "start" and snapshot is None and startup_state["startupMode"] == "standby":
+            # Only sync task execution properties if TaskRuntimeState is loaded/established:
+            if task_runtime_state is not None:
+                if task_runtime_state.current_node_id is not None:
+                    request["currentNodeId"] = task_runtime_state.current_node_id
+                if task_runtime_state.working_node_annotation is not None:
+                    request["workingNodeAnnotation"] = task_runtime_state.working_node_annotation
+                if task_runtime_state.pc_memo is not None:
+                    request["pcMemo"] = task_runtime_state.pc_memo
+
+                if task_runtime_state.takeover_protocol is not None:
+                    request["takeoverProtocol"] = task_runtime_state.takeover_protocol.model_dump(by_alias=True, mode="json")
+                if task_runtime_state.work_context_stack is not None:
+                    stack_payload = task_runtime_state.work_context_stack.model_dump(by_alias=True, mode="json")
+                    request["workContextStack"] = stack_payload
+                    request["topFrameId"] = stack_payload.get("topFrameId")
+                    request["stackDigest"] = stack_payload.get("stackDigest")
+
+            if command == "start" and snapshot is None and startup_mode == "standby":
                 runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
                 return {
                     "status": "standby",
