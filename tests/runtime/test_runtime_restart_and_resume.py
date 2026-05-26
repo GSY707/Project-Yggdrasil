@@ -424,7 +424,12 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
             ),
         })
         return {
-            "assistantText": "已根据 carry-forward package 继续执行并完成当前窗口目标。",
+            "assistantText": (
+                "# result\n已根据 carry-forward package 继续执行并完成当前窗口目标。\n"
+                "# evidence\n已完成窗口续跑验证。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ),
             "invocation": {
                 "id": f"inv_window_restart_{len(invoke_calls)}",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -473,16 +478,22 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
 
     first_run = run_worker_once("agent-runtime")
     assert first_run["status"] == "processed"
-    assert first_run["result"]["status"] == "failed"
-    assert "restart is deprecated" in str(first_run["result"].get("detail") or "")
+    assert first_run["result"]["status"] == "continuing"
+    assert first_run["result"]["queuedWorkItem"]["command"] == "resume"
+    assert first_run["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "window-restart-queued"
     assert invoke_calls == []
 
-    failed_window_artifact = first_run["result"]["windowExecutionArtifact"]
-    failed_window_path = Path(resolve_workspace_root()) / failed_window_artifact["artifactRef"]["locator"]
-    failed_window_payload = json.loads(failed_window_path.read_text(encoding="utf-8"))
-    assert failed_window_payload["transitionOutcome"] == "failed-window-overflow"
-    assert failed_window_payload["restartTrigger"] == "effectiveContextWindow"
-    assert failed_window_payload["windowIndex"] == 1
+    restart_window_artifact = first_run["result"]["windowExecutionArtifact"]
+    restart_window_path = Path(resolve_workspace_root()) / restart_window_artifact["artifactRef"]["locator"]
+    restart_window_payload = json.loads(restart_window_path.read_text(encoding="utf-8"))
+    assert restart_window_payload["transitionOutcome"] == "window-restart-queued"
+    assert restart_window_payload["restartTrigger"] == "effectiveContextWindow"
+    assert restart_window_payload["windowIndex"] == 1
+
+    second_run = run_worker_once("agent-runtime")
+    assert second_run["status"] == "processed"
+    assert second_run["result"]["status"] in {"completed", "awaiting-approval"}
+    assert len(invoke_calls) == 1
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -490,10 +501,11 @@ def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.Monke
         task = task_repository.get_task("task_window_restart")
         runs = task_repository.list_agent_runs("task_window_restart")
         assert task is not None
-        assert task.status == "failed"
-        assert task.window_index == 1
-        assert len(runs) == 1
-        assert runs[0].status == "failed"
+        assert task.status in {"completed", "awaiting-approval"}
+        assert task.window_index == 2
+        assert len(runs) == 2
+        assert runs[0].status == "completed"
+        assert runs[1].status == "completed"
 
 
 def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current_focus(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -660,6 +672,37 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
             }
         )
 
+    call_count = [0]
+
+    def _fake_invoke_model(*args, **kwargs):  # type: ignore[no-untyped-def]
+        call_count[0] += 1
+        return {
+            "mode": "fallback",
+            "provider": None,
+            "model": "fallback-synthetic",
+            "outputText": (
+                "# result\n已完成第 %d 轮 fallback 交付。\n"
+                "# evidence\n已保留 pause/resume 运行时工件。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ) % call_count[0],
+            "finishReason": "fallback",
+            "usage": {
+                "inputTokens": 64,
+                "outputTokens": 24,
+                "totalTokens": 88,
+                "cacheHitInputTokens": 0,
+                "cacheWriteInputTokens": 0,
+                "nonCacheInputTokens": 64,
+                "reasoningTokens": 0,
+            },
+            "costUsed": 0.0,
+            "toolCalls": [],
+            "error": "adapter-unavailable",
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
     started = client.post(
         "/runtime/tasks/task_runtime/start",
         json={
@@ -781,7 +824,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
     assert first_run["result"]["takeoverProtocol"] is not None
     assert isinstance(first_run["result"]["assistantText"], str)
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
-    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] == "verified"
+    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"verified", "completed"}
     assert first_run["result"]["takeoverProtocolRef"] is not None
 
     resumed = client.post(

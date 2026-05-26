@@ -24,15 +24,16 @@ v0.2 的核心变化：
 1. 工作树从“计划投影”升级为“执行栈和工作记忆”。
 2. LLM 可以在协议约束下动态创建、细分、跳转、总结和关闭工作节点。
 3. 系统负责拓扑、版本、权限、审计、恢复指针和窗口一致性。
-4. LLM 负责语义判断、节点命名、局部摘要、失败经验、下潜和上浮决策。
-5. 上下文窗口只能加载当前工作切片；长期状态必须写入工作树或记忆树。
+4. 父节点中的 LLM 负责语义判断、节点命名、局部摘要、失败经验、下潜和上浮决策。
+5. child 完成或失败后，必须先回编排父节点，由父节点决定是否进入 sibling、继续拆 leaf 或请求外部输入。
+6. 上下文窗口以当前工作切片为主；允许保留有限线性 continuation 轨迹，但长期状态仍必须写入工作树或记忆树。
 
 ## 2. 与 v0.1 的决策差异
 
 | 主题 | v0.1 | v0.2 |
 | --- | --- | --- |
 | 节点来源 | 从 `TaskTakeoverProtocol.plan` 派生 | takeover plan 只作为初始建议，LLM 可动态扩树 |
-| 控制流 | 计划步骤驱动 | 当前工作节点驱动 |
+| 控制流 | 计划步骤驱动 | 当前工作节点驱动，但下一步去向由编排父节点决定 |
 | 数据流 | prompt/request/runtime 共享同一 work tree snapshot | 每个窗口必须共享同一 `Working_Node`、工作树版本和检索节点 |
 | 完成语义 | runtime 可在交付后直接 completed | 根节点完成后进入 `awaiting-approval`，批准后才 completed |
 | 压缩恢复 | recoveryAnchor 为 resume/repair 入口 | `workingNodeAnnotation` 同时是上下文书签和返回指针 |
@@ -261,13 +262,20 @@ WorkContextFrame:
 | --- | --- |
 | `rootFrameId` | 初始节点对应的上下文帧 |
 | `topFrameId` | 当前最深工作帧，必须对应 `WorkTreeProtocol.currentNodeId` |
-| `cachePolicy` | 默认 `preserve-prefix`，表示下探/上浮优先复用已有 prompt 前缀和模型缓存 |
+| `cachePolicy` | 默认 `preserve-prefix`，表示 runtime continuation 优先保留根/父帧稳定前缀；provider 是否命中缓存要看调用 usage，而不是只看 policy |
 | `entryContextDigest` | 进入该节点时父级上下文的摘要指纹，用于检测返回时是否漂移 |
-| `prefixCacheKey` | 模型 provider 或本地 runtime 的前缀缓存键；不可作为唯一状态来源 |
+| `prefixCacheKey` | runtime continuation cache 的前缀身份，可由本地 runtime 或 provider 提供；它证明“前缀被稳定保留”，但不单独证明 provider 已命中缓存 |
 | `frameHeader` | 当前帧进入时追加到上下文的短文本，如 `<执行节点1>执行过程，继续往下探细节` |
 | `frameLocalTranscriptRef` | 当前帧较长执行过程的 transcript 或 artifact 引用 |
 | `childCompletionSummaries` | 子节点完成后回填到父帧的短摘要列表 |
 | `cursorState` | 父帧恢复后下一步要继续的局部游标，例如“继续最细节执行2” |
+
+边界约定：
+
+1. runtime continuation cache 由 `cachePolicy=preserve-prefix`、`WorkContextStack` 和 `prefixCacheKey` 共同描述，负责保证 push/pop/window continuation 时保留同一段稳定前缀。
+2. provider prefix cache 是模型供应商侧的真实命中/写入行为，必须通过 usage 里的 `cacheHitInputTokens` / `cacheWriteInputTokens` 证明。
+3. `prefixCacheKey` 非空但 `cacheHitInputTokens=0` 仍然可能是合法状态，这表示 runtime 已维持稳定前缀，但 provider 这次没有给出缓存命中。
+4. 反过来，provider 给出 cache hit/write 指标，但如果 `currentNodeId`、`topFrameId` 或 `prefixCacheKey` 漂移，就不能把它解释成 work-tree continuation 语义成立。
 
 ### 5.5 栈式主流程
 
@@ -300,7 +308,7 @@ pop_frame(最细节执行1)
 <分过程1>继续细节下探，最细节执行1完成
 ```
 
-随后继续 `<最细节执行2>`。当 `<分过程1>` 完成时，再次执行 `pop_frame(分过程1)`，父级上下文应近似为：
+恢复到 `<分过程1>` 后，下一步不由 runtime 自动决定，而是由 `<分过程1>` 这个编排父节点决定：继续 `<最细节执行2>`、继续拆 leaf、上浮、或请求外部输入。当 `<分过程1>` 完成时，再次执行 `pop_frame(分过程1)`，父级上下文应近似为：
 
 ```text
 <初始节点>启动内容
@@ -312,11 +320,11 @@ pop_frame(最细节执行1)
 
 硬性要求：
 
-1. 子节点完成后的默认动作是 `pop_frame`，不是 `window_restart`。
+1. 子节点完成后的默认动作是 `pop_frame` 回编排父节点，不是 `window_restart`，也不是 runtime 直接替父节点跳到下一个 sibling。
 2. `window_restart` 只在 token、工具 checkpoint、安全停止或 provider 限制触发时发生。
-3. `pop_frame` 必须保留父帧进入时的上下文前缀，充分利用 LLM prefix cache。
-4. 子节点长执行过程必须折叠为子节点摘要和证据引用，不继续占用父级窗口。
-5. 父帧恢复时必须能继续读取自己的 `cursorState`，而不是重新规划父节点。
+3. `pop_frame` 必须保留父帧进入时的上下文前缀，并允许保留有限的线性 continuation 轨迹，充分利用 LLM prefix cache。
+4. 子节点长执行过程必须折叠为子节点摘要和证据引用；如需保留轨迹，也只保留父节点编排所需的短轨迹与 cleanup 说明，不继续占用父级窗口。
+5. 父帧恢复时必须能继续读取自己的 `cursorState`、最近 child 摘要和当前未完成子节点状态，再由父节点决定下一步，而不是重新规划整棵树。
 6. 如果父帧上下文 digest 变化，runtime 必须要求 LLM 写 `pcMemo` 或重新读取父节点摘要后再继续。
 
 ### 5.6 树与栈的一致性
@@ -375,10 +383,11 @@ WorkTreeNode.workingNodeAnnotation == WorkContextStack.topFrame.workingNodeAnnot
 3. 当前工作节点。
 4. 根到当前节点的 `activePathNodeIds`。
 5. 当前节点必要的父节点摘要。
-6. 父帧中的 `childCompletionSummaries`，用于继续兄弟节点。
-7. 必要的兄弟节点状态摘要，不加载完整兄弟正文。
-8. 当前节点相关的记忆检索结果。
-9. 能力与协议索引地图。
+6. 父帧中的 `childCompletionSummaries`，用于父节点继续编排下一步。
+7. 最近有限长度的线性 continuation 轨迹，用于说明刚完成/刚失败的 child、已清理的上下文和当前待判断入口。
+8. 必要的兄弟节点状态摘要，不加载完整兄弟正文。
+9. 当前节点相关的记忆检索结果。
+10. 能力与协议索引地图。
 
 不应加载：
 

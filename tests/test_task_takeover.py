@@ -66,6 +66,9 @@ def test_task_takeover_module_hard_fails_when_required_delivery_section_missing(
     )
 
     incomplete_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.incomplete")
+    pending_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.pending")
+    assert pending_item["gateMode"] == "hard"
+    assert incomplete_item["gateMode"] == "hard"
     assert incomplete_item["status"] == "failed"
     assert verification["metrics"]["deliveryCompletenessScore0_100"] == 85.0
     assert verification["metrics"]["verificationPassRate"] == 0.75

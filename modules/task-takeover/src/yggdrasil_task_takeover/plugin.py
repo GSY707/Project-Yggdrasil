@@ -202,8 +202,8 @@ def _verification_items(delivery_sections: list[dict[str, object]]) -> list[dict
     required = {
         "result": ("必须有明确结果总结。", "hard"),
         "evidence": ("必须有支撑结果的证据或验证。", "hard"),
-        "pending": ("必须交代仍待确认的前提或风险。", "advisory"),
-        "incomplete": ("必须交代未完成项或明确写无。", "advisory"),
+        "pending": ("必须交代仍待确认的前提或风险。", "hard"),
+        "incomplete": ("必须交代未完成项或明确写无。", "hard"),
     }
     items: list[dict[str, object]] = []
     for section, (detail, gate_mode) in required.items():

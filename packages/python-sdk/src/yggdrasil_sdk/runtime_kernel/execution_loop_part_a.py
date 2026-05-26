@@ -20,7 +20,7 @@ _MEMORY_WRITE_TAG_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _WORK_TREE_ACTION_TAG_PATTERN = re.compile(
-    r"<work-node-create(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-create>",
+    r"<work-node-(?P<action>create|enter)(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-(?P=action)>",
     re.IGNORECASE | re.DOTALL,
 )
 _MEMORY_WRITE_ATTR_PATTERN = re.compile(
@@ -475,7 +475,7 @@ def _window_execution_work_tree_debug(
             continuation_reason = frame_path[-1].get("cursorState") or continuation_reason
     continuation_reason = continuation_reason or resume_path or restart_trigger
     rework_reason: str | None = None
-    if transition_outcome in {"continue-sibling-after-failure", "failed-window-overflow", "failed"}:
+    if transition_outcome in {"continue-sibling-after-failure", "bubble-parent-after-failure", "failed-window-overflow", "failed"}:
         rework_reason = restart_trigger or continuation_reason or transition_outcome
     elif restart_trigger:
         rework_reason = restart_trigger
@@ -489,7 +489,7 @@ def _window_execution_work_tree_debug(
         "continuationReason": continuation_reason,
         "reworkReason": rework_reason,
         "approvalStop0_1": 1 if transition_outcome == "awaiting-approval" else 0,
-        "childBubble0_1": 1 if transition_outcome in {"bubble-parent", "continue-sibling", "continue-sibling-after-failure"} else 0,
+        "childBubble0_1": 1 if transition_outcome in {"bubble-parent", "bubble-parent-after-failure", "continue-sibling", "continue-sibling-after-failure"} else 0,
         "mixedOutcome0_1": 1 if child_status_counts.get("completed", 0) > 0 and child_status_counts.get("failed", 0) > 0 else 0,
         "childStatusCounts": child_status_counts,
         "recentChildCompletionSummaries": recent_child_completion_summaries[-6:],
@@ -1015,7 +1015,28 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
 
     def _replace(match: re.Match[str]) -> str:
         raw_tag = str(match.group(0) or "")
+        action_name = str(match.group("action") or "create").strip().lower() or "create"
         attributes = _parse_memory_write_tag_attributes(str(match.group("attrs") or ""))
+        if action_name == "enter":
+            node_id = str(attributes.get("nodeid") or "").strip()
+            if not node_id:
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "missing-nodeid",
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            parsed_actions.append(
+                {
+                    "action": "enter",
+                    "rawTag": raw_tag,
+                    "nodeId": node_id,
+                    "cursorState": str(attributes.get("cursor") or "parent-selected-existing-child").strip() or "parent-selected-existing-child",
+                }
+            )
+            return ""
         title = str(attributes.get("title") or "").strip()
         parent_node_id = str(attributes.get("parentnodeid") or "").strip() or None
         content = str(match.group("content") or "").strip()
@@ -1031,6 +1052,7 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
             return ""
         parsed_actions.append(
             {
+                "action": "create",
                 "rawTag": raw_tag,
                 "title": title,
                 "parentNodeId": parent_node_id,
@@ -1085,45 +1107,68 @@ def _apply_parsed_assistant_work_tree_actions(
     applied: list[dict[str, Any]] = []
 
     for action in actions:
+        action_kind = str(action.get("action") or "create").strip().lower() or "create"
         try:
-            updated_protocol, updated_stack, created_node = create_child_work_node(
-                updated_protocol,
-                task_id=task_id,
-                agent_run_id=agent_run_id,
-                title=str(action.get("title") or "").strip() or "Untitled work node",
-                phase=str(action.get("phase") or "executing").strip() or "executing",
-                parent_node_id=str(action.get("parentNodeId") or "").strip() or default_parent_node_id,
-                questions_it_answers=[
-                    str(item)
-                    for item in action.get("questionsItAnswers") or []
-                    if str(item).strip()
-                ]
-                or [str(action.get("title") or "").strip() or "Untitled work node"],
-                local_goal=str(action.get("localGoal") or action.get("title") or "").strip() or None,
-                expected_evidence=[
-                    str(item)
-                    for item in action.get("expectedEvidence") or []
-                    if str(item).strip()
-                ],
-                work_context_stack=updated_stack,
-                activate=not applied,
-            )
-            applied.append(
-                {
-                    "status": "applied",
-                    "title": created_node.title,
-                    "parentNodeId": created_node.parent_node_id,
-                    "childNodeId": created_node.id,
-                    "workingNodeAnnotation": created_node.working_node_annotation,
-                    "activated": len(applied) == 0,
-                }
-            )
+            if action_kind == "enter":
+                target_node_id = str(action.get("nodeId") or "").strip()
+                if not target_node_id:
+                    raise ValueError("Missing target work-tree node id.")
+                updated_protocol, updated_stack = switch_current_work_node(
+                    updated_protocol,
+                    task_id=task_id,
+                    agent_run_id=agent_run_id,
+                    node_id=target_node_id,
+                    work_context_stack=updated_stack,
+                    cursor_state=str(action.get("cursorState") or "parent-selected-existing-child").strip() or "parent-selected-existing-child",
+                )
+                applied.append(
+                    {
+                        "status": "applied",
+                        "action": "enter",
+                        "nodeId": target_node_id,
+                        "activated": True,
+                    }
+                )
+            else:
+                updated_protocol, updated_stack, created_node = create_child_work_node(
+                    updated_protocol,
+                    task_id=task_id,
+                    agent_run_id=agent_run_id,
+                    title=str(action.get("title") or "").strip() or "Untitled work node",
+                    phase=str(action.get("phase") or "executing").strip() or "executing",
+                    parent_node_id=str(action.get("parentNodeId") or "").strip() or default_parent_node_id,
+                    questions_it_answers=[
+                        str(item)
+                        for item in action.get("questionsItAnswers") or []
+                        if str(item).strip()
+                    ]
+                    or [str(action.get("title") or "").strip() or "Untitled work node"],
+                    local_goal=str(action.get("localGoal") or action.get("title") or "").strip() or None,
+                    expected_evidence=[
+                        str(item)
+                        for item in action.get("expectedEvidence") or []
+                        if str(item).strip()
+                    ],
+                    work_context_stack=updated_stack,
+                    activate=not applied,
+                )
+                applied.append(
+                    {
+                        "status": "applied",
+                        "action": "create",
+                        "title": created_node.title,
+                        "parentNodeId": created_node.parent_node_id,
+                        "childNodeId": created_node.id,
+                        "workingNodeAnnotation": created_node.working_node_annotation,
+                        "activated": len(applied) == 0,
+                    }
+                )
         except Exception as exc:  # noqa: BLE001
             blocked.append(
                 {
                     "status": "blocked",
-                    "reason": "create-child-failed",
-                    "title": str(action.get("title") or "").strip() or None,
+                    "reason": "enter-child-failed" if action_kind == "enter" else "create-child-failed",
+                    "title": str(action.get("title") or action.get("nodeId") or "").strip() or None,
                     "detail": str(exc),
                 }
             )
@@ -1139,13 +1184,19 @@ def _apply_parsed_assistant_work_tree_actions(
             work_context_stack=updated_stack,
         )
 
+    primary_action = str(applied[0].get("action") or "create") if applied else "create"
     transition = {
-        "transition": "enter-child",
+        "transition": "enter-existing-child" if primary_action == "enter" else "enter-child",
         "requiresContinuation": bool(applied),
         "currentNodeId": updated_protocol.work_tree.current_node_id if updated_protocol is not None and updated_protocol.work_tree is not None else None,
-        "nextNodeId": applied[0]["childNodeId"] if applied else None,
+        "nextNodeId": (
+            applied[0].get("nodeId")
+            if applied and primary_action == "enter"
+            else applied[0].get("childNodeId") if applied else None
+        ),
         "currentFocus": _work_tree_focus_label(updated_protocol) if applied else request.get("currentFocus"),
-        "createdNodeIds": [item["childNodeId"] for item in applied],
+        "createdNodeIds": [item["childNodeId"] for item in applied if item.get("action") == "create" and item.get("childNodeId")],
+        "enteredNodeIds": [item["nodeId"] for item in applied if item.get("action") == "enter" and item.get("nodeId")],
     }
     return updated_protocol, updated_stack, {
         "detectedCount": int(action_payload.get("detectedCount") or (len(applied) + len(blocked))),

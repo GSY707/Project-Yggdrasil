@@ -934,14 +934,16 @@ def _format_response_requirements(
     is_resume = bool(resume_path)
     lines = [
         "1. 基于完整的工作树状态和记忆内容自主判断下一步行动。需要交付则直接交付，需要规划则进行规划，不要被强制指令干扰。",
-        "2. 若证据不足，明确说明缺失信息，不要补空白。",
-        "3. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
-        f"4. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
+        '2. 若需要操作工作树，必须通过动作标签显式声明：创建新子节点使用 <work-node-create ...></work-node-create>，进入已有子节点使用 <work-node-enter nodeId="..."></work-node-enter>。',
+        "3. 父节点强编排：child 完成或失败返回父节点后，由父节点决定下一步（进入已有 child、创建新 child、或直接汇总交付），不要默认自动跳 sibling。",
+        "4. 若证据不足，明确说明缺失信息，不要补空白。",
+        "5. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
+        f"6. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
     ]
     if is_resume:
-        lines.append("5. 恢复态下，把 resume_message 视为接续上下文的提示（context hint），结合记忆树继续执行，无需退回初始规划状态。")
-        lines.append("6. 恢复态优先按 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）组织交付，不要回退成纯规划。")
-        lines.append("7. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
+        lines.append(f"{len(lines) + 1}. 恢复态下，把 resume_message 视为接续上下文的提示（context hint），结合记忆树继续执行，无需退回初始规划状态。")
+        lines.append(f"{len(lines) + 1}. 恢复态优先按 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）组织交付，不要回退成纯规划。")
+        lines.append(f"{len(lines) + 1}. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
     if bool(request.get("memoryWriteTagsEnabled", True)):
         lines.append(
             f'{len(lines) + 1}. 记忆修改默认优先使用正式记忆工具；仅当需要不中断回答且改动足够轻量时，才插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'

@@ -235,6 +235,20 @@ def _finalize_execution_transition(
 				current_focus=(transition_state or {}).get("currentFocus") if isinstance(transition_state, dict) else None,
 				work_context_stack=work_context_stack,
 			)
+		delivery_gate_retry_count = max(0, int(request.get("deliveryGateRetryCount") or 0))
+		delivery_gate_retry_allowed = (
+			isinstance(transition_state, dict)
+			and transition_state.get("transition") == "delivery-gate-blocked"
+			and work_context_stack is not None
+			and delivery_gate_retry_count < 1
+		)
+		if delivery_gate_retry_allowed and isinstance(transition_state, dict):
+			transition_state = {
+				**transition_state,
+				"transition": "delivery-gate-retry",
+				"requiresContinuation": True,
+				"currentFocus": str(transition_state.get("currentFocus") or request.get("currentFocus") or "delivery-gate-retry"),
+			}
 		if takeover_protocol is not None and takeover_protocol.work_tree is not None:
 			if takeover_protocol.work_tree.status == "awaiting-approval":
 				result_status = "awaiting-approval"
@@ -261,6 +275,22 @@ def _finalize_execution_transition(
 					parent_run_id=run.id,
 					current_focus=(transition_state or {}).get("currentFocus") if isinstance(transition_state, dict) else None,
 				)
+				if delivery_gate_retry_allowed:
+					blocked_gates = [str(item) for item in (transition_state or {}).get("blockedGates") or [] if str(item).strip()]
+					blocked_summary = ", ".join(blocked_gates) if blocked_gates else "delivery.result/evidence/pending/incomplete"
+					corrective_tail = (
+						"Previous output stopped before the formal delivery contract was satisfied. "
+						f"Blocked hard gates: {blocked_summary}. "
+						"Continue immediately from the same work-tree node and emit the final delivery now. "
+						"Do not add planning preambles, scanning notes, or process narration. "
+						"Output Markdown only and satisfy all required delivery sections in one response."
+					)
+					base_response_requirements = str(continuation_payload.get("responseRequirements") or request.get("responseRequirements") or "").strip()
+					continuation_payload["responseRequirements"] = " ".join(
+						part for part in (base_response_requirements, corrective_tail) if part
+					)
+					continuation_payload["resumeMessage"] = corrective_tail
+					continuation_payload["deliveryGateRetryCount"] = delivery_gate_retry_count + 1
 				if work_context_stack_ref is not None:
 					continuation_payload["workContextStackRef"] = work_context_stack_ref
 				queued_work_item = {

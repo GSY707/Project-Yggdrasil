@@ -613,10 +613,11 @@ def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
     result = processed["result"]
-    assert result["status"] == "failed"
+    assert result["status"] == "continuing"
     assert result["runtimeMetrics"]["restartCount"] == 0
-    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "failed-window-overflow"
-    assert "restart is deprecated" in str(result.get("detail") or "")
+    assert result["queuedWorkItem"]["command"] == "resume"
+    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "window-restart-queued"
+    assert "carry-forward restart path" in str(result.get("detail") or "")
 
 
 def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:

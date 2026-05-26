@@ -64,6 +64,12 @@
 | `regression` | 固定回归 | 不受 §2 约定约束 |
 | `benchmark` | 性能和策略基准 | 不受 §2 约定约束 |
 
+### 3.1 当前仓库中的正式映射
+
+- `g4-real-task-externalized.json` 是当前默认真实任务入口，用于验证“单目标、弱项目内生化、由 agent 自主规划”的正式合同。
+- `g4-real-task-minimal-workset.json` 已降为 `legacy-repo-specific` 参考，只保留历史 repo-specific 口径，不再作为新题模板。
+- `g4-real-task-work-tree-debug.json` 已明确标注为 `runtime-debug-harness`，专门验证显式 `takeoverProtocol`、child/sibling/root continuation、approval stop 与 work-tree 调试报告结构。
+
 ## 4. 明确例外
 
 下面这类 case 可以不遵守 §2 约定，但必须置于 `suiteRole = "runtime-debug-harness"` 的 suite 中，并在 suite 的 `suiteRoleNote` 中说明原因：

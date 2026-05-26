@@ -120,7 +120,7 @@ class TaskRepository:
         statement = (
             sa.select(AgentRunORM)
             .where(AgentRunORM.task_id == task_id)
-            .order_by(AgentRunORM.started_at.desc())
+            .order_by(AgentRunORM.started_at.desc(), AgentRunORM.ended_at.desc(), AgentRunORM.id.desc())
             .limit(limit)
         )
         return [_agent_run_record(model) for model in self.session.execute(statement).scalars().all()]
@@ -129,7 +129,7 @@ class TaskRepository:
         statement = (
             sa.select(AgentRunORM)
             .where(AgentRunORM.task_id == task_id)
-            .order_by(AgentRunORM.started_at.desc())
+            .order_by(AgentRunORM.started_at.desc(), AgentRunORM.ended_at.desc(), AgentRunORM.id.desc())
             .limit(20)
         )
         models = self.session.execute(statement).scalars().all()

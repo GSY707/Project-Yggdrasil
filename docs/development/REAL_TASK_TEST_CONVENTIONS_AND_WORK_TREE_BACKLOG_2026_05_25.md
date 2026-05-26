@@ -238,3 +238,16 @@
 - live 工件里 `prefixCacheKey` 不再长期为 `null`。
 - live evalrun 不再长期是 `cacheHitInputTokens = 0`。
 - short/long continuation 链路能给出缓存命中证据，而不是只声明 `cachePolicy = preserve-prefix`。
+
+
+
+
+# 本轮收口状态
+
+P1 已收口。`g4-real-task-work-tree-debug.json` 现已补齐 `suiteRole=runtime-debug-harness`、`suiteRoleNote` 与例外约定；`tests/test_suite_contract_verifier.py` 的全量 suite 角色回归已通过。当前口径也已冻结为：`g4-real-task-externalized.json` 是默认真实任务入口，`g4-real-task-minimal-workset.json` 只保留 legacy 参考。
+
+P2 已收口。`task-takeover` 现在会正式生成并校验 `delivery.result / evidence / pending / incomplete` 四段，`delivery.pending` 与 `delivery.incomplete` 已升级为 hard gate；`tests/test_runtime_p2_delivery_gate.py` 现补齐“缺字段即 delivery-gate-blocked”与“同一多节点工作树链路里的 revision -> 复跑 -> approve”回归，`tests/test_runtime_p4_foundation.py` 继续锁住 child completion summary、mixed outcome 和 sibling/root 收口。
+
+P3 已收口。缓存主实现与验收门禁保持不变，但协议文档现已单独冻结 provider prefix cache 与 runtime continuation cache 的边界：`prefixCacheKey`/`preserve-prefix` 负责 runtime continuation 语义，`cacheHitInputTokens`/`cacheWriteInputTokens` 才是 provider 侧真实命中证据。`g4-real-task-work-tree-debug.json` 与 `suite_cases_g4.py` 继续把两类证据都纳入正式验收。
+
+P5 已收口。`docs/LLM_WORK_ANALYZER_USER_GUIDE.md` 现已把 work-tree debug 摘要卡、节点切换时间线、cache trace、child bubble 与 mixed outcome 固定成标准读法，不再要求操作者自己去拼 UI 字段语义。

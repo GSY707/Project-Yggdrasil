@@ -370,7 +370,7 @@ def test_work_tree_reducer_can_create_child_and_sync_stack() -> None:
     assert child_node.id in root_node.child_node_ids
 
 
-def test_work_tree_reducer_bubbles_completed_children_and_waits_for_approval() -> None:
+def test_work_tree_reducer_returns_parent_for_reorchestration_and_waits_for_approval() -> None:
     protocol = TaskTakeoverProtocol.model_validate(_nested_takeover_protocol("task_p4_reducer"))
     protocol, stack = runtime_takeover.normalize_takeover_runtime_state(
         protocol,
@@ -390,11 +390,20 @@ def test_work_tree_reducer_bubbles_completed_children_and_waits_for_approval() -
         work_context_stack=stack,
     )
 
-    assert child_one_transition["transition"] == "continue-sibling"
+    assert child_one_transition["transition"] == "bubble-parent"
     assert protocol.work_tree is not None
-    assert protocol.work_tree.current_node_id == "child-2"
+    assert protocol.work_tree.current_node_id == "root"
     root_frame = next(frame for frame in stack.frames if frame.node_id == "root")
     assert [item.child_node_id for item in root_frame.child_completion_summaries] == ["child-1"]
+
+    protocol, stack = runtime_takeover.switch_current_work_node(
+        protocol,
+        task_id="task_p4_reducer",
+        agent_run_id="run_p4_reducer",
+        node_id="child-2",
+        work_context_stack=stack,
+        cursor_state="parent-selected-existing-child",
+    )
 
     protocol, stack, child_two_transition = runtime_takeover.complete_current_work_node(
         protocol,
@@ -444,11 +453,11 @@ def test_work_tree_reducer_continues_next_sibling_after_failed_leaf() -> None:
         work_context_stack=stack,
     )
 
-    assert failure_transition["transition"] == "continue-sibling-after-failure"
+    assert failure_transition["transition"] == "bubble-parent-after-failure"
     assert failure_transition["requiresContinuation"] is True
     assert protocol.work_tree is not None
-    assert protocol.work_tree.current_node_id == "child-2"
-    assert failure_transition["nextNodeId"] == "child-2"
+    assert protocol.work_tree.current_node_id == "root"
+    assert failure_transition["nextNodeId"] == "root"
     failed_child = next(node for node in protocol.work_tree.nodes if node.id == "child-1")
     assert failed_child.status == "failed"
     assert failed_child.failure_summary is not None
@@ -456,9 +465,7 @@ def test_work_tree_reducer_continues_next_sibling_after_failed_leaf() -> None:
     root_frame = next(frame for frame in stack.frames if frame.node_id == "root")
     assert [item.child_node_id for item in root_frame.child_completion_summaries] == ["child-1"]
     assert root_frame.child_completion_summaries[0].status == "failed"
-    assert stack.top_frame_id == "frame-child-2"
-    child_two_frame = next(frame for frame in stack.frames if frame.node_id == "child-2")
-    assert child_two_frame.cursor_state == "continue-next-sibling-after-failure"
+    assert stack.top_frame_id == "frame-root"
 
 
 def test_work_tree_reducer_allows_root_delivery_after_failed_child_summary() -> None:
@@ -480,7 +487,16 @@ def test_work_tree_reducer_allows_root_delivery_after_failed_child_summary() -> 
         work_context_stack=stack,
     )
 
-    assert failure_transition["currentNodeId"] == "child-2"
+    assert failure_transition["currentNodeId"] == "root"
+
+    protocol, stack = runtime_takeover.switch_current_work_node(
+        protocol,
+        task_id="task_p4_failed_leaf_root_delivery",
+        agent_run_id="run_p4_failed_leaf_root_delivery",
+        node_id="child-2",
+        work_context_stack=stack,
+        cursor_state="parent-selected-existing-child",
+    )
 
     protocol, stack, child_two_transition = runtime_takeover.complete_current_work_node(
         protocol,
@@ -641,7 +657,7 @@ def test_runtime_default_mode_moves_root_delivery_to_awaiting_approval(monkeypat
     assert processed["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
 
 
-def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -659,13 +675,28 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         request = kwargs["request"]
         current_node_id = str(request.get("currentNodeId") or "")
+        root_frame = next(
+            (frame for frame in (request.get("workContextStack") or {}).get("frames") or [] if frame.get("nodeId") == "root"),
+            None,
+        )
+        completed_children = [
+            str(item.get("childNodeId") or "")
+            for item in (root_frame or {}).get("childCompletionSummaries") or []
+            if str(item.get("status") or "") == "completed"
+        ]
         text_by_node = {
             "child-1": "# result\n子节点一完成。\n# evidence\n子节点一证据齐全。\n# pending\nchild-2。\n# incomplete\n无。",
             "child-2": "# result\n子节点二完成。\n# evidence\n子节点二证据齐全。\n# pending\n汇总 root。\n# incomplete\n无。",
-            "root": "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
         }
+        if current_node_id == "root":
+            if completed_children == ["child-1"]:
+                assistant_text = "继续由 root 编排并进入 child-2。\n<work-node-enter nodeId=\"child-2\"></work-node-enter>"
+            else:
+                assistant_text = "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。"
+        else:
+            assistant_text = text_by_node[current_node_id]
         return {
-            "assistantText": text_by_node[current_node_id],
+            "assistantText": assistant_text,
             "invocation": {
                 "id": f"inv_{current_node_id}",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -705,35 +736,43 @@ def test_runtime_single_path_continues_siblings_then_waits_for_approval(monkeypa
     assert first["status"] == "processed"
     assert first["result"]["status"] == "continuing"
     assert first["result"]["task"]["status"] == "queued"
-    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
     assert first["result"]["windowExecutionArtifact"]["record"]["topFramePrefixCacheKey"]
     assert first["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
-    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
-    assert first["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
+    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert first["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     assert first["result"]["workContextStackRef"] is not None
 
     second = run_worker_once("agent-runtime")
     assert second["status"] == "processed"
     assert second["result"]["status"] == "continuing"
     assert second["result"]["task"]["status"] == "queued"
-    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
-    assert second["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
-    assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
-    assert second["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
+    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "enter-existing-child"
+    assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
+    assert second["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
+
+    third = run_worker_once("agent-runtime")
+    assert third["status"] == "processed"
+    assert third["result"]["status"] == "continuing"
+    assert third["result"]["task"]["status"] == "queued"
+    assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
+    assert third["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
+    assert third["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert third["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     root_frame = next(
         frame
-        for frame in second["result"]["queuedWorkItem"]["payload"]["workContextStack"]["frames"]
+        for frame in third["result"]["queuedWorkItem"]["payload"]["workContextStack"]["frames"]
         if frame["nodeId"] == "root"
     )
     assert [item["childNodeId"] for item in root_frame["childCompletionSummaries"]] == ["child-1", "child-2"]
 
-    third = run_worker_once("agent-runtime")
-    assert third["status"] == "processed"
-    assert third["result"]["status"] == "awaiting-approval"
-    assert third["result"]["task"]["status"] == "awaiting-approval"
-    assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
-    assert third["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["approvalStop0_1"] == 1
-    assert third["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
+    fourth = run_worker_once("agent-runtime")
+    assert fourth["status"] == "processed"
+    assert fourth["result"]["status"] == "awaiting-approval"
+    assert fourth["result"]["task"]["status"] == "awaiting-approval"
+    assert fourth["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
+    assert fourth["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["approvalStop0_1"] == 1
+    assert fourth["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
 
     with runtime.session_scope() as session:
         task = TaskRepository(session).get_task("task_p4_multi_node_loop")
@@ -952,10 +991,10 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
     assert processed["result"]["status"] == "continuing"
-    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling-after-failure"
+    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
 
     queued_payload = processed["result"]["queuedWorkItem"]["payload"]
-    assert queued_payload["currentNodeId"] == "child-2"
+    assert queued_payload["currentNodeId"] == "root"
     assert queued_payload["allowToolExecution"] is False
     assert queued_payload["temperature"] == 0.1
     assert queued_payload["maxTokens"] == 256
@@ -970,22 +1009,20 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
     root_frame = next(frame for frame in queued_payload["workContextStack"]["frames"] if frame["nodeId"] == "root")
     assert root_frame["childCompletionSummaries"][0]["childNodeId"] == "child-1"
     assert root_frame["childCompletionSummaries"][0]["status"] == "failed"
-    assert queued_payload["workContextStack"]["topFrameId"] == "frame-child-2"
-    child_two_frame = next(frame for frame in queued_payload["workContextStack"]["frames"] if frame["nodeId"] == "child-2")
-    assert child_two_frame["cursorState"] == "continue-next-sibling-after-failure"
+    assert queued_payload["workContextStack"]["topFrameId"] == "frame-root"
 
 
-def test_runtime_provider_exception_leaf_failure_continues_sibling(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_provider_exception_leaf_failure_returns_parent_for_reorchestration(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
         TaskRepository(session).create_task(
             {
                 "id": "task_p4_provider_exception_leaf_failure",
-                "title": "P4 provider 异常叶子失败 continuation",
-                "goal": "验证 provider 异常会把当前叶子节点标记 failed 并继续 sibling。",
+                "title": "P4 provider 异常叶子失败返回父节点",
+                "goal": "验证 provider 异常会把当前叶子节点标记 failed 并回到父节点等待重新编排。",
                 "status": "draft",
-                "currentObjective": "在 child-1 上触发 provider 异常并继续 child-2。",
+                "currentObjective": "在 child-1 上触发 provider 异常并回到 root。",
                 "currentFocus": "child-1",
             }
         )
@@ -999,7 +1036,7 @@ def test_runtime_provider_exception_leaf_failure_continues_sibling(monkeypatch: 
     started = client.post(
         "/runtime/tasks/task_p4_provider_exception_leaf_failure/start",
         json={
-            "currentObjective": "在 child-1 上触发 provider 异常并继续 child-2。",
+            "currentObjective": "在 child-1 上触发 provider 异常并回到 root。",
             "currentFocus": "child-1",
             "takeoverProtocol": _nested_takeover_protocol("task_p4_provider_exception_leaf_failure"),
         },
@@ -1010,9 +1047,9 @@ def test_runtime_provider_exception_leaf_failure_continues_sibling(monkeypatch: 
     assert processed["status"] == "processed"
     assert processed["result"]["status"] == "continuing"
     assert processed["result"]["task"]["status"] == "queued"
-    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "continue-sibling-after-failure"
-    assert processed["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
-    assert processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
+    assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
+    assert processed["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     failed_child = next(
         node
         for node in processed["result"]["takeoverProtocol"]["workTree"]["nodes"]

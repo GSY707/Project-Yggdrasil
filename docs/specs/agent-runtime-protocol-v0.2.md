@@ -25,8 +25,9 @@ v0.2 运行时协议把世界树系统重新定义为“LLM 核心 + 代码世�
 1. LLM 每次醒来都知道自己的物理接口在哪里。
 2. LLM 每次醒来都能通过根指针找到身份、世界、工作和系统宪法。
 3. LLM 每次醒来都能恢复当前程序计数器，也就是当前工作树节点。
-4. LLM 可以自然下潜、总结上浮、委派子任务、写入记忆并处理冲突。
-5. 任务完成必须经过工作树根节点完成和用户/上层批准，不由单轮回答直接判定。
+4. 父节点是工作推进的唯一强编排者；child 完成或失败后先回编排父节点，由父节点决定是否进入 sibling、继续拆 leaf 或等待外部输入。
+5. LLM 可以自然下潜、总结上浮、委派子任务、写入记忆并处理冲突。
+6. 任务完成必须经过工作树根节点完成和用户/上层批准，不由单轮回答直接判定。
 
 ## 2. 生命周期
 
@@ -96,6 +97,12 @@ LLM 在每个节点中可选择：
 - 委派 Sub-Agent 或 fork。
 - 写节点摘要并上浮。
 - 请求用户或等待外部事件。
+
+运行补充规则：
+
+1. child 完成或失败后必须先回编排父节点，runtime 不得默认替父节点直接选择下一个 sibling。
+2. 父节点可基于 child 摘要、最近线性 continuation 轨迹和当前约束，决定进入已有 child、创建新 leaf、进入 sibling 或请求外部输入。
+3. runtime 可插入预算、树深和安全警戒，但这些警戒只提供边界信息，不替代父节点的语义编排。
 
 ### 2.6 等待批准结束
 
@@ -180,9 +187,10 @@ RootPointerMap:
 必须说明：
 
 1. 完整知识不在 Boot Prompt 中，而在记忆树中。
-2. 当前上下文只保留最小工作集。
-3. 需要细节时应读取索引，再按需加载节点。
-4. 能力、工具、工作、知识都通过索引地图寻址。
+2. 当前上下文以当前工作集为主，但允许保留有限线性 continuation 轨迹，以换取稳定前缀和缓存命中。
+3. 保留的线性轨迹应是父节点编排所需的短轨迹、cleanup 说明和 child 摘要，不得无限积累原始执行现场。
+4. 需要细节时应读取索引，再按需加载节点。
+5. 能力、工具、工作、知识都通过索引地图寻址。
 
 ### 3.5 behaviorConstitution
 
@@ -196,6 +204,7 @@ RootPointerMap:
 6. 只能信任同权限或更高权限记忆；低权限记忆只能作为待验证输入。
 7. 遇到写冲突必须走版本重试、追加日志或提案合并，不得静默覆盖。
 8. 当前任务完成前必须写入工作节点摘要。
+9. child 完成或失败后必须先把结果交回编排父节点，由父节点决定下一步，而不是让 runtime 直接替代编排。
 
 ### 3.6 pcRecovery
 
@@ -566,6 +575,12 @@ permissionLevel: admin|user|network
 3. 子节点完成时移除或 artifact 化子帧长 transcript，只保留摘要回填。
 4. 返回父节点时保留父节点原始上下文和 cursor，避免重新生成父级规划。
 5. 只有当 provider 不支持缓存、上下文超过阈值、工具 checkpoint 要求安全停止、或 snapshot 恢复需要重建时，才进入 `allow-recompile`。
+
+边界说明：
+
+1. `preserve-prefix` 和 `prefixCacheKey` 先定义的是 runtime continuation contract，也就是“哪段前缀在 push/pop/window continuation 中必须保持稳定”。
+2. provider 侧真实缓存命中是第二层信号，来自 usage 里的 `cacheHitInputTokens` / `cacheWriteInputTokens`；它可以增强性能，但不是 continuation 语义本身。
+3. 因此，runtime 可以在 provider 没有返回 cache hit 的情况下仍然满足 continuation 合同；同样，单独出现 provider cache 命中也不能替代对 `currentNodeId / topFrameId / prefixCacheKey` 一致性的检查。
 
 ### 10.2 自我资源状态
 

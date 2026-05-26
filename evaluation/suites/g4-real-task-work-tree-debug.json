@@ -2,6 +2,12 @@
   "id": "evalsuite_g4_real_task_work_tree_debug",
   "name": "G4 Real-Task Work-Tree Debug",
   "domain": "generic",
+  "suiteRole": "runtime-debug-harness",
+  "suiteRoleNote": "Intentionally pre-configures nested takeoverProtocol/workTree state to validate child->sibling->root continuation, failed-leaf bubble, approval stops, and work-tree delivery semantics. Not a default real-task planning template.",
+  "conventions": {
+    "conformsTo": null,
+    "exemptionReason": "Runtime semantic verification requires an explicitly seeded takeoverProtocol, nested work tree path, and prescribed debug report structure per real-task-test-conventions-v0.1 §4."
+  },
   "metricRefs": [
     "pass-rate",
     "restart-count",

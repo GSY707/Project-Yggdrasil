@@ -395,6 +395,9 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "latestVersionId 冲突时，不要静默覆盖" in tool_policy
     assert "记忆修改默认优先使用正式记忆工具" in response_requirements
     assert "<memory-write title=\"...\" rootBranch=\"context\">" in response_requirements
+    assert "<work-node-create ...></work-node-create>" in response_requirements
+    assert "<work-node-enter nodeId=\"...\"></work-node-enter>" in response_requirements
+    assert "child 完成或失败返回父节点后，由父节点决定下一步" in response_requirements
 
 
 def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() -> None:

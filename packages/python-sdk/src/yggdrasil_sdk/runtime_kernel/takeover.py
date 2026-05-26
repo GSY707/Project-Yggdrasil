@@ -915,31 +915,17 @@ def complete_current_work_node(
             parent_node_id=current_node.parent_node_id,
             child_summary=child_summary,
         )
-        next_sibling = pick_next_sibling_work_node(normalized_protocol, node_id=current_node.id)
-        if next_sibling is not None:
-            normalized_protocol, normalized_stack = switch_current_work_node(
-                normalized_protocol,
-                task_id=task_id,
-                agent_run_id=agent_run_id,
-                node_id=next_sibling.id,
-                work_context_stack=normalized_stack,
-                cursor_state="continue-next-sibling",
-            )
-            transition = "continue-sibling"
-            next_node_id = next_sibling.id
-            current_focus = _work_tree_focus_label(normalized_protocol)
-        else:
-            normalized_protocol, normalized_stack = bubble_to_parent_work_node(
-                normalized_protocol,
-                task_id=task_id,
-                agent_run_id=agent_run_id,
-                work_context_stack=normalized_stack,
-                node_id=current_node.id,
-                cursor_state="resume-parent-summary",
-            )
-            transition = "bubble-parent"
-            next_node_id = normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None
-            current_focus = _work_tree_focus_label(normalized_protocol)
+        normalized_protocol, normalized_stack = bubble_to_parent_work_node(
+            normalized_protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            work_context_stack=normalized_stack,
+            node_id=current_node.id,
+            cursor_state="resume-parent-after-child-completion",
+        )
+        transition = "bubble-parent"
+        next_node_id = normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None
+        current_focus = _work_tree_focus_label(normalized_protocol)
     else:
         work_tree_payload = normalized_protocol.work_tree.model_dump(by_alias=True, mode="json")
         work_tree_payload.update(
@@ -1053,23 +1039,6 @@ def fail_current_work_node(
         parent_node_id=current_node.parent_node_id,
         child_summary=failure_child_summary,
     )
-    next_sibling = pick_next_sibling_work_node(normalized_protocol, node_id=current_node.id)
-    if next_sibling is not None:
-        normalized_protocol, normalized_stack = switch_current_work_node(
-            normalized_protocol,
-            task_id=task_id,
-            agent_run_id=agent_run_id,
-            node_id=next_sibling.id,
-            work_context_stack=normalized_stack,
-            cursor_state="continue-next-sibling-after-failure",
-        )
-        return normalized_protocol, normalized_stack, {
-            "transition": "continue-sibling-after-failure",
-            "requiresContinuation": True,
-            "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
-            "nextNodeId": next_sibling.id,
-            "currentFocus": _work_tree_focus_label(normalized_protocol),
-        }
     normalized_protocol, normalized_stack = bubble_to_parent_work_node(
         normalized_protocol,
         task_id=task_id,
