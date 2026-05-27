@@ -596,10 +596,10 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             snapshot = None
             if request.get("resumeToken") is not None:
                 snapshot = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
-            elif task.active_snapshot_id:
-                snapshot = task_repository.get_snapshot(task.active_snapshot_id)
+            # Lossless restore fallback
             if command == "resume" and (snapshot is None or snapshot.status != "restorable"):
-                raise ValueError(f"Task {task_id} does not have a restorable snapshot.")
+                command = "start"
+                snapshot = None
             if snapshot is not None and command == "resume":
                 for pending_action in snapshot.pending_actions or []:
                     if not isinstance(pending_action, dict):
@@ -656,58 +656,79 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
 
             rehydration_result = None
             if snapshot is not None and command == "resume":
-                rehydration_started_at = perf_counter()
-                rehydration_results = collect_hook_results(
-                    HookNames.TASK_RESUME_REHYDRATE,
-                    {
-                        "taskId": task.id,
-                        "taskSnapshot": snapshot.model_dump(by_alias=True, mode="json"),
-                        "rootMounts": root_mount,
-                        "resumePolicy": {
-                            "resumePath": "snapshot",
-                            "preserveProtectedItems": True,
+                try:
+                    rehydration_started_at = perf_counter()
+                    rehydration_results = collect_hook_results(
+                        HookNames.TASK_RESUME_REHYDRATE,
+                        {
+                            "taskId": task.id,
+                            "taskSnapshot": snapshot.model_dump(by_alias=True, mode="json"),
+                            "rootMounts": root_mount,
+                            "resumePolicy": {
+                                "resumePath": "snapshot",
+                                "preserveProtectedItems": True,
+                            },
                         },
-                    },
-                    module_ids=root_mount.get("activeCapabilities") or None,
-                )
-                merged_restored_state: dict[str, Any] = {}
-                followup_actions: list[dict[str, Any]] = []
-                resume_summaries: list[str] = []
-                for item in rehydration_results:
-                    if item.get("error"):
-                        raise RuntimeError(f"Resume rehydrate failed in {item.get('moduleId')}: {item['error']}")
-                    result = item.get("result") if isinstance(item.get("result"), dict) else {}
-                    restored_state = result.get("restoredState") if isinstance(result.get("restoredState"), dict) else {}
-                    merged_restored_state.update(restored_state)
-                    if isinstance(result.get("followupActions"), list):
-                        followup_actions.extend(action for action in result["followupActions"] if isinstance(action, dict))
-                    if result.get("resumeMessage") is not None:
-                        request["resumeMessage"] = str(result["resumeMessage"])
-                        root_mount["resumeMessage"] = str(result["resumeMessage"])
-                    if result.get("summary") is not None:
-                        resume_summaries.append(str(result["summary"]))
-                if isinstance(merged_restored_state.get("currentContext"), list):
-                    current_context = [item for item in merged_restored_state["currentContext"] if isinstance(item, dict)]
-                if isinstance(merged_restored_state.get("protectedItems"), list):
-                    protected_items = [item for item in merged_restored_state["protectedItems"] if isinstance(item, dict)]
-                if isinstance(merged_restored_state.get("requestUpdates"), dict):
-                    request.update(merged_restored_state["requestUpdates"])
-                if isinstance(merged_restored_state.get("rootMount"), dict):
-                    root_mount.update(merged_restored_state["rootMount"])
-                if followup_actions:
-                    request["pendingActions"] = [
-                        action
-                        for action in [*(request.get("pendingActions") or []), *followup_actions]
-                        if isinstance(action, dict)
-                    ]
-                if resume_summaries:
-                    root_mount["rootSummary"] = " ".join([root_mount.get("rootSummary") or "", *resume_summaries]).strip()
-                rehydration_result = {
-                    "restoredState": merged_restored_state,
-                    "followupActions": followup_actions,
-                    "summaries": resume_summaries,
-                }
-                runtime_timings["resumeRehydrateMs"] = _elapsed_ms(rehydration_started_at)
+                        module_ids=root_mount.get("activeCapabilities") or None,
+                    )
+                    merged_restored_state: dict[str, Any] = {}
+                    followup_actions: list[dict[str, Any]] = []
+                    resume_summaries: list[str] = []
+                    for item in rehydration_results:
+                        if item.get("error"):
+                            raise RuntimeError(f"Resume rehydrate failed in {item.get('moduleId')}: {item['error']}")
+                        result = item.get("result") if isinstance(item.get("result"), dict) else {}
+                        restored_state = result.get("restoredState") if isinstance(result.get("restoredState"), dict) else {}
+                        merged_restored_state.update(restored_state)
+                        if isinstance(result.get("followupActions"), list):
+                            followup_actions.extend(action for action in result["followupActions"] if isinstance(action, dict))
+                        if result.get("resumeMessage") is not None:
+                            request["resumeMessage"] = str(result["resumeMessage"])
+                            root_mount["resumeMessage"] = str(result["resumeMessage"])
+                        if result.get("summary") is not None:
+                            resume_summaries.append(str(result["summary"]))
+                    if isinstance(merged_restored_state.get("currentContext"), list):
+                        current_context = [item for item in merged_restored_state["currentContext"] if isinstance(item, dict)]
+                    if isinstance(merged_restored_state.get("protectedItems"), list):
+                        protected_items = [item for item in merged_restored_state["protectedItems"] if isinstance(item, dict)]
+                    if isinstance(merged_restored_state.get("requestUpdates"), dict):
+                        request.update(merged_restored_state["requestUpdates"])
+                    if isinstance(merged_restored_state.get("rootMount"), dict):
+                        root_mount.update(merged_restored_state["rootMount"])
+                    if followup_actions:
+                        request["pendingActions"] = [
+                            action
+                            for action in [*(request.get("pendingActions") or []), *followup_actions]
+                            if isinstance(action, dict)
+                        ]
+                    if resume_summaries:
+                        root_mount["rootSummary"] = " ".join([root_mount.get("rootSummary") or "", *resume_summaries]).strip()
+                    rehydration_result = {
+                        "restoredState": merged_restored_state,
+                        "followupActions": followup_actions,
+                        "summaries": resume_summaries,
+                    }
+                    runtime_timings["resumeRehydrateMs"] = _elapsed_ms(rehydration_started_at)
+                except Exception as e:
+                    _logger.warning("Resume rehydrate failed, falling back to start and reloading task state: %s", e)
+                    command = "start"
+                    snapshot = None
+                    root_mount = build_root_mount_package(
+                        task_id,
+                        {
+                            "projectId": task.project_id,
+                            "branchId": task.branch_id,
+                            "spaceId": task.space_id,
+                            "taskObjective": request.get("taskObjective") or task.current_objective or task.goal,
+                            "currentObjective": request.get("currentObjective") or task.current_objective,
+                            "currentFocus": request.get("currentFocus") or task.current_focus,
+                            "resumeMessage": request.get("resumeMessage") or task.resume_message,
+                            "restartMessage": request.get("restartMessage") or task.restart_message,
+                            "responseRequirements": request.get("responseRequirements"),
+                            "budgetState": request.get("budgetState") or task.budget.model_dump(by_alias=True),
+                            "activeCapabilities": request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
+                        },
+                    )
 
             current_context = _hydrate_mailbox_runtime_state(
                 task=task,
@@ -741,12 +762,12 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     task_id=task.id,
                     payload=request,
                 )
-                request["taskRuntimeState"] = task_runtime_state
+                request["taskRuntimeState"] = task_runtime_state.model_dump(by_alias=True, mode="json")
 
             # Determine startupMode:
             if not has_task_input:
                 startup_mode = "standby"
-            elif task_runtime_state is not None and task_runtime_state.phase in ("lossless-restore", "task-state-loaded"):
+            elif task_runtime_state is not None and task_runtime_state.phase == "lossless-restore":
                 startup_mode = "resume-node"
             else:
                 startup_mode = "bootstrap"

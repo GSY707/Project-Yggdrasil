@@ -236,6 +236,10 @@ def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_aud
         )
     }
     for case in cases:
+        assert "seeded currentNodeId / Working_Node / WorkContextStack semantics as authoritative" in case["responseRequirements"]
+        assert "If the current node is child-1, first complete and bubble child-1 semantics" in case["responseRequirements"]
+        assert "Preserve the seeded currentNodeId / Working_Node / WorkContextStack semantics first" in case["currentContext"][3]["content"]
+    for case in cases:
         paths = {item["path"] for item in case["currentContextFiles"]}
         assert "docs/specs/work-tree-protocol-v0.2.md" in paths
         assert "docs/specs/agent-runtime-protocol-v0.2.md" in paths

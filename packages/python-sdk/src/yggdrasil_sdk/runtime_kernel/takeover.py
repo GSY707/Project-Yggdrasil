@@ -6,6 +6,7 @@ from typing import Any
 from ._common import *  # noqa: F403,F401
 from ..contracts import (
     ExternalRef,
+    TaskRuntimeState,
     TaskTakeoverDeliverySection,
     TaskTakeoverMetrics,
     TaskTakeoverPlanStep,
@@ -287,6 +288,10 @@ def sync_takeover_runtime_state(
     current_focus: str | None = None,
     work_context_stack: WorkContextStack | dict[str, Any] | None = None,
 ) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None]:
+    task_runtime_state = request.get("taskRuntimeState")
+    if task_runtime_state is None:
+        return protocol, _coerce_work_context_stack(work_context_stack)
+
     normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
         protocol,
         task_id=task_id,
@@ -324,6 +329,20 @@ def sync_takeover_runtime_state(
         root_mount["topFrameId"] = normalized_stack.top_frame_id
         root_mount["stackDigest"] = normalized_stack.stack_digest
         root_mount["currentFocus"] = request.get("currentFocus")
+
+    if isinstance(task_runtime_state, dict):
+        task_runtime_state = TaskRuntimeState.model_validate(task_runtime_state)
+    task_runtime_state.current_node_id = normalized_protocol.work_tree.current_node_id
+    task_runtime_state.working_node_annotation = current_node.working_node_annotation if current_node is not None else None
+    task_runtime_state.pc_memo = normalized_protocol.work_tree.pc_memo
+    task_runtime_state.takeover_protocol = normalized_protocol
+    task_runtime_state.work_context_stack = normalized_stack
+    if current_focus is not None:
+        task_runtime_state.current_focus = current_focus
+    elif not str(task_runtime_state.current_focus or "").strip():
+        task_runtime_state.current_focus = _work_tree_focus_label(normalized_protocol)
+    request["taskRuntimeState"] = task_runtime_state.model_dump(by_alias=True, mode="json")
+
     return normalized_protocol, normalized_stack
 
 
@@ -1201,6 +1220,25 @@ def build_takeover_continuation_request(
     if memory_retrieval_state is not None:
         memory_retrieval_state["workTreeNodeId"] = continuation["currentNodeId"]
         continuation["memoryRetrievalState"] = memory_retrieval_state
+
+    # Package taskRuntimeState inside continuation payload
+    task_runtime_state = {
+        "taskId": base_request.get("taskId") or protocol.task_id,
+        "phase": "task-state-loaded",
+        "taskObjective": base_request.get("taskObjective") or base_request.get("currentObjective") or protocol.objective,
+        "currentFocus": continuation.get("currentFocus"),
+        "currentNodeId": continuation.get("currentNodeId"),
+        "workingNodeAnnotation": continuation.get("workingNodeAnnotation"),
+        "pcMemo": continuation.get("pcMemo"),
+        "resumeMessage": base_request.get("resumeMessage"),
+        "restartMessage": base_request.get("restartMessage"),
+        "takeoverProtocol": continuation.get("takeoverProtocol"),
+        "workContextStack": continuation.get("workContextStack"),
+        "memoryRetrievalState": continuation.get("memoryRetrievalState"),
+        "budgetState": base_request.get("budgetState") or base_request.get("budget"),
+    }
+    continuation["taskRuntimeState"] = task_runtime_state
+
     return continuation
 
 

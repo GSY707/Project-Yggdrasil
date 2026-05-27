@@ -111,6 +111,8 @@ def _resolve_startup_state(
     task_objective: Any = None,
     current_focus: Any = None,
     mounted_context_count: int = 0,
+    has_real_snapshot: bool = False,
+    is_world_level: bool = True,
 ) -> dict[str, str | None]:
     pointer_fields = _runtime_pointer_fields(payload)
     has_work = any(
@@ -122,7 +124,10 @@ def _resolve_startup_state(
             current_focus,
         )
     ) or mounted_context_count > 0
-    startup_mode = "resume-node" if pointer_fields["currentNodeId"] is not None else "bootstrap" if has_work else "standby"
+    if is_world_level:
+        startup_mode = "resume-node" if has_real_snapshot else "bootstrap" if has_work else "standby"
+    else:
+        startup_mode = "resume-node" if pointer_fields["currentNodeId"] is not None else "bootstrap" if has_work else "standby"
     standby_reason = None if startup_mode != "standby" else "no-active-work"
     return {
         **pointer_fields,
@@ -215,7 +220,7 @@ def _system_root_protocol(
     return {
         "nodeId": "SYS_ROOT_PROTOCOL",
         "label": "[NODE_ID: SYS_ROOT_PROTOCOL]",
-        "summary": "系统宪法、底层协议和能力索引入口。",
+        "summary": "系统宪法、底层协议 and 能力索引入口。",
         "protocols": ["Agent Runtime v0.2", "WorkTreeProtocol v0.2"],
         "capabilityCount": len(capability_index),
         "toolCount": len(tool_index),
@@ -249,8 +254,15 @@ def _root_mount_runtime_metadata(
     active_capabilities: list[str],
     mailbox_state: dict[str, Any] | None = None,
     is_world_level: bool = True,
+    has_real_snapshot: bool = False,
 ) -> dict[str, Any]:
-    startup_state = _resolve_startup_state(payload, task_objective=task_objective, current_focus=current_focus)
+    startup_state = _resolve_startup_state(
+        payload,
+        task_objective=task_objective,
+        current_focus=current_focus,
+        has_real_snapshot=has_real_snapshot,
+        is_world_level=is_world_level,
+    )
     if is_world_level:
         startup_state["currentNodeId"] = None
         startup_state["workingNodeAnnotation"] = None
@@ -434,6 +446,7 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
     identity_refs = [_root_ref(project_id, branch_id, "identity")]
     context_refs = [_root_ref(project_id, branch_id, "context")]
     execution_refs = [_root_ref(project_id, branch_id, "execution")]
+    has_real_snapshot = False
 
     try:
         with runtime.session_scope() as session:
@@ -461,8 +474,19 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
                     branch_id,
                     task_record.execution_root_node_id,
                 )
+                
+                snapshot_rec = None
+                if request.get("resumeToken") is not None:
+                    snapshot_rec = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
+                elif task_record.active_snapshot_id:
+                    snapshot_rec = task_repository.get_snapshot(task_record.active_snapshot_id)
+                
+                if snapshot_rec is not None and snapshot_rec.status == "restorable":
+                    if snapshot_rec.snapshot_type != "restart":
+                        has_real_snapshot = True
+                
                 if task_record.active_snapshot_id and not resume_message:
-                    snapshot = task_repository.get_snapshot(task_record.active_snapshot_id)
+                    snapshot = snapshot_rec or task_repository.get_snapshot(task_record.active_snapshot_id)
                     if snapshot is not None and snapshot.resume_message:
                         resume_message = snapshot.resume_message
                 mailbox_state = runtime_repository.get_mailbox_state(task_record.id)
@@ -491,6 +515,7 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         active_capabilities=active_capabilities,
         mailbox_state=mailbox_state,
         is_world_level=True,
+        has_real_snapshot=has_real_snapshot,
     )
 
     summary_parts = [
@@ -498,17 +523,9 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         "Context root is mounted for project and world state.",
         "Execution root is mounted for current task progress and resumability.",
     ]
-    if current_focus:
-        summary_parts.append(f"Current focus: {normalize_excerpt(str(current_focus), 120)}")
-    if task_objective:
-        summary_parts.append(f"Objective: {normalize_excerpt(str(task_objective), 160)}")
-    if resume_message:
-        summary_parts.append(f"Resume message available: {normalize_excerpt(str(resume_message), 120)}")
     summary_parts.append(f"Startup mode: {runtime_metadata['startupMode']}.")
     if int(runtime_metadata["mailboxState"].get("pendingCount") or 0) > 0:
         summary_parts.append(f"Mailbox pending messages: {runtime_metadata['mailboxState']['pendingCount']}.")
-    if runtime_metadata.get("currentNodeId") is not None:
-        summary_parts.append(f"Current work node: {runtime_metadata['currentNodeId']}")
     if runtime_metadata["startupMode"] == "standby":
         summary_parts.append("No active work is mounted; remain in standby until user or mailbox input arrives.")
 
@@ -568,8 +585,8 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         contextRefs=context_refs,
         executionRefs=execution_refs,
         rootSummary=" ".join(summary_parts),
-        taskObjective=str(task_objective) if task_objective is not None else None,
-        resumeMessage=str(resume_message) if resume_message is not None else None,
+        taskObjective=None,
+        resumeMessage=None,
         budgetState=budget_state,
         activeCapabilities=active_capabilities,
         semanticRoots=runtime_metadata["semanticRoots"],
@@ -580,11 +597,11 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
         startupMode=runtime_metadata["startupMode"],
         mailboxState=runtime_metadata["mailboxState"],
         standbyState=runtime_metadata["standbyState"],
-        currentNodeId=runtime_metadata["currentNodeId"],
-        workingNodeAnnotation=runtime_metadata["workingNodeAnnotation"],
-        pcMemo=runtime_metadata["pcMemo"],
-        topFrameId=runtime_metadata["topFrameId"],
-        stackDigest=runtime_metadata["stackDigest"],
+        currentNodeId=None,
+        workingNodeAnnotation=None,
+        pcMemo=None,
+        topFrameId=None,
+        stackDigest=None,
         generatedAt=utc_now(),
     )
     response = package.model_dump(by_alias=True, mode="json")
@@ -626,6 +643,7 @@ def build_task_runtime_state(
     task_objective = request.get("taskObjective") or request.get("currentObjective")
     resume_message = request.get("resumeMessage")
     restart_message = request.get("restartMessage")
+    has_real_snapshot = False
     
     try:
         with runtime.session_scope() as session:
@@ -636,8 +654,19 @@ def build_task_runtime_state(
                 task_objective = request.get("taskObjective") or request.get("currentObjective") or task_record.current_objective or task_record.goal
                 resume_message = request.get("resumeMessage") or task_record.resume_message
                 restart_message = request.get("restartMessage") or task_record.restart_message
+                
+                snapshot_rec = None
+                if request.get("resumeToken") is not None:
+                    snapshot_rec = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
+                elif task_record.active_snapshot_id:
+                    snapshot_rec = task_repository.get_snapshot(task_record.active_snapshot_id)
+                
+                if snapshot_rec is not None and snapshot_rec.status == "restorable":
+                    if snapshot_rec.snapshot_type != "restart":
+                        has_real_snapshot = True
+                
                 if task_record.active_snapshot_id and not resume_message:
-                    snapshot = task_repository.get_snapshot(task_record.active_snapshot_id)
+                    snapshot = snapshot_rec or task_repository.get_snapshot(task_record.active_snapshot_id)
                     if snapshot is not None and snapshot.resume_message:
                         resume_message = snapshot.resume_message
     except Exception:
@@ -669,7 +698,7 @@ def build_task_runtime_state(
     memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
 
     if phase is None:
-        if request.get("resumeToken") is not None or request.get("resumeMessage") is not None or request.get("restartMessage") is not None:
+        if has_real_snapshot:
             phase = "lossless-restore"
         elif pointer_fields["currentNodeId"] is not None:
             phase = "task-state-loaded"

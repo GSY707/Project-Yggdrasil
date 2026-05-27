@@ -88,7 +88,7 @@ def test_main_agent_start_without_active_work_enters_standby_without_running_mod
         assert runs == []
 
 
-def test_main_agent_start_with_current_work_node_uses_resume_node_startup_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -96,7 +96,7 @@ def test_main_agent_start_with_current_work_node_uses_resume_node_startup_mode(m
             {
                 "id": "task_start_resume_node",
                 "title": "热启动恢复当前节点",
-                "goal": "验证 start 路径在已有工作节点时直接进入当前节点而不是回退 bootstrap。",
+                "goal": "验证 start 路径在已有工作节点但无真实恢复现场时，走任务态加载而不是无损恢复。",
                 "status": "draft",
                 "currentObjective": "继续执行 node-run。",
                 "currentFocus": "node-run",
@@ -210,7 +210,7 @@ def test_main_agent_start_with_current_work_node_uses_resume_node_startup_mode(m
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
     assert len(invoke_calls) == 1, processed["result"].get("detail")
-    assert invoke_calls[0]["startupMode"] == "resume-node"
+    assert invoke_calls[0]["startupMode"] == "bootstrap"
     assert invoke_calls[0]["currentNodeId"] == "node-run"
     assert invoke_calls[0]["workingNodeAnnotation"] == "<Working_Node: node-run>"
     assert invoke_calls[0]["memoryRetrievalState"]["workTreeNodeId"] == "node-run"
@@ -785,11 +785,9 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
             "physical_interface",
             "world_roots",
             "behavior_constitution",
-            "scene_recovery",
         }
-        assert artifact.work_tree_snapshot is not None
-        assert artifact.takeover_protocol_snapshot is not None
-        assert artifact.work_tree_snapshot["currentNodeId"] is not None
+        assert artifact.work_tree_snapshot is None
+        assert artifact.takeover_protocol_snapshot is None
         assert invocations[0].request_ref is not None
         assert invocations[0].response_ref is not None
         assert invocations[0].assistant_text_summary is not None
@@ -801,9 +799,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         assert request_payload["promptMetadata"]["promptProfileId"] == "yggdrasil.main-agent"
         assert request_payload["promptMetadata"]["seedTemplateId"] == "yggdrasil.seed.generic.default"
         assert request_payload["promptMetadata"]["runType"] == "main"
-        assert request_payload["promptMetadata"]["takeoverProtocol"]["objective"] == "完成首次执行并进入 safe-stop。"
-        assert request_payload["promptMetadata"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
-        assert request_payload["promptMetadata"]["takeoverProtocol"]["workTree"]["status"] == "active"
+        assert request_payload["promptMetadata"].get("takeoverProtocol") is None
         response_path = Path(resolve_workspace_root()) / invocations[0].response_ref.locator
         response_payload = json.loads(response_path.read_text(encoding="utf-8"))
         assert isinstance(response_payload["assistantText"], str)
@@ -870,11 +866,15 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         assert {invocation.status for invocation in invocations} == {"fallback"}
         assert all(invocation.assistant_text_summary for invocation in invocations)
         assert all(any(label.startswith("work-tree:") for label in invocation.output_labels) for invocation in invocations)
-        for invocation in invocations:
-            artifact = prompt_repository.get_prompt_compile_artifact(str(invocation.prompt_compile_artifact_id))
-            assert artifact is not None
-            assert artifact.work_tree_snapshot is not None
-            assert artifact.takeover_protocol_snapshot is not None
+        artifact_1 = prompt_repository.get_prompt_compile_artifact(str(invocations[1].prompt_compile_artifact_id))
+        assert artifact_1 is not None
+        assert artifact_1.work_tree_snapshot is None
+        assert artifact_1.takeover_protocol_snapshot is None
+
+        artifact_2 = prompt_repository.get_prompt_compile_artifact(str(invocations[0].prompt_compile_artifact_id))
+        assert artifact_2 is not None
+        assert artifact_2.work_tree_snapshot is not None
+        assert artifact_2.takeover_protocol_snapshot is not None
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)

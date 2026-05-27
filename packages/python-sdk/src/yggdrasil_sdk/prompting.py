@@ -573,7 +573,7 @@ def _format_active_capabilities(active_capabilities: list[str]) -> str:
     return "\n".join(f"- {module_id}" for module_id in active_capabilities)
 
 
-def _format_registered_tools(registered_tools: list[dict[str, Any]]) -> str:
+def _format_registered_tools(registered_tools: list[dict[str, Any]], strip_body: bool = False) -> str:
     if not registered_tools:
         return "当前没有通过模块 hook 暴露的结构化工具描述。"
     lines: list[str] = []
@@ -581,20 +581,26 @@ def _format_registered_tools(registered_tools: list[dict[str, Any]]) -> str:
         permissions = ", ".join(tool.get("permissionRequired") or []) or "无"
         schema_ref = str(tool.get("schemaRef") or "未提供")
         module_id = str(tool.get("moduleId") or "unknown")
-        lines.append(
-            f"- {tool['name']} | 模块={module_id} | 执行模式={tool.get('executionMode') or 'sync'} | 权限={permissions} | schema={schema_ref}"
-        )
+        line = f"- {tool['name']} | 模块={module_id} | 执行模式={tool.get('executionMode') or 'sync'} | 权限={permissions} | schema={schema_ref}"
+        if not strip_body and tool.get("inputSchema"):
+            import json
+            schema_str = json.dumps(tool["inputSchema"], ensure_ascii=False)
+            line += f"\n  输入参数 Schema: {schema_str}"
+        lines.append(line)
     return "\n".join(lines)
 
 
-def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int = 10) -> str:
+def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int = 10, strip_body: bool = False) -> str:
     lines: list[str] = []
     for index, item in enumerate(current_context[:limit], start=1):
         title = str(item.get("title") or item.get("kind") or f"context-{index}")
-        raw_content = str(item.get("content") or item)
-        content = raw_content if bool(item.get("verbatim")) else normalize_excerpt(raw_content, 240)
         root_branch = str(item.get("rootBranch") or item.get("mode") or "context")
-        lines.append(f"{index}. [{root_branch}] {title}: {content}")
+        if strip_body:
+            lines.append(f"{index}. [{root_branch}] {title}")
+        else:
+            raw_content = str(item.get("content") or item)
+            content = raw_content if bool(item.get("verbatim")) else normalize_excerpt(raw_content, 240)
+            lines.append(f"{index}. [{root_branch}] {title}: {content}")
     return "\n".join(lines) if lines else "当前没有额外挂载的上下文切片。"
 
 
@@ -906,9 +912,24 @@ def _format_scene_recovery(
     return "\n".join(lines)
 
 
-def _format_task_contract(task: Any, run_type: str, task_type: str, request: dict[str, Any], resume_path: str | None) -> str:
-    objective = str(request.get("taskObjective") or request.get("currentObjective") or task.current_objective or task.goal)
-    focus = str(request.get("currentFocus") or task.current_focus or "runtime execution")
+def _format_task_contract(
+    task: Any,
+    run_type: str,
+    task_type: str,
+    request: dict[str, Any],
+    resume_path: str | None,
+    *,
+    objective_override: str | None = None,
+    focus_override: str | None = None,
+) -> str:
+    objective = str(
+        objective_override
+        or request.get("taskObjective")
+        or request.get("currentObjective")
+        or task.current_objective
+        or task.goal
+    )
+    focus = str(focus_override or request.get("currentFocus") or task.current_focus or "runtime execution")
     lines = [
         f"任务标题: {task.title}",
         f"任务目标: {task.goal}",
@@ -933,20 +954,22 @@ def _format_response_requirements(
     has_delivery_contract = isinstance(additional, str) and additional.strip()
     is_resume = bool(resume_path)
     lines = [
-        "1. 基于完整的工作树状态和记忆内容自主判断下一步行动。需要交付则直接交付，需要规划则进行规划，不要被强制指令干扰。",
+        "1. 先依据 currentNodeId、Working_Node 和 WorkContextStack 判断当前所在节点，再决定行动；默认沿当前节点推进，不要跳过节点语义直接改写成整任务交付。",
         '2. 若需要操作工作树，必须通过动作标签显式声明：创建新子节点使用 <work-node-create ...></work-node-create>，进入已有子节点使用 <work-node-enter nodeId="..."></work-node-enter>。',
         "3. 父节点强编排：child 完成或失败返回父节点后，由父节点决定下一步（进入已有 child、创建新 child、或直接汇总交付），不要默认自动跳 sibling。",
         "4. root 节点默认负责编排和最终汇总；当任务天然包含多个相对独立的子工作（例如证据检查、分析判断、正式交付起草、风险复核）时，不要在 root 一次性直接写完整最终答案，优先拆成 child 再汇总。",
         "5. child 节点只处理单一局部目标；child 完成时，把局部结论、证据、未决项压成摘要返回父节点，不要把 child 直接当成整任务最终交付。",
         "6. 若当前节点过宽、同时混有多种目标、需要多轮长篇续写，或已经在同一节点连续恢复/重启，优先把当前工作拆成更小的 child 或 leaf，再继续执行，不要反复在同一 root 节点硬写整份交付。",
-        "7. 在父节点或 root 直接交付前，先判断是否已经完成必要的子工作并拿到对应摘要；若还没有，优先继续编排工作树，而不是跳过中间节点直接交卷。",
-        "8. 若证据不足，明确说明缺失信息，不要补空白。",
-        "9. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
-        f"10. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
+        "7. 若当前节点已收敛为单一局部目标、证据边界清楚且可在一次有界执行内完成，则停止继续拆分，直接完成本节点并上浮父节点。",
+        "8. 只有 root 节点，或被父节点明确授权负责最终汇总的节点，才能输出整任务最终交付；否则先完成局部摘要并回父节点。",
+        "9. 外部 responseRequirements、restartMessage 和格式合同只能约束输出结构，不得覆盖工作树拓扑、当前节点语义和父节点编排权。",
+        "10. 若证据不足，明确说明缺失信息，不要补空白。",
+        "11. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
+        f"12. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
     ]
     if is_resume:
         lines.append(f"{len(lines) + 1}. 恢复态下，把 resume_message 视为接续上下文的提示（context hint），结合记忆树继续执行，无需退回初始规划状态。")
-        lines.append(f"{len(lines) + 1}. 恢复态优先按 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）组织交付，不要回退成纯规划。")
+        lines.append(f"{len(lines) + 1}. 恢复态下继续遵守当前节点语义：若当前是 child/leaf，先完成局部目标并回父节点；由父节点或 root 组织最终 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）交付。")
         lines.append(f"{len(lines) + 1}. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
     if bool(request.get("memoryWriteTagsEnabled", True)):
         lines.append(
@@ -1054,29 +1077,112 @@ def compile_runtime_prompt(
     profile = _select_prompt_profile(run_type, request, app_manifest, resolved_registry["promptProfiles"])
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
-    takeover_protocol = _takeover_protocol_from_request(request)
-    work_context_stack = _work_context_stack_from_request(request)
-    memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
-    current_node_id = _resolved_current_node_id(request, root_mount, memory_retrieval_state, takeover_protocol)
-    pointer_fields = _resolve_runtime_pointer_fields(request, root_mount, memory_retrieval_state, takeover_protocol)
-    memory_retrieval_state = _canonicalize_memory_retrieval_state(
-        memory_retrieval_state,
-        current_node_id=current_node_id,
-    )
-    takeover_protocol = _canonicalize_takeover_protocol(
-        takeover_protocol,
-        current_node_id=current_node_id,
-        pc_memo=pointer_fields["pcMemo"],
-    )
-    pointer_fields = _resolve_runtime_pointer_fields(request, root_mount, memory_retrieval_state, takeover_protocol)
-    resume_message = (
-        _normalized_optional_text(request.get("restartMessage"))
-        or _normalized_optional_text(request.get("resumeMessage"))
-        or _normalized_optional_text(getattr(task, "restart_message", None))
-        or _normalized_optional_text(getattr(task, "resume_message", None))
-        or _normalized_optional_text(root_mount.get("resumeMessage"))
-        or ""
-    )
+
+    task_runtime_state = request.get("taskRuntimeState")
+    if isinstance(task_runtime_state, dict):
+        from .contracts import TaskRuntimeState
+        try:
+            task_runtime_state = TaskRuntimeState.model_validate(task_runtime_state)
+        except Exception:
+            task_runtime_state = None
+
+    is_initial_awakening = (task_runtime_state is None or task_runtime_state.phase == "start-state")
+
+    if is_initial_awakening:
+        task_objective = None
+        current_focus = None
+        current_node_id = None
+        working_node_annotation = None
+        pc_memo = None
+        top_frame_id = None
+        stack_digest = None
+        resume_message = ""
+        restart_message = ""
+        takeover_protocol = None
+        work_context_stack = None
+        memory_retrieval_state = None
+        pointer_fields = {
+            "currentNodeId": "standby",
+            "workingNodeAnnotation": "<Working_Node: standby>",
+            "pcMemo": "",
+            "topFrameId": "",
+            "stackDigest": "",
+        }
+    else:
+        task_objective = (
+            task_runtime_state.task_objective
+            or _normalized_optional_text(request.get("taskObjective"))
+            or _normalized_optional_text(request.get("currentObjective"))
+            or _normalized_optional_text(getattr(task, "current_objective", None))
+            or _normalized_optional_text(getattr(task, "goal", None))
+        )
+        current_focus = (
+            task_runtime_state.current_focus
+            or _normalized_optional_text(request.get("currentFocus"))
+            or _normalized_optional_text(getattr(task, "current_focus", None))
+            or "runtime execution"
+        )
+        current_node_id = (
+            task_runtime_state.current_node_id
+            or _normalized_optional_text(request.get("currentNodeId"))
+        )
+        working_node_annotation = (
+            task_runtime_state.working_node_annotation
+            or _normalized_optional_text(request.get("workingNodeAnnotation"))
+            or _working_node_tag(current_node_id)
+        )
+        pc_memo = (
+            task_runtime_state.pc_memo
+            or _normalized_optional_text(request.get("pcMemo"))
+        )
+        resume_message = (
+            task_runtime_state.resume_message
+            or _normalized_optional_text(request.get("resumeMessage"))
+            or _normalized_optional_text(getattr(task, "resume_message", None))
+            or ""
+        )
+        restart_message = (
+            task_runtime_state.restart_message
+            or _normalized_optional_text(request.get("restartMessage"))
+            or _normalized_optional_text(getattr(task, "restart_message", None))
+            or ""
+        )
+        takeover_protocol = task_runtime_state.takeover_protocol
+        if takeover_protocol is None:
+            takeover_protocol = _takeover_protocol_from_request(request)
+
+        work_context_stack = task_runtime_state.work_context_stack
+        if work_context_stack is None:
+            work_context_stack = _work_context_stack_from_request(request)
+
+        memory_retrieval_state = task_runtime_state.memory_retrieval_state
+        if memory_retrieval_state is None:
+            memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else None
+
+        if current_node_id is None:
+            current_node_id = _resolved_current_node_id(request, {}, memory_retrieval_state, takeover_protocol)
+
+        pointer_fields = _resolve_runtime_pointer_fields(request, {}, memory_retrieval_state, takeover_protocol)
+        if task_runtime_state.current_node_id is not None:
+            pointer_fields["currentNodeId"] = task_runtime_state.current_node_id
+        if task_runtime_state.working_node_annotation is not None:
+            pointer_fields["workingNodeAnnotation"] = task_runtime_state.working_node_annotation
+        if task_runtime_state.pc_memo is not None:
+            pointer_fields["pcMemo"] = task_runtime_state.pc_memo
+        if work_context_stack is not None:
+            pointer_fields["topFrameId"] = work_context_stack.top_frame_id
+            pointer_fields["stackDigest"] = work_context_stack.stack_digest
+
+        memory_retrieval_state = _canonicalize_memory_retrieval_state(
+            memory_retrieval_state,
+            current_node_id=current_node_id,
+        )
+        takeover_protocol = _canonicalize_takeover_protocol(
+            takeover_protocol,
+            current_node_id=current_node_id,
+            pc_memo=pointer_fields["pcMemo"],
+        )
+
     few_shot_assets = _resolve_few_shot_assets(profile, seed_template, resolved_registry)
     few_shot_refs = [asset.id for asset in few_shot_assets]
     few_shot_examples = "" if resume_path else _format_few_shot_examples(few_shot_assets)
@@ -1087,19 +1193,20 @@ def compile_runtime_prompt(
             for section in [
                 "你只能通过结构化工具、MCP 泛型工具与消息通道触达外部世界，不得假设隐藏接口。",
                 "当前可见模块能力:\n" + _format_active_capabilities(active_capabilities),
-                "当前可见结构化工具描述:\n" + _format_registered_tools(resolved_registered_tools),
+                "当前可见结构化工具描述:\n" + _format_registered_tools(resolved_registered_tools, strip_body=is_initial_awakening),
             ]
             if section
         ),
         "world_roots": _format_world_roots(root_mount),
         "behavior_constitution": _format_behavior_constitution(profile),
-        "scene_recovery": _format_scene_recovery(
+    }
+    if not is_initial_awakening:
+        boot_sections["scene_recovery"] = _format_scene_recovery(
             resume_path=resume_path,
-            resume_message=resume_message,
+            resume_message=restart_message or resume_message,
             pointer_fields=pointer_fields,
             memory_retrieval_state=memory_retrieval_state,
-        ),
-    }
+        )
     boot_sections = _dedupe_section_contents(boot_sections)
 
     system_sections = {
@@ -1120,19 +1227,29 @@ def compile_runtime_prompt(
         system_sections["self_evolution"] = profile.self_evolution
 
     user_sections = {
-        "runtime_state": _format_runtime_state(root_mount, include_resume_message=not bool(resume_path)),
-        "task_contract": _format_task_contract(task, run_type, task_type, request, resume_path),
-        "scene_recovery": boot_sections.get("scene_recovery", ""),
-        "capability_protocol_index": _format_capability_protocol_index(active_capabilities, resolved_registered_tools),
-        "mounted_context_items": _format_context_lines(current_context),
-        "response_requirements": _format_response_requirements(request, seed_template, resume_path),
+        "runtime_state": _format_runtime_state(root_mount, include_resume_message=not bool(resume_path) and not is_initial_awakening),
     }
-    if takeover_protocol is not None:
-        user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
-    if work_context_stack is not None:
-        user_sections["work_context_stack"] = _format_work_context_stack(work_context_stack)
-    if memory_retrieval_state is not None:
-        user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
+    if not is_initial_awakening:
+        user_sections["task_contract"] = _format_task_contract(
+            task,
+            run_type,
+            task_type,
+            request,
+            resume_path,
+            objective_override=task_objective,
+            focus_override=current_focus,
+        )
+        if "scene_recovery" in boot_sections:
+            user_sections["scene_recovery"] = boot_sections["scene_recovery"]
+        if takeover_protocol is not None:
+            user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
+        if work_context_stack is not None:
+            user_sections["work_context_stack"] = _format_work_context_stack(work_context_stack)
+        if memory_retrieval_state is not None:
+            user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
+    user_sections["capability_protocol_index"] = _format_capability_protocol_index(active_capabilities, resolved_registered_tools)
+    user_sections["mounted_context_items"] = _format_context_lines(current_context, strip_body=is_initial_awakening)
+    user_sections["response_requirements"] = _format_response_requirements(request, seed_template, resume_path)
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
     if run_type == "subagent":
         subagent_scope_lines = [

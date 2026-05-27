@@ -53,7 +53,7 @@
         {
           "id": "ctx_work_tree_debug_delivery_mode",
           "title": "delivery mode contract",
-          "content": "Tool execution is disabled for this case. Treat the provided anchors as the evidence set. Do not describe future scanning or tool usage. Start immediately with the final Markdown report using these exact section headings: '## 1. 目标工作树模型', '## 2. 实际执行路径', '## 3. 节点与窗口一致性', '## 4. 失败与上浮语义', '## 5. approval 与完成语义', '## 6. 差距判断', '## 7. 下一步'.",
+          "content": "Tool execution is disabled for this case. Treat the provided anchors as the evidence set. Do not describe future scanning or tool usage. Preserve the seeded currentNodeId / Working_Node / WorkContextStack semantics first; if the current node is a child, finish that child and bubble to the parent before final root-level synthesis. The final report must still use these exact section headings: '## 1. 目标工作树模型', '## 2. 实际执行路径', '## 3. 节点与窗口一致性', '## 4. 失败与上浮语义', '## 5. approval 与完成语义', '## 6. 差距判断', '## 7. 下一步'.",
           "importance": 1.0
         }
       ],
@@ -186,11 +186,11 @@
         "appliedModules": ["task-takeover"],
         "hookTrace": []
       },
-      "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
       "allowFallback": false,
       "allowToolExecution": false,
-      "allowPaidModels": false,
+      "allowPaidModels": true,
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
@@ -223,8 +223,8 @@
       "acceptanceRequirePrefixCacheKey": true,
       "acceptanceMinCacheEvidence0_1": 1.0,
       "failOnAcceptanceViolation": true,
-      "responseRequirements": "Produce the complete work-tree debug report directly. Required sections: 1) 目标工作树模型, 2) 实际执行路径, 3) 节点与窗口一致性, 4) 失败与上浮语义, 5) approval 与完成语义, 6) 差距判断 (must explicitly state 一致 or 不一致), 7) 下一步. Treat the provided anchors as the complete evidence set. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
-      "restartMessage": "Window continuation: continue the work-tree debug report and keep the same seven sections. Reuse the intended work-tree model, compare it against the actual execution path, and make an explicit 一致/不一致 judgment. Output Markdown only and do not emit XML/tool/MCP tags.",
+      "responseRequirements": "Produce the complete work-tree debug report directly, but treat the seeded currentNodeId / Working_Node / WorkContextStack as authoritative. If the current node is child-1, first complete and bubble child-1 semantics, then let the parent/root synthesize the final report. Required sections: 1) 目标工作树模型, 2) 实际执行路径, 3) 节点与窗口一致性, 4) 失败与上浮语义, 5) approval 与完成语义, 6) 差距判断 (must explicitly state 一致 or 不一致), 7) 下一步. Treat the provided anchors as the complete evidence set. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window continuation: continue the work-tree debug report and keep the same seven sections, while preserving the seeded currentNodeId / Working_Node / WorkContextStack semantics. If the current node is child-1, first finish child-1 and bubble to the parent before root-level synthesis. Reuse the intended work-tree model, compare it against the actual execution path, and make an explicit 一致/不一致 judgment. Output Markdown only and do not emit XML/tool/MCP tags.",
       "effectiveContextWindow": 64000,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 6,
@@ -239,7 +239,7 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "work-tree", "debug", "longcat", "short-window"],
+      "tags": ["g4", "real-task", "work-tree", "debug", "deepseek", "short-window"],
       "difficulty": "hard"
     },
     {
@@ -411,11 +411,11 @@
         "appliedModules": ["task-takeover"],
         "hookTrace": []
       },
-      "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
       "allowFallback": false,
       "allowToolExecution": false,
-      "allowPaidModels": false,
+      "allowPaidModels": true,
       "requireLive": true,
       "temperature": 0.1,
       "maxTokens": 4000,
@@ -448,8 +448,8 @@
       "acceptanceRequirePrefixCacheKey": true,
       "acceptanceMinCacheEvidence0_1": 1.0,
       "failOnAcceptanceViolation": true,
-      "responseRequirements": "Produce the complete work-tree debug report directly. Required sections: 1) 目标工作树模型, 2) 实际执行路径, 3) 节点与窗口一致性, 4) 失败与上浮语义, 5) approval 与完成语义, 6) 差距判断 (must explicitly state 一致 or 不一致), 7) 下一步. Treat the provided anchors as the complete evidence set. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
-      "restartMessage": "Window continuation: continue the work-tree debug report and keep the same seven sections. Reuse the intended work-tree model, compare it against the actual execution path, and make an explicit 一致/不一致 judgment. Output Markdown only and do not emit XML/tool/MCP tags.",
+      "responseRequirements": "Produce the complete work-tree debug report directly, but treat the seeded currentNodeId / Working_Node / WorkContextStack as authoritative. If the current node is child-1, first complete and bubble child-1 semantics, then let the parent/root synthesize the final report. Required sections: 1) 目标工作树模型, 2) 实际执行路径, 3) 节点与窗口一致性, 4) 失败与上浮语义, 5) approval 与完成语义, 6) 差距判断 (must explicitly state 一致 or 不一致), 7) 下一步. Treat the provided anchors as the complete evidence set. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, <tool_calls>, or planning preambles. Do not stop at planning or next-steps summary.",
+      "restartMessage": "Window continuation: continue the work-tree debug report and keep the same seven sections, while preserving the seeded currentNodeId / Working_Node / WorkContextStack semantics. If the current node is child-1, first finish child-1 and bubble to the parent before root-level synthesis. Reuse the intended work-tree model, compare it against the actual execution path, and make an explicit 一致/不一致 judgment. Output Markdown only and do not emit XML/tool/MCP tags.",
       "effectiveContextWindow": 128000,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 0,
@@ -464,7 +464,7 @@
         "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
         "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
       ],
-      "tags": ["g4", "real-task", "work-tree", "debug", "longcat", "long-window"],
+      "tags": ["g4", "real-task", "work-tree", "debug", "deepseek", "long-window"],
       "difficulty": "hard"
     }
   ]

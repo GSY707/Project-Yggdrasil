@@ -78,10 +78,12 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
         )
         if request.get(key) is not None
     }
-    for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites", "workContextStack"):
+    for key in ("takeoverProtocol", "memoryRetrievalState", "memoryTagWrites", "workContextStack", "taskRuntimeState"):
         value = request.get(key)
         if isinstance(value, dict):
             request_state[key] = deepcopy(value)
+        elif hasattr(value, "model_dump"):
+            request_state[key] = value.model_dump(by_alias=True, mode="json")
     # Keep restart/resume contract keys stable across windows, even when temporarily empty.
     request_state.setdefault("responseRequirements", deepcopy(request.get("responseRequirements")))
     request_state.setdefault("restartMessage", deepcopy(request.get("restartMessage")))

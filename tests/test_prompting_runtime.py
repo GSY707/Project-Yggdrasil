@@ -56,7 +56,6 @@ def test_compile_runtime_prompt_for_main_coding_uses_existing_project_seed() -> 
         "physical_interface",
         "world_roots",
         "behavior_constitution",
-        "scene_recovery",
     }
     assert "深潜研究员与继承开发者" in compiled.messages[0]["content"]
     assert "subagent_pr.create" in compiled.messages[0]["content"]
@@ -77,7 +76,10 @@ def test_compile_runtime_prompt_for_subagent_includes_scope_constraints() -> Non
                 "rootBranch": "context",
             }
         ],
-        request={"readonlyContextRef": {"type": "package-entry", "locator": "runtime/tasks/task_sub/readonly-context/current"}},
+        request={
+            "readonlyContextRef": {"type": "package-entry", "locator": "runtime/tasks/task_sub/readonly-context/current"},
+            "taskRuntimeState": {"phase": "task-state-loaded"},
+        },
         resume_path="snapshot",
     )
 
@@ -97,6 +99,7 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
         root_mount=_root_mount(activeCapabilities=["text-memory", "task-takeover", "context-pruning"]),
         current_context=[],
         request={
+            "taskRuntimeState": {"phase": "task-state-loaded"},
             "takeoverProtocol": {
                 "id": "takeover_test",
                 "version": "0.1.0",
@@ -337,7 +340,12 @@ def test_compile_runtime_prompt_resume_path_omits_few_shot_examples() -> None:
         task_type="coding",
         root_mount=_root_mount(resumeMessage="继续执行同一任务。"),
         current_context=[],
-        request={"appId": "yggdrasil.app.coding-greenfield", "codingMode": "new-project", "resumeMessage": "继续执行同一任务。"},
+        request={
+            "appId": "yggdrasil.app.coding-greenfield",
+            "codingMode": "new-project",
+            "resumeMessage": "继续执行同一任务。",
+            "taskRuntimeState": {"phase": "task-state-loaded", "resumeMessage": "继续执行同一任务。"},
+        },
         resume_path="restart-snapshot",
     )
 
@@ -401,7 +409,66 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "root 节点默认负责编排和最终汇总" in response_requirements
     assert "child 节点只处理单一局部目标" in response_requirements
     assert "已经在同一节点连续恢复/重启，优先把当前工作拆成更小的 child 或 leaf" in response_requirements
-    assert "先判断是否已经完成必要的子工作并拿到对应摘要" in response_requirements
+    assert "停止继续拆分，直接完成本节点并上浮父节点" in response_requirements
+    assert "只有 root 节点，或被父节点明确授权负责最终汇总的节点，才能输出整任务最终交付" in response_requirements
+    assert "不得覆盖工作树拓扑、当前节点语义和父节点编排权" in response_requirements
+
+
+def test_compile_runtime_prompt_task_contract_uses_runtime_state_objective_and_focus() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(
+            current_focus="task-focus",
+            current_objective="task-objective",
+        ),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(),
+        current_context=[],
+        request={
+            "appId": "yggdrasil.app.software-factory",
+            "taskObjective": "stale-task-objective",
+            "currentObjective": "stale-current-objective",
+            "currentFocus": "stale-current-focus",
+            "taskRuntimeState": {
+                "phase": "task-state-loaded",
+                "taskObjective": "runtime-objective",
+                "currentFocus": "runtime-focus",
+                "currentNodeId": "node-runtime",
+                "workingNodeAnnotation": "<Working_Node: node-runtime>",
+            },
+        },
+        resume_path="snapshot",
+    )
+
+    task_contract = compiled.user_sections["task_contract"]
+    assert "当前目标: runtime-objective" in task_contract
+    assert "当前焦点: runtime-focus" in task_contract
+    assert "stale-current-objective" not in task_contract
+    assert "stale-current-focus" not in task_contract
+
+
+def test_compile_runtime_prompt_places_node_state_before_response_requirements() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["text-memory", "task-takeover", "context-pruning"]),
+        current_context=[],
+        request={
+            "appId": "yggdrasil.app.software-factory",
+            "taskRuntimeState": {
+                "phase": "task-state-loaded",
+                "current_node_id": "node-root",
+                "working_node_annotation": "<Working_Node: node-root>",
+                "pc_memo": "continue:node-root",
+            },
+        },
+        resume_path="restart-window-2",
+    )
+
+    user_message = compiled.messages[1]["content"]
+    assert user_message.index("<task_contract>") < user_message.index("<response_requirements>")
+    assert user_message.index("<scene_recovery>") < user_message.index("<response_requirements>")
 
 
 def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() -> None:
@@ -420,6 +487,11 @@ def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() 
             "codingMode": "new-project",
             "resumeMessage": "来自请求的恢复提示。",
             "restartMessage": "来自请求的重启提示。",
+            "taskRuntimeState": {
+                "phase": "task-state-loaded",
+                "resumeMessage": "来自请求的恢复提示。",
+                "restartMessage": "来自请求的重启提示。",
+            },
         },
         resume_path="restart-window-2",
     )
@@ -498,6 +570,19 @@ def test_resume_prompt_canonicalizes_working_node_and_memory_pointer() -> None:
                 },
                 "appliedModules": ["task-takeover"],
                 "hookTrace": [],
+            },
+            "taskRuntimeState": {
+                "phase": "task-state-loaded",
+                "currentNodeId": "node-root",
+                "workingNodeAnnotation": "<Working_Node: node-root>",
+                "pcMemo": "pc:node-root",
+                "memoryRetrievalState": {
+                    "summary": "retrieval summary",
+                    "requestId": "retr-1",
+                    "workTreeNodeId": "node-memory",
+                    "matchedNodeRefs": [],
+                    "materializedNodeIds": [],
+                },
             },
         },
         resume_path="snapshot",
