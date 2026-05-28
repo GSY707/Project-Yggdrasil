@@ -179,6 +179,70 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
     assert "计划质量: 92.0" in compiled.messages[-1]["content"]
 
 
+def test_compile_runtime_prompt_enforces_clarification_gate_when_takeover_needs_confirmation() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["task-takeover"]),
+        current_context=[],
+        request={
+            "takeoverProtocol": {
+                "id": "takeover_confirm_gate",
+                "version": "0.1.0",
+                "taskId": "task_takeover_confirm_gate",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "confirm",
+                "status": "needs-clarification",
+                "objective": "先核对再执行。",
+                "objectiveSummary": "先核对再执行。",
+                "ambiguities": [],
+                "constraints": [],
+                "plan": [],
+                "workTree": {
+                    "version": "0.1.0",
+                    "rootObjective": "先核对再执行。",
+                    "status": "planned",
+                    "currentNodeId": "worktree-node-1",
+                    "nodes": [
+                        {
+                            "id": "worktree-node-1",
+                            "title": "核对计划",
+                            "phase": "planning",
+                            "status": "in-progress",
+                            "planStepIds": [],
+                            "constraintIds": [],
+                            "dependsOn": [],
+                            "expectedEvidence": [],
+                            "recoveryAnchor": None,
+                        }
+                    ],
+                    "recoveryAnchor": None,
+                    "entropyBudgetRemaining": 8,
+                },
+                "deliverySections": [],
+                "verificationItems": [],
+                "metrics": {
+                    "planQualityScore0_100": 90.0,
+                    "reworkCount": 0,
+                    "reworkRate": 0.0,
+                    "clarificationNeeded": True,
+                    "planConfirmationNeeded": True,
+                    "planConfirmed": False,
+                    "deliveryCompletenessScore0_100": 0.0,
+                    "verificationPassRate": 0.0,
+                },
+                "appliedModules": ["task-takeover"],
+                "hookTrace": [],
+            }
+        },
+        resume_path=None,
+    )
+
+    assert "当前 takeover 状态是 needs-clarification" in compiled.user_sections["response_requirements"]
+
+
 def test_compile_runtime_prompt_for_writing_selects_writing_seed() -> None:
     compiled = compile_runtime_prompt(
         task=_task(title="写作长篇章节", goal="推进剧情并维护角色一致性。", app_id="yggdrasil.app.knowledge-studio"),

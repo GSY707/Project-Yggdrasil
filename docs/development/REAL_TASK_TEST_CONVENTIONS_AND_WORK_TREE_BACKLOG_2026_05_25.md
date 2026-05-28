@@ -11,8 +11,6 @@
 
 ### 2.1 默认测试任务约定
 
-除专门的 runtime/debug harness 外，后续真实任务测试默认遵守下面四条：
-
 - 测试任务尽可能与本项目业务本身无关，不要把“解释本仓库当前实现”“总结本仓库某条内部路线”当作默认真实任务。
 - 任务描述只给一个目标，不在任务文本里内嵌步骤规划、章节顺序、执行顺序或完成路径。
 - 规划必须由 agent 在运行时自己生成，测试合同不应替 agent 提前写好 plan。
@@ -20,12 +18,10 @@
 
 ### 2.2 这条约定的含义
 
-这条约定不是要求测试任务与仓库完全无关，而是要求：
+- 当前默认真实任务入口是 `g4-real-task-web-research-default`，后续应继续扩大“外部题面 + 自主规划”的覆盖面。
 
 - 任务目标可以利用本仓库提供的工具、协议和环境来完成。
 - 但任务本身应尽量像一个外部真实工作目标，而不是“让 agent 复述本项目自我说明”。
-- 测试时主要检验 agent 的自主规划、最小工作集控制、continuation、一致性和交付质量，而不是检验我们是否把答案提前写进题目里。
-
 ### 2.3 明确例外
 
 下面这类 case 可以不遵守“只给单目标、不预置规划”的默认约定，但必须显式标注为 harness 或 debug case：
@@ -39,7 +35,7 @@
 
 ### 3.1 哪些 case 属于默认真实任务
 
-- `g4-real-task-minimal-workset` 更接近默认真实任务的方向，但题目仍明显绑定当前仓库和既定输出结构，后续应继续去项目内生化。
+- `g4-real-task-web-research-default` 已成为默认真实任务入口，后续应继续扩大“外部题面 + 自主规划”的覆盖面。
 
 ### 3.2 哪些 case 属于例外 harness
 
@@ -244,7 +240,7 @@
 
 # 本轮收口状态
 
-P1 已收口。`g4-real-task-work-tree-debug.json` 现已补齐 `suiteRole=runtime-debug-harness`、`suiteRoleNote` 与例外约定；`tests/test_suite_contract_verifier.py` 的全量 suite 角色回归已通过。当前口径也已冻结为：`g4-real-task-externalized.json` 是默认真实任务入口，`g4-real-task-minimal-workset.json` 只保留 legacy 参考。
+P1 已收口。`g4-real-task-work-tree-debug.json` 现已补齐 `suiteRole=runtime-debug-harness`、`suiteRoleNote` 与例外约定；`tests/test_suite_contract_verifier.py` 的全量 suite 角色回归已通过。当前口径也已冻结为：`g4-real-task-externalized.json` 是默认真实任务入口，`g4-real-task-web-research-default.json` 只保留 legacy 参考。
 
 P2 已收口。`task-takeover` 现在会正式生成并校验 `delivery.result / evidence / pending / incomplete` 四段，`delivery.pending` 与 `delivery.incomplete` 已升级为 hard gate；`tests/test_runtime_p2_delivery_gate.py` 现补齐“缺字段即 delivery-gate-blocked”与“同一多节点工作树链路里的 revision -> 复跑 -> approve”回归，`tests/test_runtime_p4_foundation.py` 继续锁住 child completion summary、mixed outcome 和 sibling/root 收口。
 

@@ -1,0 +1,132 @@
+{
+  "id": "evalsuite_g4_web_research_work_tree_long",
+  "name": "G4 Web Research Work-Tree Long",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Work-tree focused long web-research run with multi-window continuation pressure.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": [
+    "pass-rate",
+    "restart-count",
+    "context-window-span",
+    "restart-success-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:web-research-work-tree-long",
+  "cases": [
+    {
+      "id": "evalcase_g4_web_research_work_tree_long_24k",
+      "title": "G4 Web Research Work-Tree Long: Grid Storage LDES - 24k forced-long",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-web-research-work-tree-long-24k",
+      "parityPairKey": "g4-web-research-work-tree-long",
+      "parityRole": "long",
+      "qualityDeltaThreshold0_100": 12.0,
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "Long-Duration Energy Storage Route Selection (2030) - Work Tree Long",
+      "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
+      "currentFocus": "g4-web-research-work-tree-long-grid-storage",
+      "currentObjective": "Run a long, multi-window web-grounded comparison and keep parent-node orchestration explicit in the final delivery.",
+      "currentContext": [
+        {
+          "id": "ctx_web_research_scope",
+          "title": "decision scope",
+          "content": "Target operator profile: peak load 3-6 GW, renewable share 45%-60%, procurement horizon to 2030. Decision criteria must include levelized storage cost range, safety risk profile, supply-chain risk, and implementation lead time.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_web_research_method",
+          "title": "research method",
+          "content": "You must perform network search and compare sources from multiple domains. At least one source should be policy/regulator, one should be industry report, and one should be academic or technical institution.",
+          "importance": 0.98
+        },
+        {
+          "id": "ctx_web_research_work_tree",
+          "title": "work-tree contract",
+          "content": "Treat this run as work-tree-first. Keep node progression explicit: child analysis chunks should bubble to parent synthesis. Avoid root-only planning loops.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_web_research_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled. Build the report from verifiable web evidence. Include a source table and explicitly discuss at least one contradiction between sources and how you resolved it.",
+          "importance": 1.0
+        }
+      ],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": [
+        "task-takeover",
+        "mcp-bridge",
+        "context-pruning",
+        "text-memory"
+      ],
+      "allowPaidModels": false,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 8000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 20.0,
+      "acceptanceRequiredPhrases": [
+        "## 结果",
+        "## 证据",
+        "## 风险",
+        "## 已知问题"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "http://",
+        "https://",
+        "来源",
+        "source",
+        "矛盾",
+        "contradiction"
+      ],
+      "acceptanceRejectPhrases": [
+        "我会先总结当前局势，再给出最稳妥的下一步",
+        "仅基于给定上下文",
+        "无法联网"
+      ],
+      "acceptanceMinRestartCount": 8,
+      "acceptanceMinWindowIndex": 9,
+      "acceptanceMinCumulativeWindowSpanTokens": 250000,
+      "acceptanceMinWorkTreeContinuity0_1": 0.9,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.2,
+      "acceptanceMaxRetrievalDriftRate0_1": 0.4,
+      "acceptanceRequirePrefixCacheKey": true,
+      "acceptanceMinCacheEvidence0_1": 0.6,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Keep work-tree progression explicit and ensure parent synthesis follows child evidence chunks. After the main report, append exactly these headings: ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only.",
+      "restartMessage": "Window restart: continue the web-grounded comparison report, preserve source table, contradiction analysis, and parent synthesis over child evidence chunks. Keep Markdown-only output with ## 结果/## 证据/## 风险/## 已知问题.",
+      "effectiveContextWindow": 24000,
+      "windowRestartRatio": 0.72,
+      "forcedWindowRestartBudget": 18,
+      "maxToolRounds": 16,
+      "maxWindowCycles": 36,
+      "maxWorkerWaitSeconds": 360,
+      "workspaceProfile": "g4-web-research-work-tree-long-grid-storage",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "tags": [
+        "g4",
+        "real-task",
+        "web-research",
+        "work-tree",
+        "long-task",
+        "multi-window"
+      ],
+      "difficulty": "hard"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 - 文档状态：Log-Preserved Rerun On LongCat With Root-Cause Analysis
 - 日期：2026-05-16
-- 重跑命令：`$env:YGGDRASIL_EVAL_PRESERVE_SANDBOX=1; $env:YGGDRASIL_RUNTIME_AUDIT_LEVEL='strict'; corepack pnpm eval:g4:real-task-parity`
+- 重跑命令（历史入口，现已下线）：`$env:YGGDRASIL_EVAL_PRESERVE_SANDBOX=1; $env:YGGDRASIL_RUNTIME_AUDIT_LEVEL='strict'; corepack pnpm eval:g4:web-research:default`
 - 重跑 run：`evalrun_941c8b8ca2204966812d`
 
 ## 0. 后续正式重跑补记（2026-05-16 晚）
@@ -98,7 +98,7 @@ evaluation sandbox 是否在隔离环境下运行，导致 `resolve_workspace_ro
 
 1. **`prompting.py`**：`_format_response_requirements` 现在检测 `has_delivery_contract`：若 `responseRequirements` 字段存在，第 1 行改为 `"1. 直接产出以下要求指定的最终交付物，不要停在计划或下一步总结。"`，从而把 planning-first 模式切换为 delivery-first 模式。
 2. **`suite_cases_g4.py`**：`_run_g4_live_provider_matrix_case` 现在检测 `case_payload.get("responseRequirements")` 和 `case_payload.get("restartMessage")`，将它们 forward 进 `start_payload`。
-3. **`g4-real-task-window-parity.json`**：两个 case 均加入 `responseRequirements`（7 小节 + 明确要求 `高价值` 和 `等价/不等价` 判断）和 `restartMessage`（窗口 restart 时要求模型直接产出完整 release brief，不得停在计划）。
+3. **`g4-real-task-web-research-default.json`**：两个 case 均加入 `responseRequirements`（7 小节 + 明确要求 `高价值` 和 `等价/不等价` 判断）和 `restartMessage`（窗口 restart 时要求模型直接产出完整 release brief，不得停在计划）。
 
 **关于 `responseRequirements` 的跨窗口传递**：
 

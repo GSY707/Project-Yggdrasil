@@ -709,7 +709,7 @@ def mcp_bridge_tool_descriptors(workspace_root: Path | None = None, *, refresh_i
                 "version": BRIDGE_VERSION,
                 "displayName": f"{binding['serverDisplayName']} / {binding['remoteToolName']}",
                 "description": binding.get("description") or f"MCP bridge tool from {binding['serverDisplayName']}",
-                "schemaRef": "docs/specs/agent-runtime-protocol-v0.1.md",
+                "schemaRef": "docs/specs/agent-runtime-protocol-v0.2.md",
                 "executionMode": "sync",
                 "timeoutMs": DEFAULT_SERVER_TIMEOUT_MS,
                 "permissionRequired": ["tool.mcp.invoke"],

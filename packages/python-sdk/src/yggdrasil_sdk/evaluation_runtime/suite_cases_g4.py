@@ -925,6 +925,9 @@ def _g4_live_provider_matrix_start_payload(
     task_type: str,
     candidate_models: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # G4 default real-task suite should execute directly for acceptance evaluation,
+    # so we force confirmation on start to avoid clarification-only stalls.
+    plan_confirmed = True
     start_payload = {
         "appId": app_id,
         "taskType": task_type,
@@ -936,7 +939,13 @@ def _g4_live_provider_matrix_start_payload(
         "allowToolExecution": bool(case_payload.get("allowToolExecution", False)),
         "temperature": float(case_payload.get("temperature") or 0.1),
         "maxTokens": int(case_payload.get("maxTokens") or 320),
+        "takeoverPlanConfirmed": plan_confirmed,
+        "planConfirmed": plan_confirmed,
+        "confirmPlan": plan_confirmed,
+        "takeoverAutoConfirm": plan_confirmed,
     }
+    if case_payload.get("activeCapabilities") is not None:
+        start_payload["activeCapabilities"] = [str(item) for item in case_payload.get("activeCapabilities") or []]
     if case_payload.get("auditLevel") is not None:
         start_payload["auditLevel"] = str(case_payload.get("auditLevel") or "default")
     if case_payload.get("effectiveContextWindow") is not None:
@@ -964,6 +973,7 @@ def _g4_live_provider_matrix_start_payload(
 def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from datetime import datetime, timedelta
     import os
+    import time
 
     from fastapi.testclient import TestClient
     from yggdrasil_agent_runtime.app import app as runtime_app
@@ -1015,8 +1025,22 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
 
     processed_runs: list[dict[str, Any]] = []
     max_window_cycles = max(int(case_payload.get("maxWindowCycles") or 12), int(case_payload.get("forcedWindowRestartBudget") or 0) + 4)
+    max_worker_wait_seconds = max(
+        int(case_payload.get("maxWorkerWaitSeconds") or os.environ.get("YGGDRASIL_G4_MAX_WORKER_WAIT_SECONDS") or 180),
+        30,
+    )
+    worker_wait_started_at = time.monotonic()
+    empty_poll_count = 0
     while True:
-        processed = run_worker_once("agent-runtime")
+        processed = run_worker_once("agent-runtime", timeout_seconds=1)
+        if processed.get("status") == "empty":
+            empty_poll_count += 1
+            if time.monotonic() - worker_wait_started_at >= max_worker_wait_seconds:
+                raise RuntimeError(
+                    "g4 provider matrix worker timed out while waiting for queue payload: "
+                    f"waitedSeconds={max_worker_wait_seconds}, emptyPollCount={empty_poll_count}, processedRuns={len(processed_runs)}"
+                )
+            continue
         result_payload = dict(processed.get("result") or {})
         processed_runs.append(processed)
         if result_payload.get("status") in {"restarting", "continuing"}:

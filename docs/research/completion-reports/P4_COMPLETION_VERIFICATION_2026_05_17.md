@@ -46,8 +46,8 @@
 - 代码锚点：
   - `modules/task-takeover/src/yggdrasil_task_takeover/plugin.py`
   - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py`
-  - `evaluation/suites/g4-real-task-window-parity.json`
-- 现有证据：路线图顶部执行状态与 `eval:g4:window-stress` / `eval:g4:real-task-parity` 最新结论。
+  - `evaluation/suites/g4-real-task-web-research-default.json`
+- 现有证据：路线图顶部执行状态与 `eval:g4:window-stress` / `eval:g4:web-research:default` 最新结论。
 
 ---
 

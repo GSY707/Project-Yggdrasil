@@ -73,6 +73,10 @@ def _build_restart_request_state(request: dict[str, Any], runtime_metrics: dict[
             "maxUncompressedTailBeforeDecompress",
             "forcedWindowRestartBudget",
             "memoryWriteTagsEnabled",
+            "takeoverPlanConfirmed",
+            "planConfirmed",
+            "confirmPlan",
+            "takeoverAutoConfirm",
             "responseRequirements",
             "restartMessage",
         )

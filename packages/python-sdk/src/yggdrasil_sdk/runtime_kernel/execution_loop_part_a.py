@@ -96,23 +96,33 @@ def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
         threshold = max(1, min(effective_context_window, int(effective_context_window * restart_ratio)))
     max_uncompressed_tail_before_decompress = _max_uncompressed_tail_before_decompress(request)
 
+    window_index = max(
+        _int_metric(request.get("windowIndex"), _int_metric(request_metrics.get("windowIndex"), getattr(task, "window_index", 1))),
+        1,
+    )
+    restart_count = max(
+        _int_metric(request.get("restartCount"), _int_metric(request_metrics.get("restartCount"), getattr(task, "restart_count", 0))),
+        0,
+    )
+    cumulative_window_span_tokens = max(
+        _int_metric(
+            request.get("cumulativeWindowSpanTokens"),
+            _int_metric(request_metrics.get("cumulativeWindowSpanTokens"), getattr(task, "cumulative_window_span_tokens", 0)),
+        ),
+        0,
+    )
+    # Use window-span semantics as a floor so cumulative span can reflect restart traversal,
+    # not only the currently materialized context token count.
+    if effective_context_window > 0:
+        span_floor = effective_context_window * max(window_index - 1, restart_count)
+        if span_floor > cumulative_window_span_tokens:
+            cumulative_window_span_tokens = span_floor
+
     return {
-        "windowIndex": max(
-            _int_metric(request.get("windowIndex"), _int_metric(request_metrics.get("windowIndex"), getattr(task, "window_index", 1))),
-            1,
-        ),
-        "restartCount": max(
-            _int_metric(request.get("restartCount"), _int_metric(request_metrics.get("restartCount"), getattr(task, "restart_count", 0))),
-            0,
-        ),
+        "windowIndex": window_index,
+        "restartCount": restart_count,
         "compressionCount": max(_int_metric(request.get("compressionCount"), _int_metric(request_metrics.get("compressionCount"), 0)), 0),
-        "cumulativeWindowSpanTokens": max(
-            _int_metric(
-                request.get("cumulativeWindowSpanTokens"),
-                _int_metric(request_metrics.get("cumulativeWindowSpanTokens"), getattr(task, "cumulative_window_span_tokens", 0)),
-            ),
-            0,
-        ),
+        "cumulativeWindowSpanTokens": cumulative_window_span_tokens,
         "carryForwardLossCount": max(
             _int_metric(
                 request.get("carryForwardLossCount"),

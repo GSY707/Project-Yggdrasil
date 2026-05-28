@@ -11,7 +11,7 @@
   - E1：交付段落缺失从 warning 升级为 failed（硬门禁语义）。
   - D6：G4 case 增加 tier 化 restart stability 报告与可选强失败门禁。
   - E2：新增 short-window vs long-window parity 冻结指标并进入 suite 聚合输出。
-  - P3 缺口收口（2026-05-17）：`evalsuite_g4_real_task_window_parity` 已支持 free 默认 + case 级少量 paid 批准；评测聚合改为按 parity pair + provider/model 分组，避免 LongCat 与 DeepSeek 样本混成单一 parity 结论。
+  - P3 缺口收口（2026-05-17）：`evalsuite_g4_real_task_web_research_default` 已支持 free 默认 + case 级少量 paid 批准；评测聚合改为按 parity pair + provider/model 分组，避免 LongCat 与 DeepSeek 样本混成单一 parity 结论。
 3. P4（任务 21-26）已完成基础工程收口：
   - B6：共享空间写入在 mounted-space / mountMode / write tuple 上前置校验，并保留 blockers。
   - A4：WorkTree 在无 plan 时也会生成 bootstrap 节点，保证 `currentNodeId` 与 `recoveryAnchor` 可恢复。
@@ -19,7 +19,7 @@
   - A2/A1：任务创建阶段补齐 project/space/branch 一致性校验与缺失 branch workspace 自动引导。
 4. 官方入口运行状态：
   - `eval:g4:window-stress` 本次运行通过（`passRate=1.0`）。
-  - `eval:g4:real-task-parity` 本次运行 failed（严格 acceptance 未通过），当前剩余工作转为 live 结果达标而非代码接线缺失。
+  - `eval:g4:web-research:default` 本次运行 failed（严格 acceptance 未通过），当前剩余工作转为 live 结果达标而非代码接线缺失。
 
 ---
 
@@ -325,7 +325,7 @@
 - 输入：short-window vs long-window 同任务语料。
 - 实现：
   - 文件：packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py
-  - 文件：evaluation/suites/g4-real-task-window-parity.json
+  - 文件：evaluation/suites/g4-real-task-web-research-default.json
   - 冻结 acceptance parity 与 delivery equivalence 指标，禁止结构性 pass 替代交付 pass。
 - 输出：官方 parity 结论。
 - 验证：严格 acceptance 下通过，且失败时给出可解释差异。
@@ -465,3 +465,4 @@
 1. 这套顺序优先保证“记忆树写入-检索-恢复-验收”四闭环，不再把接入层当主战场。
 2. 若 Phase P0/P1 未闭合，后续 D6/E2 的任何高分都不应解释为“记忆树已替代窗口”。
 3. 真正的完成标准不是 restart 技术成功，而是在严格 acceptance 下获得可复现的交付级 parity。
+

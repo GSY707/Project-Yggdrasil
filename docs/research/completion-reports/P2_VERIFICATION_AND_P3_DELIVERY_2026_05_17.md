@@ -88,12 +88,12 @@ uv run pytest -q tests/test_llm_retry_and_safe_shutdown.py tests/test_task_takeo
   - `parityRole`
   - `qualityDeltaThreshold0_100`
 
-配置补齐：`evaluation/suites/g4-real-task-window-parity.json`
+配置补齐：`evaluation/suites/g4-real-task-web-research-default.json`
 
 - short case：`parityRole=short`
 - long case：`parityRole=long`
 - 对两者统一设置：
-  - `parityPairKey=g4-real-task-window-parity`
+  - `parityPairKey=g4-web-research-default-grid-storage`
   - `qualityDeltaThreshold0_100=8.0`
 
 新增测试：`tests/test_g4_multiscene.py`
@@ -130,7 +130,7 @@ corepack pnpm eval:g4:window-stress
 命令：
 
 ```powershell
-corepack pnpm eval:g4:real-task-parity
+corepack pnpm eval:g4:web-research:default
 ```
 
 - runId：`evalrun_7016b7b1cc27493abe3b`
@@ -146,3 +146,4 @@ corepack pnpm eval:g4:real-task-parity
 1. P2：任务 14-17 的工程能力已闭环，预算 pre/post check 主链路与断言测试已补齐。
 2. P3：任务 18-20 的代码、配置与聚合指标已落地，且本地回归通过；D6 入口已跑通。
 3. 当前剩余项集中在 E2 的 live parity 通过率，不在“代码缺失”层面，而在“正式运行结果未达 acceptance”层面。
+

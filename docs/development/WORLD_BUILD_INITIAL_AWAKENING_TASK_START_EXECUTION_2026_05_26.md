@@ -7,7 +7,7 @@
   - [工作树协议 v0.2](../specs/work-tree-protocol-v0.2.md)
   - [世界构建、初次苏醒与任务启动协议 v0.1](../specs/world-build-awakening-task-start-protocol-v0.1.md)
 - 关联旧执行文档：
-  - [提示词、启动流程、工作流程重做执行文档（2026-05-23）](ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md)
+  - [提示词、启动流程、工作流程重做执行文档（2026-05-23）](WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md)
 
 ## 0. 本轮实施结论
 

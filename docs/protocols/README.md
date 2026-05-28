@@ -4,7 +4,7 @@
 - 更新时间：2026-04-16
 - 关联文档：
   - [PRD v0.1](../PRD-v0.1.md)
-  - [Agent 运行时协议 v0.1](../specs/agent-runtime-protocol-v0.1.md)
+  - [Agent 运行时协议 v0.2](../specs/agent-runtime-protocol-v0.2.md)
 
 ## 说明
 

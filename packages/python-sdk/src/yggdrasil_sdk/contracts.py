@@ -1114,6 +1114,8 @@ class TaskTakeoverMetrics(BaseModel):
     rework_count: int = Field(default=0, alias="reworkCount")
     rework_rate: float = Field(default=0.0, alias="reworkRate")
     clarification_needed: bool = Field(default=False, alias="clarificationNeeded")
+    plan_confirmation_needed: bool = Field(default=False, alias="planConfirmationNeeded")
+    plan_confirmed: bool = Field(default=False, alias="planConfirmed")
     delivery_completeness_score_0_100: float = Field(default=0.0, alias="deliveryCompletenessScore0_100")
     verification_pass_rate: float = Field(default=0.0, alias="verificationPassRate")
 
@@ -1122,11 +1124,11 @@ class TaskTakeoverProtocol(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     task_id: str = Field(alias="taskId")
     task_type: str = Field(alias="taskType")
     run_type: str = Field(alias="runType")
-    current_phase: Literal["objective", "constraints", "plan", "execute", "verify", "deliver"] = Field(alias="currentPhase")
+    current_phase: Literal["objective", "constraints", "plan", "confirm", "execute", "verify", "deliver"] = Field(alias="currentPhase")
     status: Literal["prepared", "executing", "verified", "completed", "needs-clarification"]
     objective: str
     objective_summary: str = Field(alias="objectiveSummary")

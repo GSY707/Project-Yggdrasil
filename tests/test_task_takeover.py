@@ -20,12 +20,36 @@ def test_task_takeover_module_builds_coding_protocol() -> None:
         }
     )
 
-    assert protocol["status"] == "prepared"
+    assert protocol["status"] == "needs-clarification"
     assert protocol["taskType"] == "coding"
     assert protocol["plan"]
     assert any(step["phase"] == "verify" for step in protocol["plan"])
     assert any(constraint["category"] == "delivery" for constraint in protocol["constraints"])
+    assert protocol["metrics"]["planConfirmationNeeded"] is True
+    assert protocol["metrics"]["planConfirmed"] is False
     assert protocol["metrics"]["planQualityScore0_100"] > 0
+
+
+def test_task_takeover_module_switches_to_prepared_after_plan_confirmation() -> None:
+    plugin = TaskTakeoverModule()
+    protocol = plugin.build_protocol(
+        {
+            "taskId": "task_coding_confirmed",
+            "taskType": "coding",
+            "runType": "main",
+            "request": {
+                "taskObjective": "先核对后执行。",
+                "takeoverPlanConfirmed": True,
+            },
+            "rootMount": {
+                "activeCapabilities": ["task-takeover"],
+            },
+        }
+    )
+
+    assert protocol["status"] == "prepared"
+    assert protocol["metrics"]["planConfirmationNeeded"] is False
+    assert protocol["metrics"]["planConfirmed"] is True
 
 
 def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None:

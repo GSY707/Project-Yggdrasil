@@ -5,7 +5,7 @@
 - 关联文档：
   - [通向最终目标的路线图](final-goal-roadmap-2026-04-30.md)
   - [记忆与建树数据规格 v0.1](../specs/memory-domain-data-spec-v0.1.md)
-  - [Agent 运行时协议 v0.1](../specs/agent-runtime-protocol-v0.1.md)
+  - [Agent 运行时协议 v0.2](../specs/agent-runtime-protocol-v0.2.md)
 
 ## 1. 定位
 

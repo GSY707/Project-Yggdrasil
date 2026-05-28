@@ -8,7 +8,7 @@
   - [开发 TODO](../todo.md)
   - [ADR 索引](adr/README.md)
   - [协议索引](protocols/README.md)
-  - [Agent 运行时协议 v0.1](specs/agent-runtime-protocol-v0.1.md)
+  - [Agent 运行时协议 v0.2](specs/agent-runtime-protocol-v0.2.md)
   - [数据规格索引 v0.1](specs/README.md)
 
 ## 1. 背景
@@ -160,7 +160,7 @@
 - 临时节点写入。
 - 后续整理任务触发。
 
-建树算法的运行顺序与系统边界见 [Agent 运行时协议 v0.1](specs/agent-runtime-protocol-v0.1.md)。
+建树算法的运行顺序与系统边界见 [Agent 运行时协议 v0.2](specs/agent-runtime-protocol-v0.2.md)。
 
 ### FR-005 Agent 启动与恢复
 
@@ -171,7 +171,7 @@
 - 在上下文接近上限时安全收尾并重启。
 - 重启后重新挂载必要上下文，继续执行。
 
-启动流程与根节点挂载见 [Agent 运行时协议 v0.1](specs/agent-runtime-protocol-v0.1.md)。
+启动流程与根节点挂载见 [Agent 运行时协议 v0.2](specs/agent-runtime-protocol-v0.2.md)。
 
 ### FR-006 预算控制
 

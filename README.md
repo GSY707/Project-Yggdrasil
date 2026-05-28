@@ -122,9 +122,8 @@ corepack pnpm eval:g2:regression
 corepack pnpm eval:g4:multiscene
 corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
-corepack pnpm eval:g4:window-stress
-corepack pnpm eval:g4:real-task-parity
-corepack pnpm eval:g4:real-task-parity:flash
+corepack pnpm eval:g4:web-research:default
+corepack pnpm eval:g4:web-research:work-tree-long
 corepack pnpm eval:g4:real-task-unrelated:dual-live
 corepack pnpm eval:g4:work-tree-debug
 ```
@@ -135,11 +134,9 @@ corepack pnpm eval:g4:work-tree-debug
 
 `corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
 
-`corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
+`corepack pnpm eval:g4:web-research:default` 是当前默认真实任务入口：它固定网络检索、多源对比与矛盾处理合同，要求主报告后追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），并通过 `strict` 审计记录窗口续跑与证据链路。
 
-`corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。当前 parity suite 还会在 7 段简报之后强制追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），避免真实任务输出先被 runtime delivery gate 拦截。
-
-`corepack pnpm eval:g4:real-task-parity:flash` 是同一真实任务 parity 的 flash 变体：它保留 `longcat / LongCat-2.0-Preview` 的对照路径，并把 DeepSeek paid case 切到 `deepseek_direct / deepseek-v4-flash`，用于在不改动现有 pro 基线的前提下补跑实际任务效果；输出合同同样包含 7 段简报加 formal delivery footer。
+`corepack pnpm eval:g4:web-research:work-tree-long` 是 web research 的长任务工作树入口：固定 LongCat live 网络搜索，重点观察多窗口 continuation 与工作树连续性。
 
 `corepack pnpm eval:g4:real-task-unrelated:dual-live` 是“先用与本项目完全无关的任务看实际执行过程”的最小 live 入口：它固定为同一个外部 incident RCA 题目，分别在 `longcat / LongCat-2.0-Preview` 与 `deepseek_direct / deepseek-v4-flash` 上各跑一遍，并要求主报告后追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），用于直接观察世界树 agent 在 unrelated real-task 下的实际推进方式。
 
@@ -177,11 +174,11 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - docs/PRD-v0.1.md
 - docs/protocols/README.md
 - docs/specs/README.md
-- docs/specs/agent-runtime-protocol-v0.1.md
+- docs/specs/agent-runtime-protocol-v0.2.md
 
 ## 当前重点
 
-当前阶段的重点已经切换为“在维持 Gate 4 正式基线不回退的前提下，把‘记忆树为主体、上下文窗口为工作集’的伪无限上下文窗口实现提升为当前第一优先级”。
+当前阶段的重点已经切换为“在维持 Gate 4 正式基线不回退的前提下，把工作树 v0.2 单路径运行语义落到运行时与评测链路”。
 
 ### 阶段状态（2026-05-16）
 
@@ -189,9 +186,9 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - Gate 2 已闭合：完成 1 轮全量官方复跑 + 2 轮稳定性复跑；`YGG-CG-01` / `YGG-CG-03` 连续 3 轮全部通过，人工接管中位数 0，用户澄清回合中位数 0，恢复成功率 100%。
 - Gate 3 已闭合：首 token 观测、work tree 正式对象、post-invocation budget hard fail、`execute_server` 默认拒绝网络命令、worker retry/requeue 与 paid-provider live batch 已全部落下正式证据。
 - Gate 4 已闭合：few-shot 执行链、官方三场景资产收口、`evalsuite_g4_multiscene`、`evalsuite_g4_provider_matrix`、Prompt 控制面 few-shot 显示与手动 release gate 已完成闭环。
-- 伪无限上下文窗口第一版已落地并取得首轮 live 证据：execution loop restart controller、restart snapshot、carry-forward package、runtimeMetrics、`evalsuite_g4_window_restart_stress` 与 `eval:g4:window-stress` 已进仓；LongCat 与 DeepSeek 已作为正式 stress provider 批准，并在 `evalrun_1160dc08b84e4b6e8268` 中完成 `restartCount=100` 的正式复跑。
-- LongCat 真实任务结构性对照已补上：`evalsuite_g4_real_task_window_parity` / `eval:g4:real-task-parity` 在 `evalrun_590eca26a63247308373` 中完成 `64k` vs `128k` 的 4M 级样本对照；但保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这条证据目前只证明 restart 技术闭环，尚未证明最终交付 parity。
-- 当前正式闭环证据应分开看：Gate 2/3/4 基线闭环参考见 `docs/research/g2-closeout-2026-05-15.md`、`docs/research/g3-closeout-2026-05-15.md`、`docs/research/g4-closeout-2026-05-15.md`；真实任务 parity 的最新修正结论见 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md`。
+- 运行时已进入工作树 v0.2 收敛阶段：默认语义为子节点完成/失败后回到父节点编排，不再把窗口重启作为常态推进路径。
+- 真实任务主入口已切到 web research 合同：默认入口为 `evalsuite_g4_real_task_web_research_default`（`eval:g4:web-research:default`），并保留 `evalsuite_g4_web_research_work_tree_long` 作为长任务工作树续跑观测入口。
+- 当前正式闭环证据应分开看：Gate 2/3/4 基线闭环参考见 `docs/research/g2-closeout-2026-05-15.md`、`docs/research/g3-closeout-2026-05-15.md`、`docs/research/g4-closeout-2026-05-15.md`；真实任务默认入口的最新修正结论见 `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md`。
 
 下一步更值得投入的是：
 
@@ -199,4 +196,6 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - 在上述修正完成后，再在 DeepSeek 上补齐同一条真实任务的 `64k` vs `128k` 对照，确认多 provider 下的 parity 结论是否稳定。
 - 基于 stress + real-task 两条 live 证据，重新冻结 `restartCount`、`cumulativeWindowSpanTokens`、`restartSuccessRate0_1`、`goalCompletionParity0_1`、`deliveryEquivalence0_1` 与 `qualityDeltaToLongWindow0_100` 的正式门槛。
 - 在上述主线完成前，只维持必要的 G4 provider matrix 样本补录与最小非阻塞技术债清理，避免被次要事项分散。
-- 相关研究入口见 `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md`、`docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` 与 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md`。
+- 相关研究入口见 `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md`、`docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` 与 `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md`。
+
+

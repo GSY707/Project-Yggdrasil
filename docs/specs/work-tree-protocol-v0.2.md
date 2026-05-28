@@ -3,17 +3,16 @@
 - 文档状态：Accepted for P1 implementation
 - 版本：v0.2
 - 日期：2026-05-23
-- 取代范围：取代 [工作树协议 v0.1](work-tree-protocol-v0.1.md) 的运行语义；v0.1 artifact 仍必须可读并可升级。
+- 取代范围：v0.2 为唯一正式运行语义。
 - 设计来源：
   - [新工作树方案](../new/工作树.md)
   - [新 Boot Prompt 方案](../new/元提示词.md)
   - [世界树计划正式项目定义草稿](../new/世界树计划正式项目定义.md)
-  - [提示词、启动流程、工作流程重做执行文档](../development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md)
+  - [世界构建、初次苏醒与任务级工作状态读取实施文档](../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md)
 - 关联文档：
   - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md)
   - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
   - [记忆与建树数据规格 v0.1](memory-domain-data-spec-v0.1.md)
-  - [任务接管协议 v0.1](task-takeover-protocol-v0.1.md)
 
 ## 1. 定位
 
@@ -702,30 +701,7 @@ workTreeVersion: integer
 
 如果任意两处不一致，runtime 必须拒绝完成迁移，并进入可恢复错误。
 
-## 13. v0.1 兼容
-
-### 13.1 读取 v0.1
-
-读取 v0.1 `WorkTreeProtocol` 时：
-
-1. `version` 升级为 `0.2.0`。
-2. `rootNodeId` 使用第一个无依赖节点；若没有节点，创建 bootstrap 根节点。
-3. `parentNodeId` 按 `dependsOn` 无法推导时默认挂到根节点。
-4. `questionsItAnswers` 从 `title`、`expectedEvidence` 和 plan step title 生成。
-5. `nodeText` 从 `title`、`phase`、`expectedEvidence` 生成。
-6. `workingNodeAnnotation` 由节点 ID 生成。
-7. `verified` 状态映射为 `awaiting-approval`，除非已有明确用户批准记录。
-
-### 13.2 写出策略
-
-兼容迁移期可以同时写：
-
-- v0.2 正式 artifact。
-- v0.1 兼容摘要，用于旧代码读取。
-
-但任何新功能只能依赖 v0.2 语义。
-
-## 14. 验收标准
+## 13. 验收标准
 
 P1/P2 实现必须满足：
 
@@ -747,7 +723,7 @@ P1/P2 实现必须满足：
 uv run pytest tests/test_runtime_p4_foundation.py tests/runtime/test_runtime_restart_and_resume.py tests/runtime/test_runtime_core_and_memory.py -q
 ```
 
-## 15. 非目标
+## 14. 非目标
 
 v0.2 不要求一次性实现：
 

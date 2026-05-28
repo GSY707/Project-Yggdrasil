@@ -40,12 +40,12 @@ _PROFILE_HINTS = {
     "short64k": (
         "short-window profile represents a constrained",
         "effectivecontextwindow=64000",
-        "g4-real-task-window-parity-short64k",
+        "g4-web-research-default-grid-storage-short64k",
     ),
-    "long128k": (
-        "long-window profile represents the wider reference path",
-        "effectivecontextwindow=128000",
-        "g4-real-task-window-parity-long128k",
+    "long24k": (
+        "work-tree focused long web-research run",
+        "effectivecontextwindow=24000",
+        "g4-web-research-work-tree-long-24k",
     ),
 }
 _SELF_TALK_KEYS = {

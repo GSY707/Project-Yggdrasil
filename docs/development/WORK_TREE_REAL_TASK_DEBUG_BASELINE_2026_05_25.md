@@ -100,8 +100,8 @@ provider 约束需要透传，但它是为了减少续跑漂移，不是这条�
 
 ### 4.1 真实任务入口的差距
 
-- 默认真实任务入口现已明确切到 `g4-real-task-externalized`；它承担“单目标、弱项目内生化、由 agent 自主规划”的正式 real-task 合同。
-- `g4-real-task-minimal-workset` 现在只保留 `legacy-repo-specific` 参考口径，不再作为默认真实任务模板。
+- 默认真实任务入口现已明确切到 `g4-real-task-web-research-default`；它承担“单目标、弱项目内生化、由 agent 自主规划”的正式 real-task 合同。
+- 旧的 repo-specific 最小工作集口径只保留历史参考，不再作为默认真实任务模板。
 - `g4-real-task-work-tree-debug` 已明确标成 `runtime-debug-harness`，继续承接显式 `takeoverProtocol`、child/sibling/root continuation 与 approval 语义调试。
 
 ### 4.2 acceptance 口径的差距

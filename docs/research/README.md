@@ -7,7 +7,7 @@
 - `../new/世界树计划正式项目定义.md` - 当前最高层项目定义草稿与用户笔记：以 LLM 为核心，把代码定位为服务 LLM 的世界环境，并记录生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent 与项目分期。
 - `../new/工作树.md` - 新工作树方案：把工作树定义为“我要干什么”分支下的动态工作记忆与执行栈，强调节点 schema、LOD 拓扑、Working Node 标签、摘要上浮和冲突仲裁。
 - `../new/元提示词.md` - 新 Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，不承载具体业务知识。
-- `../development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` - 本轮提示词、启动流程、工作流程重做执行文档，负责把 `docs/new/` 方案转成分阶段实现、验证和回滚任务。
+- `../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` - 世界构建、初次苏醒与任务级工作状态读取实施文档，负责把新三阶段方案转成分阶段实现任务。
 
 当前重新定义项目时，应先读 `docs/new/` 的正式项目定义草稿，再读工作树和元提示词方案；进入实现前以执行文档为任务拆分入口。其他研究文档只作为来源、证据或候选特性处理。
 
@@ -83,7 +83,7 @@
 **关键文档**：
 - `memory-tree-agent-work-breakdown-2026-05-16.md` - 内存树代理工作分解
 - `memory-tree-theory-gap-assessment-2026-05-17.md` - 记忆树理论差距评估（技术详解）
-- `g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` - G4真实任务窗口奇偶性审计
+- `../development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` - G4 web research 默认入口失败审计
 - `runtime-two-failures-summary-2026-05-17.md` - 运行时双重故障分析
 - `sqlite-concurrency-ops-queue-2026-05-17.md` - SQLite并发操作队列设计
 
@@ -104,13 +104,7 @@
   - `real-user-validation-baseline-freeze-2026-04-30.md`
   - `real-user-validation-internal-pilot-deepseek-2026-04-30.md`
 
-- **[future-planning/](./archive/future-planning)** - 未来规划（初期草案）
-  - Agent 原生基础设施规划
-  - 多模态潜空间智能体架构设想
-
-- **[legacy-from-old-archive/](./archive/legacy-from-old-archive)** - 旧归档的合并内容
-  - G1-G4早期阶段的评估和进度文档
-  - 协议集成计划、优化计划等历史文档
+-- 旧归档目录已清理，历史阶段文档仅保留当前 archive 根目录内仍被维护的条目。
 
 **注意**：这些文档主要用于历史参考和上下文理解。对于当前开发，重点参考 roadmaps 和 specifications。
 

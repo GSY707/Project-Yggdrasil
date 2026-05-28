@@ -48,7 +48,7 @@
 2. carry-forward 仍主要是自然语言摘要包，不是“执行指针 + 结构化最小证据”的强约束包。
    - 证据：carry-forward 由 currentContextState 摘要拼接生成，允许语义损失。
 3. 真实任务 parity 用例本身仍可注入大量文件/glob 语料，不符合“窗口仅最小子任务”实验设计。
-   - 证据：g4-real-task-window-parity 用例包含大规模 currentContextFiles 与 currentContextGlobs。
+   - 证据：g4-real-task-web-research-default 用例包含大规模 currentContextFiles 与 currentContextGlobs。
 4. 评测读取链存在语料类型鲁棒性缺陷（.pyc 当文本读取），导致 parity 结论可被装载错误阻断。
    - 证据：suite_cases_g4 直接按文本解码 currentContextFiles，遇二进制会失败。
 
@@ -88,3 +88,4 @@
 当前项目在“记忆树 + 多窗口重启技术闭环”上已经达到可用水平，但距离“全部记忆上树、窗口仅保留一次最小子任务工作集”的目标仍有明显工程差距，当前可量化差距约为 41%。
 
 这 41% 里，最大缺口不是“有没有 restart”，而是“窗口最小化与交付等价是否被硬约束并被稳定验证”。
+

@@ -64,8 +64,7 @@ corepack pnpm eval:g2:regression
 corepack pnpm eval:g4:multiscene
 corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
-corepack pnpm eval:g4:window-stress
-corepack pnpm eval:g4:real-task-parity
+corepack pnpm eval:g4:web-research:default
 ```
 
 ## Lint / Type Check
@@ -119,3 +118,4 @@ uv run pytest -m slow -n auto --dist loadfile
 - 运行 live/paid provider 前需确认相关环境变量（如 API key、`YGGDRASIL_ALLOW_PAID_MODELS`）。
 - `scripts/smoke_test.sh` 提供基础 smoke 流程（infra + migration + `/health`）。
 - `pytest.ini` 定义 `slow` marker，默认 `testpaths = tests`。
+

@@ -43,7 +43,7 @@ P3 原始工程接线已经完成，但还有两处发布级缺口：
 
 ### 2.3 真实任务 parity suite 扩展
 
-- 文件：`evaluation/suites/g4-real-task-window-parity.json`
+- 文件：`evaluation/suites/g4-real-task-web-research-default.json`
 
 变更：
 
@@ -67,7 +67,7 @@ uv run pytest -q tests/test_g4_multiscene.py
 
 本次新增/覆盖验证点：
 
-1. `evalsuite_g4_real_task_window_parity` 现在包含 4 个 case：2 个 LongCat free、2 个 DeepSeek paid-approved。
+1. `evalsuite_g4_real_task_web_research_default` 现在包含 4 个 case：2 个 LongCat free、2 个 DeepSeek paid-approved。
 2. 隔离评测环境会主动清理遗留 `YGGDRASIL_ALLOW_PAID_MODELS`，只有 `allowPaidModels=true` 才会重新打开。
 3. parity 聚合会按 provider group 分开输出，不再混算。
 

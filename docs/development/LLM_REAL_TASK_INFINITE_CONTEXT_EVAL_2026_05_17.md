@@ -4,7 +4,7 @@
 
 这份报告只按两类证据给结论：
 
-1. 任务目标：来自 `evaluation/suites/g4-real-task-window-parity.json` 的真实任务契约。
+1. 任务目标：来自 `evaluation/suites/g4-real-task-web-research-default.json` 的真实任务契约。
 2. 任务结果：来自 Langfuse trace 中 LLM 的最终输出原文，而不是 `deliveryEquivalence0_1`、`restartCount`、`cumulativeWindowSpanTokens` 这类执行指标。
 
 执行指标只作为辅助证据，不再单独承担“任务效果是否达成”的结论职责。
@@ -23,7 +23,7 @@
 本轮重新跑了真实任务，并把 Langfuse 真正接进观测链路：
 
 1. 启动 Langfuse：`corepack pnpm infra:langfuse:up`
-2. 重新执行真实任务对照：`corepack pnpm eval:g4:real-task-parity`
+2. 重新执行真实任务对照：`corepack pnpm eval:g4:web-research:default`
 3. 从 Langfuse trace `75c172aae4ff70de8ec320f08ff43fcb` 读取 4 个 generation 的最终输出
 4. 使用专用分析器 `scripts/analyze_langfuse_real_task_trace.py` 生成逐窗口分析工件：`.yggdrasil/state/analysis/langfuse-real-task-trace.md`
 
@@ -134,3 +134,4 @@
 1. 优先处理 LongCat short64k 的结论分叉，重点检查恢复态 prompt contract、delivery mode contract 和最小证据集是否把“工具禁用”误解释成了“能力不等价”。
 2. 把 `scripts/analyze_langfuse_real_task_trace.py` 固定为后续真实任务 / 无限上下文评估的默认分析入口，避免再回到只看汇总指标的旧口径。
 3. 在修复结论分叉之前，不再对外宣称“已经稳定证明 short-window 与 long-window 等价”；更准确的表述应是“真实任务多窗口交付能力已成立，但稳定等价结论仍待收口”。
+

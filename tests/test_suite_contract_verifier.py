@@ -219,17 +219,14 @@ class TestSuiteContractVerifier:
         result = verifier.verify_suite(suite)
         assert result.passed, f"Externalized suite failed: {[str(i.message) for i in result.rejections]}"
 
-    def test_legacy_suite_loads_with_warning_not_reject(self) -> None:
-        path = SUITES_DIR / "g4-real-task-minimal-workset.json"
+    def test_work_tree_debug_harness_loads_without_reject(self) -> None:
+        path = SUITES_DIR / "g4-real-task-work-tree-debug.json"
         if not path.exists():
-            pytest.skip("minimal-workset suite not found")
+            pytest.skip("work-tree-debug suite not found")
         suite = json.loads(path.read_text(encoding="utf-8"))
         verifier = SuiteContractVerifier()
         result = verifier.verify_suite(suite)
-        # Legacy suite should NOT reject (only warn)
-        assert result.passed, f"Legacy suite should not reject: {[str(i.message) for i in result.rejections]}"
-        # But should have warnings
-        assert len(result.warnings) > 0, "Legacy suite should produce warnings"
+        assert result.passed, f"Harness suite should pass: {[str(i.message) for i in result.rejections]}"
 
     def test_harness_suite_allows_embedded_planning(self) -> None:
         suite = _make_suite(

@@ -294,8 +294,8 @@ def _build_readonly_context_package_from_session(
         projectId=parent_task.project_id,
         branchId=parent_task.branch_id,
         systemIntro=(
-            "Project Yggdrasil mounts identity, context, and execution roots before each run so "
-            "the agent starts from stable runtime state instead of prompt-only conventions."
+            "世界树运行时会在每次执行前挂载身份、上下文与执行根节点，"
+            "使 Agent 从稳定的运行时状态启动，而不是只依赖提示词约定。"
         ),
         identityRefs=identity_refs,
         contextRefs=context_refs,

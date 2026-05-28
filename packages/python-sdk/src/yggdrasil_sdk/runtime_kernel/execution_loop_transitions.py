@@ -215,6 +215,10 @@ def _finalize_execution_transition(
 	work_context_stack = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
 	transition_state = None
 	if takeover_protocol is not None and takeover_protocol.work_tree is not None:
+		if takeover_protocol.status == "needs-clarification":
+			result_status = "needs-clarification"
+			task_status = "awaiting-approval"
+			transition_outcome = "needs-clarification"
 		transition_state = assistant_work_tree_transition if isinstance(assistant_work_tree_transition, dict) and assistant_work_tree_transition.get("applied") else None
 		if transition_state is None:
 			takeover_protocol, work_context_stack, transition_state = advance_takeover_after_delivery(
@@ -250,7 +254,11 @@ def _finalize_execution_transition(
 				"currentFocus": str(transition_state.get("currentFocus") or request.get("currentFocus") or "delivery-gate-retry"),
 			}
 		if takeover_protocol is not None and takeover_protocol.work_tree is not None:
-			if takeover_protocol.work_tree.status == "awaiting-approval":
+			if takeover_protocol.status == "needs-clarification":
+				result_status = "needs-clarification"
+				task_status = "awaiting-approval"
+				transition_outcome = "needs-clarification"
+			elif takeover_protocol.work_tree.status == "awaiting-approval":
 				result_status = "awaiting-approval"
 				task_status = "awaiting-approval"
 				transition_outcome = "awaiting-approval"

@@ -46,6 +46,12 @@ _SECTION_WEIGHTS: dict[str, float] = {
     "incomplete": 0.15,
 }
 
+_CONFIRMATION_KEYS: tuple[str, ...] = (
+    "takeoverPlanConfirmed",
+    "planConfirmed",
+    "confirmPlan",
+)
+
 
 
 def _text(value: Any) -> str:
@@ -68,6 +74,14 @@ def _objective_from(payload: dict[str, object]) -> str:
 
 def _task_type(payload: dict[str, object]) -> str:
     return _text(payload.get("taskType") or "generic").lower() or "generic"
+
+
+def _is_plan_confirmed(payload: dict[str, object]) -> bool:
+    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+    for key in _CONFIRMATION_KEYS:
+        if key in request and bool(request.get(key)):
+            return True
+    return False
 
 
 def _run_type(payload: dict[str, object]) -> str:
@@ -273,6 +287,7 @@ class TaskTakeoverModule(BaseModulePlugin):
     def parse_objective(self, payload: dict[str, object]) -> dict[str, object]:
         objective = _objective_from(payload)
         ambiguities: list[dict[str, object]] = []
+        plan_confirmed = _is_plan_confirmed(payload)
         if len(objective) < 12:
             ambiguities.append(
                 TaskTakeoverAmbiguity(
@@ -280,6 +295,15 @@ class TaskTakeoverModule(BaseModulePlugin):
                     prompt="当前目标过短，可能需要补充验收标准。",
                     reason="objective-too-short",
                     required=False,
+                ).model_dump(by_alias=True, mode="json")
+            )
+        if not plan_confirmed:
+            ambiguities.append(
+                TaskTakeoverAmbiguity(
+                    id=new_id("takeover-ambiguity", "plan-confirmation-required", stable=True),
+                    prompt="请先确认我对任务目标与执行计划的理解是否正确；确认后我再进入执行。",
+                    reason="plan-confirmation-required",
+                    required=True,
                 ).model_dump(by_alias=True, mode="json")
             )
         return {
@@ -386,6 +410,8 @@ class TaskTakeoverModule(BaseModulePlugin):
                 reworkCount=0,
                 reworkRate=0.0,
                 clarificationNeeded=bool([item for item in ambiguities if item.get("required")]),
+                planConfirmationNeeded=not _is_plan_confirmed(payload),
+                planConfirmed=_is_plan_confirmed(payload),
                 deliveryCompletenessScore0_100=0.0,
                 verificationPassRate=0.0,
             ).model_dump(by_alias=True, mode="json"),
@@ -413,6 +439,8 @@ class TaskTakeoverModule(BaseModulePlugin):
                 reworkCount=rework_count,
                 reworkRate=rework_rate,
                 clarificationNeeded=False,
+                planConfirmationNeeded=False,
+                planConfirmed=_is_plan_confirmed(payload),
                 deliveryCompletenessScore0_100=_delivery_completeness(delivery_sections),
                 verificationPassRate=_verification_pass_rate(verification_items),
             ).model_dump(by_alias=True, mode="json"),

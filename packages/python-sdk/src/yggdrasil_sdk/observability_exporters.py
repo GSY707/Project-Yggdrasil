@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 import os
+import socket
 import threading
+import time
 from typing import Any
+from urllib.parse import urlparse
 
 _logger = logging.getLogger(__name__)
 
@@ -136,6 +139,32 @@ class _ExporterState:
         self._metric_runtimes: dict[tuple[str, str], _MetricRuntime] = {}
         self._langfuse_client: Any | None = None
         self._langfuse_identity: tuple[str, str, str | None] | None = None
+        self._endpoint_health: dict[str, tuple[float, bool]] = {}
+
+    def _endpoint_available(self, endpoint: str) -> bool:
+        parsed = urlparse(endpoint)
+        host = (parsed.hostname or "").strip().lower()
+        # Only probe loopback/local endpoints; remote endpoints remain untouched.
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            return True
+
+        now = time.monotonic()
+        cached = self._endpoint_health.get(endpoint)
+        if cached is not None and now - cached[0] < 60.0:
+            return cached[1]
+
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        available = True
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                available = True
+        except OSError:
+            available = False
+
+        self._endpoint_health[endpoint] = (now, available)
+        if not available:
+            _logger.debug("OTel endpoint unreachable, exporter disabled for now: %s", endpoint)
+        return available
 
     def _resource(self, service_name: str):
         if Resource is None:
@@ -151,6 +180,8 @@ class _ExporterState:
     def trace_runtime(self, service_name: str) -> _TraceRuntime | None:
         endpoint = _signal_endpoint("traces")
         if endpoint is None or TracerProvider is None or OTLPSpanExporter is None or BatchSpanProcessor is None:
+            return None
+        if not self._endpoint_available(endpoint):
             return None
 
         cache_key = (service_name, endpoint)
@@ -173,6 +204,8 @@ class _ExporterState:
     def metric_runtime(self, service_name: str) -> _MetricRuntime | None:
         endpoint = _signal_endpoint("metrics")
         if endpoint is None or MeterProvider is None or OTLPMetricExporter is None or PeriodicExportingMetricReader is None:
+            return None
+        if not self._endpoint_available(endpoint):
             return None
 
         cache_key = (service_name, endpoint)

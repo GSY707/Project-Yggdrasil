@@ -338,6 +338,29 @@ def test_work_tree_bootstraps_pointer_when_plan_is_empty() -> None:
     assert bootstrap_node.recovery_anchor == "resume:bootstrap"
 
 
+def test_takeover_confirmation_gate_requires_confirmation_before_prepared() -> None:
+    protocol = TaskTakeoverProtocol.model_validate(_root_only_takeover_protocol("task_p4_confirm_gate"))
+    gated = runtime_takeover.enforce_takeover_confirmation_gate(
+        protocol,
+        request={},
+    )
+    assert gated is not None
+    assert gated.status == "needs-clarification"
+    assert gated.current_phase == "confirm"
+    assert gated.metrics.plan_confirmation_needed is True
+    assert gated.metrics.plan_confirmed is False
+
+    prepared = runtime_takeover.enforce_takeover_confirmation_gate(
+        gated,
+        request={"takeoverPlanConfirmed": True},
+    )
+    assert prepared is not None
+    assert prepared.status == "prepared"
+    assert prepared.current_phase == "execute"
+    assert prepared.metrics.plan_confirmation_needed is False
+    assert prepared.metrics.plan_confirmed is True
+
+
 def test_work_tree_reducer_can_create_child_and_sync_stack() -> None:
     protocol = TaskTakeoverProtocol.model_validate(_root_only_takeover_protocol("task_p4_create_child"))
     protocol, stack = runtime_takeover.normalize_takeover_runtime_state(

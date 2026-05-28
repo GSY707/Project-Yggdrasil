@@ -25,17 +25,14 @@
 - [工作树协议 v0.2](work-tree-protocol-v0.2.md) - 冻结工作树作为动态工作记忆和执行栈的节点 schema、状态机、Working Node 标签、摘要上浮和冲突语义。
 - [世界构建、初次苏醒与任务启动协议 v0.1](world-build-awakening-task-start-protocol-v0.1.md) - 重新划分“先建世界 / 再醒来 / 再开始工作”的世界级与任务级边界，强调建世界与初次苏醒不得接触具体工作信息，并引入“起始状态”作为任务起点。
 
-### 现有 v0.1 规格（兼容参考）
+### 现有 v0.1 领域数据规格（实现参考）
 
 - [通用数据约定 v0.1](common-data-conventions-v0.1.md)
-- [任务接管协议 v0.1](task-takeover-protocol-v0.1.md)
-- [工作树协议 v0.1](work-tree-protocol-v0.1.md)
 - [记忆与建树数据规格 v0.1](memory-domain-data-spec-v0.1.md)
 - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
 - [协作与治理数据规格 v0.1](collaboration-and-governance-data-spec-v0.1.md)
 - [模块平台数据规格 v0.1](module-platform-data-spec-v0.1.md)
 - [资产、导入导出与评测数据规格 v0.1](asset-packaging-evaluation-data-spec-v0.1.md)
-- [原始设计覆盖检查 v0.1](original-design-coverage-review-v0.1.md)
 
 ## 3. 阅读顺序
 
@@ -43,10 +40,9 @@
 2. 若参与提示词、启动流程或工作流程重做，先读 Agent 运行时协议 v0.2。
 3. 再读世界构建、初次苏醒与任务启动协议 v0.1，确认“世界级学习”和“任务级读取工作状态”的边界。
 4. 再读工作树协议 v0.2，确认 runtime 如何维护当前工作节点、动态下潜、摘要上浮和结束批准。
-5. 再读任务接管协议 v0.1，确认旧 takeover plan 如何作为 v0.2 工作树初始建议和兼容输入。
-6. 再读你所属模块的主领域规格。
-7. 然后读协议文档，确认 manifest、hook、事件的接入方式。
-8. 最后按需要回读 v0.1 规格，处理旧 artifact 兼容。
+5. 再读你所属模块的主领域规格。
+6. 然后读协议文档，确认 manifest、hook、事件的接入方式。
+7. 最后按需要回读 v0.1 领域数据规格，处理旧数据迁移。
 
 ## 4. 模块开发最低合规要求
 
@@ -65,11 +61,11 @@ v0.2 已冻结以下重做边界：
 - Boot Prompt 四段：物理接口、根指针、行为宪法、程序计数器恢复。
 - RootMountPackage v0.2：语义根指针、索引地图、当前工作节点、邮箱和侧信道占位。
 - WorkTreeProtocol v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack 栈式上下文、摘要上浮、等待批准完成。
-- 启动模式：cold-standby、hot-resume、work-node-active、approval-review（`restart-recovery` 仅保留为 legacy/stress 兼容输入，不作为默认执行路径）。
+- 启动模式：cold-standby、hot-resume、work-node-active、approval-review。
 - 运行模式：以当前工作树节点为权威指针，`currentFocus` 只作为 UI 摘要。
 - 邮箱：使用独立 `mailbox` 表作为主存储，outbox/event 只承载投递和审计。
 - Fork：按模型能力、节点复杂度、上下文窗口和成本动态分配预算，并保留父 Agent 合并预算。
-- 兼容策略：v0.1 artifact 必须可读并升级，v0.2 作为默认且唯一运行路径。
+- 运行策略：v0.2 作为默认且唯一运行路径。
 
 当前 v0.1 已冻结以下数据边界：
 

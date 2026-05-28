@@ -1,6 +1,120 @@
 from .llm_runtime_part_a import *  # noqa: F401,F403
 from .llm_runtime_part_a import _elapsed_ms
 
+
+def _normalize_conversation_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            for key in ("text", "input_text", "output_text", "content"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    parts.append(value)
+                    break
+        return "\n".join(parts)
+    return ""
+
+
+def _to_serialized_messages(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
+    serialized: list[dict[str, str]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "unknown")
+        serialized.append(
+            {
+                "role": role,
+                "content": _normalize_conversation_content(message.get("content")),
+            }
+        )
+    return serialized
+
+
+def _safe_load_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _upsert_task_conversation_record(
+    *,
+    workspace_root: Path,
+    task_id: str,
+    invocation_entry: dict[str, Any],
+) -> None:
+    now = utc_now().isoformat()
+
+    state_dir = ensure_state_subdir("llm/task-conversations", workspace_root)
+    state_record_path = state_dir / f"task_{task_id}.json"
+    state_index_path = state_dir / "index.json"
+
+    tmp_dir = workspace_root / "tmp" / "task-conversations" / "data"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_record_path = tmp_dir / f"task_{task_id}.json"
+    tmp_index_path = tmp_dir / "index.json"
+
+    for record_path, index_path in (
+        (state_record_path, state_index_path),
+        (tmp_record_path, tmp_index_path),
+    ):
+        record_payload = _safe_load_json(record_path) or {
+            "taskId": task_id,
+            "createdAt": now,
+            "updatedAt": now,
+            "invocations": [],
+        }
+        invocations = [
+            item
+            for item in (record_payload.get("invocations") or [])
+            if isinstance(item, dict) and str(item.get("invocationId") or "") != str(invocation_entry.get("invocationId") or "")
+        ]
+        invocations.append(dict(invocation_entry))
+        invocations.sort(
+            key=lambda item: (
+                int(item.get("windowIndex") or 0),
+                str(item.get("endedAt") or ""),
+                str(item.get("invocationId") or ""),
+            )
+        )
+        record_payload["taskId"] = task_id
+        record_payload["updatedAt"] = now
+        record_payload["invocationCount"] = len(invocations)
+        record_payload["invocations"] = invocations
+        if invocations:
+            latest = invocations[-1]
+            record_payload["latestInvocationId"] = latest.get("invocationId")
+            record_payload["latestWindowIndex"] = latest.get("windowIndex")
+            record_payload["latestStatus"] = latest.get("status")
+        write_json(record_path, record_payload)
+
+        index_payload = _safe_load_json(index_path) or {"updatedAt": now, "tasks": []}
+        tasks = [item for item in (index_payload.get("tasks") or []) if isinstance(item, dict)]
+        task_items = [item for item in tasks if str(item.get("taskId") or "") != task_id]
+        latest_entry = invocations[-1] if invocations else {}
+        task_items.append(
+            {
+                "taskId": task_id,
+                "recordPath": record_path.name,
+                "invocationCount": len(invocations),
+                "latestInvocationId": latest_entry.get("invocationId"),
+                "latestWindowIndex": latest_entry.get("windowIndex"),
+                "latestStatus": latest_entry.get("status"),
+                "updatedAt": now,
+            }
+        )
+        task_items.sort(key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
+        index_payload["updatedAt"] = now
+        index_payload["tasks"] = task_items
+        write_json(index_path, index_payload)
+
 def invoke_runtime_completion(
     session,
     *,
@@ -181,6 +295,8 @@ def invoke_runtime_completion(
             final_result: dict[str, Any] | None = None
             last_tool_round_signature: str | None = None
             duplicate_tool_round_streak = 0
+            force_no_tool_round = False
+            tool_budget_forced_finalized = False
 
             # Check for pending tool calls from a safe-shutdown checkpoint
             _resume_tool_calls: list[dict[str, Any]] | None = None
@@ -291,6 +407,23 @@ def invoke_runtime_completion(
                         "error": str(pre_check.reason or "pre-invocation-budget-check-failed"),
                     }
                     break
+                if round_index >= max_tool_rounds:
+                    force_no_tool_round = True
+                    if not tool_budget_forced_finalized:
+                        conversation_messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "Tool round budget reached. Do not call any tools in this response. "
+                                    "Use already collected evidence and produce the final Markdown delivery now. "
+                                    "Must include: comparison matrix, contradiction resolution, source table, and the four headings "
+                                    "## 结果 / ## 证据 / ## 风险 / ## 已知问题."
+                                ),
+                            }
+                        )
+                        tool_budget_forced_finalized = True
+                round_tool_specs = None if force_no_tool_round else (tool_specs or None)
+                force_no_tool_round = False
                 if invoke_model is None:
                     result = _local_fallback_result(conversation_messages, route_payload)
                 else:
@@ -302,7 +435,7 @@ def invoke_runtime_completion(
                         max_tokens=max_tokens,
                         workspace_root=workspace_root,
                         allow_fallback=allow_fallback,
-                        tools=tool_specs or None,
+                        tools=round_tool_specs,
                         thinking=thinking_mode,
                         reasoning_effort=reasoning_effort,
                     )
@@ -373,12 +506,124 @@ def invoke_runtime_completion(
                     final_result = result
                     break
                 if duplicate_tool_round_streak >= _DUPLICATE_TOOL_ROUND_THRESHOLD:
-                    round_summaries[-1]["finishReason"] = "duplicate-tool-loop-short-circuit"
-                    round_summaries[-1]["duplicateToolRoundShortCircuited"] = True
-                    final_result = _duplicate_tool_loop_result(result, invocation.id, duplicate_streak=duplicate_tool_round_streak)
-                    break
+                    round_summaries[-1]["finishReason"] = "duplicate-tool-loop-blocked-continue"
+                    round_summaries[-1]["duplicateToolRoundBlocked"] = True
+                    assistant_tool_calls = _assistant_tool_calls_payload(tool_calls, round_index)
+                    conversation_messages.append(_assistant_tool_round_message(result, assistant_tool_calls))
+                    duplicate_notice = {
+                        "status": "error",
+                        "error": "duplicate_tool_loop_blocked",
+                        "message": (
+                            "Blocked repeated idempotent tool calls. Do not repeat the same tool call signature. "
+                            "Use already collected evidence and produce the final answer now."
+                        ),
+                        "duplicateStreak": duplicate_tool_round_streak,
+                    }
+                    for call in tool_calls:
+                        tool_call_id = str(call.get("id") or new_id("toolcall", call.get("name"), round_index))
+                        conversation_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call_id,
+                                "name": str(call.get("name") or "unknown"),
+                                "content": tool_result_to_message_content(
+                                    {
+                                        "tool": {"name": str(call.get("name") or "unknown")},
+                                        "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                                        "result": duplicate_notice,
+                                        "success": False,
+                                        "toolCallId": tool_call_id,
+                                    }
+                                ),
+                            }
+                        )
+                    conversation_messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "Duplicate idempotent tool loop detected. Do not call any tools in the next response. "
+                                "Use already collected evidence and produce the final Markdown delivery now. "
+                                "Must include: comparison matrix, contradiction resolution, source table, and the four headings "
+                                "## 结果 / ## 证据 / ## 风险 / ## 已知问题."
+                            ),
+                        }
+                    )
+                    if round_index >= max_tool_rounds:
+                        final_round_started_at = perf_counter()
+                        if invoke_model is None:
+                            final_result = _local_fallback_result(conversation_messages, route_payload)
+                        else:
+                            final_result = invoke_model(
+                                requested_model=str(route_payload.get("selectedModel")) if route_payload.get("selectedModel") is not None else None,
+                                requested_provider=str(route_payload.get("selectedProvider")) if route_payload.get("selectedProvider") is not None else None,
+                                messages=conversation_messages,
+                                temperature=temperature,
+                                max_tokens=max_tokens,
+                                workspace_root=workspace_root,
+                                allow_fallback=allow_fallback,
+                                tools=None,
+                                thinking=thinking_mode,
+                                reasoning_effort=reasoning_effort,
+                            )
+                        _merge_usage(usage_totals, dict(final_result.get("usage") or {}))
+                        accumulated_cost += float(final_result.get("costUsed", 0.0) or 0.0)
+                        round_modes.append(str(final_result.get("mode") or "unknown"))
+                        round_summaries.append(
+                            {
+                                "index": round_index + 1,
+                                "mode": final_result.get("mode"),
+                                "finishReason": str(final_result.get("finishReason") or "forced-final-delivery-after-duplicate-loop"),
+                                "latencyMs": _elapsed_ms(final_round_started_at),
+                                "toolCalls": [],
+                                "forcedNoToolRound": True,
+                            }
+                        )
+                        break
+                    force_no_tool_round = True
+                    continue
                 if round_index >= max_tool_rounds:
-                    raise RuntimeError(f"Tool round limit exceeded for invocation {invocation.id}.")
+                    conversation_messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "Tool round budget reached. Do not call any tools in the next response. "
+                                "Use already collected evidence and produce the final Markdown delivery now. "
+                                "Must include: comparison matrix, contradiction resolution, source table, and the four headings "
+                                "## 结果 / ## 证据 / ## 风险 / ## 已知问题."
+                            ),
+                        }
+                    )
+                    final_round_started_at = perf_counter()
+                    if invoke_model is None:
+                        final_result = _local_fallback_result(conversation_messages, route_payload)
+                    else:
+                        final_result = invoke_model(
+                            requested_model=str(route_payload.get("selectedModel")) if route_payload.get("selectedModel") is not None else None,
+                            requested_provider=str(route_payload.get("selectedProvider")) if route_payload.get("selectedProvider") is not None else None,
+                            messages=conversation_messages,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            workspace_root=workspace_root,
+                            allow_fallback=allow_fallback,
+                            tools=None,
+                            thinking=thinking_mode,
+                            reasoning_effort=reasoning_effort,
+                        )
+                    _merge_usage(usage_totals, dict(final_result.get("usage") or {}))
+                    accumulated_cost += float(final_result.get("costUsed", 0.0) or 0.0)
+                    round_modes.append(str(final_result.get("mode") or "unknown"))
+                    round_summaries.append(
+                        {
+                            "index": round_index + 1,
+                            "mode": final_result.get("mode"),
+                            "finishReason": str(final_result.get("finishReason") or "forced-final-delivery-after-tool-round-limit"),
+                            "latencyMs": _elapsed_ms(final_round_started_at),
+                            "toolCalls": [],
+                            "forcedNoToolRound": True,
+                            "forcedNoToolRoundTrigger": "tool-round-limit",
+                        }
+                    )
+                    break
 
                 # Graceful shutdown checkpoint: if shutdown requested and there are tool calls,
                 # save state and raise SafeShutdownInterrupt instead of executing them.
@@ -615,6 +860,33 @@ def invoke_runtime_completion(
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+
+            invocation_entry = {
+                "invocationId": invocation.id,
+                "taskId": task.id,
+                "agentRunId": run.id,
+                "promptCompileArtifactId": prompt_artifact.id,
+                "status": invocation.status,
+                "requestedModel": route_payload.get("selectedModel"),
+                "requestedProvider": route_payload.get("selectedProvider"),
+                "resolvedModel": invocation.resolved_model,
+                "resolvedProvider": invocation.resolved_provider,
+                "windowIndex": (request.get("runtimeMetrics") or {}).get("windowIndex") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                "restartCount": (request.get("runtimeMetrics") or {}).get("restartCount") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                "cumulativeWindowSpanTokens": (request.get("runtimeMetrics") or {}).get("cumulativeWindowSpanTokens") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                "contextLengthObservations": [dict(item) for item in context_length_observations if isinstance(item, dict)],
+                "messages": _to_serialized_messages(messages),
+                "conversationMessages": _to_serialized_messages([*conversation_messages, final_message]),
+                "assistantText": str(final_result.get("outputText") or ""),
+                "error": final_result.get("error"),
+                "endedAt": utc_now().isoformat(),
+            }
+            _upsert_task_conversation_record(
+                workspace_root=workspace_root,
+                task_id=str(task.id),
+                invocation_entry=invocation_entry,
+            )
+
             local_runtime_timings["totalLocalMs"] = _elapsed_ms(local_started_at)
             return {
                 "assistantText": str(final_result.get("outputText") or ""),
@@ -706,6 +978,41 @@ def invoke_runtime_completion(
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+
+            failure_final_message = {
+                "role": "assistant",
+                "content": str(failure_result.get("outputText") or ""),
+            }
+            failure_runtime_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
+            failure_entry = {
+                "invocationId": invocation.id,
+                "taskId": task.id,
+                "agentRunId": run.id,
+                "promptCompileArtifactId": str(failure_prompt_artifact_id or prompt_metadata.get("id") or ""),
+                "status": "failed",
+                "requestedModel": route_payload.get("selectedModel"),
+                "requestedProvider": route_payload.get("selectedProvider"),
+                "resolvedModel": route_payload.get("selectedModel"),
+                "resolvedProvider": route_payload.get("selectedProvider"),
+                "windowIndex": failure_runtime_metrics.get("windowIndex"),
+                "restartCount": failure_runtime_metrics.get("restartCount"),
+                "cumulativeWindowSpanTokens": failure_runtime_metrics.get("cumulativeWindowSpanTokens"),
+                "contextLengthObservations": [
+                    dict(item)
+                    for item in failure_context_length_observations
+                    if isinstance(item, dict)
+                ],
+                "messages": _to_serialized_messages(messages),
+                "conversationMessages": _to_serialized_messages([*(failure_messages or []), failure_final_message]),
+                "assistantText": str(failure_result.get("outputText") or ""),
+                "error": str(exc),
+                "endedAt": utc_now().isoformat(),
+            }
+            _upsert_task_conversation_record(
+                workspace_root=workspace_root,
+                task_id=str(task.id),
+                invocation_entry=failure_entry,
+            )
         except Exception as persist_exc:
             record_log(
                 service_name,

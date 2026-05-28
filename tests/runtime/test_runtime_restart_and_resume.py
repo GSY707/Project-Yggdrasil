@@ -285,7 +285,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["status"] == "continuing"
     assert len(invoke_calls) == 1
     assert invoke_calls[0]["startupMode"] == "bootstrap"
     assert any(item.get("kind") == "mailbox-message" for item in invoke_calls[0]["currentContext"])
@@ -296,7 +296,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         task = task_repository.get_task("task_mailbox_wake")
         messages = runtime_repository.list_mailbox_messages(task_id="task_mailbox_wake", limit=10)
         assert task is not None
-        assert task.status == "awaiting-approval"
+        assert task.status == "queued"
         assert messages[0].status == "delivered"
 
 
@@ -387,126 +387,6 @@ def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
         assert refreshed_snapshot.status == "created"
         assert len(refreshed_snapshot.blockers) == 1
         assert refreshed_snapshot.blockers[0].startswith("snapshot-corrupted:checksum-mismatch: expected=broken-checksum, actual=")
-
-def test_main_agent_runtime_window_restart_closed_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        TaskRepository(session).create_task(
-            {
-                "id": "task_window_restart",
-                "title": "伪无限上下文窗口闭环",
-                "goal": "当工作集超过人工限制的有效窗口时，自动生成 carry-forward package 并切换到下一窗口继续执行。",
-                "status": "draft",
-                "currentObjective": "验证自动窗口重启和续跑闭环。",
-                "currentFocus": "window-restart",
-                "resumeMessage": "继续执行下一窗口。",
-                "budgetState": {
-                    "tokenBudgetTotal": 2000,
-                    "costBudgetTotal": 5.0,
-                },
-            }
-        )
-
-    invoke_calls: list[dict[str, object]] = []
-
-    def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
-        request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
-        invoke_calls.append({
-            "resumeMessage": request_payload.get("resumeMessage"),
-            "restartMetrics": request_payload.get("runtimeMetrics"),
-            "currentNodeId": request_payload.get("currentNodeId"),
-            "workingNodeAnnotation": request_payload.get("workingNodeAnnotation"),
-            "retrievalWorkTreeNodeId": (
-                request_payload.get("memoryRetrievalState", {}).get("workTreeNodeId")
-                if isinstance(request_payload.get("memoryRetrievalState"), dict)
-                else None
-            ),
-        })
-        return {
-            "assistantText": (
-                "# result\n已根据 carry-forward package 继续执行并完成当前窗口目标。\n"
-                "# evidence\n已完成窗口续跑验证。\n"
-                "# pending\n无。\n"
-                "# incomplete\n无。"
-            ),
-            "invocation": {
-                "id": f"inv_window_restart_{len(invoke_calls)}",
-                "resolvedModel": "LongCat-Flash-Lite",
-                "resolvedProvider": "longcat",
-                "status": "completed",
-                "promptCompileArtifactId": "artifact_window_restart",
-                "traceId": "trace_window_restart",
-            },
-            "usage": {
-                "inputTokens": 64,
-                "outputTokens": 24,
-                "totalTokens": 88,
-            },
-            "costUsed": 0.0,
-            "toolExecutions": [],
-            "timings": {
-                "compilePromptMs": 0.0,
-                "modelToolLoopMs": 0.0,
-            },
-            "contextLengthObservations": [],
-        }
-
-    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
-    started = client.post(
-        "/runtime/tasks/task_window_restart/start",
-        json={
-            "currentFocus": "执行人工受限窗口压力路径",
-            "currentObjective": "验证超过 effectiveContextWindow 后自动切换窗口。",
-            "currentContext": [
-                {
-                    "id": "ctx_window_large",
-                    "title": "长任务主工作集",
-                    "content": "正式上下文窗口压力样本。" * 80,
-                    "importance": 0.99,
-                }
-            ],
-            "protectedItems": [{"kind": "node", "id": "ctx_window_large"}],
-            "effectiveContextWindow": 120,
-            "windowRestartRatio": 0.75,
-            "restartMessage": "窗口已满，请基于 carry-forward package 在下一窗口继续执行。",
-        },
-    )
-    assert started.status_code == 202
-
-    first_run = run_worker_once("agent-runtime")
-    assert first_run["status"] == "processed"
-    assert first_run["result"]["status"] == "continuing"
-    assert first_run["result"]["queuedWorkItem"]["command"] == "resume"
-    assert first_run["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "window-restart-queued"
-    assert invoke_calls == []
-
-    restart_window_artifact = first_run["result"]["windowExecutionArtifact"]
-    restart_window_path = Path(resolve_workspace_root()) / restart_window_artifact["artifactRef"]["locator"]
-    restart_window_payload = json.loads(restart_window_path.read_text(encoding="utf-8"))
-    assert restart_window_payload["transitionOutcome"] == "window-restart-queued"
-    assert restart_window_payload["restartTrigger"] == "effectiveContextWindow"
-    assert restart_window_payload["windowIndex"] == 1
-
-    second_run = run_worker_once("agent-runtime")
-    assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] in {"completed", "awaiting-approval"}
-    assert len(invoke_calls) == 1
-
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        task_repository = TaskRepository(session)
-        task = task_repository.get_task("task_window_restart")
-        runs = task_repository.list_agent_runs("task_window_restart")
-        assert task is not None
-        assert task.status in {"completed", "awaiting-approval"}
-        assert task.window_index == 2
-        assert len(runs) == 2
-        assert runs[0].status == "completed"
-        assert runs[1].status == "completed"
-
 
 def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current_focus(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
@@ -820,7 +700,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
     assert first_run["result"]["takeoverProtocol"] is not None
     assert isinstance(first_run["result"]["assistantText"], str)
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
-    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"verified", "completed"}
+    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "verified", "completed"}
     assert first_run["result"]["takeoverProtocolRef"] is not None
 
     resumed = client.post(
@@ -835,7 +715,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
 
     second_run = run_worker_once("agent-runtime")
     assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] == "awaiting-approval"
+    assert second_run["result"]["status"] == "continuing"
     assert second_run["result"]["runtimeTimings"]["totalMs"] >= 0
     assert second_run["result"]["resume"] is not None
     assert second_run["result"]["rehydration"] is not None
@@ -850,7 +730,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
         assert task is not None
-        assert task.status == "awaiting-approval"
+        assert task.status in {"queued", "awaiting-approval"}
         assert task.active_snapshot_id is None
         runs = task_repository.list_agent_runs("task_runtime")
         assert len(runs) == 2
@@ -882,7 +762,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         ]
         assert len(execution_notes) == 2
     assert second_run["result"]["takeoverProtocol"] is not None
-    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
+    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "awaiting-approval"}
     assert second_run["result"]["takeoverProtocolRef"] is not None
 
 

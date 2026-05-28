@@ -4,8 +4,8 @@
 - 日期：2026-05-05
 - 关联文档：
   - [通向最终目标的路线图](final-goal-roadmap-2026-04-30.md)
-  - [Task Takeover Protocol v0.1](../specs/task-takeover-protocol-v0.1.md)
-  - [Agent 运行时协议 v0.1](../specs/agent-runtime-protocol-v0.1.md)
+  - [Work Tree Protocol v0.2](../specs/work-tree-protocol-v0.2.md)
+  - [Agent 运行时协议 v0.2](../specs/agent-runtime-protocol-v0.2.md)
   - [运行时与工具数据规格 v0.1](../specs/runtime-domain-data-spec-v0.1.md)
 
 ## 1. 定位

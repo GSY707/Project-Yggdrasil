@@ -3,17 +3,15 @@
 - 文档状态：Accepted for P1/P2 implementation
 - 版本：v0.2
 - 日期：2026-05-23
-- 取代范围：取代 [Agent 运行时协议 v0.1](agent-runtime-protocol-v0.1.md) 中关于提示词、启动流程、根节点挂载、工作流程、暂停恢复和任务结束的运行语义；v0.1 的模块边界和既有数据规格仍可作为兼容层参考。
+- 取代范围：v0.2 为唯一正式运行语义。
 - 设计来源：
   - [新 Boot Prompt 方案](../new/元提示词.md)
   - [新工作树方案](../new/工作树.md)
   - [世界树计划正式项目定义草稿](../new/世界树计划正式项目定义.md)
-  - [提示词、启动流程、工作流程重做执行文档](../development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md)
+  - [世界构建、初次苏醒与任务级工作状态读取实施文档](../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md)
 - 关联文档：
   - [世界构建、初次苏醒与任务启动协议 v0.1](world-build-awakening-task-start-protocol-v0.1.md)
   - [工作树协议 v0.2](work-tree-protocol-v0.2.md)
-  - [工作树协议 v0.1](work-tree-protocol-v0.1.md)
-  - [任务接管协议 v0.1](task-takeover-protocol-v0.1.md)
   - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
   - [协作与治理数据规格 v0.1](collaboration-and-governance-data-spec-v0.1.md)
 

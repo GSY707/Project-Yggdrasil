@@ -108,8 +108,8 @@
           "importance": 0.95
         },
         {
-          "path": "evaluation/suites/g4-window-restart-stress.json",
-          "title": "g4 window stress suite",
+          "path": "evaluation/suites/g4-web-research-work-tree-long.json",
+          "title": "g4 work-tree long suite",
           "importance": 0.98
         },
         {
@@ -463,8 +463,8 @@
           "importance": 0.95
         },
         {
-          "path": "evaluation/suites/g4-window-restart-stress.json",
-          "title": "g4 window stress suite",
+          "path": "evaluation/suites/g4-web-research-work-tree-long.json",
+          "title": "g4 work-tree long suite",
           "importance": 0.98
         },
         {
@@ -814,8 +814,8 @@
           "importance": 0.95
         },
         {
-          "path": "evaluation/suites/g4-window-restart-stress.json",
-          "title": "g4 window stress suite",
+          "path": "evaluation/suites/g4-web-research-work-tree-long.json",
+          "title": "g4 work-tree long suite",
           "importance": 0.98
         },
         {
@@ -1172,8 +1172,8 @@
           "importance": 0.95
         },
         {
-          "path": "evaluation/suites/g4-window-restart-stress.json",
-          "title": "g4 window stress suite",
+          "path": "evaluation/suites/g4-web-research-work-tree-long.json",
+          "title": "g4 work-tree long suite",
           "importance": 0.98
         },
         {

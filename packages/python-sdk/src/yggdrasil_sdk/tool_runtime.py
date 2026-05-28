@@ -40,7 +40,7 @@ def _normalize_tool_descriptor(tool: dict[str, Any], module_id: str) -> ToolDesc
     payload.setdefault("moduleId", module_id)
     payload.setdefault("version", "0.1.0")
     payload.setdefault("displayName", payload.get("name") or module_id)
-    payload.setdefault("schemaRef", "docs/specs/agent-runtime-protocol-v0.1.md")
+    payload.setdefault("schemaRef", "docs/specs/agent-runtime-protocol-v0.2.md")
     payload.setdefault("executionMode", "sync")
     payload.setdefault("timeoutMs", 5000)
     payload.setdefault("permissionRequired", [])

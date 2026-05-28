@@ -11,7 +11,8 @@
   - `docs/research/g3-closeout-2026-05-15.md`
   - `docs/research/g4-closeout-2026-05-15.md`
   - `docs/protocols/yggdrasil-application-manifest-v0.1.md`
-  - `docs/specs/task-takeover-protocol-v0.1.md`
+  - `docs/specs/work-tree-protocol-v0.2.md`
+  - `docs/specs/agent-runtime-protocol-v0.2.md`
   - `todo.md`
 
 ---

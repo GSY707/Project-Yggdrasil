@@ -198,7 +198,7 @@ child-1 完成摘要
 
 - `docs/specs/agent-runtime-protocol-v0.2.md`
 - `docs/specs/work-tree-protocol-v0.2.md`
-- `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md`
+- `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md`
 - `docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md`
 - `docs/new/工作树.md`
 - `docs/new/元提示词.md`
@@ -399,7 +399,7 @@ child-1 完成摘要
 - `docs/specs/agent-runtime-protocol-v0.2.md`
 - `docs/specs/work-tree-protocol-v0.2.md`
 - `docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md`
-- `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md`
+- `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md`
 - `tests/test_runtime_p4_foundation.py`
 - `tests/runtime/test_runtime_restart_and_resume.py`
 - `tests/test_runtime_p2_delivery_gate.py`

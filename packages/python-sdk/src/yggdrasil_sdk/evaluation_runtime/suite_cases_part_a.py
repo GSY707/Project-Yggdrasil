@@ -197,7 +197,11 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         for candidate in load_runtime_candidate_models() or []
         if str(candidate.get("provider") or "") == requested_provider and str(candidate.get("model") or "") == requested_model
     ]
-    task = _seed_runtime_task(task_id)
+    task = _seed_runtime_task(
+        task_id,
+        token_budget_total=int(case_payload.get("tokenBudgetTotal") or 1200),
+        cost_budget_total=float(case_payload.get("costBudgetTotal") or 5.0),
+    )
     client = TestClient(runtime_app)
     require_live = bool(case_payload.get("requireLive", False))
     if require_live and not candidate_models:
@@ -221,6 +225,8 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "temperature": float(case_payload.get("temperature") or 0.15),
         "maxTokens": int(case_payload.get("maxTokens") or 320),
     }
+    if case_payload.get("auditLevel") is not None:
+        start_payload["auditLevel"] = str(case_payload["auditLevel"])
     if case_payload.get("allowToolExecution") is not None:
         start_payload["allowToolExecution"] = bool(case_payload["allowToolExecution"])
     if case_payload.get("maxToolRounds") is not None:
@@ -342,7 +348,11 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
         }
     )
 
-    task = _seed_runtime_task(task_id)
+    task = _seed_runtime_task(
+        task_id,
+        token_budget_total=int(case_payload.get("tokenBudgetTotal") or 1200),
+        cost_budget_total=float(case_payload.get("costBudgetTotal") or 5.0),
+    )
     _seed_tool_case_memory(task_id)
     client = TestClient(runtime_app)
     start_payload = {
@@ -357,6 +367,8 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "temperature": float(case_payload.get("temperature") or 0.1),
         "maxTokens": int(case_payload.get("maxTokens") or 420),
     }
+    if case_payload.get("auditLevel") is not None:
+        start_payload["auditLevel"] = str(case_payload["auditLevel"])
     if case_payload.get("allowToolExecution") is not None:
         start_payload["allowToolExecution"] = bool(case_payload["allowToolExecution"])
     if case_payload.get("maxToolRounds") is not None:

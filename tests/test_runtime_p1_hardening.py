@@ -9,7 +9,7 @@ import yggdrasil_sdk.runtime_kernel.execution_loop_part_a as runtime_execution_l
 import yggdrasil_sdk.runtime_kernel.root_mount as runtime_root_mount
 import yggdrasil_sdk.runtime_kernel.snapshot as runtime_snapshot
 import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
-from yggdrasil_sdk.contracts import TaskSnapshotSummary, WorkTreeProtocol
+from yggdrasil_sdk.contracts import TaskSnapshotSummary, TaskTakeoverProtocol, WorkTreeProtocol
 from yggdrasil_pause_resume.plugin import PauseResumeModule
 from yggdrasil_context_pruning.plugin import ContextPruningModule
 
@@ -460,6 +460,168 @@ def test_should_trim_retrieved_context_auto_decompress_default_n_1() -> None:
         request={},
     )
     assert should_trim_long_tail is True
+
+
+def test_build_task_takeover_protocol_non_explicit_preserves_plan_work_tree(monkeypatch) -> None:
+    def _fake_collect_hook_results(hook_name, payload, module_ids=None):
+        if hook_name == runtime_takeover.HookNames.TASK_TAKEOVER_PARSE_OBJECTIVE:
+            return [{"moduleId": "task-takeover", "result": {"objective": "执行搜索研究任务", "objectiveSummary": "执行搜索研究任务", "ambiguities": []}}]
+        if hook_name == runtime_takeover.HookNames.TASK_TAKEOVER_EXTRACT_CONSTRAINTS:
+            return [{"moduleId": "task-takeover", "result": {"constraints": []}}]
+        if hook_name == runtime_takeover.HookNames.TASK_TAKEOVER_GENERATE_PLAN:
+            return [
+                {
+                    "moduleId": "task-takeover",
+                    "result": {
+                        "plan": [
+                            {
+                                "id": "step-search",
+                                "title": "执行检索",
+                                "instructions": "收集与目标相关的资料",
+                                "phase": "execute",
+                                "status": "in-progress",
+                                "expectedEvidence": ["检索证据"],
+                                "dependsOn": [],
+                            },
+                            {
+                                "id": "step-summarize",
+                                "title": "整理结果",
+                                "instructions": "形成可交付结论",
+                                "phase": "deliver",
+                                "status": "pending",
+                                "expectedEvidence": ["总结结论"],
+                                "dependsOn": ["step-search"],
+                            },
+                        ],
+                        "metrics": {
+                            "planQualityScore0_100": 90.0,
+                            "reworkCount": 0,
+                            "reworkRate": 0.0,
+                            "clarificationNeeded": False,
+                            "deliveryCompletenessScore0_100": 0.0,
+                            "verificationPassRate": 0.0,
+                        },
+                    },
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(runtime_takeover, "collect_hook_results", _fake_collect_hook_results)
+
+    protocol = runtime_takeover.build_task_takeover_protocol(
+        task=SimpleNamespace(id="task-1", task_type="deep-research", run_type="main", goal="执行搜索研究任务"),
+        task_type="deep-research",
+        run_type="main",
+        request={"takeoverPlanConfirmed": True},
+        root_mount={"activeCapabilities": ["task-takeover"]},
+        current_context=[],
+    )
+
+    assert protocol is not None
+    assert len(protocol.plan) == 2
+    assert protocol.work_tree is not None
+    assert len(protocol.work_tree.nodes) >= 2
+    assert not (
+        len(protocol.work_tree.nodes) == 1
+        and protocol.work_tree.root_node_id is not None
+        and protocol.work_tree.nodes[0].id == protocol.work_tree.root_node_id
+    )
+
+
+def test_advance_takeover_after_delivery_requires_parent_orchestration_when_children_pending() -> None:
+    protocol = TaskTakeoverProtocol.model_validate(
+        {
+            "id": "takeover-task-1",
+            "version": "0.2.0",
+            "taskId": "task-1",
+            "taskType": "deep-research",
+            "runType": "main",
+            "currentPhase": "execute",
+            "status": "executing",
+            "objective": "执行搜索研究任务",
+            "objectiveSummary": "执行搜索研究任务",
+            "ambiguities": [],
+            "constraints": [],
+            "plan": [],
+            "workTree": {
+                "version": "0.2.0",
+                "id": "work-tree-task-1",
+                "taskId": "task-1",
+                "rootNodeId": "root",
+                "rootObjective": "执行搜索研究任务",
+                "status": "active",
+                "currentNodeId": "root",
+                "nodes": [
+                    {
+                        "id": "root",
+                        "title": "任务根",
+                        "phase": "coordination",
+                        "status": "in-progress",
+                        "childNodeIds": ["child-a", "child-b"],
+                        "planStepIds": [],
+                        "constraintIds": [],
+                        "dependsOn": [],
+                        "expectedEvidence": [],
+                    },
+                    {
+                        "id": "child-a",
+                        "title": "子任务A",
+                        "parentNodeId": "root",
+                        "phase": "executing",
+                        "status": "completed",
+                        "planStepIds": [],
+                        "constraintIds": [],
+                        "dependsOn": [],
+                        "expectedEvidence": [],
+                    },
+                    {
+                        "id": "child-b",
+                        "title": "子任务B",
+                        "parentNodeId": "root",
+                        "phase": "executing",
+                        "status": "in-progress",
+                        "planStepIds": [],
+                        "constraintIds": [],
+                        "dependsOn": [],
+                        "expectedEvidence": [],
+                    },
+                ],
+                "loadedNodeIds": ["root", "child-a", "child-b"],
+                "activePathNodeIds": ["root"],
+                "entropyBudgetRemaining": 8,
+                "versionCounter": 1,
+            },
+            "deliverySections": [],
+            "verificationItems": [],
+            "metrics": {
+                "planQualityScore0_100": 90.0,
+                "reworkCount": 0,
+                "reworkRate": 0.0,
+                "clarificationNeeded": False,
+                "deliveryCompletenessScore0_100": 0.0,
+                "verificationPassRate": 0.0,
+            },
+            "appliedModules": [],
+            "hookTrace": [],
+        }
+    )
+
+    next_protocol, _, transition = runtime_takeover.advance_takeover_after_delivery(
+        protocol,
+        task_id="task-1",
+        agent_run_id="run-1",
+        assistant_text="完成根节点总结",
+    )
+
+    assert next_protocol is not None
+    assert next_protocol.work_tree is not None
+    assert next_protocol.work_tree.current_node_id == "root"
+    assert transition["transition"] == "parent-orchestration-required"
+    assert transition["requiresContinuation"] is True
+    assert transition["nextNodeId"] == "child-b"
+    assert transition["preferredChildNodeId"] == "child-b"
+    assert "child-b" in transition["currentFocus"]
+    assert transition["pendingChildNodeIds"] == ["child-b"]
 
     # ...<1>B<3>A<4> auto-decompresses because tail=1 <= 1
     should_trim_short_tail = runtime_execution_loop._should_trim_retrieved_context(

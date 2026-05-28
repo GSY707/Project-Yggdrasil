@@ -7,9 +7,8 @@
   - [Gate 4 正式闭环报告（2026-05-15）](g4-closeout-2026-05-15.md)
   - [Gate 4 评估与完美实现路线图（2026-05-15）](g4-assessment-and-roadmap-2026-05-15.md)
   - [运行时与工具数据规格 v0.1](../specs/runtime-domain-data-spec-v0.1.md)
-  - [Agent 运行时协议 v0.1](../specs/agent-runtime-protocol-v0.1.md)
-  - [Work Tree Protocol v0.1](../specs/work-tree-protocol-v0.1.md)
-  - [任务接管协议 v0.1](../specs/task-takeover-protocol-v0.1.md)
+   - [Agent 运行时协议 v0.2](../specs/agent-runtime-protocol-v0.2.md)
+   - [Work Tree Protocol v0.2](../specs/work-tree-protocol-v0.2.md)
   - [事件契约 v0.1](../protocols/event-contracts-v0.1.md)
 
 ---
@@ -46,7 +45,7 @@
 | 最新官方 live 证据 | `.yggdrasil/state/evaluations/evalrun_821c46b4b4584f38911e.json` 中，LongCat case 的 `totalTokens=4091`、`nonCacheInputTokens=2811`、`maxContextLengthTokens=3078`。 | 这只相当于一个 128k 窗口的约 `2.4%` 最大上下文占用，距离“单窗口吃满”都还很远，更谈不上“10 倍窗口任务”。 |
 | 上下文观测链路 | [packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py](../../packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py) 已记录 `beforeContextPruning`、`afterContextPruning`、`beforeModelInvocation`、`taskEnd`，且当存在 `restartMessage` 时会记录 `beforeWindowRestart`。 | 观测位已经开始对 restart 让路，但还缺真正的 restart 触发器、状态迁移和 run-to-run handoff。 |
 | 重启相关正式对象 | [docs/specs/runtime-domain-data-spec-v0.1.md](../specs/runtime-domain-data-spec-v0.1.md) 已给 `Task` 定义 `restartMessage`、`restart-requested`、`restarting`，并给 `TaskSnapshot` 预留 `snapshotType: pause | restart | checkpoint`。 | 控制面语义已经存在，说明项目方向明确；缺的是 runtime 落地。 |
-| work tree 语义 | [docs/specs/work-tree-protocol-v0.1.md](../specs/work-tree-protocol-v0.1.md) 中 `WorkTreeNode.phase` 已允许 `restarting`，并要求通过 `recoveryAnchor` 进行正式恢复。 | work tree 已能表达 restart 阶段，但运行时尚未把 restart 真的投影到节点推进与恢复锚点上。 |
+| work tree 语义 | [docs/specs/work-tree-protocol-v0.2.md](../specs/work-tree-protocol-v0.2.md) 中 `WorkTreeNode.phase` 已允许 `restarting`，并要求通过 `recoveryAnchor` 进行正式恢复。 | work tree 已能表达 restart 阶段，但运行时尚未把 restart 真的投影到节点推进与恢复锚点上。 |
 | 事件契约 | [docs/protocols/event-contracts-v0.1.md](../protocols/event-contracts-v0.1.md) 已预留 `context.restart.requested` 与 `context.restart.completed`。 | 审计口径已经占坑，但当前代码检索未发现对应事件发射实现。 |
 | 快照实现现状 | [packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py](../../packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py) 当前只实际创建 `pause` 与 `checkpoint` 快照。 | `restart` 快照还停留在契约层，没有进入正式 runtime 路径。 |
 
@@ -155,7 +154,7 @@
 实现形式有两个可选方向：
 
 1. 新增独立规格，例如 `docs/specs/context-window-restart-protocol-v0.1.md`。
-2. 直接扩写 [运行时与工具数据规格 v0.1](../specs/runtime-domain-data-spec-v0.1.md)、[Agent 运行时协议 v0.1](../specs/agent-runtime-protocol-v0.1.md) 与 [事件契约 v0.1](../protocols/event-contracts-v0.1.md)。
+2. 直接扩写 [运行时与工具数据规格 v0.1](../specs/runtime-domain-data-spec-v0.1.md)、[Agent 运行时协议 v0.2](../specs/agent-runtime-protocol-v0.2.md) 与 [事件契约 v0.1](../protocols/event-contracts-v0.1.md)。
 
 第一阶段我更建议第二种：先在现有规格上补齐最小协议，避免先把文档树分得过细。
 

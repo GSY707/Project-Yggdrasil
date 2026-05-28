@@ -30,6 +30,12 @@ _WORK_TREE_PHASE_MAP = {
     "deliver": "delivery",
 }
 
+_TAKEOVER_CONFIRMATION_KEYS: tuple[str, ...] = (
+    "takeoverPlanConfirmed",
+    "planConfirmed",
+    "confirmPlan",
+)
+
 
 def _work_tree_status(protocol_status: str) -> str:
     if protocol_status == "completed":
@@ -134,9 +140,49 @@ def _protocol_status_from_work_tree_status(work_tree_status: str, current_status
         return "verified"
     if work_tree_status == "failed":
         return "needs-clarification"
+    if current_status == "needs-clarification":
+        return "needs-clarification"
     if current_status == "prepared":
         return "prepared"
     return "executing"
+
+
+def is_takeover_plan_confirmed(request: dict[str, Any]) -> bool:
+    for key in _TAKEOVER_CONFIRMATION_KEYS:
+        if key in request and bool(request.get(key)):
+            return True
+    return False
+
+
+def enforce_takeover_confirmation_gate(
+    protocol: TaskTakeoverProtocol | None,
+    *,
+    request: dict[str, Any],
+) -> TaskTakeoverProtocol | None:
+    if protocol is None:
+        return None
+    confirmed = is_takeover_plan_confirmed(request)
+    metrics_payload = protocol.metrics.model_dump(by_alias=True, mode="json")
+    metrics_payload["clarificationNeeded"] = not confirmed
+    metrics_payload["planConfirmationNeeded"] = not confirmed
+    metrics_payload["planConfirmed"] = confirmed
+    if confirmed:
+        if protocol.status == "needs-clarification":
+            return protocol.model_copy(
+                update={
+                    "current_phase": "execute",
+                    "status": "prepared",
+                    "metrics": TaskTakeoverMetrics.model_validate(metrics_payload),
+                }
+            )
+        return protocol.model_copy(update={"metrics": TaskTakeoverMetrics.model_validate(metrics_payload)})
+    return protocol.model_copy(
+        update={
+            "current_phase": "confirm",
+            "status": "needs-clarification",
+            "metrics": TaskTakeoverMetrics.model_validate(metrics_payload),
+        }
+    )
 
 
 def _current_work_tree_node(protocol: TaskTakeoverProtocol | None) -> WorkTreeNode | None:
@@ -160,6 +206,19 @@ def _work_tree_focus_label(protocol: TaskTakeoverProtocol | None) -> str:
         return normalize_excerpt(f"等待批准: {current_node.title}", 96) or "awaiting-approval"
     local_goal = normalize_excerpt(current_node.local_goal or current_node.node_text or current_node.title, 96)
     return local_goal or current_node.title or current_node.id
+
+
+def _parent_orchestration_focus_label(*, parent_node: WorkTreeNode, preferred_child: WorkTreeNode | None) -> str:
+    if preferred_child is None:
+        return normalize_excerpt(
+            f"Parent orchestration required: continue unresolved children under {parent_node.title or parent_node.id}",
+            120,
+        ) or "parent-orchestration-required"
+    child_label = preferred_child.local_goal or preferred_child.node_text or preferred_child.title or preferred_child.id
+    return normalize_excerpt(
+        f"Parent orchestration required: prioritize child {preferred_child.id} ({child_label})",
+        120,
+    ) or f"parent-orchestration-required:{preferred_child.id}"
 
 
 def _coerce_work_context_stack(candidate: WorkContextStack | dict[str, Any] | None) -> WorkContextStack | None:
@@ -416,6 +475,8 @@ def bootstrap_takeover_state_for_work_node(
             reworkCount=0,
             reworkRate=0.0,
             clarificationNeeded=False,
+            planConfirmationNeeded=False,
+            planConfirmed=True,
             deliveryCompletenessScore0_100=0.0,
             verificationPassRate=0.0,
         ),
@@ -1115,6 +1176,52 @@ def advance_takeover_after_delivery(
 ) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None, dict[str, Any]]:
     if protocol is None:
         return None, None, {"transition": "completed", "requiresContinuation": False, "currentFocus": "completed"}
+
+    current_node = _current_work_tree_node(protocol)
+    if protocol.work_tree is not None and current_node is not None:
+        node_by_id = _work_tree_node_index(protocol.work_tree)
+        child_ids = current_node.child_node_ids or [
+            node.id
+            for node in protocol.work_tree.nodes
+            if node.parent_node_id == current_node.id
+        ]
+        pending_child_ids = [
+            child_id
+            for child_id in child_ids
+            if child_id in node_by_id
+            and node_by_id[child_id].status not in {"completed", "failed", "skipped"}
+        ]
+        if pending_child_ids:
+            preferred_child_id = pending_child_ids[0]
+            preferred_child = node_by_id.get(preferred_child_id)
+            focus_label = _parent_orchestration_focus_label(parent_node=current_node, preferred_child=preferred_child)
+            normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+                protocol,
+                task_id=task_id,
+                agent_run_id=agent_run_id,
+                work_context_stack=work_context_stack,
+            )
+            if normalized_protocol is None:
+                normalized_protocol = protocol
+            if normalized_stack is not None:
+                normalized_stack = update_cursor_state(
+                    normalized_stack,
+                    node_id=current_node.id,
+                    cursor_state=f"parent-orchestration-required:prioritize-child:{preferred_child_id}",
+                )
+            return normalized_protocol, normalized_stack, {
+                "transition": "parent-orchestration-required",
+                "requiresContinuation": True,
+                "currentNodeId": (
+                    normalized_protocol.work_tree.current_node_id
+                    if normalized_protocol is not None and normalized_protocol.work_tree is not None
+                    else current_node.id
+                ),
+                "nextNodeId": preferred_child_id,
+                "preferredChildNodeId": preferred_child_id,
+                "currentFocus": focus_label,
+                "pendingChildNodeIds": pending_child_ids,
+            }
     
     # Hard gate check: if result or evidence is missing, don't complete
     if protocol is not None and protocol.verification_items:
@@ -1182,6 +1289,10 @@ def build_takeover_continuation_request(
         "budgetState",
         "readonlyContextRef",
         "memoryWriteTagsEnabled",
+        "takeoverPlanConfirmed",
+        "planConfirmed",
+        "confirmPlan",
+        "takeoverAutoConfirm",
         "requestedBy",
         "allowModelFallback",
         "allowToolExecution",
@@ -1494,53 +1605,31 @@ def build_task_takeover_protocol(
         appliedModules=list(dict.fromkeys([*objective_modules, *constraint_modules, *plan_modules])),
         hookTrace=[*_trace_entries(objective_results), *_trace_entries(constraints_results), *_trace_entries(plan_results)],
     )
-    if not explicit_takeover:
-        implicit_node_id = str(request.get("currentNodeId") or "").strip() or new_id("work-tree-node", task.id, "bootstrap", stable=True)
-        implicit_node_title = (
-            str(request.get("currentFocus") or "").strip()
-            or str(request.get("workingNodeAnnotation") or "").strip().replace("<Working_Node:", "").replace(">", "").strip()
-            or "current-node"
-        )
-        implicit_work_tree = WorkTreeProtocol(
-            taskId=str(task.id),
-            rootNodeId=implicit_node_id,
-            rootObjective=protocol.objective,
-            status="active",
-            currentNodeId=implicit_node_id,
-            nodes=[
-                WorkTreeNode(
-                    id=implicit_node_id,
-                    title=implicit_node_title,
-                    phase="executing",
-                    status="in-progress",
-                    localGoal=protocol.objective,
-                    nodeText=protocol.objective,
-                    constraintIds=[str(item.id) for item in protocol.constraints],
-                    expectedEvidence=["result", "evidence", "pending", "incomplete"],
-                    workingNodeAnnotation=str(request.get("workingNodeAnnotation") or f"<Working_Node: {implicit_node_id}>"),
-                    recoveryAnchor=f"resume:{implicit_node_id}",
-                )
-            ],
-            recoveryAnchor=f"resume:{implicit_node_id}",
-            entropyBudgetRemaining=8,
-        )
-        return protocol.model_copy(
-            update={
-                "plan": [],
-                "work_tree": implicit_work_tree,
-            }
-        )
-    protocol = protocol.model_copy(
-        update={
-            "work_tree": _work_tree_from_protocol_parts(
-                task_id=str(task.id),
-                objective=protocol.objective,
-                constraints=protocol.constraints,
-                plan=protocol.plan,
-                protocol_status=protocol.status,
-            )
-        }
+    protocol = enforce_takeover_confirmation_gate(protocol, request=request) or protocol
+    generated_work_tree = _work_tree_from_protocol_parts(
+        task_id=str(task.id),
+        objective=protocol.objective,
+        constraints=protocol.constraints,
+        plan=protocol.plan,
+        protocol_status=protocol.status,
     )
+    if not explicit_takeover:
+        requested_node_id = str(request.get("currentNodeId") or "").strip()
+        if requested_node_id:
+            node_ids = {node.id for node in generated_work_tree.nodes}
+            if requested_node_id in node_ids:
+                generated_work_tree = WorkTreeProtocol.model_validate(
+                    {
+                        **generated_work_tree.model_dump(by_alias=True, mode="json"),
+                        "currentNodeId": requested_node_id,
+                        "activePathNodeIds": _work_tree_active_path_node_ids(
+                            generated_work_tree,
+                            current_node_id=requested_node_id,
+                        ),
+                        "pcMemo": str(request.get("pcMemo") or f"continue:{requested_node_id}"),
+                    }
+                )
+    protocol = protocol.model_copy(update={"work_tree": generated_work_tree})
     return protocol
 
 
@@ -1555,6 +1644,8 @@ def finalize_task_takeover_protocol(
 ) -> TaskTakeoverProtocol | None:
     if protocol is None:
         return None
+    if not is_takeover_plan_confirmed(request):
+        return enforce_takeover_confirmation_gate(protocol, request=request)
     module_ids = [str(item) for item in root_mount.get("activeCapabilities") or []] or None
     payload = {
         "taskId": task.id,

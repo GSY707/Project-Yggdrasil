@@ -79,47 +79,17 @@ def test_g4_longform_provider_matrix_suite_focuses_on_one_task() -> None:
         assert case["workspaceProfile"] == "g4-longform-single-task"
 
 
-def test_g4_window_restart_stress_suite_targets_longcat_and_deepseek() -> None:
+def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
-    suite = suites["evalsuite_g4_window_restart_stress"]
+    suite = suites["evalsuite_g4_real_task_web_research_default"]
     cases = suite["cases"]
 
-    assert len(cases) == 2
-    assert {case["requestedProvider"] for case in cases} == {"deepseek_direct", "longcat"}
-    assert {case["forcedWindowRestartBudget"] for case in cases} == {100}
-    assert {case["effectiveContextWindow"] for case in cases} == {120}
-    assert {case["maxWindowCycles"] for case in cases} == {120}
-
-
-def test_g4_real_task_window_parity_suite_uses_free_default_and_small_paid_approval() -> None:
-    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
-
-    suite = suites["evalsuite_g4_real_task_window_parity"]
-    cases = suite["cases"]
-
-    assert len(cases) == 4
-    assert {case["requestedProvider"] for case in cases} == {"longcat", "deepseek_direct"}
-    assert len([case for case in cases if bool(case.get("allowPaidModels"))]) == 2
-    assert {case["costBudgetTotal"] for case in cases if case["requestedProvider"] == "deepseek_direct"} == {2.0}
-    assert {case["parityPairKey"] for case in cases} == {"g4-real-task-window-parity", "g4-real-task-window-parity-deepseek"}
+    assert len(cases) == 1
+    assert {case["requestedProvider"] for case in cases} == {"longcat"}
+    assert all(case.get("allowToolExecution") is True for case in cases)
+    assert {case["parityPairKey"] for case in cases} == {"g4-web-research-default-grid-storage"}
     assert {case.get("auditLevel") for case in cases} == {"strict"}
-
-
-def test_g4_real_task_minimal_workset_suite_uses_strict_audit_and_no_repo_wide_globs() -> None:
-    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
-
-    suite = suites["evalsuite_g4_real_task_minimal_workset"]
-    cases = suite["cases"]
-
-    assert len(cases) == 4
-    assert {case["requestedProvider"] for case in cases} == {"deepseek_direct", "longcat"}
-    assert {case.get("auditLevel") for case in cases} == {"strict"}
-    assert all(not case.get("currentContextGlobs") for case in cases)
-    assert {case["parityPairKey"] for case in cases} == {
-        "g4-real-task-minimal-workset",
-        "g4-real-task-minimal-workset-deepseek",
-    }
 
 
 def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_protocol() -> None:
@@ -216,7 +186,7 @@ def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_aud
     cases = suite["cases"]
 
     assert len(cases) == 2
-    assert {case["requestedProvider"] for case in cases} == {"longcat"}
+    assert {case["requestedProvider"] for case in cases} == {"deepseek_direct"}
     assert {case.get("auditLevel") for case in cases} == {"strict"}
     assert all(not case.get("currentContextGlobs") for case in cases)
     assert {case["parityPairKey"] for case in cases} == {"g4-real-task-work-tree-debug"}
@@ -236,9 +206,10 @@ def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_aud
         )
     }
     for case in cases:
-        assert "seeded currentNodeId / Working_Node / WorkContextStack semantics as authoritative" in case["responseRequirements"]
+        assert "treat the seeded currentNodeId / Working_Node / WorkContextStack as authoritative" in case["responseRequirements"]
         assert "If the current node is child-1, first complete and bubble child-1 semantics" in case["responseRequirements"]
-        assert "Preserve the seeded currentNodeId / Working_Node / WorkContextStack semantics first" in case["currentContext"][3]["content"]
+        assert "Tool execution is disabled for this case." in case["currentContext"][3]["content"]
+        assert "## 1. 目标工作树模型" in case["currentContext"][3]["content"]
     for case in cases:
         paths = {item["path"] for item in case["currentContextFiles"]}
         assert "docs/specs/work-tree-protocol-v0.2.md" in paths
@@ -619,9 +590,9 @@ def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -
     result = processed["result"]
     assert result["status"] == "continuing"
     assert result["runtimeMetrics"]["restartCount"] == 0
-    assert result["queuedWorkItem"]["command"] == "resume"
-    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "window-restart-queued"
-    assert "carry-forward restart path" in str(result.get("detail") or "")
+    assert result["queuedWorkItem"]["command"] == "start"
+    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
+    assert "failure bubbling semantics" in str(result.get("detail") or "")
 
 
 def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:
@@ -645,7 +616,7 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
                 "title": "short",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-short64k",
+                        "matrixKey": "g4-web-research-default-grid-storage-short64k",
                         "parityRole": "short",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
@@ -662,7 +633,7 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
                 "title": "long",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-long128k",
+                        "matrixKey": "g4-web-research-default-grid-storage-long128k",
                         "parityRole": "long",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
@@ -694,8 +665,8 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                 "title": "short-longcat",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-short64k",
-                        "parityPairKey": "g4-real-task-window-parity",
+                        "matrixKey": "g4-web-research-default-grid-storage-short64k",
+                        "parityPairKey": "g4-web-research-default-grid-storage",
                         "parityRole": "short",
                         "provider": "longcat",
                         "model": "LongCat-2.0-Preview",
@@ -714,8 +685,8 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                 "title": "long-longcat",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-long128k",
-                        "parityPairKey": "g4-real-task-window-parity",
+                        "matrixKey": "g4-web-research-default-grid-storage-long128k",
+                        "parityPairKey": "g4-web-research-default-grid-storage",
                         "parityRole": "long",
                         "provider": "longcat",
                         "model": "LongCat-2.0-Preview",
@@ -734,8 +705,8 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                 "title": "short-deepseek",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-short64k-deepseek",
-                        "parityPairKey": "g4-real-task-window-parity-deepseek",
+                        "matrixKey": "g4-web-research-default-grid-storage-short64k-deepseek",
+                        "parityPairKey": "g4-web-research-default-grid-storage-deepseek",
                         "parityRole": "short",
                         "provider": "deepseek_direct",
                         "model": "deepseek-v4-pro",
@@ -754,8 +725,8 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                 "title": "long-deepseek",
                 "detail": {
                     "providerMatrixEntry": {
-                        "matrixKey": "g4-real-task-window-parity-long128k-deepseek",
-                        "parityPairKey": "g4-real-task-window-parity-deepseek",
+                        "matrixKey": "g4-web-research-default-grid-storage-long128k-deepseek",
+                        "parityPairKey": "g4-web-research-default-grid-storage-deepseek",
                         "parityRole": "long",
                         "provider": "deepseek_direct",
                         "model": "deepseek-v4-pro",

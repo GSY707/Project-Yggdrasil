@@ -124,7 +124,7 @@ uv run pytest -q tests/test_runtime_and_pruning.py::test_main_agent_runtime_paus
 命令：
 
 ```powershell
-$env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:real-task-parity
+$env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:web-research:default
 ```
 
 结果摘要：
@@ -168,7 +168,7 @@ $env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:window-stress
 - `adapters/model-providers/src/yggdrasil_model_providers/gateway.py`
 - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/bootstrap.py`
 - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py`
-- `evaluation/suites/g4-real-task-window-parity.json`
+- `evaluation/suites/g4-real-task-web-research-default.json`
 
 ## 6.2 本次观察
 
@@ -206,7 +206,7 @@ $env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:window-stress
 uv run pytest -q tests/test_runtime_p4_foundation.py tests/test_runtime_p1_hardening.py tests/test_m9_shared_memory.py tests/test_prompting_runtime.py tests/test_g4_multiscene.py
 uv run pytest -q tests/test_deepseek_gateway.py tests/test_g4_multiscene.py -k "paid or allow_paid or provider_matrix or gateway"
 uv run pytest -q tests/test_runtime_and_pruning.py::test_main_agent_runtime_pause_resume_closed_loop tests/test_runtime_and_pruning.py::test_main_agent_runtime_fails_when_actual_usage_exceeds_budget
-$env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:real-task-parity
+$env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:web-research:default
 $env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:window-stress
 ```
 
@@ -217,3 +217,4 @@ $env:YGGDRASIL_ALLOW_PAID_MODELS='1'; corepack pnpm eval:g4:window-stress
 1. 记忆树在“多窗口重启稳定性”方面仍表现出强证据。
 2. 本次 real-task parity 失败主要由 `.pyc` 被误读为文本导致，属于评测装载缺陷，应优先修复。
 3. 预算预检/后检与执行状态的一致性缺陷会影响质量门可信度，需尽快修复后再做正式发布判定。
+

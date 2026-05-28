@@ -607,12 +607,10 @@ def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int =
 def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message: bool = True) -> str:
     mounted_refs = root_mount.get("mountedNodeRefs") or []
     lines = [
-        f"系统导语: {root_mount.get('systemIntro') or ''}",
-        f"根摘要: {root_mount.get('rootSummary') or ''}",
-        f"任务说明: {root_mount.get('taskObjective') or ''}",
+        f"当前任务目标: {root_mount.get('taskObjective') or ''}",
     ]
     if include_resume_message:
-        lines.append(f"恢复提示: {root_mount.get('resumeMessage') or ''}")
+        lines.append(f"恢复提示: {sanitize_prompt_contract_text(root_mount.get('resumeMessage')) or ''}")
     lines.extend(
         [
             f"挂载节点引用数: {len(mounted_refs)}",
@@ -623,9 +621,73 @@ def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message:
     return "\n".join(lines).strip()
 
 
+def _format_runtime_glossary() -> str:
+    return "\n".join(
+        [
+            "运行时术语速览（不依赖项目背景知识）:",
+            "- 根挂载（root mount）: 每轮开始前注入的基础现场，包括身份、上下文、执行根。",
+            "- 工作树（work tree）: 当前任务的分解执行树；父节点编排，子节点处理局部目标。",
+            "- takeover 状态: 任务接管流程状态；needs-clarification 表示先核对理解与计划。",
+            "- scene recovery: 断点恢复现场，用于重启后继续同一节点，不代表要重做全任务。",
+            "- mounted context items: 本轮挂载的上下文切片清单，是当前可直接引用的证据范围。",
+            "- response requirements: 本轮输出合同与边界，优先约束输出结构和执行门禁。",
+            "- 规则: 如遇术语冲突或不理解，按本速览定义执行，不要依赖历史隐含语义。",
+        ]
+    )
+
+
 def _normalized_optional_text(value: Any) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
+
+
+_PROMPT_REPEAT_TOKENS: tuple[str, ...] = (
+    "## 结果/## 证据/## 风险/## 已知问题",
+    "## 结果, ## 证据, ## 风险, ## 已知问题",
+)
+
+
+def sanitize_prompt_contract_text(value: Any) -> str | None:
+    """Normalize and dedupe repeated contract fragments before they reach the model prompt."""
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return None
+
+    normalized = text
+    for token in _PROMPT_REPEAT_TOKENS:
+        first = normalized.find(token)
+        if first < 0:
+            continue
+        before = normalized[: first + len(token)]
+        after = normalized[first + len(token) :].replace(token, "")
+        normalized = before + after
+
+    deduped_lines: list[str] = []
+    seen: set[str] = set()
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            deduped_lines.append("")
+            continue
+        key = " ".join(line.split()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped_lines.append(line)
+
+    compacted: list[str] = []
+    previous_blank = False
+    for line in deduped_lines:
+        if not line:
+            if previous_blank:
+                continue
+            previous_blank = True
+            compacted.append(line)
+            continue
+        previous_blank = False
+        compacted.append(line)
+    result = "\n".join(compacted).strip()
+    return result or None
 
 
 def _working_node_tag(node_id: str | None) -> str:
@@ -950,7 +1012,9 @@ def _format_response_requirements(
 ) -> str:
     style = seed_template.output_style if seed_template is not None else "concise"
     localized_style = _localized_output_style(style)
-    additional = request.get("responseRequirements")
+    additional = sanitize_prompt_contract_text(request.get("responseRequirements"))
+    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    takeover_status = str(takeover_protocol.get("status") or "").strip().lower()
     has_delivery_contract = isinstance(additional, str) and additional.strip()
     is_resume = bool(resume_path)
     lines = [
@@ -975,6 +1039,10 @@ def _format_response_requirements(
         lines.append(
             f'{len(lines) + 1}. 记忆修改默认优先使用正式记忆工具；仅当需要不中断回答且改动足够轻量时，才插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
         )
+    if takeover_status == "needs-clarification" and not bool(request.get("takeoverAutoConfirm")):
+        lines.append(
+            f"{len(lines) + 1}. 当前 takeover 状态是 needs-clarification：本轮以任务理解、执行计划与确认问题为主；可调用工具补充核对证据，但不得产出执行性最终结论。"
+        )
     if has_delivery_contract:
         lines.append(f"{len(lines) + 1}. 附加要求: {additional.strip()}")
     return "\n".join(lines)
@@ -984,6 +1052,17 @@ def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProt
     candidate = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else None
     if candidate is None:
         return None
+    if bool(request.get("takeoverAutoConfirm")) and str(candidate.get("status") or "").strip().lower() == "needs-clarification":
+        metrics = dict(candidate.get("metrics") or {})
+        metrics["clarificationNeeded"] = False
+        metrics["planConfirmationNeeded"] = False
+        metrics["planConfirmed"] = True
+        candidate = {
+            **candidate,
+            "status": "prepared",
+            "currentPhase": "execute",
+            "metrics": metrics,
+        }
     try:
         return TaskTakeoverProtocol.model_validate(candidate)
     except Exception:
@@ -1147,6 +1226,8 @@ def compile_runtime_prompt(
             or _normalized_optional_text(getattr(task, "restart_message", None))
             or ""
         )
+        resume_message = sanitize_prompt_contract_text(resume_message) or ""
+        restart_message = sanitize_prompt_contract_text(restart_message) or ""
         takeover_protocol = task_runtime_state.takeover_protocol
         if takeover_protocol is None:
             takeover_protocol = _takeover_protocol_from_request(request)
@@ -1249,6 +1330,7 @@ def compile_runtime_prompt(
             user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
     user_sections["capability_protocol_index"] = _format_capability_protocol_index(active_capabilities, resolved_registered_tools)
     user_sections["mounted_context_items"] = _format_context_lines(current_context, strip_body=is_initial_awakening)
+    user_sections["runtime_glossary"] = _format_runtime_glossary()
     user_sections["response_requirements"] = _format_response_requirements(request, seed_template, resume_path)
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
     if run_type == "subagent":

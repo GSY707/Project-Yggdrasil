@@ -204,7 +204,7 @@
 2. **已落地**：execution loop 中的 restart controller、restart snapshot、carry-forward package 与自动 requeue/resume 已形成技术闭环。
 3. **已落地**：`restartCount`、`compressionCount`、`cumulativeWindowSpanTokens`、`carryForwardLossCount` 已写入正式 response artifact 与 provider summary。
 4. **已落地**：`evalsuite_g4_window_restart_stress` 与 `corepack pnpm eval:g4:window-stress` 已进仓，并批准使用 LongCat / DeepSeek 正式复跑。
-5. **已落地**：`evalsuite_g4_real_task_window_parity` 与 `corepack pnpm eval:g4:real-task-parity` 已进仓，并完成了 LongCat `64k` vs `128k` 的 4M 真实任务结构性对照。
+5. **已落地**：`evalsuite_g4_real_task_web_research_default` 与 `corepack pnpm eval:g4:web-research:default` 已进仓，并完成了 LongCat `64k` vs `128k` 的 4M 真实任务结构性对照。
 6. **已确认的新问题**：保留日志重跑证明当前恢复态仍依赖 snapshot summary handoff，而不是记忆树主体；work tree continuity 和 goal-level delivery parity 尚未成立。
 7. **下一步**：先修正恢复态 prompt contract、记忆树/工作树恢复语义与强验收口径，再做 DeepSeek 复制和 multi-provider parity 门槛冻结。
 

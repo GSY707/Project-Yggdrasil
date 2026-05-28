@@ -214,7 +214,7 @@
 
 1. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py`
 2. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py`
-3. `evaluation/suites/g4-real-task-window-parity.json`
+3. `evaluation/suites/g4-real-task-web-research-default.json`
 4. `evaluation/suites/g4-window-restart-stress.json`
 
 ---
@@ -348,7 +348,7 @@
 
 建议与本手册配套阅读：
 
-1. `docs/research/technical-analysis/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md`
+1. `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md`
 2. `docs/research/project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md`
 3. `docs/research/roadmaps/memory-tree-agent-executable-roadmap-2026-05-16.md`
 4. `docs/development/LLM_REAL_TASK_INFINITE_CONTEXT_EVAL_2026_05_17.md`
@@ -399,7 +399,7 @@
 2. `workTreeContinuity0_1` 和 `minimalWorksetRatio0_1` 还没有接入 scorer。
    - 现状：代码中没有消费 `windowExecutionArtifact` 或 `runtime/window-executions` 的逻辑。
 3. canonical real-task parity case 仍然过宽。
-   - 当前定义位置：`evaluation/suites/g4-real-task-window-parity.json`
+   - 当前定义位置：`evaluation/suites/g4-real-task-web-research-default.json`
    - 现状：case 同时挂了大量 `currentContextFiles` 与 `currentContextGlobs`，这会直接削弱“窗口最小化”实验的解释力。
 
 ---
@@ -459,7 +459,7 @@
 
 ### 11.4 当前 canonical case 本身就在稀释“最小工作集”实验
 
-`g4-real-task-window-parity.json` 当前设计仍把大量 repo 文件和 glob 直接装进 case。它适合证明“真实任务很复杂”，但不适合证明“窗口已经最小化”。
+`g4-real-task-web-research-default.json` 当前设计仍把大量 repo 文件和 glob 直接装进 case。它适合证明“真实任务很复杂”，但不适合证明“窗口已经最小化”。
 
 因为一旦实验入口本身就把大面积 repo surface 直接灌进来，后面即使 restart 发生，你也很难断言：
 
@@ -576,7 +576,7 @@ uv run python -m yggdrasil_sdk.langfuse_trace_layered_analysis --trace-id <TRACE
 
 1. 先改 `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py` 的 `_build_carry_forward_context`。
 2. 再把 `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 与 `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py` 接到 `runtime/window-executions`。
-3. 然后再收缩 `evaluation/suites/g4-real-task-window-parity.json`，新增 minimal-workset canonical case。
+3. 然后再收缩 `evaluation/suites/g4-real-task-web-research-default.json`，新增 minimal-workset canonical case。
 
 ---
 

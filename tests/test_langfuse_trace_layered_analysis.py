@@ -25,7 +25,7 @@ def test_normalize_text_unescapes_newlines() -> None:
 def test_split_window_contexts_preserves_initial_and_rehydrated_windows() -> None:
     runtime_message = (
         "System intro: Project Yggdrasil mounts identity. "
-        "Top nodes: live stress evidence, evaluation/suites/g4-real-task-window-parity.json, window policy. "
+        "Top nodes: live stress evidence, evaluation/suites/g4-real-task-web-research-default.json, window policy. "
         "Reverse trace anchored at work tree node work-tree-node_initial. "
         "Rehydrated 1 context items from snapshot snap_abc123 and restored 25 runtime request fields. "
         "Retrieved 4 nodes for query 'task'. Top nodes: required output structure, window policy, docs/DEVELOPER_GUIDE.md. "
@@ -63,7 +63,7 @@ def test_build_observation_evidence_reconstructs_window_transcript() -> None:
                         "<runtime_state>\n"
                         "System intro: Project Yggdrasil mounts identity. "
                         "Materialized 2192 runtime context items into the memory tree before retrieval. "
-                        "Top nodes: live stress evidence, evaluation/suites/g4-real-task-window-parity.json, window policy. "
+                        "Top nodes: live stress evidence, evaluation/suites/g4-real-task-web-research-default.json, window policy. "
                         "Reverse trace anchored at work tree node work-tree-node_1. "
                         "Rehydrated 1 context items from snapshot snap_mid and restored 25 runtime request fields. "
                         "Retrieved 4 nodes for query 'task'. Top nodes: required output structure, window policy, docs/DEVELOPER_GUIDE.md. "
