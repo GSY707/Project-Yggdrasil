@@ -44,6 +44,22 @@ def _safe_load_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _runtime_metrics_for_response(task: Any, request: dict[str, Any]) -> dict[str, Any]:
+    request_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
+    merged = dict(request_metrics)
+    merged["windowIndex"] = max(int(merged.get("windowIndex") or 0), int(getattr(task, "window_index", 0) or 0))
+    merged["restartCount"] = max(int(merged.get("restartCount") or 0), int(getattr(task, "restart_count", 0) or 0))
+    merged["cumulativeWindowSpanTokens"] = max(
+        int(merged.get("cumulativeWindowSpanTokens") or 0),
+        int(getattr(task, "cumulative_window_span_tokens", 0) or 0),
+    )
+    merged["carryForwardLossCount"] = max(
+        int(merged.get("carryForwardLossCount") or 0),
+        int(getattr(task, "carry_forward_loss_count", 0) or 0),
+    )
+    return merged
+
+
 def _upsert_task_conversation_record(
     *,
     workspace_root: Path,
@@ -162,6 +178,7 @@ def invoke_runtime_completion(
     max_tokens = _default_max_tokens(task, request)
     thinking_mode = _requested_thinking_mode(request)
     reasoning_effort = _requested_reasoning_effort(request)
+    response_runtime_metrics = _runtime_metrics_for_response(task, request)
     allow_fallback = bool(request.get("allowModelFallback", True))
     build_tool_specs_started_at = perf_counter()
     tool_specs = build_llm_tool_specs(compiled_prompt.registered_tools) if allow_tool_execution else []
@@ -855,7 +872,7 @@ def invoke_runtime_completion(
                 },
                 first_token_latency_ms=first_token_latency_ms,
                 context_length_observations=context_length_observations,
-                runtime_metrics=request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                runtime_metrics=response_runtime_metrics,
             )
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
@@ -871,9 +888,9 @@ def invoke_runtime_completion(
                 "requestedProvider": route_payload.get("selectedProvider"),
                 "resolvedModel": invocation.resolved_model,
                 "resolvedProvider": invocation.resolved_provider,
-                "windowIndex": (request.get("runtimeMetrics") or {}).get("windowIndex") if isinstance(request.get("runtimeMetrics"), dict) else None,
-                "restartCount": (request.get("runtimeMetrics") or {}).get("restartCount") if isinstance(request.get("runtimeMetrics"), dict) else None,
-                "cumulativeWindowSpanTokens": (request.get("runtimeMetrics") or {}).get("cumulativeWindowSpanTokens") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                "windowIndex": response_runtime_metrics.get("windowIndex"),
+                "restartCount": response_runtime_metrics.get("restartCount"),
+                "cumulativeWindowSpanTokens": response_runtime_metrics.get("cumulativeWindowSpanTokens"),
                 "contextLengthObservations": [dict(item) for item in context_length_observations if isinstance(item, dict)],
                 "messages": _to_serialized_messages(messages),
                 "conversationMessages": _to_serialized_messages([*conversation_messages, final_message]),
@@ -902,7 +919,7 @@ def invoke_runtime_completion(
                 "budgetCheckResult": budget_check_result,
                 "budgetOverrunResult": budget_overrun_result,
                 "contextLengthObservations": list(context_length_observations),
-                "runtimeMetrics": dict(request.get("runtimeMetrics") or {}),
+                "runtimeMetrics": dict(response_runtime_metrics),
                 "timings": dict(local_runtime_timings),
             }
     except Exception as exc:
@@ -926,6 +943,7 @@ def invoke_runtime_completion(
             "finishReason": "error",
             "error": str(exc),
         }
+        failure_runtime_metrics = response_runtime_metrics if "response_runtime_metrics" in locals() else _runtime_metrics_for_response(task, request)
         response_ref_payload = None
         try:
             rewrite_request_started_at = perf_counter()
@@ -974,7 +992,7 @@ def invoke_runtime_completion(
                     },
                     first_token_latency_ms=failure_first_token_latency_ms,
                     context_length_observations=failure_context_length_observations,
-                    runtime_metrics=request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else None,
+                    runtime_metrics=failure_runtime_metrics,
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
@@ -983,7 +1001,6 @@ def invoke_runtime_completion(
                 "role": "assistant",
                 "content": str(failure_result.get("outputText") or ""),
             }
-            failure_runtime_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
             failure_entry = {
                 "invocationId": invocation.id,
                 "taskId": task.id,

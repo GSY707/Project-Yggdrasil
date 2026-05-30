@@ -970,10 +970,107 @@ def _g4_live_provider_matrix_start_payload(
     return start_payload
 
 
+def _g4_wait_for_target_worker_result(
+    *,
+    task_id: str,
+    expected_result_status: str,
+    max_window_cycles: int,
+    max_worker_wait_seconds: int,
+    run_worker_once_fn,
+    worker_poll_timeout_seconds: float | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    import queue
+    import threading
+    import time
+
+    processed_runs: list[dict[str, Any]] = []
+    empty_poll_count = 0
+    foreign_processed_count = 0
+    last_relevant_poll_at = time.monotonic()
+    poll_timeout_seconds = max(float(worker_poll_timeout_seconds), 0.05) if worker_poll_timeout_seconds is not None else None
+    if poll_timeout_seconds is None:
+        stall_deadline_seconds = max(float(max_worker_wait_seconds), 30.0)
+    else:
+        stall_deadline_seconds = max(float(max_worker_wait_seconds), 30.0) + poll_timeout_seconds
+
+    while True:
+        if time.monotonic() - last_relevant_poll_at >= stall_deadline_seconds:
+            raise RuntimeError(
+                "g4 provider matrix worker stalled while waiting for target queue payload: "
+                f"taskId={task_id}, stallDeadlineSeconds={stall_deadline_seconds:.1f}, "
+                f"emptyPollCount={empty_poll_count}, foreignProcessedCount={foreign_processed_count}, "
+                f"processedRuns={len(processed_runs)}"
+            )
+
+        if poll_timeout_seconds is None:
+            processed = run_worker_once_fn("agent-runtime", timeout_seconds=1)
+            processed = dict(processed or {}) if isinstance(processed, dict) else {}
+        else:
+            poll_result_queue: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+            def _poll_once() -> None:
+                try:
+                    poll_result_queue.put((True, run_worker_once_fn("agent-runtime", timeout_seconds=1)))
+                except Exception as exc:  # pragma: no cover - passthrough guard
+                    poll_result_queue.put((False, exc))
+
+            threading.Thread(target=_poll_once, daemon=True).start()
+            try:
+                succeeded, payload = poll_result_queue.get(timeout=poll_timeout_seconds)
+            except queue.Empty as exc:
+                raise RuntimeError(
+                    "g4 provider matrix worker call timed out while polling queue: "
+                    f"taskId={task_id}, pollTimeoutSeconds={poll_timeout_seconds:.1f}, "
+                    f"emptyPollCount={empty_poll_count}, foreignProcessedCount={foreign_processed_count}, "
+                    f"processedRuns={len(processed_runs)}"
+                ) from exc
+
+            if not succeeded:
+                raise RuntimeError(
+                    "g4 provider matrix worker call failed while polling queue: "
+                    f"taskId={task_id}, error={payload!r}"
+                )
+
+            processed = dict(payload or {}) if isinstance(payload, dict) else {}
+
+        if processed.get("status") == "empty":
+            empty_poll_count += 1
+            if time.monotonic() - last_relevant_poll_at >= max_worker_wait_seconds:
+                raise RuntimeError(
+                    "g4 provider matrix worker timed out while waiting for target queue payload: "
+                    f"taskId={task_id}, waitedSeconds={max_worker_wait_seconds}, emptyPollCount={empty_poll_count}, "
+                    f"foreignProcessedCount={foreign_processed_count}, processedRuns={len(processed_runs)}"
+                )
+            continue
+
+        processed_task_id = str((processed.get("payload") or {}).get("taskId") or "")
+        if processed_task_id != task_id:
+            foreign_processed_count += 1
+            if time.monotonic() - last_relevant_poll_at >= max_worker_wait_seconds:
+                raise RuntimeError(
+                    "g4 provider matrix worker timed out while waiting for target task progress amid foreign payloads: "
+                    f"taskId={task_id}, waitedSeconds={max_worker_wait_seconds}, emptyPollCount={empty_poll_count}, "
+                    f"foreignProcessedCount={foreign_processed_count}, processedRuns={len(processed_runs)}"
+                )
+            continue
+
+        last_relevant_poll_at = time.monotonic()
+        result_payload = dict(processed.get("result") or {})
+        processed_runs.append(processed)
+        if result_payload.get("status") in {"restarting", "continuing"}:
+            if len(processed_runs) >= max_window_cycles:
+                raise RuntimeError(
+                    f"g4 provider matrix exceeded maxWindowCycles={max_window_cycles}: {json.dumps(processed_runs[-1], ensure_ascii=False)}"
+                )
+            continue
+        if result_payload.get("status") != expected_result_status:
+            raise RuntimeError(f"g4 provider matrix worker failed: {json.dumps(processed, ensure_ascii=False)}")
+        return processed_runs, processed, result_payload
+
+
 def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from datetime import datetime, timedelta
     import os
-    import time
 
     from fastapi.testclient import TestClient
     from yggdrasil_agent_runtime.app import app as runtime_app
@@ -1023,35 +1120,18 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     if started.status_code != 202:
         raise RuntimeError(f"g4 provider matrix start failed: {started.text}")
 
-    processed_runs: list[dict[str, Any]] = []
     max_window_cycles = max(int(case_payload.get("maxWindowCycles") or 12), int(case_payload.get("forcedWindowRestartBudget") or 0) + 4)
     max_worker_wait_seconds = max(
         int(case_payload.get("maxWorkerWaitSeconds") or os.environ.get("YGGDRASIL_G4_MAX_WORKER_WAIT_SECONDS") or 180),
         30,
     )
-    worker_wait_started_at = time.monotonic()
-    empty_poll_count = 0
-    while True:
-        processed = run_worker_once("agent-runtime", timeout_seconds=1)
-        if processed.get("status") == "empty":
-            empty_poll_count += 1
-            if time.monotonic() - worker_wait_started_at >= max_worker_wait_seconds:
-                raise RuntimeError(
-                    "g4 provider matrix worker timed out while waiting for queue payload: "
-                    f"waitedSeconds={max_worker_wait_seconds}, emptyPollCount={empty_poll_count}, processedRuns={len(processed_runs)}"
-                )
-            continue
-        result_payload = dict(processed.get("result") or {})
-        processed_runs.append(processed)
-        if result_payload.get("status") in {"restarting", "continuing"}:
-            if len(processed_runs) >= max_window_cycles:
-                raise RuntimeError(
-                    f"g4 provider matrix exceeded maxWindowCycles={max_window_cycles}: {json.dumps(processed_runs[-1], ensure_ascii=False)}"
-                )
-            continue
-        if result_payload.get("status") != expected_result_status:
-            raise RuntimeError(f"g4 provider matrix worker failed: {json.dumps(processed, ensure_ascii=False)}")
-        break
+    processed_runs, processed, result_payload = _g4_wait_for_target_worker_result(
+        task_id=str(task["id"]),
+        expected_result_status=expected_result_status,
+        max_window_cycles=max_window_cycles,
+        max_worker_wait_seconds=max_worker_wait_seconds,
+        run_worker_once_fn=run_worker_once,
+    )
 
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:

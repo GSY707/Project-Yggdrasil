@@ -46,11 +46,32 @@ _SECTION_WEIGHTS: dict[str, float] = {
     "incomplete": 0.15,
 }
 
-_CONFIRMATION_KEYS: tuple[str, ...] = (
-    "takeoverPlanConfirmed",
-    "planConfirmed",
-    "confirmPlan",
+_WEB_GROUNDED_REQUIREMENT_MARKERS = (
+    "web search",
+    "web-grounded",
+    "web grounded",
+    "source url",
+    "source urls",
+    "citation",
+    "citations",
+    "网络检索",
+    "网络搜索",
+    "来源",
+    "网址",
+    "链接",
 )
+
+_WEB_GROUNDED_FAILURE_MARKERS = (
+    "无法进行实时网络搜索",
+    "无法执行网络搜索",
+    "unable to perform real-time web search",
+    "cannot perform real-time web search",
+    "based on training knowledge",
+    "基于训练知识",
+    "未能验证最新来源",
+)
+
+_WEB_CITATION_PATTERN = re.compile(r"https?://[^\s)\]>\"']+", re.IGNORECASE)
 
 
 
@@ -74,14 +95,6 @@ def _objective_from(payload: dict[str, object]) -> str:
 
 def _task_type(payload: dict[str, object]) -> str:
     return _text(payload.get("taskType") or "generic").lower() or "generic"
-
-
-def _is_plan_confirmed(payload: dict[str, object]) -> bool:
-    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
-    for key in _CONFIRMATION_KEYS:
-        if key in request and bool(request.get(key)):
-            return True
-    return False
 
 
 def _run_type(payload: dict[str, object]) -> str:
@@ -261,6 +274,75 @@ def _rework_metrics(plan_steps: list[dict[str, object]], verification_items: lis
     return warnings, round(warnings / len(plan_steps), 4)
 
 
+def _requires_web_grounded_evidence(payload: dict[str, object]) -> bool:
+    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+    root_mount = payload.get("rootMount") if isinstance(payload.get("rootMount"), dict) else {}
+    startup_contract = root_mount.get("startupContract") if isinstance(root_mount.get("startupContract"), dict) else {}
+    text = "\n".join(
+        [
+            _text(request.get("responseRequirements")),
+            _text(startup_contract.get("responseRequirements")),
+            _text(request.get("currentObjective")),
+            _text(request.get("taskObjective")),
+        ]
+    ).lower()
+    return any(marker in text for marker in _WEB_GROUNDED_REQUIREMENT_MARKERS)
+
+
+def _tool_execution_success_count(tool_executions: list[object]) -> int:
+    success_count = 0
+    for item in tool_executions:
+        if not isinstance(item, dict):
+            continue
+        status = _text(item.get("status")).lower()
+        error = item.get("error")
+        result = item.get("result") if isinstance(item.get("result"), dict) else {}
+        is_error = bool(result.get("isError"))
+        if status in {"failed", "error", "blocked", "timeout"}:
+            continue
+        if error is not None or is_error:
+            continue
+        success_count += 1
+    return success_count
+
+
+def _has_web_grounded_failure_disclaimer(delivery_sections: list[dict[str, object]]) -> bool:
+    joined = "\n".join(
+        _text(item.get("content"))
+        for item in delivery_sections
+        if isinstance(item, dict)
+    ).lower()
+    return any(marker in joined for marker in _WEB_GROUNDED_FAILURE_MARKERS)
+
+
+def _has_web_citation_evidence(delivery_sections: list[dict[str, object]]) -> bool:
+    joined = "\n".join(
+        _text(item.get("content"))
+        for item in delivery_sections
+        if isinstance(item, dict)
+    )
+    return bool(_WEB_CITATION_PATTERN.search(joined))
+
+
+def _is_continuation_window(payload: dict[str, object]) -> bool:
+    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+    # Some runtimes lift continuation hints to the top-level payload instead of request.
+    candidates: list[dict[str, Any]] = [request, payload]
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        if item.get("resumeToken") or item.get("parentRunId") or item.get("currentNodeId"):
+            return True
+        if isinstance(item.get("workContextStack"), dict):
+            return True
+        try:
+            if int(item.get("windowIndex") or 1) > 1:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 class TaskTakeoverModule(BaseModulePlugin):
     module_id = "task-takeover"
 
@@ -287,7 +369,6 @@ class TaskTakeoverModule(BaseModulePlugin):
     def parse_objective(self, payload: dict[str, object]) -> dict[str, object]:
         objective = _objective_from(payload)
         ambiguities: list[dict[str, object]] = []
-        plan_confirmed = _is_plan_confirmed(payload)
         if len(objective) < 12:
             ambiguities.append(
                 TaskTakeoverAmbiguity(
@@ -295,15 +376,6 @@ class TaskTakeoverModule(BaseModulePlugin):
                     prompt="当前目标过短，可能需要补充验收标准。",
                     reason="objective-too-short",
                     required=False,
-                ).model_dump(by_alias=True, mode="json")
-            )
-        if not plan_confirmed:
-            ambiguities.append(
-                TaskTakeoverAmbiguity(
-                    id=new_id("takeover-ambiguity", "plan-confirmation-required", stable=True),
-                    prompt="请先确认我对任务目标与执行计划的理解是否正确；确认后我再进入执行。",
-                    reason="plan-confirmation-required",
-                    required=True,
                 ).model_dump(by_alias=True, mode="json")
             )
         return {
@@ -410,8 +482,6 @@ class TaskTakeoverModule(BaseModulePlugin):
                 reworkCount=0,
                 reworkRate=0.0,
                 clarificationNeeded=bool([item for item in ambiguities if item.get("required")]),
-                planConfirmationNeeded=not _is_plan_confirmed(payload),
-                planConfirmed=_is_plan_confirmed(payload),
                 deliveryCompletenessScore0_100=0.0,
                 verificationPassRate=0.0,
             ).model_dump(by_alias=True, mode="json"),
@@ -429,6 +499,24 @@ class TaskTakeoverModule(BaseModulePlugin):
         formatted = self.format_output(payload)
         delivery_sections = formatted["deliverySections"]
         verification_items = _verification_items(delivery_sections)
+        tool_executions = payload.get("toolExecutions") if isinstance(payload.get("toolExecutions"), list) else []
+        if _requires_web_grounded_evidence(payload):
+            success_count = _tool_execution_success_count(tool_executions)
+            has_disclaimer = _has_web_grounded_failure_disclaimer(delivery_sections)
+            has_citation_evidence = _has_web_citation_evidence(delivery_sections)
+            continuation_window = _is_continuation_window(payload)
+            web_gate_passed = (success_count > 0 or has_citation_evidence or continuation_window) and not has_disclaimer
+            verification_items.append(
+                TaskTakeoverVerificationItem(
+                    id=new_id("takeover-verify", "web-grounded-evidence", stable=True),
+                    label="delivery.web-grounded-evidence",
+                    status="passed" if web_gate_passed else "failed",
+                    detail=(
+                        "合同要求 web-grounded/source URL 证据时，必须满足以下之一：至少一次成功工具执行、交付内容包含可验证 URL 引用、或处于 continuation 窗口并继承前序证据；且不得声明无法实时网络检索。"
+                    ),
+                    gateMode="hard",
+                ).model_dump(by_alias=True, mode="json")
+            )
         plan_steps = payload.get("plan") if isinstance(payload.get("plan"), list) else []
         rework_count, rework_rate = _rework_metrics(plan_steps, verification_items)
         return {
@@ -439,8 +527,6 @@ class TaskTakeoverModule(BaseModulePlugin):
                 reworkCount=rework_count,
                 reworkRate=rework_rate,
                 clarificationNeeded=False,
-                planConfirmationNeeded=False,
-                planConfirmed=_is_plan_confirmed(payload),
                 deliveryCompletenessScore0_100=_delivery_completeness(delivery_sections),
                 verificationPassRate=_verification_pass_rate(verification_items),
             ).model_dump(by_alias=True, mode="json"),

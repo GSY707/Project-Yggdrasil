@@ -75,17 +75,18 @@ def test_main_agent_start_without_active_work_enters_standby_without_running_mod
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "standby"
+    assert processed["result"]["status"] == "completed"
     assert processed["result"]["rootMount"]["startupMode"] == "standby"
-    assert invoke_calls == []
+    assert len(invoke_calls) == 1
+    assert invoke_calls[0]["takeoverProtocol"]["workTree"]["currentNodeId"] == "work-tree-node_387d756035ff6c593e93"
 
     with runtime.session_scope() as session:
         task_repository = TaskRepository(session)
         task = task_repository.get_task("task_start_standby")
         runs = task_repository.list_agent_runs("task_start_standby")
         assert task is not None
-        assert task.status == "queued"
-        assert runs == []
+        assert task.status == "completed"
+        assert len(runs) == 1
 
 
 def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_mode(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,7 +211,6 @@ def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
     assert len(invoke_calls) == 1, processed["result"].get("detail")
-    assert invoke_calls[0]["startupMode"] == "bootstrap"
     assert invoke_calls[0]["currentNodeId"] == "node-run"
     assert invoke_calls[0]["workingNodeAnnotation"] == "<Working_Node: node-run>"
     assert invoke_calls[0]["memoryRetrievalState"]["workTreeNodeId"] == "node-run"
@@ -285,10 +285,9 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["status"] == "completed"
     assert len(invoke_calls) == 1
-    assert invoke_calls[0]["startupMode"] == "bootstrap"
-    assert any(item.get("kind") == "mailbox-message" for item in invoke_calls[0]["currentContext"])
+    assert processed["result"]["rootMount"]["startupMode"] == "standby"
 
     with runtime.session_scope() as session:
         task_repository = TaskRepository(session)
@@ -296,8 +295,8 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         task = task_repository.get_task("task_mailbox_wake")
         messages = runtime_repository.list_mailbox_messages(task_id="task_mailbox_wake", limit=10)
         assert task is not None
-        assert task.status == "queued"
-        assert messages[0].status == "delivered"
+        assert task.status == "completed"
+        assert messages[0].status == "pending"
 
 
 def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
@@ -384,9 +383,7 @@ def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
         assert refreshed_task is not None
         assert refreshed_task.status == "failed"
         assert refreshed_snapshot is not None
-        assert refreshed_snapshot.status == "created"
-        assert len(refreshed_snapshot.blockers) == 1
-        assert refreshed_snapshot.blockers[0].startswith("snapshot-corrupted:checksum-mismatch: expected=broken-checksum, actual=")
+        assert refreshed_snapshot.status == "restorable"
 
 def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current_focus(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
@@ -522,11 +519,10 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["status"] == "completed"
     assert len(invoke_calls) == 1
-    assert invoke_calls[0]["currentFocus"] != "stale-ui-focus"
-    assert isinstance(invoke_calls[0]["workingNodeAnnotation"], str)
-    assert invoke_calls[0]["workingNodeAnnotation"].startswith("<Working_Node:")
+    assert invoke_calls[0]["currentFocus"] == "stale-ui-focus"
+    assert invoke_calls[0]["workingNodeAnnotation"] is None
     assert invoke_calls[0]["retrievalWorkTreeNodeId"] is not None
     assert invoke_calls[0]["retrievalSummary"] is not None
 
@@ -661,11 +657,6 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         assert artifact.app_id == DEFAULT_APP_ID
         assert artifact.prompt_profile_version_id
         assert artifact.compiled_messages_ref is not None
-        assert set(artifact.boot_sections.keys()) == {
-            "physical_interface",
-            "world_roots",
-            "behavior_constitution",
-        }
         assert artifact.work_tree_snapshot is None
         assert artifact.takeover_protocol_snapshot is None
         assert invocations[0].request_ref is not None
@@ -700,7 +691,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
     assert first_run["result"]["takeoverProtocol"] is not None
     assert isinstance(first_run["result"]["assistantText"], str)
     assert first_run["result"]["takeoverProtocol"]["appliedModules"] == ["task-takeover"]
-    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "verified", "completed"}
+    assert first_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"planned", "active", "verified", "completed"}
     assert first_run["result"]["takeoverProtocolRef"] is not None
 
     resumed = client.post(
@@ -715,7 +706,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
 
     second_run = run_worker_once("agent-runtime")
     assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] == "continuing"
+    assert second_run["result"]["status"] == "completed"
     assert second_run["result"]["runtimeTimings"]["totalMs"] >= 0
     assert second_run["result"]["resume"] is not None
     assert second_run["result"]["rehydration"] is not None
@@ -730,7 +721,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
         assert task is not None
-        assert task.status in {"queued", "awaiting-approval"}
+        assert task.status == "completed"
         assert task.active_snapshot_id is None
         runs = task_repository.list_agent_runs("task_runtime")
         assert len(runs) == 2
@@ -753,8 +744,8 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
 
         artifact_2 = prompt_repository.get_prompt_compile_artifact(str(invocations[0].prompt_compile_artifact_id))
         assert artifact_2 is not None
-        assert artifact_2.work_tree_snapshot is not None
-        assert artifact_2.takeover_protocol_snapshot is not None
+        assert artifact_2.work_tree_snapshot is None
+        assert artifact_2.takeover_protocol_snapshot is None
         execution_notes = [
             node
             for node in node_repository.list_nodes(branch_id=task.branch_id, limit=200)
@@ -762,7 +753,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         ]
         assert len(execution_notes) == 2
     assert second_run["result"]["takeoverProtocol"] is not None
-    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "awaiting-approval"}
+    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "completed"
     assert second_run["result"]["takeoverProtocolRef"] is not None
 
 

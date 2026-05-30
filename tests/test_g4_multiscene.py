@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment, local_evaluation_runtime_environment
 import yggdrasil_sdk.evaluation_runtime.scorer as evaluation_scorer
 import yggdrasil_sdk.evaluation_runtime.suite_cases_g4 as suite_cases_g4
@@ -92,6 +94,45 @@ def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() ->
     assert {case.get("auditLevel") for case in cases} == {"strict"}
 
 
+def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    suite = suites["evalsuite_g4_real_task_web_research_default"]
+    cases = suite["cases"]
+
+    assert len(cases) == 1
+    case = cases[0]
+    assert "takeoverProtocol" not in case
+
+
+def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated() -> None:
+    start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
+        {
+            "currentFocus": "g4-web-research-default-grid-storage",
+            "currentObjective": "Deliver a web-grounded comparison report.",
+            "currentContext": [
+                {
+                    "id": "ctx_contract",
+                    "title": "contract",
+                    "content": "Use web evidence and resolve contradictions.",
+                    "importance": 1.0,
+                }
+            ],
+            "allowToolExecution": True,
+            "auditLevel": "strict",
+            "responseRequirements": "Output Markdown only.",
+        },
+        {"id": "task_web_default", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
+        app_id="yggdrasil.app.deep-research",
+        task_type="research",
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+    )
+
+    assert "takeoverProtocol" not in start_payload
+    assert start_payload["allowToolExecution"] is True
+    assert start_payload["takeoverPlanConfirmed"] is True
+
+
 def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_protocol() -> None:
     explicit_protocol = {
         "id": "takeover_debug_case",
@@ -177,6 +218,64 @@ def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_proto
     assert explicit_protocol["taskId"] == "placeholder-task"
     assert explicit_protocol["workTree"]["taskId"] == "placeholder-task"
     assert start_payload["candidateModels"][0]["provider"] == "longcat"
+
+
+def test_g4_wait_for_target_worker_result_ignores_foreign_payloads() -> None:
+    events = iter(
+        [
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_foreign", "payload": {}},
+                "result": {"status": "continuing"},
+            },
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {"status": "continuing"},
+            },
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {"status": "awaiting-approval"},
+            },
+        ]
+    )
+
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        assert timeout_seconds == 1
+        return next(events)
+
+    processed_runs, processed, result_payload = suite_cases_g4._g4_wait_for_target_worker_result(
+        task_id="task_target",
+        expected_result_status="awaiting-approval",
+        max_window_cycles=8,
+        max_worker_wait_seconds=30,
+        run_worker_once_fn=_run_worker_once,
+    )
+
+    assert len(processed_runs) == 2
+    assert all(str((item.get("payload") or {}).get("taskId") or "") == "task_target" for item in processed_runs)
+    assert str((processed.get("payload") or {}).get("taskId") or "") == "task_target"
+    assert result_payload["status"] == "awaiting-approval"
+
+
+def test_g4_wait_for_target_worker_result_fails_fast_on_worker_poll_timeout() -> None:
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        del timeout_seconds
+        import time
+
+        time.sleep(0.2)
+        return {"status": "empty"}
+
+    with pytest.raises(RuntimeError, match="worker call timed out while polling queue"):
+        suite_cases_g4._g4_wait_for_target_worker_result(
+            task_id="task_target",
+            expected_result_status="awaiting-approval",
+            max_window_cycles=8,
+            max_worker_wait_seconds=30,
+            run_worker_once_fn=_run_worker_once,
+            worker_poll_timeout_seconds=0.05,
+        )
 
 
 def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_audit() -> None:

@@ -125,7 +125,7 @@ def isolated_runtime_environment(
         temp_root.mkdir(parents=True, exist_ok=False)
         temp_dir_context = nullcontext(str(temp_root))
     else:
-        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-")
+        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-", ignore_cleanup_errors=True)
     with temp_dir_context as temp_dir:
         temp_root = Path(temp_dir)
         sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root, workspace_root)
@@ -197,7 +197,7 @@ def local_evaluation_runtime_environment(
         local_root.mkdir(parents=True, exist_ok=False)
         temp_dir_context = nullcontext(str(local_root))
     else:
-        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-")
+        temp_dir_context = tempfile.TemporaryDirectory(prefix="yggdrasil-eval-local-", ignore_cleanup_errors=True)
     with temp_dir_context as temp_dir:
         temp_root = Path(temp_dir)
         sandbox_workspace = prepare_runtime_workspace_sandbox(temp_root, workspace_root)

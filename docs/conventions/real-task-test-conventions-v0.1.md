@@ -66,8 +66,8 @@
 
 ### 3.1 当前仓库中的正式映射
 
-- `g4-real-task-web-research-default.json` 是当前默认真实任务入口，用于验证“单目标、外部证据驱动、由 agent 自主规划”的正式合同。
-- `g4-real-task-externalized.json` 保留为补充真实任务入口，用于跨题型复核 single-goal / externalized 合同。
+- `g4-real-task-externalized.json` 是当前默认真实任务入口，用于验证“单目标、弱项目内生化、由 agent 自主规划”的正式合同。
+- `g4-real-task-minimal-workset.json` 已降为 `legacy-repo-specific` 参考，只保留历史 repo-specific 口径，不再作为新题模板。
 - `g4-real-task-work-tree-debug.json` 已明确标注为 `runtime-debug-harness`，专门验证显式 `takeoverProtocol`、child/sibling/root continuation、approval stop 与 work-tree 调试报告结构。
 
 ## 4. 明确例外

@@ -31,6 +31,7 @@
 - `discover_worker_activities`（worker 动态活动发现）
 - `dispatch_work_item`（活动路由分发）
 - `run_worker_once`（单轮消费执行）
+- `services/worker/src/yggdrasil_worker/main.py` 默认进入常驻消费模式，`uv run yggdrasil-worker` 会持续轮询 `AGENT_RUNTIME_QUEUE`
 
 ## Common Change Scenarios
 

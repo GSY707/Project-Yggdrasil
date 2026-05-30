@@ -16,6 +16,47 @@ from yggdrasil_worker.registry import run_worker_once
 client = TestClient(runtime_app)
 
 
+def test_runtime_metrics_uses_window_span_floor_for_live_restart_paths() -> None:
+    task = type(
+        "TaskStub",
+        (),
+        {
+            "window_index": 1,
+            "restart_count": 0,
+            "cumulative_window_span_tokens": 944,
+            "carry_forward_loss_count": 0,
+        },
+    )()
+
+    metrics = runtime_execution_loop._runtime_metrics(
+        task,
+        {
+            "effectiveContextWindow": 64000,
+            "windowRestartRatio": 0.75,
+            "runtimeMetrics": {
+                "windowIndex": 3,
+                "restartCount": 2,
+                "cumulativeWindowSpanTokens": 944,
+                "carryForwardLossCount": 0,
+            },
+        },
+    )
+
+    assert metrics["windowIndex"] == 3
+    assert metrics["restartCount"] == 2
+    assert metrics["cumulativeWindowSpanTokens"] == 128000
+
+
+def test_has_formal_delivery_sections_accepts_legacy_and_live_heading_contracts() -> None:
+    assert runtime_execution_loop._has_formal_delivery_sections(
+        "# result\n完成。\n# evidence\n通过。\n# pending\n无。\n# incomplete\n无。"
+    )
+    assert runtime_execution_loop._has_formal_delivery_sections(
+        "## 结果\n完成。\n\n## 证据\n通过。\n\n## 风险\n无。\n\n## 已知问题\n无。"
+    )
+    assert not runtime_execution_loop._has_formal_delivery_sections("## 结果\n只有结果，没有其余段落。")
+
+
 def _simple_root_protocol(task_id: str) -> dict[str, object]:
     return {
         "id": f"takeover_{task_id}",
@@ -319,7 +360,9 @@ def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missi
     assert first["result"]["status"] == "continuing"
     assert first["result"]["task"]["status"] == "queued"
     assert first["result"]["queuedWorkItem"]["payload"]["deliveryGateRetryCount"] == 1
-    assert "formal delivery contract" in str(first["result"]["queuedWorkItem"]["payload"]["responseRequirements"])
+    retry_requirements = str(first["result"]["queuedWorkItem"]["payload"]["responseRequirements"])
+    assert "formal delivery contract" in retry_requirements
+    assert "## 结果, ## 证据, ## 风险, ## 已知问题" in retry_requirements
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "delivery-gate-retry"
 
     second = run_worker_once("agent-runtime")
@@ -380,6 +423,7 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
     first = run_worker_once("agent-runtime")
     assert first["result"]["status"] == "continuing"
     assert first["result"]["queuedWorkItem"]["payload"]["deliveryGateRetryCount"] == 1
+    assert "## 结果, ## 证据, ## 风险, ## 已知问题" in str(first["result"]["queuedWorkItem"]["payload"]["responseRequirements"])
 
     second = run_worker_once("agent-runtime")
     assert second["result"]["status"] == "awaiting-approval"
@@ -439,14 +483,17 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
     first = run_worker_once("agent-runtime")
     assert first["result"]["status"] == "continuing"
     assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "work-tree-continue"
 
     second = run_worker_once("agent-runtime")
     assert second["result"]["status"] == "continuing"
     assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "work-tree-continue"
 
     third = run_worker_once("agent-runtime")
     assert third["result"]["status"] == "awaiting-approval"
     assert third["result"]["task"]["status"] == "awaiting-approval"
+    assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
 
     revision = request_task_revision(
         "task_p2_multinode_revision_approve",
@@ -468,3 +515,4 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
         task = TaskRepository(session).get_task("task_p2_multinode_revision_approve")
         assert task is not None
         assert task.status == "completed"
+

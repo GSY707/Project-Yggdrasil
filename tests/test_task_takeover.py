@@ -20,36 +20,12 @@ def test_task_takeover_module_builds_coding_protocol() -> None:
         }
     )
 
-    assert protocol["status"] == "needs-clarification"
+    assert protocol["status"] == "prepared"
     assert protocol["taskType"] == "coding"
     assert protocol["plan"]
     assert any(step["phase"] == "verify" for step in protocol["plan"])
     assert any(constraint["category"] == "delivery" for constraint in protocol["constraints"])
-    assert protocol["metrics"]["planConfirmationNeeded"] is True
-    assert protocol["metrics"]["planConfirmed"] is False
     assert protocol["metrics"]["planQualityScore0_100"] > 0
-
-
-def test_task_takeover_module_switches_to_prepared_after_plan_confirmation() -> None:
-    plugin = TaskTakeoverModule()
-    protocol = plugin.build_protocol(
-        {
-            "taskId": "task_coding_confirmed",
-            "taskType": "coding",
-            "runType": "main",
-            "request": {
-                "taskObjective": "先核对后执行。",
-                "takeoverPlanConfirmed": True,
-            },
-            "rootMount": {
-                "activeCapabilities": ["task-takeover"],
-            },
-        }
-    )
-
-    assert protocol["status"] == "prepared"
-    assert protocol["metrics"]["planConfirmationNeeded"] is False
-    assert protocol["metrics"]["planConfirmed"] is True
 
 
 def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None:
@@ -134,3 +110,113 @@ def test_parse_delivery_sections_infers_evidence_from_result() -> None:
     )
     evidence_section = next(s for s in verification["deliverySections"] if s["section"] == "evidence")
     assert evidence_section["status"] == "present"
+
+
+def test_verify_delivery_web_grounded_requires_successful_tool_execution() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n基于已有知识给出结论。\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {"responseRequirements": "Use web search and provide source URLs."},
+            "toolExecutions": [],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["gateMode"] == "hard"
+    assert web_item["status"] == "failed"
+
+
+def test_verify_delivery_web_grounded_passes_with_successful_tool_execution() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n- 引用来源: https://example.com/source\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {"responseRequirements": "Need web-grounded answer with source URL citations."},
+            "toolExecutions": [
+                {"name": "fetch_webpage", "status": "completed", "result": {"isError": False}}
+            ],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["status"] == "passed"
+
+
+def test_verify_delivery_web_grounded_passes_with_url_citations_without_tool_execution() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n- 来源 A: https://example.com/a\n- 来源 B: https://example.com/b\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {"responseRequirements": "Need web-grounded answer with source URL citations."},
+            "toolExecutions": [],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["status"] == "passed"
+
+
+def test_verify_delivery_web_grounded_passes_on_continuation_without_new_tool_execution() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n已沿用上一窗口检索证据完成综合。\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {
+                "responseRequirements": "Need web-grounded answer with source URL citations.",
+                "currentNodeId": "work-tree-node_xxx",
+                "windowIndex": 3,
+            },
+            "toolExecutions": [],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["status"] == "passed"
+
+
+def test_verify_delivery_web_grounded_passes_when_continuation_fields_are_top_level() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n已沿用上一窗口检索证据完成综合。\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {
+                "responseRequirements": "Need web-grounded answer with source URL citations.",
+            },
+            "parentRunId": "run_parent_001",
+            "windowIndex": 4,
+            "toolExecutions": [],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["status"] == "passed"
+
+
+def test_verify_delivery_web_grounded_passes_when_work_context_stack_is_top_level() -> None:
+    plugin = TaskTakeoverModule()
+    verification = plugin.verify_delivery(
+        {
+            "modelOutput": "# result\n完成。\n\n# evidence\n已沿用上一窗口检索证据完成综合。\n\n# pending\n无。\n\n# incomplete\n无。",
+            "plan": [],
+            "planQualityScore0_100": 80.0,
+            "request": {
+                "responseRequirements": "Need web-grounded answer with source URL citations.",
+            },
+            "workContextStack": {"currentNodeId": "work-tree-node_xxx", "frames": [{"nodeId": "root"}]},
+            "toolExecutions": [],
+        }
+    )
+
+    web_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.web-grounded-evidence")
+    assert web_item["status"] == "passed"

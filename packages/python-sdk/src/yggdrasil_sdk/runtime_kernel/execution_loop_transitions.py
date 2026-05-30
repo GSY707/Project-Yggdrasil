@@ -239,6 +239,42 @@ def _finalize_execution_transition(
 				current_focus=(transition_state or {}).get("currentFocus") if isinstance(transition_state, dict) else None,
 				work_context_stack=work_context_stack,
 			)
+		# Always enforce hard delivery gates, even when an assistant transition was pre-applied.
+		if takeover_protocol is not None and takeover_protocol.verification_items:
+			blocked_hard_gates: list[str] = []
+			verification_items_payload = (
+				takeover_protocol.model_dump(by_alias=True, mode="json").get("verificationItems")
+				if hasattr(takeover_protocol, "model_dump")
+				else None
+			)
+			if isinstance(verification_items_payload, list):
+				for item in verification_items_payload:
+					if not isinstance(item, dict):
+						continue
+					if str(item.get("gateMode") or item.get("gate_mode") or "").strip().lower() == "hard" and str(item.get("status") or "").strip().lower() != "passed":
+						blocked_hard_gates.append(str(item.get("label") or item.get("id") or "unknown"))
+			else:
+				for item in takeover_protocol.verification_items:
+					if isinstance(item, dict):
+						gate_mode = str(item.get("gateMode") or item.get("gate_mode") or "").strip().lower()
+						status = str(item.get("status") or "").strip().lower()
+						if gate_mode == "hard" and status != "passed":
+							blocked_hard_gates.append(str(item.get("label") or item.get("id") or "unknown"))
+					else:
+						gate_mode = str(getattr(item, "gate_mode", "") or "").strip().lower()
+						status = str(getattr(item, "status", "") or "").strip().lower()
+						if gate_mode == "hard" and status != "passed":
+							blocked_hard_gates.append(str(getattr(item, "label", "unknown")))
+			if blocked_hard_gates and not (
+				isinstance(transition_state, dict)
+				and transition_state.get("transition") == "delivery-gate-blocked"
+			):
+				transition_state = {
+					"transition": "delivery-gate-blocked",
+					"requiresContinuation": False,
+					"currentFocus": "delivery-gate-blocked",
+					"blockedGates": blocked_hard_gates,
+				}
 		delivery_gate_retry_count = max(0, int(request.get("deliveryGateRetryCount") or 0))
 		delivery_gate_retry_allowed = (
 			isinstance(transition_state, dict)
@@ -334,6 +370,53 @@ def _finalize_execution_transition(
 				result_status = "continuing"
 				task_status = "queued"
 				transition_outcome = str((transition_state or {}).get("transition") or "continued")
+	blocked_hard_gates_final: list[str] = []
+	if takeover_protocol is not None and takeover_protocol.verification_items:
+		verification_items_payload = (
+			takeover_protocol.model_dump(by_alias=True, mode="json").get("verificationItems")
+			if hasattr(takeover_protocol, "model_dump")
+			else None
+		)
+		if isinstance(verification_items_payload, list):
+			for item in verification_items_payload:
+				if not isinstance(item, dict):
+					continue
+				if str(item.get("gateMode") or item.get("gate_mode") or "").strip().lower() == "hard" and str(item.get("status") or "").strip().lower() != "passed":
+					blocked_hard_gates_final.append(str(item.get("label") or item.get("id") or "unknown"))
+		else:
+			for item in takeover_protocol.verification_items:
+				if isinstance(item, dict):
+					gate_mode = str(item.get("gateMode") or item.get("gate_mode") or "").strip().lower()
+					status = str(item.get("status") or "").strip().lower()
+					if gate_mode == "hard" and status != "passed":
+						blocked_hard_gates_final.append(str(item.get("label") or item.get("id") or "unknown"))
+				else:
+					gate_mode = str(getattr(item, "gate_mode", "") or "").strip().lower()
+					status = str(getattr(item, "status", "") or "").strip().lower()
+					if gate_mode == "hard" and status != "passed":
+						blocked_hard_gates_final.append(str(getattr(item, "label", "unknown")))
+	if not blocked_hard_gates_final:
+		request_takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else None
+		request_verification_items = (
+			request_takeover_protocol.get("verificationItems") if isinstance(request_takeover_protocol, dict) else None
+		)
+		if isinstance(request_verification_items, list):
+			for item in request_verification_items:
+				if not isinstance(item, dict):
+					continue
+				gate_mode = str(item.get("gateMode") or item.get("gate_mode") or "").strip().lower()
+				status = str(item.get("status") or "").strip().lower()
+				if gate_mode == "hard" and status != "passed":
+					blocked_hard_gates_final.append(str(item.get("label") or item.get("id") or "unknown"))
+	delivery_gate_blocked_final = (
+		str((transition_state or {}).get("transition") or "") == "delivery-gate-blocked"
+		or transition_outcome == "delivery-gate-blocked"
+	)
+	if (blocked_hard_gates_final or delivery_gate_blocked_final) and task_status == "completed":
+		result_status = "failed"
+		task_status = "failed"
+		transition_outcome = "delivery-gate-blocked"
+
 	task = task_repository.update_task(
 		task_id,
 		{
@@ -366,7 +449,15 @@ def _finalize_execution_transition(
 		),
 	)
 	if takeover_protocol is not None and takeover_protocol.work_tree is not None:
-		if task_status == "completed":
+		if blocked_hard_gates_final or delivery_gate_blocked_final:
+			takeover_protocol_payload = takeover_protocol.model_dump(by_alias=True, mode="json")
+			takeover_protocol_payload["status"] = "failed"
+			takeover_protocol_payload["workTree"] = {
+				**takeover_protocol_payload.get("workTree", {}),
+				"status": "failed",
+			}
+			takeover_protocol = TaskTakeoverProtocol.model_validate(takeover_protocol_payload)
+		if task_status == "completed" and not blocked_hard_gates_final and not delivery_gate_blocked_final:
 			takeover_protocol_payload = takeover_protocol.model_dump(by_alias=True, mode="json")
 			takeover_protocol_payload["status"] = "completed"
 			takeover_protocol_payload["workTree"] = {

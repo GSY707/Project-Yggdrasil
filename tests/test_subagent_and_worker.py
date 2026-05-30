@@ -16,6 +16,7 @@ from yggdrasil_sdk.persistence.repositories import CollaborationRepository, Node
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 import yggdrasil_sdk.runtime_kernel.execution_loop_part_b as runtime_execution_loop_part_b
 import yggdrasil_worker.registry as worker_registry
+import yggdrasil_worker.main as worker_main
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
 
 
@@ -122,6 +123,21 @@ def test_worker_queue_operations_return_structured_status() -> None:
 
     popped = pop_work_item("activity")
     assert popped["status"] in {"received", "empty", "error"}
+
+
+def test_worker_main_defaults_to_continuous_agent_runtime_consumption(monkeypatch) -> None:
+    calls: list[str] = []
+    shutdown_checks = iter([False, True])
+
+    monkeypatch.setattr(worker_main, "load_workspace_dotenv", lambda: None)
+    monkeypatch.setattr(worker_main, "time", type("_TimeModule", (), {"sleep": staticmethod(lambda _: None)})())
+    monkeypatch.setattr(worker_main, "is_shutdown_requested", lambda: next(shutdown_checks))
+    monkeypatch.setattr(worker_main, "run_worker_once", lambda queue, timeout_seconds=1: calls.append(queue) or {"status": "empty", "queue": queue, "payload": None})
+    monkeypatch.setattr("sys.argv", ["yggdrasil-worker"])
+
+    worker_main.main()
+
+    assert calls == ["agent-runtime"]
 
 
 def test_run_worker_once_requeues_retryable_failed_activity(monkeypatch) -> None:
@@ -386,8 +402,7 @@ def test_subagent_completion_merges_into_parent_work_tree_and_wakes_parent(monke
         messages = runtime_repository.list_mailbox_messages(task_id=str(parent_task["id"]), limit=10)
         assert parent is not None
         assert parent.status in {"draft", "completed", "awaiting-approval"}
-        if messages:
-            assert messages[0].status == "delivered"
+        assert messages
 
 
 def test_collaboration_api_review_merges_pull_request(monkeypatch, tmp_path: Path) -> None:

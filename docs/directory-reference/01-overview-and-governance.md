@@ -73,6 +73,7 @@
 > 2026/5/28 runtime 编排修复同步：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py` 已取消非显式 takeover 的 root-only 单节点降级（改为保留 plan 生成的 work tree），并在父节点仍有未完成 child 时阻止直接交付完成，统一回到 `parent-orchestration-required` continuation；`tests/test_runtime_p1_hardening.py` 已新增回归用例锁住这两条行为。
 > 2026/5/28 runtime 编排修复第2轮：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py` 的 `parent-orchestration-required` 现已携带 `nextNodeId/preferredChildNodeId` 并将 `currentFocus` 收紧为“优先未完成 child”，同时在 work-context 栈写入 `cursorState=parent-orchestration-required:prioritize-child:<id>`；`tests/test_runtime_p1_hardening.py` 对应断言已补齐并通过（2 passed）。
 > 2026/5/28 runtime 第3-5轮同步：`packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py` 已把 `maxToolRounds` 封顶回合默认切换为 `tools=None` 最终收口模式，降低“最后回合继续工具调用 -> 超限失败”概率；`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 已将 G4 live case 的 worker 轮询改为 `run_worker_once(..., timeout_seconds=1)` 并新增空队列超时保护（支持 `maxWorkerWaitSeconds` 与环境变量 `YGGDRASIL_G4_MAX_WORKER_WAIT_SECONDS`），避免评测在空队列上无限阻塞。
+> 2026/5/29 worker 常驻消费修复：`services/worker/src/yggdrasil_worker/main.py` 现在默认进入常驻消费模式，`uv run yggdrasil-worker` 会持续轮询 `AGENT_RUNTIME_QUEUE`，避免 continuation 只是被排队但没有后台消费者接住。
 
 ---
 

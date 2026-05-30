@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 import yggdrasil_sdk.observability_exporters as observability_exporters
@@ -260,6 +261,74 @@ def test_live_task_token_budget_defaults_to_unbounded_without_override() -> None
     assert ops_runtime_live._live_task_token_budget({"maxTokens": 900, "maxToolRounds": 12}) is None
     assert ops_runtime_live._live_task_token_budget({"maxTokens": 2200, "maxToolRounds": 36}) is None
     assert ops_runtime_live._live_task_token_budget({"budgetTokenTotal": 24000, "maxTokens": 900}) == 24000
+
+
+def test_duplicate_tool_loop_short_circuit_keeps_formal_delivery_sections() -> None:
+    payload = sdk_llm_runtime._duplicate_tool_loop_result(
+        {
+            "mode": "live",
+            "provider": "longcat",
+            "model": "LongCat-2.0-Preview",
+            "usage": {"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+            "costUsed": 0.0,
+        },
+        "invocation_dup_loop",
+        duplicate_streak=2,
+    )
+
+    text = str(payload["outputText"])
+    assert "## 结果" in text
+    assert "## 证据" in text
+    assert "## 风险" in text
+    assert "## 已知问题" in text
+    assert payload["finishReason"] == "duplicate-tool-loop-short-circuit"
+
+
+def test_tool_round_limit_short_circuit_keeps_formal_delivery_sections() -> None:
+    payload = sdk_llm_runtime._tool_round_limit_result(
+        {
+            "mode": "live",
+            "provider": "longcat",
+            "model": "LongCat-2.0-Preview",
+            "usage": {"inputTokens": 30, "outputTokens": 12, "totalTokens": 42},
+            "costUsed": 0.0,
+        },
+        "invocation_round_limit",
+        max_tool_rounds=24,
+    )
+
+    text = str(payload["outputText"])
+    assert "## 结果" in text
+    assert "## 证据" in text
+    assert "## 风险" in text
+    assert "## 已知问题" in text
+    assert payload["finishReason"] == "tool-round-limit-short-circuit"
+
+
+def test_runtime_metrics_for_response_uses_persisted_task_cumulative_span() -> None:
+    task = SimpleNamespace(
+        window_index=6,
+        restart_count=5,
+        cumulative_window_span_tokens=320000,
+        carry_forward_loss_count=0,
+    )
+
+    metrics = sdk_llm_runtime._runtime_metrics_for_response(
+        task,
+        {
+            "runtimeMetrics": {
+                "windowIndex": 2,
+                "restartCount": 1,
+                "cumulativeWindowSpanTokens": 944,
+                "carryForwardLossCount": 0,
+                "effectiveContextWindow": 64000,
+            }
+        },
+    )
+
+    assert metrics["windowIndex"] == 6
+    assert metrics["restartCount"] == 5
+    assert metrics["cumulativeWindowSpanTokens"] == 320000
 
 
 def test_drain_worker_attempts_consumes_requeued_results_before_returning() -> None:
