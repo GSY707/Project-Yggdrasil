@@ -1,0 +1,356 @@
+[
+  {
+    "id": "evalcase_g4_real_task_window_parity_deepseek_flash_short64k",
+    "title": "G4 Real Task Window Parity - DeepSeek Flash Short 64k",
+    "scenario": "g4.live_provider_matrix",
+    "matrixKey": "g4-real-task-window-parity-short64k-deepseek-flash",
+    "parityPairKey": "g4-real-task-window-parity-deepseek-flash",
+    "parityRole": "short",
+    "qualityDeltaThreshold0_100": 8.0,
+    "appId": "yggdrasil.app.coding-greenfield",
+    "taskType": "coding",
+    "taskTitle": "G4 Real Task Window Parity",
+    "taskGoal": "Review the current Project Yggdrasil repository and produce a final release brief for pseudo-infinite context parity. The brief must first judge whether this is a high-value real task for the current repo, then synthesize the global integration chain across runtime, evaluation, protocol, provider, documentation, and evidence surfaces. The final answer must explicitly decide whether a realistic short-window path can be treated as equivalent to a realistic long-window reference for the current repo state.",
+    "currentFocus": "g4-real-task-window-parity",
+    "currentObjective": "Turn the current repo state into a release-ready parity judgment across realistic context windows without dropping cross-surface evidence.",
+    "currentContext": [
+      {
+        "id": "ctx_real_task_value",
+        "title": "task value contract",
+        "content": "This must be a real repo-wide integration task, not a synthetic long prompt. In the first section, explicitly judge whether the task is high value for the current project and explain why. The answer must treat the repo as a real engineering system and not as a toy example.",
+        "importance": 0.99
+      },
+      {
+        "id": "ctx_real_task_output",
+        "title": "required output structure",
+        "content": "The final structure must be: 1) 任务价值判断, 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论, 7) 风险与下一步. The conclusion section must state whether the task effect is equivalent across the two windows and why. After section 7, append a formal delivery footer with the exact Markdown headings '## 结果', '## 证据', '## 风险', '## 已知问题'.",
+        "importance": 0.99
+      },
+      {
+        "id": "ctx_real_task_window_policy",
+        "title": "window policy",
+        "content": "Use realistic windows rather than toy windows. For this run, the short-window profile represents a constrained but still practical working set. Your judgment must explicitly distinguish acceptable differences in cost or latency from unacceptable differences in final delivery quality.",
+        "importance": 0.99
+      }
+    ],
+    "currentContextFiles": [
+      {
+        "path": "README.md",
+        "title": "repo entry README",
+        "importance": 0.99
+      },
+      {
+        "path": "docs/DIRECTORY_REFERENCE.md",
+        "title": "directory reference",
+        "importance": 0.98
+      },
+      {
+        "path": "docs/protocols/event-contracts-v0.1.md",
+        "title": "event contracts",
+        "importance": 0.97
+      },
+      {
+        "path": "docs/protocols/hook-contracts-v0.1.md",
+        "title": "hook contracts",
+        "importance": 0.97
+      },
+      {
+        "path": "docs/specs/runtime-domain-data-spec-v0.1.md",
+        "title": "runtime domain spec",
+        "importance": 0.98
+      },
+      {
+        "path": "docs/specs/agent-runtime-protocol-v0.1.md",
+        "title": "agent runtime protocol",
+        "importance": 0.97
+      },
+      {
+        "path": "docs/specs/work-tree-protocol-v0.1.md",
+        "title": "work tree protocol",
+        "importance": 0.97
+      },
+      {
+        "path": "docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md",
+        "title": "roadmap research",
+        "importance": 0.99
+      },
+      {
+        "path": "docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md",
+        "title": "historical long-task baseline",
+        "importance": 0.97
+      },
+      {
+        "path": "docs/research/archive/g4-closeout-2026-05-15.md",
+        "title": "g4 closeout",
+        "importance": 0.96
+      },
+      {
+        "path": "evaluation/suites/g4-provider-matrix-longform.json",
+        "title": "g4 longform suite",
+        "importance": 0.95
+      },
+      {
+        "path": "evaluation/suites/g4-web-research-work-tree-long.json",
+        "title": "g4 work-tree long suite",
+        "importance": 0.98
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
+        "title": "execution loop",
+        "lineStart": 1,
+        "lineEnd": 760,
+        "importance": 0.99
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py",
+        "title": "snapshot runtime",
+        "lineStart": 1,
+        "lineEnd": 420,
+        "importance": 0.99
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+        "title": "llm runtime metrics path",
+        "lineStart": 520,
+        "lineEnd": 725,
+        "importance": 0.96
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py",
+        "title": "g4 suite cases",
+        "lineStart": 1,
+        "lineEnd": 620,
+        "importance": 0.97
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/scorer.py",
+        "title": "g4 scorer aggregation",
+        "lineStart": 210,
+        "lineEnd": 320,
+        "importance": 0.95
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+        "title": "real-user live pack",
+        "lineStart": 1,
+        "lineEnd": 340,
+        "importance": 0.96
+      },
+      {
+        "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+        "title": "real-user live execution path",
+        "lineStart": 350,
+        "lineEnd": 776,
+        "importance": 0.96
+      },
+      {
+        "path": "adapters/model-providers/src/yggdrasil_model_providers/gateway.py",
+        "title": "provider gateway",
+        "lineStart": 1,
+        "lineEnd": 220,
+        "importance": 0.95
+      },
+      {
+        "path": "tests/test_g4_multiscene.py",
+        "title": "g4 tests",
+        "lineStart": 1,
+        "lineEnd": 320,
+        "importance": 0.94
+      },
+      {
+        "path": "tests/runtime/test_runtime_restart_and_resume.py",
+        "title": "runtime restart tests",
+        "lineStart": 180,
+        "lineEnd": 320,
+        "importance": 0.94
+      },
+      {
+        "path": ".yggdrasil/state/evaluations/evalrun_1160dc08b84e4b6e8268.json",
+        "title": "live stress evidence",
+        "lineStart": 1,
+        "lineEnd": 1012,
+        "importance": 0.99
+      }
+    ],
+    "currentContextGlobs": [
+      {
+        "pattern": "*.md",
+        "importance": 0.7
+      },
+      {
+        "pattern": "*.json",
+        "importance": 0.68
+      },
+      {
+        "pattern": "*.toml",
+        "importance": 0.68
+      },
+      {
+        "pattern": "*.ini",
+        "importance": 0.68
+      },
+      {
+        "pattern": "docs/**/*.md",
+        "importance": 0.82
+      },
+      {
+        "pattern": "infra/**/*.md",
+        "importance": 0.72
+      },
+      {
+        "pattern": "infra/**/*.yml",
+        "importance": 0.7
+      },
+      {
+        "pattern": "infra/**/*.yaml",
+        "importance": 0.7
+      },
+      {
+        "pattern": "evaluation/suites/**/*.json",
+        "importance": 0.8
+      },
+      {
+        "pattern": "evaluation/fixtures/**/*.md",
+        "importance": 0.76
+      },
+      {
+        "pattern": "evaluation/fixtures/**/*.json",
+        "importance": 0.74
+      },
+      {
+        "pattern": "evaluation/fixtures/**/*.csv",
+        "importance": 0.72
+      },
+      {
+        "pattern": "packages/python-sdk/src/yggdrasil_sdk/**/*.py",
+        "importance": 0.88
+      },
+      {
+        "pattern": "packages/frontend-sdk/**/*.ts",
+        "importance": 0.74
+      },
+      {
+        "pattern": "packages/frontend-sdk/**/*.tsx",
+        "importance": 0.74
+      },
+      {
+        "pattern": "packages/contracts/**/*.ts",
+        "importance": 0.74
+      },
+      {
+        "pattern": "packages/contracts/**/*.json",
+        "importance": 0.72
+      },
+      {
+        "pattern": "modules/**/src/**/*.py",
+        "importance": 0.78
+      },
+      {
+        "pattern": "modules/**/yggdrasil.module.yaml",
+        "importance": 0.72
+      },
+      {
+        "pattern": "modules/**/pyproject.toml",
+        "importance": 0.7
+      },
+      {
+        "pattern": "services/**/*.py",
+        "importance": 0.76
+      },
+      {
+        "pattern": "adapters/**/*.py",
+        "importance": 0.78
+      },
+      {
+        "pattern": "tests/**/*.py",
+        "importance": 0.8
+      },
+      {
+        "pattern": "apps/web/**/*.ts",
+        "importance": 0.72
+      },
+      {
+        "pattern": "apps/web/**/*.tsx",
+        "importance": 0.72
+      },
+      {
+        "pattern": "applications/**/*.*",
+        "importance": 0.7
+      },
+      {
+        "pattern": "migrations/**/*.py",
+        "importance": 0.7
+      },
+      {
+        "pattern": "scripts/**/*.py",
+        "importance": 0.68
+      }
+    ],
+    "requestedProvider": "deepseek_direct",
+    "requestedModel": "deepseek-v4-flash",
+    "allowFallback": false,
+    "allowToolExecution": false,
+    "allowPaidModels": true,
+    "requireLive": true,
+    "temperature": 0.1,
+    "maxTokens": 4000,
+    "auditLevel": "strict",
+    "costBudgetTotal": 2.0,
+    "acceptanceRequiredSections": [
+      "任务价值判断",
+      "联调覆盖范围",
+      "关键集成链路",
+      "short-window 配置",
+      "long-window 配置",
+      "acceptance 对照结论",
+      "风险与下一步"
+    ],
+    "acceptanceRequiredPhrases": [
+      "高价值"
+    ],
+    "acceptanceRequiredAnyPhrases": [
+      "等价",
+      "不等价",
+      "equivalent",
+      "not equivalent"
+    ],
+    "acceptanceRejectPhrases": [
+      "我会先总结当前局势，再给出最稳妥的下一步",
+      "我会按这个顺序推进，确保每一步都可验证。"
+    ],
+    "acceptanceMinRestartCount": 1,
+    "acceptanceMinWindowIndex": 2,
+    "acceptanceMinCumulativeWindowSpanTokens": 1000000,
+    "acceptanceMinWorkTreeContinuity0_1": 1.0,
+    "acceptanceMinMinimalWorksetRatio0_1": 0.25,
+    "acceptanceMaxRetrievalDriftRate0_1": 0.0,
+    "failOnAcceptanceViolation": true,
+    "responseRequirements": "Produce the complete release brief directly. Required sections: 1) 任务价值判断 (must contain '高价值' judgment), 2) 联调覆盖范围, 3) 关键集成链路, 4) short-window 配置, 5) long-window 配置, 6) acceptance 对照结论 (must explicitly state 等价 or 不等价), 7) 风险与下一步. After the 7 required sections, append a formal delivery footer using the exact Markdown headings '## 结果', '## 证据', '## 风险', '## 已知问题'. Start immediately with these exact Markdown headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Output Markdown only. Do not emit XML tags, tool tags, MCP tags, code blocks, or planning preambles. Do not describe future scanning, reading, listing, or tool usage.",
+    "restartMessage": "Window restart: produce the final Markdown brief now. Start immediately with these exact headings: '## 1. 任务价值判断', '## 2. 联调覆盖范围', '## 3. 关键集成链路', '## 4. short-window 配置', '## 5. long-window 配置', '## 6. acceptance 对照结论', '## 7. 风险与下一步'. Treat the provided context as sufficient evidence. Do not emit XML/tool/MCP tags, code blocks, plans, or any statement about future scanning or tool use.",
+    "effectiveContextWindow": 64000,
+    "windowRestartRatio": 0.75,
+    "forcedWindowRestartBudget": 16,
+    "maxToolRounds": 10,
+    "maxWindowCycles": 24,
+    "workspaceProfile": "g4-real-task-window-parity",
+    "expectedPromptProfileId": "yggdrasil.coding-greenfield.main-agent",
+    "expectedSeedTemplateId": "yggdrasil.seed.coding.new-project",
+    "expectedCompiledFewShotRefs": [
+      "yggdrasil.fewshot.coding-greenfield.spec-to-module-plan.v1",
+      "yggdrasil.fewshot.coding-greenfield.incremental-delivery.v1",
+      "yggdrasil.fewshot.scene-coding-new-project.scope-first-architecture.v1",
+      "yggdrasil.fewshot.scene-coding-new-project.contract-driven-bootstrap.v1"
+    ],
+    "tags": [
+      "g4",
+      "window-parity",
+      "real-task",
+      "deepseek",
+      "short-window",
+      "paid-approved"
+    ],
+    "difficulty": "hard"
+  }
+]
+
+

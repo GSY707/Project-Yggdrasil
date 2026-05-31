@@ -6,6 +6,13 @@ from .suite_cases_part_a import *  # noqa: F403,F401
 from .suite_cases_part_b import *  # noqa: F403,F401
 from .suite_cases_g2 import *  # noqa: F403,F401
 from .suite_cases_g4 import *  # noqa: F403,F401
+from .suite_cases_g4 import (  # noqa: F401
+    _run_g4_live_provider_matrix_case,
+    _run_g4_scene_prompt_contract_case,
+    _run_g4_scene_resume_contract_case,
+    _run_g4_scene_runtime_recovery_case,
+    _run_g4_scene_switch_isolation_case,
+)
 
 SCENARIO_HANDLERS: dict[str, Any] = {
     "m4.memory_import_retrieval": _run_memory_import_case,

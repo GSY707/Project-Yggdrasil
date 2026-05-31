@@ -1,0 +1,167 @@
+{
+  "id": "evalsuite_g4_graduate_ml_deepseek_v4",
+  "name": "G4 Graduate ML DeepSeek V4",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Machine-learning graduate researcher long-horizon learning run on DeepSeek V4 with tool-rich execution and learning-process-first acceptance.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": [
+    "pass-rate",
+    "restart-count",
+    "context-window-span",
+    "restart-success-rate"
+  ],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:graduate-ml:deepseek-v4",
+  "cases": [
+    {
+      "id": "evalcase_g4_graduate_ml_deepseek_v4_ctx200k",
+      "title": "G4 Graduate ML DeepSeek V4: Tool-Rich Learning Cycle - Context 200k",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-graduate-ml-deepseek-v4-ctx200k",
+      "parityPairKey": "g4-graduate-ml-deepseek-v4",
+      "parityRole": "deepseek-v4",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.graduate-researcher",
+      "taskType": "research",
+      "taskTitle": "Machine Learning Graduate Research and Learning",
+      "taskGoal": "Act as a machine-learning graduate student. Spend the token budget on iterative learning with web research and computation, continuously consolidate knowledge into memory artifacts, and finally deliver one paper plus one literature review as milestone reports.",
+      "currentFocus": "g4-graduate-ml-deepseek-v4",
+      "currentObjective": "Verify autonomous multi-level planning, long-task stability, and non-rushed learning-process-first behavior under a tool-rich setup.",
+      "currentContext": [
+        {
+          "id": "ctx_grad_ml_scope",
+          "title": "learning scope",
+          "content": "The learning topic is modern machine learning with emphasis on representation learning, optimization, generalization, and evaluation methodology. Learning outputs must be reusable and structured.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_grad_ml_process_contract",
+          "title": "process contract",
+          "content": "The process is primary: build multi-level plans, execute independent steps, and log auditable actions. Each next step can only rely on explicit artifacts from documents or memory output, not hidden context carry-over.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_grad_ml_delivery_contract",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled and required. Use web and compute evidence, then produce milestone outputs: one paper and one literature review. Append formal delivery footer headings: ## 结果, ## 证据, ## 风险, ## 已知问题.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": [
+        "task-takeover",
+        "mcp-bridge",
+        "subagent-runtime",
+        "text-memory",
+        "context-pruning",
+        "shared-memory",
+        "relation-discovery",
+        "memory-organizer",
+        "multimodal-memory",
+        "pause-resume",
+        "scene-research-deep",
+        "scene-writing-epic"
+      ],
+      "allowPaidModels": true,
+      "requireLive": true,
+      "temperature": 0.1,
+      "maxTokens": 9000,
+      "auditLevel": "strict",
+      "budgetTokenTotal": 10000000,
+      "costBudgetTotal": 0.0,
+      "timeLimitHours": 24,
+      "acceptanceRequireHumanReview": true,
+      "humanReviewMode": "single-reviewer",
+      "humanReviewersRequired": 1,
+      "acceptanceRequiredPhrases": [
+        "## 结果",
+        "## 证据",
+        "## 风险",
+        "## 已知问题"
+      ],
+      "acceptanceRequiredAnyPhrases": [
+        "论文",
+        "文献综述",
+        "计划",
+        "步骤",
+        "动作",
+        "http://",
+        "https://",
+        "实验"
+      ],
+      "acceptanceRejectPhrases": [
+        "开局直接给出最终论文",
+        "无法联网",
+        "仅基于已有上下文不给出工具证据"
+      ],
+      "acceptanceMinRestartCount": 0,
+      "acceptanceMinWindowIndex": 1,
+      "acceptanceMinCumulativeWindowSpanTokens": 0,
+      "acceptanceMinIndependentSteps": 10,
+      "acceptanceMinToolBackedStepRatio0_1": 0.6,
+      "acceptanceMinMemoryNodeCount": 30,
+      "acceptanceRequireExperimentRecord": true,
+      "acceptanceRequireDisputeList": true,
+      "acceptanceRequireToolCategories": [
+        "web",
+        "compute",
+        "memory"
+      ],
+      "acceptanceMinSuccessfulToolExecutions": 6,
+      "acceptanceRequiredAcademicSections": [
+        "摘要",
+        "引言",
+        "相关工作",
+        "方法",
+        "实验",
+        "结论",
+        "参考文献"
+      ],
+      "acceptanceMinCitationMarkers": 8,
+      "acceptanceRequiredDeliverables": [
+        "论文",
+        "文献综述",
+        "外文翻译"
+      ],
+      "acceptanceMinEvidenceLinks": 8,
+      "acceptanceRequireInnovationStatement": true,
+      "acceptanceRequireProblemSolutionTrace": true,
+      "acceptanceRequireLimitationsAndFutureWork": true,
+      "acceptanceRequireTaskBookProgress": true,
+      "acceptanceRequireForeignTranslation": true,
+      "acceptanceRequireDefenseQAReady": true,
+      "failOnAcceptanceViolation": true,
+      "responseRequirements": "Use tools and deliver a learning-process-first report in Markdown. First response rule: output a strict decomposition scaffold before any tool call, with explicit sections Plan Layer, Step Layer, and Action Layer. Mandatory decomposition contract: if the task can be decomposed, you must decompose first; only when it cannot be decomposed further may you enter Step planning, then Action execution. Activate exactly one Step at a time, and each Action must serve only the current Step. Tool-call rule: no empty arguments for required-parameter tools; never send empty object/array placeholders. Do not merge multiple Steps into one rushed draft. Stage pipeline contract (required): n rounds of broad exploration + n rounds of focused exploration + n rounds of experiment research + n rounds of result reflection + 1-2 rounds of paper writing. Default n recommendation is 4/3/4/3/1-2 and can be adjusted with explicit rationale. After broad exploration, select exactly one core innovation point as the main line, then continue all focused and experimental rounds around that innovation. Each response must report current stage and round index (for example Experiment Research 1/4). Include explicit sections for Evidence/Memory Assets and Budget/Risks. Include milestone outputs (one paper + one literature review) as stage reports only. End with exactly: ## 结果, ## 证据, ## 风险, ## 已知问题. Output Markdown only.",
+      "restartMessage": "Continue the machine-learning graduate learning process report with strict plan-step-action decomposition, explicit artifact handoff, and explicit stage round ledger (broad -> focused -> experiment -> reflection -> writing).",
+      "effectiveContextWindow": 200000,
+      "windowRestartRatio": 1.0,
+      "forcedWindowRestartBudget": 0,
+      "maxToolRounds": 64,
+      "maxWindowCycles": 36,
+      "maxWorkerWaitSeconds": 360,
+      "workspaceProfile": "g4-graduate-ml-deepseek-v4",
+      "expectedPromptProfileId": "yggdrasil.graduate-researcher.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.graduate-researcher.ml-learning-cycle.v1"
+      ],
+      "tags": [
+        "g4",
+        "real-task",
+        "graduate-researcher",
+        "machine-learning",
+        "tool-rich",
+        "deepseek-v4"
+      ],
+      "difficulty": "hard"
+    }
+  ]
+}

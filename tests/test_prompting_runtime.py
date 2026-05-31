@@ -30,6 +30,33 @@ def _root_mount(**overrides):
     return payload
 
 
+def test_compile_runtime_prompt_for_graduate_researcher_profile_succeeds() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(title="研究生任务：机器学习长期学习"),
+        run_type="main",
+        task_type="research",
+        root_mount=_root_mount(activeCapabilities=["task-takeover", "mcp-bridge", "text-memory"]),
+        current_context=[
+            {
+                "id": "ctx_grad_1",
+                "title": "学习范围",
+                "content": "表示学习、优化、泛化与评估方法。",
+                "rootBranch": "context",
+            }
+        ],
+        request={
+            "appId": "yggdrasil.app.graduate-researcher",
+            "promptProfileId": "yggdrasil.graduate-researcher.main-agent",
+            "seedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+        },
+        resume_path=None,
+    )
+
+    assert compiled.app_id == "yggdrasil.app.graduate-researcher"
+    assert compiled.prompt_profile_id == "yggdrasil.graduate-researcher.main-agent"
+    assert compiled.seed_template_id == "yggdrasil.seed.graduate-researcher.default"
+
+
 def test_compile_runtime_prompt_for_main_coding_uses_existing_project_seed() -> None:
     compiled = compile_runtime_prompt(
         task=_task(),

@@ -61,6 +61,7 @@ def discover_application_manifests(applications_root: Path | None = None) -> lis
         metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
         spec = raw.get("spec") if isinstance(raw.get("spec"), dict) else {}
         prompting = spec.get("prompting") if isinstance(spec.get("prompting"), dict) else {}
+        memory = spec.get("memory") if isinstance(spec.get("memory"), dict) else {}
         dependencies = spec.get("dependencies") if isinstance(spec.get("dependencies"), dict) else {}
         config = spec.get("config") if isinstance(spec.get("config"), dict) else {}
         frontend = spec.get("frontend") if isinstance(spec.get("frontend"), dict) else {}
@@ -97,6 +98,12 @@ def discover_application_manifests(applications_root: Path | None = None) -> lis
                     if prompting.get("defaultSeedTemplateId") is not None
                     else None
                 ),
+                memoryNamespace=(
+                    str(memory.get("namespace"))
+                    if memory.get("namespace") is not None
+                    else None
+                ),
+                memoryAssetFiles=_relative_file_list(manifest_path.parent, memory.get("assetFiles") or [], workspace_root),
                 promptProfileFiles=_relative_file_list(manifest_path.parent, prompting.get("profileFiles") or [], workspace_root),
                 seedTemplateFiles=_relative_file_list(manifest_path.parent, prompting.get("seedTemplateFiles") or [], workspace_root),
                 configDefaultsRef=_external_ref(manifest_path.parent, config.get("defaultsRef"), workspace_root),

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { ApplicationConfigBinding, ApplicationManifestSummary } from "@yggdrasil/frontend-sdk";
+import type { ApplicationConfigBinding, ApplicationManifestSummary, ApplicationMemoryAssetRecord } from "@yggdrasil/frontend-sdk";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Surface, StatusBadge } from "./workbench-primitives";
@@ -12,6 +12,7 @@ type ApplicationDetailResponse = {
   application: ApplicationManifestSummary;
   configBinding: ApplicationConfigBinding;
   effectiveConfig: Record<string, unknown>;
+  applicationMemoryAssets: Array<ApplicationMemoryAssetRecord>;
   dashboard?: Record<string, unknown> | null;
 };
 
@@ -68,6 +69,7 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
 
   const manifest = detail.data.application;
   const binding = detail.data.configBinding;
+  const memoryAssets = detail.data.applicationMemoryAssets ?? [];
   const dashboardHero = typeof detail.data.dashboard?.hero === "object" ? detail.data.dashboard?.hero as Record<string, unknown> : null;
   const quickActions = Array.isArray(detail.data.dashboard?.quickActions) ? detail.data.dashboard?.quickActions as Array<Record<string, unknown>> : [];
 
@@ -100,6 +102,8 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
                 <span className="inline-chip">owner {manifest.owner ?? "-"}</span>
                 <span className="inline-chip">prompt {manifest.defaultPromptProfileId ?? "-"}</span>
                 <span className="inline-chip">seed {manifest.defaultSeedTemplateId ?? "-"}</span>
+                <span className="inline-chip">memory {manifest.memoryNamespace ?? manifest.appId}</span>
+                <span className="inline-chip">memory assets {manifest.memoryAssetFiles.length}</span>
               </div>
             </article>
           </div>
@@ -142,6 +146,47 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
             </button>
           </div>
           <pre className="meta-copy mono">{JSON.stringify(detail.data.effectiveConfig, null, 2)}</pre>
+        </Surface>
+
+        <Surface>
+          <p className="section-kicker">Memory</p>
+          <h3 className="section-title">应用出厂记忆</h3>
+          <p className="meta-copy">运行时记忆按 namespace 隔离，出厂记忆放在应用包内，二者共同组成混合记忆方案。</p>
+          <div className="pill-row">
+            <span className="inline-chip">namespace {manifest.memoryNamespace ?? manifest.appId}</span>
+            <span className="inline-chip">asset files {manifest.memoryAssetFiles.length}</span>
+          </div>
+          {manifest.memoryAssetFiles.length === 0 ? (
+            <EmptyState title="没有声明应用记忆资产" detail="这个应用包尚未提供 memory/ 下的静态记忆文件。" />
+          ) : (
+            <div className="record-list">
+              {manifest.memoryAssetFiles.map((filePath) => (
+                <article className="record-card" key={filePath}>
+                  <div className="record-head">
+                    <div>
+                      <h4 className="record-title">{filePath}</h4>
+                      <p className="meta-copy">manifest memory asset</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          {memoryAssets.length === 0 ? null : (
+            <div className="record-list" style={{ marginTop: 16 }}>
+              {memoryAssets.map((asset) => (
+                <article className="record-card" key={asset.id}>
+                  <div className="record-head">
+                    <div>
+                      <h4 className="record-title">{asset.name}</h4>
+                      <p className="meta-copy">{asset.id} · {asset.version}{asset.sourcePath ? ` · ${asset.sourcePath}` : ""}</p>
+                    </div>
+                  </div>
+                  <pre className="meta-copy mono" style={{ whiteSpace: "pre-wrap" }}>{asset.content}</pre>
+                </article>
+              ))}
+            </div>
+          )}
         </Surface>
 
         <Surface>

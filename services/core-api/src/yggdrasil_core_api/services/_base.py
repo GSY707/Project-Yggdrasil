@@ -12,6 +12,7 @@ from yggdrasil_sdk import (
     ActorRef,
     AssetRepository,
     CollaborationRepository,
+    assemble_prompt_registry,
     build_application_catalog_snapshot,
     compile_runtime_prompt,
     ensure_mcp_bridge_config,

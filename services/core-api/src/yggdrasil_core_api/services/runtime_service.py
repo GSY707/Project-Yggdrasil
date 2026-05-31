@@ -82,6 +82,8 @@ class RuntimeServiceMixin:
             "resumeStatus": resume_status,
             "canResume": bool(task.status == "paused" and latest_restorable_snapshot is not None),
             "canRequestPause": bool(task.status in {"queued", "running", "pause-requested"}),
+            "canRetry": bool(task.status == "failed"),
+            "canTopUp": bool(task.status in {"paused", "failed"}),
             "canApprove": bool(task.status == "awaiting-approval"),
             "canRequestRevision": bool(task.status == "awaiting-approval"),
             "recommendedResumeToken": latest_restorable_snapshot.resume_token if latest_restorable_snapshot is not None else None,
@@ -136,10 +138,15 @@ class RuntimeServiceMixin:
     def get_application(self, app_id: str) -> dict[str, object]:
         manifest = get_application_manifest(app_id, self.workspace_root)
         binding = get_application_config_binding(app_id, self.workspace_root)
+        registry = assemble_prompt_registry(app_id)
         return {
             "application": manifest.model_dump(by_alias=True, mode="json"),
             "configBinding": binding.model_dump(by_alias=True, mode="json"),
             "effectiveConfig": load_effective_application_config(app_id, self.workspace_root),
+            "applicationMemoryAssets": [
+                asset.model_dump(by_alias=True, mode="json") if hasattr(asset, "model_dump") else dict(asset)
+                for asset in registry.get("applicationMemoryAssets") or []
+            ],
             "dashboard": self._load_ref_payload(manifest.dashboard_ref.locator if manifest.dashboard_ref else None),
         }
 

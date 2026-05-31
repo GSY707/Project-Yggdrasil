@@ -266,11 +266,23 @@ export interface ApplicationManifestSummary {
   defaultPromptProfileId?: string | null;
   subagentPromptProfileId?: string | null;
   defaultSeedTemplateId?: string | null;
+  memoryNamespace?: string | null;
+  memoryAssetFiles: string[];
   promptProfileFiles: string[];
   seedTemplateFiles: string[];
   configDefaultsRef?: { type: string; locator: string } | null;
   frontendEntryRoute?: string | null;
   dashboardRef?: { type: string; locator: string } | null;
+}
+
+export interface ApplicationMemoryAssetRecord {
+  id: string;
+  name: string;
+  version: string;
+  content: string;
+  sourceAppId?: string | null;
+  sourceModuleId?: string | null;
+  sourcePath?: string | null;
 }
 
 export interface ApplicationConfigBinding {
@@ -448,6 +460,8 @@ export interface TaskRuntimeControlSummary {
   resumeStatus: string;
   canResume: boolean;
   canRequestPause: boolean;
+  canRetry?: boolean;
+  canTopUp?: boolean;
   canApprove: boolean;
   canRequestRevision: boolean;
   recommendedResumeToken?: string | null;

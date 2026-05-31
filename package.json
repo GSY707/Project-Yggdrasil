@@ -18,6 +18,8 @@
     "eval:g4:multiscene": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_web_research_default",
     "eval:g4:web-research:default": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_web_research_default",
     "eval:g4:web-research:work-tree-long": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_web_research_work_tree_long",
+    "eval:g4:graduate-ml:longcat2": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_graduate_ml_longcat2",
+    "eval:g4:graduate-ml:deepseek-v4": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_graduate_ml_deepseek_v4",
     "eval:g4:provider-matrix": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_provider_matrix",
     "eval:g4:provider-matrix:longform": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_provider_matrix_longform",
     "eval:g4:real-task-unrelated:dual-live": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_unrelated_dual_live",

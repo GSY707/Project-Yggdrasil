@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 
 from yggdrasil_model_providers import gateway
 from yggdrasil_sdk.llm_runtime import _assistant_tool_round_message
@@ -482,6 +483,78 @@ def test_invoke_model_streaming_extracts_block_content_and_tool_calls(monkeypatc
     assert result["toolCalls"][0]["arguments"] == {"path": "docs/DIRECTORY_REFERENCE.md"}
 
 
+def test_invoke_model_streaming_merges_split_tool_call_arguments(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeStreamingResponse(
+            [
+                {
+                    "id": "chatcmpl-split-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-2.0-Preview",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_split_1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "mcp.web.search_web",
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                },
+                {
+                    "id": "chatcmpl-split-1",
+                    "object": "chat.completion.chunk",
+                    "model": "LongCat-2.0-Preview",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {
+                                            "arguments": '{"query":"double descent 2024 survey"}',
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 10,
+                        "total_tokens": 30,
+                    },
+                },
+            ]
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-2.0-Preview",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "先检索 double descent 的最新综述。"}],
+        allow_fallback=False,
+    )
+
+    assert result["toolCalls"][0]["name"] == "mcp.web.search_web"
+    assert result["toolCalls"][0]["arguments"] == {"query": "double descent 2024 survey"}
+
+
 def test_invoke_model_extracts_longcat_tagged_tool_calls(monkeypatch) -> None:
     monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
     monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
@@ -614,3 +687,138 @@ def test_invoke_model_extracts_block_xml_tool_calls(monkeypatch) -> None:
     assert [call["name"] for call in result["toolCalls"]] == ["mcp.read.list_directory", "mcp.read.read_file"]
     assert result["toolCalls"][0]["arguments"] == {"path": ".", "recursive": False}
     assert result["toolCalls"][1]["arguments"] == {"path": "README.md", "startLine": 1, "endLine": 20}
+
+
+def test_invoke_model_repairs_single_quote_tool_arguments(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "mcp.read.read_file",
+                                        "arguments": "{'path':'README.md','startLine':1,'endLine':20}",
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "读取 README。"}],
+        allow_fallback=False,
+    )
+
+    assert result["toolCalls"][0]["name"] == "mcp.read.read_file"
+    assert result["toolCalls"][0]["arguments"] == {"path": "README.md", "startLine": 1, "endLine": 20}
+
+
+def test_invoke_model_repairs_key_value_tool_arguments(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": "call_2",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "mcp.read.read_file",
+                                        "arguments": "path=README.md, start_line=1, end_line=20",
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18},
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "读取 README。"}],
+        allow_fallback=False,
+    )
+
+    assert result["toolCalls"][0]["name"] == "mcp.read.read_file"
+    assert result["toolCalls"][0]["arguments"] == {"path": "README.md", "startLine": 1, "endLine": 20}
+
+
+def test_deepseek_ssl_eof_retry_switches_to_non_stream(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+    monkeypatch.setenv("YGGDRASIL_LLM_RETRY_MAX", "1")
+    monkeypatch.setenv("YGGDRASIL_LLM_DEEPSEEK_EXTRA_RETRY_MAX", "1")
+    monkeypatch.setattr(gateway.time, "sleep", lambda *_args, **_kwargs: None)
+
+    attempts: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout=90):
+        payload = json.loads(request.data.decode("utf-8"))
+        attempts.append(payload)
+        if len(attempts) == 1:
+            raise gateway.urllib_error.URLError(ssl.SSLEOFError(8, "UNEXPECTED_EOF_WHILE_READING"))
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": "重试成功。",
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 30,
+                    "completion_tokens": 10,
+                    "total_tokens": 40,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-pro",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "请给出简短结论。"}],
+        allow_fallback=False,
+    )
+
+    assert len(attempts) == 2
+    assert attempts[0]["stream"] is True
+    assert attempts[1]["stream"] is False
+    assert result["outputText"] == "重试成功。"

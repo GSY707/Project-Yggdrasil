@@ -1,0 +1,13 @@
+{
+  "hero": {
+    "eyebrow": "Graduate Researcher",
+    "title": "研究生学习应用",
+    "summary": "面向长周期学习任务。默认启用多工具能力（网络检索、计算验证、记忆整理、关系发现、多模态摄取），把预算优先投入学习过程与记忆树沉淀。"
+  },
+  "quickActions": [
+    {"label": "MCP 工具", "href": "/mcp"},
+    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.graduate-researcher"},
+    {"label": "应用详情", "href": "/applications/yggdrasil.app.graduate-researcher"},
+    {"label": "任务", "href": "/tasks"}
+  ]
+}

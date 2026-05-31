@@ -1,6 +1,12 @@
+from sqlalchemy.exc import OperationalError
+
 from yggdrasil_model_providers.router import route_model
 from yggdrasil_media_providers.pipeline import plan_asset_processing
+from yggdrasil_sdk import get_persistence_runtime
+from yggdrasil_sdk.persistence.repositories import NodeRepository, WorkspaceBootstrapRepository
 from yggdrasil_text_memory.plugin import TextMemoryModule
+from yggdrasil_text_memory.plugin import _run_with_sqlite_lock_retry
+from yggdrasil_text_memory.plugin import read_memory_node_tool
 
 
 def test_text_memory_plan_tree_and_expand_retrieval() -> None:
@@ -150,3 +156,63 @@ def test_media_pipeline_returns_planned_pipeline() -> None:
     assert plan["assetKind"] == "video"
     assert plan["status"] == "planned"
     assert any(stage["stage"] == "segment-scenes" for stage in plan["pipeline"])
+
+
+def test_read_memory_node_tool_falls_back_to_first_index_node_when_node_id_missing() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        nodes = NodeRepository(session)
+        created = nodes.create_node(
+            {
+                "projectId": "project_default",
+                "spaceId": "space_default",
+                "branchId": "branch_main",
+                "rootBranch": "context",
+                "nodeType": "temporary",
+                "title": "fallback candidate",
+                "content": "fallback node content",
+                "importance": 0.9,
+            }
+        )
+
+    result = read_memory_node_tool({"executionContext": {"branchId": "branch_main"}, "nodeId": {}})
+
+    assert result["fallbackNodeSelected"] is True
+    assert result["node"]["id"] == created.id
+
+
+def test_sqlite_lock_retry_recovers_after_transient_lock(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    monkeypatch.setattr("yggdrasil_text_memory.plugin.time.sleep", lambda _seconds: None)
+
+    def _action() -> dict[str, object]:
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise OperationalError("UPDATE nodes", {}, Exception("database is locked"))
+        return {"status": "ok"}
+
+    result = _run_with_sqlite_lock_retry(_action)
+
+    assert result["status"] == "ok"
+    assert attempts["count"] == 3
+
+
+def test_sqlite_lock_retry_does_not_retry_non_lock_operational_error(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    monkeypatch.setattr("yggdrasil_text_memory.plugin.time.sleep", lambda _seconds: None)
+
+    def _action() -> dict[str, object]:
+        attempts["count"] += 1
+        raise OperationalError("UPDATE nodes", {}, Exception("syntax error near UPDATE"))
+
+    try:
+        _run_with_sqlite_lock_retry(_action)
+    except OperationalError:
+        pass
+    else:
+        raise AssertionError("Expected OperationalError to be raised")
+
+    assert attempts["count"] == 1

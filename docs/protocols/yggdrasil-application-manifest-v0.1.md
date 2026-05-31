@@ -9,13 +9,12 @@
 
 ## 1. 目标
 
-应用插件用于声明“哪一个 Agent 应用”被装进基座，以及该应用默认使用哪些 Prompt 资产、能力模块、场景模块、前端入口和重要配置。
+应用插件用于声明“哪一个 Agent 应用”被装进基座，以及该应用默认使用哪些 Prompt 资产、记忆资产、能力模块、场景模块、前端入口和重要配置。
 
-Kernel 负责发现、装配、治理和审计应用插件；应用插件负责承载默认模板、场景选择和不重要的应用内资源。
+Kernel 负责发现、装配、治理和审计应用插件；应用插件负责承载默认模板、场景选择、出厂记忆和不重要的应用内资源。
 
 ## 2. 文件位置
 
-- 文件名固定：yggdrasil.app.yaml
 - 文件位置：应用根目录
 - 一个应用目录只能对应一个 manifest
 
@@ -49,10 +48,16 @@ spec:
     sceneModules: []
   config:
     defaultsRef: config/defaults.json
+  memory:
+    namespace: yggdrasil.app.base
+    assetFiles:
+      - memory/core-knowledge.yaml
   frontend:
     entryRoute: /applications/yggdrasil.app.base
     dashboardRef: web/dashboard.json
 ```
+
+memory：应用包内的静态记忆配置，包含 namespace 与 assetFiles。
 
 ## 4. 字段定义
 
@@ -90,16 +95,22 @@ spec:
 - entryRoute：应用在控制面的主入口路由。
 - dashboardRef：应用包提供的仪表板配置或 UI 元数据。
 
+### 4.6 spec.memory
+
+- namespace：运行时记忆命名空间，用于区分不同应用的私有长期记忆空间，建议默认与 appId 相同。
+- assetFiles：应用出厂记忆资产文件列表，基座应将这些文件作为静态知识底座装载；运行时写入不得直接覆盖这些文件。
+
 ## 5. 装配语义
 
 - 应用插件发现只负责找到 manifest 和包内资产。
-- Prompt profile 与 seed template 的最终装配结果 = 应用包资产 + 应用依赖模块通过 hook 提供的贡献。
+- Prompt profile、seed template 与 memory 的最终装配结果 = 应用包资产 + 应用依赖模块通过 hook 提供的贡献。
 - 如果应用声明的 profile、scene 或模块缺失，Kernel 应拒绝把它视为可装配应用。
 
 ## 6. 管理边界
 
 - 重要配置：由基座统一保存、覆盖和审计。
-- 非重要配置、展示元数据、默认文案、应用内 dashboard 配置：放在应用包内。
+- 非重要配置、展示元数据、默认文案、应用内 dashboard 配置、出厂记忆资产：放在应用包内。
+- 外部团队在编写应用包时，应默认预留 `memory/` 目录；即使没有静态记忆，也要在文档里明确写“无 memory 资产”，不要省略这一层。
 
 ## 7. 第一版约束
 

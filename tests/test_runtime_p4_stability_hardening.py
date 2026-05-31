@@ -8,7 +8,7 @@ import yggdrasil_model_providers
 from yggdrasil_sdk import TaskRepository, get_persistence_runtime
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_part_b as runtime_execution_loop_part_b
+import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_sdk.runtime_kernel.takeover import (
     build_takeover_continuation_request,
     normalize_takeover_runtime_state,
@@ -272,6 +272,30 @@ def test_continuation_inherits_forced_window_restart_budget() -> None:
     assert continuation["forcedWindowRestartBudget"] == 3
 
 
+def test_continuation_inherits_prompt_seed_contract_ids() -> None:
+    """验证 continuation payload 保留 prompt/seed contract，避免多窗口漂移到默认 scene。"""
+    base_request = {
+        "taskType": "research",
+        "promptProfileId": "yggdrasil.graduate-researcher.main-agent",
+        "seedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+        "expectedPromptProfileId": "yggdrasil.graduate-researcher.main-agent",
+        "expectedSeedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+    }
+    protocol = TaskTakeoverProtocol.model_validate(
+        _root_only_takeover_protocol("task_e2_prompt_seed")
+    )
+    protocol, stack = normalize_takeover_runtime_state(
+        protocol, task_id="task_e2_prompt_seed", agent_run_id="run_e2_prompt_seed"
+    )
+    continuation = build_takeover_continuation_request(
+        base_request, protocol=protocol, work_context_stack=stack
+    )
+    assert continuation["promptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert continuation["seedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
+    assert continuation["expectedPromptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert continuation["expectedSeedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
+
+
 # ============================================================
 # E3: Policy Drift Regression Tests
 # ============================================================
@@ -319,7 +343,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake)
+    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake)
 
     POLICY_PARAMS = {
         "allowToolExecution": False,

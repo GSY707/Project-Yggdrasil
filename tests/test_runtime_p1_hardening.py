@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import yggdrasil_sdk.prompting as runtime_prompting
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_part_a as runtime_execution_loop_part_a
+import yggdrasil_sdk.runtime_kernel.execution_loop_state as runtime_execution_loop_state
 import yggdrasil_sdk.runtime_kernel.root_mount as runtime_root_mount
 import yggdrasil_sdk.runtime_kernel.snapshot as runtime_snapshot
 import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
@@ -16,6 +16,10 @@ from yggdrasil_context_pruning.plugin import ContextPruningModule
 
 def test_build_restart_request_state_uses_deep_copy_and_keeps_contract_keys() -> None:
     request = {
+        "promptProfileId": "yggdrasil.graduate-researcher.main-agent",
+        "seedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+        "expectedPromptProfileId": "yggdrasil.graduate-researcher.main-agent",
+        "expectedSeedTemplateId": "yggdrasil.seed.graduate-researcher.default",
         "responseRequirements": "必须包含四段交付。",
         "restartMessage": "继续下一窗口。",
         "takeoverProtocol": {
@@ -39,16 +43,20 @@ def test_build_restart_request_state_uses_deep_copy_and_keeps_contract_keys() ->
 
     assert request_state["responseRequirements"] == "必须包含四段交付。"
     assert request_state["restartMessage"] == "继续下一窗口。"
+    assert request_state["promptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert request_state["seedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
+    assert request_state["expectedPromptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert request_state["expectedSeedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
     assert request_state["takeoverProtocol"]["workTree"]["currentNodeId"] == "node-a"
     assert request_state["memoryRetrievalState"]["matchedNodeRefs"] == [{"kind": "node", "id": "n-1"}]
 
 
 def test_work_tree_node_id_from_request_reads_current_node_memory_state_and_stack() -> None:
-    assert runtime_execution_loop_part_a._work_tree_node_id_from_request({"currentNodeId": "node-request"}) == "node-request"
-    assert runtime_execution_loop_part_a._work_tree_node_id_from_request(
+    assert runtime_execution_loop_state._work_tree_node_id_from_request({"currentNodeId": "node-request"}) == "node-request"
+    assert runtime_execution_loop_state._work_tree_node_id_from_request(
         {"memoryRetrievalState": {"workTreeNodeId": "node-memory"}}
     ) == "node-memory"
-    assert runtime_execution_loop_part_a._work_tree_node_id_from_request(
+    assert runtime_execution_loop_state._work_tree_node_id_from_request(
         {
             "workContextStack": {
                 "topFrameId": "frame-1",

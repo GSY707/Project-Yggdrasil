@@ -248,6 +248,7 @@ def _run_m9_shared_multimodal_reasoning_case(case: dict[str, Any] | None = None)
 
 def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient
+    import yggdrasil_model_providers
     from yggdrasil_agent_runtime.app import app as runtime_app
     from yggdrasil_worker.registry import run_worker_once
 
@@ -288,62 +289,161 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
         )
 
     client = TestClient(runtime_app)
-    started = client.post(
-        f"/runtime/tasks/{task.id}/start",
-        json={
-            "currentFocus": "执行挂载记忆树任务的 safe-stop 验收",
-            "currentObjective": question,
-            "currentContext": [
-                {
-                    "id": "ctx_resume_keep",
-                    "title": "Safe Stop Plan",
-                    "content": "safe-stop 必须保留 protectedItems、snapshot token、mounted summary 与恢复后的 followup actions。",
-                    "importance": 0.98,
-                },
-                {
-                    "id": "ctx_resume_noise",
-                    "title": "Noise",
-                    "content": "低价值草稿应在恢复后继续压缩。",
-                    "importance": 0.1,
-                },
-            ],
-            "protectedItems": [{"kind": "node", "id": "ctx_resume_keep"}],
-            "activeCapabilities": ["shared-memory"],
-        },
-    )
-    if started.status_code != 202:
-        raise RuntimeError(f"m9 pause-resume start failed: {started.text}")
-    paused = client.post(
-        f"/runtime/tasks/{task.id}/pause-request",
-        json={
-            "reason": "m9-acceptance-safe-stop",
-            "resumeMessage": "恢复后继续完成挂载记忆树总结。",
-        },
-    )
-    if paused.status_code != 202:
-        raise RuntimeError(f"m9 pause request failed: {paused.text}")
-    first = run_worker_once("agent-runtime")
-    if first.get("result", {}).get("status") != "paused":
-        raise RuntimeError(f"m9 pause step failed: {json.dumps(first, ensure_ascii=False)}")
-    snapshot = first["result"]["snapshot"]
-    root_mount_preview = snapshot.get("rootMountPreview") or {}
-    if not root_mount_preview.get("accessibleMounts"):
-        raise RuntimeError("m9 pause snapshot did not include any mounted shared space")
+    original_invoke_model = yggdrasil_model_providers.invoke_model
 
-    resumed = client.post(
-        f"/runtime/tasks/{task.id}/resume",
-        json={
-            "resumeToken": snapshot["resumeToken"],
-            "nextObjective": "恢复后完成跨空间恢复说明并写入最终执行记录。",
-        },
-    )
-    if resumed.status_code != 202:
-        raise RuntimeError(f"m9 resume request failed: {resumed.text}")
-    second = run_worker_once("agent-runtime")
-    if second.get("result", {}).get("status") != "completed":
-        raise RuntimeError(f"m9 resume completion failed: {json.dumps(second, ensure_ascii=False)}")
+    def _fake_invoke_model(**_kwargs):
+        output_text = (
+            "## 结果\n"
+            "已保留 mounted memory tree、protectedItems、snapshot token，并在恢复后完成最终写入。\n\n"
+            "## 证据\n"
+            "- safe-stop snapshot 已创建并可恢复。\n"
+            "- 恢复态继续使用 mounted shared space 与 followup actions。\n\n"
+            "## 风险\n"
+            "- 若恢复 token 失效，任务需要重新进入 safe-stop。\n\n"
+            "## 已知问题\n"
+            "- 当前验收使用固定响应，重点验证 pause/resume 链而非开放式写作质量。"
+        )
+        return {
+            "mode": "live",
+            "provider": "acceptance-provider",
+            "model": "acceptance-model",
+            "outputText": output_text,
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 120,
+                "outputTokens": 90,
+                "totalTokens": 210,
+            },
+            "costUsed": 0.0,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": output_text},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 120,
+                    "completion_tokens": 90,
+                    "total_tokens": 210,
+                },
+            },
+            "requestPayload": {
+                "model": "acceptance-model",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 25.0,
+        }
 
-    rehydration = second["result"].get("rehydration") or {}
+    yggdrasil_model_providers.invoke_model = _fake_invoke_model
+    try:
+        started = client.post(
+            f"/runtime/tasks/{task.id}/start",
+            json={
+                "currentFocus": "执行挂载记忆树任务的 safe-stop 验收",
+                "currentObjective": question,
+                "takeoverPlanConfirmed": True,
+                "planConfirmed": True,
+                "confirmPlan": True,
+                "takeoverAutoConfirm": True,
+                "responseRequirements": "输出 Markdown，并在同一响应中包含这四段：## 结果、## 证据、## 风险、## 已知问题。",
+                "currentContext": [
+                    {
+                        "id": "ctx_resume_keep",
+                        "title": "Safe Stop Plan",
+                        "content": "safe-stop 必须保留 protectedItems、snapshot token、mounted summary 与恢复后的 followup actions。",
+                        "importance": 0.98,
+                    },
+                    {
+                        "id": "ctx_resume_noise",
+                        "title": "Noise",
+                        "content": "低价值草稿应在恢复后继续压缩。",
+                        "importance": 0.1,
+                    },
+                ],
+                "protectedItems": [{"kind": "node", "id": "ctx_resume_keep"}],
+                "activeCapabilities": ["shared-memory"],
+            },
+        )
+        if started.status_code != 202:
+            raise RuntimeError(f"m9 pause-resume start failed: {started.text}")
+        paused = client.post(
+            f"/runtime/tasks/{task.id}/pause-request",
+            json={
+                "reason": "m9-acceptance-safe-stop",
+                "resumeMessage": "恢复后继续完成挂载记忆树总结。",
+            },
+        )
+        if paused.status_code != 202:
+            raise RuntimeError(f"m9 pause request failed: {paused.text}")
+        first = run_worker_once("agent-runtime")
+        if first.get("result", {}).get("status") != "paused":
+            raise RuntimeError(f"m9 pause step failed: {json.dumps(first, ensure_ascii=False)}")
+        snapshot = first["result"]["snapshot"]
+        root_mount_preview = snapshot.get("rootMountPreview") or {}
+        if not root_mount_preview.get("accessibleMounts"):
+            raise RuntimeError("m9 pause snapshot did not include any mounted shared space")
+
+        resumed = client.post(
+            f"/runtime/tasks/{task.id}/resume",
+            json={
+                "resumeToken": snapshot["resumeToken"],
+                "nextObjective": "恢复后完成跨空间恢复说明并写入最终执行记录。",
+                "takeoverPlanConfirmed": True,
+                "planConfirmed": True,
+                "confirmPlan": True,
+                "takeoverAutoConfirm": True,
+                "responseRequirements": "输出 Markdown，并在同一响应中包含这四段：## 结果、## 证据、## 风险、## 已知问题。",
+            },
+        )
+        if resumed.status_code != 202:
+            raise RuntimeError(f"m9 resume request failed: {resumed.text}")
+        resume_result = run_worker_once("agent-runtime")
+        second = resume_result
+        result_status = str((second.get("result") or {}).get("status") or "")
+        task_status = None
+        for _ in range(20):
+            with runtime.session_scope() as session:
+                current_task = TaskRepository(session).get_task(task.id)
+                task_status = current_task.status if current_task is not None else None
+            if task_status == "awaiting-approval":
+                break
+            if task_status == "completed":
+                second = {
+                    "status": "processed",
+                    "result": {
+                        "status": "completed",
+                        "task": current_task.model_dump(by_alias=True, mode="json") if current_task is not None else None,
+                    },
+                }
+                result_status = "completed"
+                break
+            if result_status != "continuing" and task_status not in {"queued", "running"}:
+                break
+            second = run_worker_once("agent-runtime")
+            result_status = str((second.get("result") or {}).get("status") or "")
+        if task_status == "awaiting-approval":
+            approved = client.post(f"/runtime/tasks/{task.id}/approve-completion", json={})
+            if approved.status_code != 200:
+                raise RuntimeError(f"m9 approve completion failed: {approved.text}")
+            second = {
+                "status": "processed",
+                "result": approved.json(),
+            }
+            result_payload = second["result"]
+            result_status = str(result_payload.get("status") or "")
+        else:
+            result_payload = second.get("result") or {}
+            result_status = str(result_payload.get("status") or "")
+        if result_status != "completed":
+            raise RuntimeError(f"m9 resume completion failed: {json.dumps(second, ensure_ascii=False)}")
+    finally:
+        yggdrasil_model_providers.invoke_model = original_invoke_model
+
+    rehydration = (resume_result.get("result") or {}).get("rehydration") or (second["result"].get("rehydration") or {})
     restored_state = rehydration.get("restoredState") or {}
     context_blocks = [
         (

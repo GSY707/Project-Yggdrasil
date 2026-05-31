@@ -379,6 +379,226 @@ def test_execute_tool_with_isolation_retries_timeout_then_succeeds(monkeypatch) 
     assert result.failure is None
 
 
+def test_execute_tool_with_isolation_repairs_raw_argument_for_single_required_field(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    captured: dict[str, Any] = {}
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        captured["arguments"] = dict(arguments)
+        if "path" not in arguments:
+            raise ValueError("missing required argument: path")
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok", "path": arguments.get("path")},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.read.read_file", "arguments": {"_raw": "README.md"}, "argumentsText": "README.md"},
+        tool_call_id="tc_repair_raw",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["path"]}},
+        max_retries=0,
+    )
+
+    assert result.success is True
+    assert captured["arguments"]["path"] == "README.md"
+
+
+def test_execute_tool_with_isolation_repairs_value_argument_for_single_required_field(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    captured: dict[str, Any] = {}
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        captured["arguments"] = dict(arguments)
+        if "query" not in arguments:
+            raise ValueError("missing required argument: query")
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok", "query": arguments.get("query")},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.search.search_text", "arguments": {"value": "window parity"}},
+        tool_call_id="tc_repair_value",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["query"]}},
+        max_retries=0,
+    )
+
+    assert result.success is True
+    assert captured["arguments"]["query"] == "window parity"
+
+
+def test_repair_tool_arguments_treats_placeholder_required_value_as_missing() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.read.read_file", "argumentsText": "{}"},
+        arguments={"path": "{}"},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["path"]}},
+    )
+
+    assert "path" not in repaired
+    assert mode is None
+
+
+def test_repair_tool_arguments_does_not_promote_placeholder_raw_or_value() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.search.search_text", "argumentsText": "{}"},
+        arguments={"value": "{}", "_raw": "{}"},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["query"]}},
+    )
+
+    assert "query" not in repaired
+    assert mode is None
+
+
+def test_repair_tool_arguments_extracts_required_value_from_arguments_text_object() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.read.read_file", "argumentsText": '{"path":"README.md"}'},
+        arguments={"path": "{}"},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["path"]}},
+    )
+
+    assert repaired.get("path") == "README.md"
+    assert mode == "argumentsText-required"
+
+
+def test_repair_tool_arguments_extracts_required_value_from_arguments_text_key_value() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "text_memory.read_node", "argumentsText": "nodeId=node_123"},
+        arguments={},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["nodeId"]}},
+    )
+
+    assert repaired.get("nodeId") == "node_123"
+    assert mode == "argumentsText-required"
+
+
+def test_repair_tool_arguments_unwraps_nested_arguments_container() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.execute.run_command", "argumentsText": "{}"},
+        arguments={"arguments": {"command": "dir"}},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["command"]}},
+    )
+
+    assert repaired.get("command") == "dir"
+    assert "arguments" not in repaired
+    assert mode == "nested-arguments-unwrapped"
+
+
+def test_repair_tool_arguments_maps_required_alias_keys() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.read.read_file", "argumentsText": "{}"},
+        arguments={"filePath": "README.md"},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["path"]}},
+    )
+
+    assert repaired.get("path") == "README.md"
+    assert mode is None
+
+
+def test_repair_tool_arguments_extracts_required_from_nested_arguments_text_json() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    repaired, mode = llm_runtime._repair_tool_arguments(
+        call={"name": "mcp.python.run_python", "argumentsText": '{"arguments":{"code":"print(1)"}}'},
+        arguments={},
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["code"]}},
+    )
+
+    assert repaired.get("code") == "print(1)"
+    assert mode == "argumentsText-required"
+
+
+def test_execute_tool_with_isolation_fails_fast_on_placeholder_required_argument(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    called = {"count": 0}
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        called["count"] += 1
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok"},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.read.read_file", "arguments": {"path": {}}, "argumentsText": '{"path":"{}"}'},
+        tool_call_id="tc_validation_1",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["path"]}},
+        max_retries=2,
+    )
+
+    assert result.success is False
+    assert result.failure is not None
+    assert result.failure.error_type == "ToolCallValidationError"
+    assert called["count"] == 0
+
+
+def test_execute_tool_with_isolation_allows_text_memory_read_node_without_node_id(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    called: dict[str, Any] = {"count": 0, "arguments": None}
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        called["count"] += 1
+        called["arguments"] = dict(arguments)
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok"},
+        }
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "text_memory.read_node", "arguments": {}, "argumentsText": "{}"},
+        tool_call_id="tc_read_node_fallback",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["nodeId"]}},
+        max_retries=0,
+    )
+
+    assert result.success is True
+    assert called["count"] == 1
+    assert called["arguments"] == {}
+
+
 def test_execute_tool_with_isolation_reports_failure_after_retry_budget(monkeypatch) -> None:
     from yggdrasil_sdk import llm_runtime
 
@@ -400,6 +620,96 @@ def test_execute_tool_with_isolation_reports_failure_after_retry_budget(monkeypa
     assert result.failure is not None
     assert result.failure.retry_count == 1
     assert result.failure.is_retryable is True
+
+
+def test_execute_tool_with_isolation_reports_argument_hint_for_invalid_arguments(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        raise ValueError("missing required argument: command")
+
+    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    result = llm_runtime._execute_tool_with_isolation(
+        call={"name": "mcp.execute.run_command", "arguments": {}},
+        tool_call_id="tc_arg_hint_1",
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+        tool_descriptor={"inputSchema": {"type": "object", "required": ["command"]}},
+        max_retries=0,
+    )
+
+    assert result.success is False
+    assert result.failure is not None
+    assert result.failure.error_type == "ToolCallValidationError"
+    assert result.result.get("cause") in {"missing-required-arguments", "invalid-arguments"}
+    assert result.result.get("exampleArguments", {}).get("command") == "dir"
+
+
+def test_tool_name_alias_map_accepts_underscore_alias() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    aliases = llm_runtime._tool_name_alias_map(
+        {
+            "text_memory.read_node": {"name": "text_memory.read_node"},
+            "mcp.read.list_directory": {"name": "mcp.read.list_directory"},
+        }
+    )
+
+    assert aliases["text_memory_read_node"] == "text_memory.read_node"
+    assert aliases["mcp_read_list_directory"] == "mcp.read.list_directory"
+
+
+def test_normalize_tool_calls_rewrites_requested_name_to_registered_name() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    aliases = {
+        "text_memory_read_index": "text_memory.read_index",
+        "text_memory.read_index": "text_memory.read_index",
+    }
+    normalized = llm_runtime._normalize_tool_calls(
+        [{"name": "text_memory_read_index", "arguments": {}, "id": "call_alias_1"}],
+        aliases,
+    )
+
+    assert normalized[0]["name"] == "text_memory.read_index"
+    assert normalized[0]["requestedName"] == "text_memory_read_index"
+
+
+def test_resolve_tool_name_policy_supports_allow_and_deny_patterns() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    policy = llm_runtime._resolve_tool_name_policy(
+        {
+            "toolNameAllowlist": ["mcp.*", "text_memory.*"],
+            "toolNameDenylist": ["mcp.read.*", "mcp.search.*"],
+        },
+        {
+            "mcp.read.read_file": {"name": "mcp.read.read_file"},
+            "mcp.edit.write_file": {"name": "mcp.edit.write_file"},
+            "mcp.search.search_text": {"name": "mcp.search.search_text"},
+            "text_memory.read_index": {"name": "text_memory.read_index"},
+        },
+    )
+
+    assert set(policy["allowedNames"]) == {"mcp.edit.write_file", "text_memory.read_index"}
+    assert set(policy["blockedNames"]) == {"mcp.read.read_file", "mcp.search.search_text"}
+
+
+def test_filter_tool_calls_by_allowed_names_blocks_disallowed_calls() -> None:
+    from yggdrasil_sdk import llm_runtime
+
+    allowed, blocked = llm_runtime._filter_tool_calls_by_allowed_names(
+        [
+            {"name": "mcp.read.read_file", "arguments": {"path": "README.md"}},
+            {"name": "mcp.edit.write_file", "arguments": {"path": "a.md", "content": "x"}},
+        ],
+        {"mcp.edit.write_file"},
+    )
+
+    assert [call["name"] for call in allowed] == ["mcp.edit.write_file"]
+    assert blocked == ["mcp.read.read_file"]
 
 
 def test_snapshot_checksum_compute_and_verify_roundtrip() -> None:

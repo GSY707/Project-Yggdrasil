@@ -2,8 +2,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from .execution_loop_part_a import *  # noqa: F401,F403
+from .execution_loop_state import *  # noqa: F401,F403
 from .root_mount import _elapsed_ms
+
+
+def _has_formal_delivery_sections(text: str) -> bool:
+	normalized = str(text or "")
+	normalized_lower = normalized.lower()
+	required_heading_sets = (
+		("# result", "# evidence", "# pending", "# incomplete"),
+		("## 结果", "## 证据", "## 风险", "## 已知问题"),
+	)
+	return any(
+		all(section in candidate for section in headings)
+		for candidate, headings in ((normalized_lower, required_heading_sets[0]), (normalized, required_heading_sets[1]))
+	)
+
+
+def _work_tree_all_leaves_complete(work_tree: Any) -> bool:
+	if work_tree is None:
+		return False
+	root_node_id = str(getattr(work_tree, "root_node_id", None) or "")
+	nodes = getattr(work_tree, "nodes", None) or []
+	terminal = {"completed", "failed", "skipped"}
+	leaf_nodes = [node for node in nodes if str(getattr(node, "id", "") or "") != root_node_id]
+	if not leaf_nodes:
+		return False
+	return all(str(getattr(node, "status", "") or "") in terminal for node in leaf_nodes)
 
 
 def _persist_work_context_stack_ref(
@@ -239,6 +264,89 @@ def _finalize_execution_transition(
 				current_focus=(transition_state or {}).get("currentFocus") if isinstance(transition_state, dict) else None,
 				work_context_stack=work_context_stack,
 			)
+		if takeover_protocol is not None and takeover_protocol.work_tree is not None and transition_state is None:
+			current_node_id = takeover_protocol.work_tree.current_node_id
+			root_node_id = takeover_protocol.work_tree.root_node_id
+			assistant_text = str(llm_result.get("assistantText") or "")
+			terminal_candidate = (
+				takeover_protocol.status in {"needs-clarification", "completed", "verified"}
+				or takeover_protocol.work_tree.status == "awaiting-approval"
+			)
+			if terminal_candidate and current_node_id != root_node_id:
+				work_tree = takeover_protocol.work_tree
+				node_by_id = {str(node.id): node for node in work_tree.nodes}
+				next_node_id = None
+				current_node = node_by_id.get(str(current_node_id or ""))
+				if current_node is not None and current_node.parent_node_id is not None:
+					parent_node = node_by_id.get(str(current_node.parent_node_id))
+					sibling_ids: list[str] = []
+					if parent_node is not None and parent_node.child_node_ids:
+						sibling_ids = [str(item) for item in parent_node.child_node_ids]
+					if not sibling_ids:
+						sibling_ids = [
+							str(node.id)
+							for node in work_tree.nodes
+							if str(node.parent_node_id or "") == str(current_node.parent_node_id)
+						]
+					for sibling_id in sibling_ids:
+						if sibling_id == str(current_node_id):
+							continue
+						sibling_node = node_by_id.get(sibling_id)
+						if sibling_node is None:
+							continue
+						if str(sibling_node.status) not in {"completed", "failed", "skipped"}:
+							next_node_id = sibling_id
+							break
+					if next_node_id is None:
+						next_node_id = str(current_node.parent_node_id)
+				if next_node_id:
+					now = utc_now()
+					completed_summary = normalize_excerpt(assistant_text.strip(), 240)
+					updated_nodes: list[dict[str, Any]] = []
+					for node in work_tree.nodes:
+						payload = node.model_dump(by_alias=True, mode="json")
+						if str(node.id) == str(current_node_id):
+							payload["status"] = "completed"
+							if completed_summary:
+								payload["executionSummary"] = completed_summary
+							payload["updatedAt"] = now
+						updated_nodes.append(payload)
+					takeover_protocol = TaskTakeoverProtocol.model_validate(
+						{
+							**takeover_protocol.model_dump(by_alias=True, mode="json"),
+							"status": "executing",
+							"currentPhase": "execute",
+							"workTree": {
+								**work_tree.model_dump(by_alias=True, mode="json"),
+								"nodes": updated_nodes,
+								"status": "active",
+								"updatedAt": now,
+							},
+						}
+					)
+					takeover_protocol, work_context_stack = switch_current_work_node(
+						takeover_protocol,
+						task_id=task.id,
+						agent_run_id=run.id,
+						node_id=next_node_id,
+						work_context_stack=work_context_stack,
+						cursor_state=f"continue:{next_node_id}",
+					)
+					transition_state = {
+						"transition": "work-tree-continue",
+						"requiresContinuation": True,
+						"currentFocus": request.get("nextFocus") or request.get("currentFocus") or f"continue:{next_node_id}",
+					}
+			elif terminal_candidate and current_node_id == root_node_id:
+				has_formal_delivery_sections = _has_formal_delivery_sections(assistant_text)
+				all_leaves_complete = _work_tree_all_leaves_complete(takeover_protocol.work_tree)
+				if has_formal_delivery_sections or all_leaves_complete:
+					takeover_protocol = takeover_protocol.model_copy(
+						update={
+							"status": "verified",
+							"work_tree": takeover_protocol.work_tree.model_copy(update={"status": "awaiting-approval"}),
+						}
+					)
 		# Always enforce hard delivery gates, even when an assistant transition was pre-applied.
 		if takeover_protocol is not None and takeover_protocol.verification_items:
 			blocked_hard_gates: list[str] = []
@@ -426,7 +534,23 @@ def _finalize_execution_transition(
 			"currentFocus": request.get("nextFocus") or (transition_state or {}).get("currentFocus") or request.get("currentFocus") or ("awaiting-approval" if task_status == "awaiting-approval" else "completed"),
 		},
 	)
-	run = task_repository.update_agent_run(run.id, {"status": "completed"})
+	run_status = "completed"
+	if task_status == "failed":
+		run_status = "failed"
+	elif task_status == "queued" and result_status == "continuing":
+		run_status = "aborted"
+	run = task_repository.update_agent_run(run.id, {"status": run_status})
+	execution_state_audit = {
+		"resultStatus": result_status,
+		"taskStatus": task_status,
+		"runStatus": run_status,
+		"transitionOutcome": transition_outcome,
+		"transition": (transition_state or {}).get("transition") if isinstance(transition_state, dict) else None,
+		"deliveryGateBlocked": bool(delivery_gate_blocked_final),
+		"blockedHardGates": blocked_hard_gates_final,
+		"continuationQueued": continuation_event is not None,
+		"queueDepth": queue_depth,
+	}
 	window_execution_artifact = _persist_window_execution_artifact(
 		session,
 		task=task,
@@ -496,6 +620,7 @@ def _finalize_execution_transition(
 		"workContextStackRef": work_context_stack_ref,
 		"queuedWorkItem": queued_work_item,
 		"queueDepth": queue_depth,
+		"executionStateAudit": execution_state_audit,
 		"runtimeMetricsArtifact": runtime_metrics_artifact,
 		"runtimeTimings": {**runtime_timings, "llm": llm_result.get("timings")},
 	}

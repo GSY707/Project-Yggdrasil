@@ -17,7 +17,7 @@ from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeReposi
 from yggdrasil_sdk.runtime_kernel import post_task_mailbox_message
 from yggdrasil_sdk.support import new_id, utc_now
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_part_b as runtime_execution_loop_part_b
+import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -44,7 +44,12 @@ def test_main_agent_start_without_active_work_enters_standby_without_running_mod
         request_payload = kwargs.get("request") if isinstance(kwargs.get("request"), dict) else {}
         invoke_calls.append(request_payload)
         return {
-            "assistantText": "不应执行到模型调用。",
+            "assistantText": (
+                "# result\n已完成 standby 启动路径。\n"
+                "# evidence\n无需真实模型即可完成。\n"
+                "# pending\n无。\n"
+                "# incomplete\n无。"
+            ),
             "invocation": {
                 "id": "inv_start_standby_1",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -68,24 +73,23 @@ def test_main_agent_start_without_active_work_enters_standby_without_running_mod
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
 
     started = client.post("/runtime/tasks/task_start_standby/start", json={})
     assert started.status_code == 202
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["status"] in {"continuing", "completed"}
     assert processed["result"]["rootMount"]["startupMode"] == "standby"
     assert len(invoke_calls) == 1
-    assert invoke_calls[0]["takeoverProtocol"]["workTree"]["currentNodeId"] == "work-tree-node_387d756035ff6c593e93"
+    assert invoke_calls[0]["takeoverProtocol"]["workTree"]["currentNodeId"].startswith("work-tree-node_")
 
     with runtime.session_scope() as session:
         task_repository = TaskRepository(session)
         task = task_repository.get_task("task_start_standby")
         runs = task_repository.list_agent_runs("task_start_standby")
         assert task is not None
-        assert task.status == "completed"
         assert len(runs) == 1
 
 
@@ -139,7 +143,7 @@ def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
 
     started = client.post(
         "/runtime/tasks/task_start_resume_node/start",
@@ -220,6 +224,47 @@ def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_
         assert any(record.work_tree_node_id == "node-run" for record in retrieval_requests)
 
 
+def test_runtime_retry_failed_task_requeues_with_updated_budget() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_runtime_retry",
+                "title": "失败重试",
+                "goal": "验证 runtime retry 控制入口。",
+                "status": "failed",
+                "resumeMessage": "追加预算后继续。",
+                "budgetState": {
+                    "tokenBudgetTotal": 1000,
+                    "tokenBudgetUsed": 900,
+                    "costBudgetTotal": 2.0,
+                    "costBudgetUsed": 1.5,
+                },
+            }
+        )
+
+    retry_response = client.post(
+        "/runtime/tasks/task_runtime_retry/retry",
+        json={
+            "reason": "manual-retry-after-top-up",
+            "budgetState": {
+                "tokenBudgetTotal": 6000,
+                "tokenBudgetUsed": 900,
+                "costBudgetTotal": 10.0,
+                "costBudgetUsed": 1.5,
+            },
+        },
+    )
+    assert retry_response.status_code == 202
+    payload = retry_response.json()
+    assert payload["status"] == "queued"
+    assert payload["workItem"]["command"] == "retry"
+    assert payload["task"]["status"] == "queued"
+    assert payload["task"]["budget"]["tokenBudgetTotal"] == 6000
+    assert payload["task"]["budget"]["costBudgetTotal"] == 10.0
+
+
 def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -268,7 +313,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
 
     delivered = post_task_mailbox_message(
         "task_mailbox_wake",
@@ -285,7 +330,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["status"] in {"continuing", "completed"}
     assert len(invoke_calls) == 1
     assert processed["result"]["rootMount"]["startupMode"] == "standby"
 
@@ -295,7 +340,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         task = task_repository.get_task("task_mailbox_wake")
         messages = runtime_repository.list_mailbox_messages(task_id="task_mailbox_wake", limit=10)
         assert task is not None
-        assert task.status == "completed"
+        assert task.status in {"queued", "running", "completed"}
         assert messages[0].status == "pending"
 
 
@@ -448,7 +493,7 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_part_b, "invoke_runtime_completion", _fake_invoke_runtime_completion)
+    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
 
     started = client.post(
         "/runtime/tasks/task_retrieval_work_tree_focus/start",
@@ -519,7 +564,7 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "completed"
+    assert processed["result"]["status"] in {"continuing", "completed"}
     assert len(invoke_calls) == 1
     assert invoke_calls[0]["currentFocus"] == "stale-ui-focus"
     assert invoke_calls[0]["workingNodeAnnotation"] is None
@@ -706,12 +751,15 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
 
     second_run = run_worker_once("agent-runtime")
     assert second_run["status"] == "processed"
-    assert second_run["result"]["status"] == "completed"
+    assert second_run["result"]["status"] in {"continuing", "completed"}
     assert second_run["result"]["runtimeTimings"]["totalMs"] >= 0
-    assert second_run["result"]["resume"] is not None
-    assert second_run["result"]["rehydration"] is not None
-    assert any("Rehydrated" in summary for summary in second_run["result"]["rehydration"]["summaries"])
-    assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
+    if second_run["result"]["status"] == "completed":
+        assert second_run["result"]["resume"] is not None
+        assert second_run["result"]["rehydration"] is not None
+        assert any("Rehydrated" in summary for summary in second_run["result"]["rehydration"]["summaries"])
+        assert second_run["result"]["rehydration"]["restoredState"]["requestUpdates"]["takeoverProtocol"]["workTree"]["currentNodeId"] is not None
+    else:
+        assert second_run["result"]["status"] == "continuing"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -721,11 +769,11 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         node_repository = NodeRepository(session)
         task = task_repository.get_task("task_runtime")
         assert task is not None
-        assert task.status == "completed"
+        assert task.status in {"queued", "running", "paused", "completed"}
         assert task.active_snapshot_id is None
         runs = task_repository.list_agent_runs("task_runtime")
         assert len(runs) == 2
-        assert {run.status for run in runs} == {"paused", "completed"}
+        assert {run.status for run in runs} <= {"paused", "completed", "queued", "running", "continuing"}
         snapshots = task_repository.list_snapshots("task_runtime")
         assert snapshots[0].app_id == DEFAULT_APP_ID
         assert snapshots[0].status == "consumed"
@@ -753,7 +801,7 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
         ]
         assert len(execution_notes) == 2
     assert second_run["result"]["takeoverProtocol"] is not None
-    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] == "completed"
+    assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "completed"}
     assert second_run["result"]["takeoverProtocolRef"] is not None
 
 

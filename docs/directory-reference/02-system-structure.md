@@ -285,6 +285,7 @@ applications/
 ├── epic-writing/                   # 长篇内容创作
 ├── knowledge-studio/               # 知识库建设与管理
 ├── learning-coach/                 # 个性化学习辅导
+├── graduate-researcher/            # 研究生学习与研究（预算驱动）
 ├── maintenance-ops/                # 系统运维与巡检
 ├── scenic-guide/                   # 信息导览与规划
 └── software-factory/               # 大型软件工程全流程

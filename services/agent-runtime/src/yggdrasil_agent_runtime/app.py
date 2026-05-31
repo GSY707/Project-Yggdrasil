@@ -5,7 +5,7 @@ from fastapi import Body, FastAPI, HTTPException, Query, status
 from yggdrasil_sdk import instrument_fastapi_app
 from yggdrasil_sdk.persistence.coordination import RedisCoordinator
 
-from .runtime import approve_task_completion, build_root_mount_package, load_package_entry, prepare_pause_snapshot, queue_main_agent_execution, request_task_revision, request_task_pause
+from .runtime import approve_task_completion, build_root_mount_package, load_package_entry, prepare_pause_snapshot, queue_main_agent_execution, request_task_revision, request_task_pause, retry_task_execution
 from yggdrasil_sdk import get_persistence_runtime
 
 
@@ -73,6 +73,16 @@ def resume_task(task_id: str, payload: dict[str, Any] | None = Body(default=None
         request = dict(payload or {})
         request["command"] = "resume"
         return queue_main_agent_execution(task_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@app.post("/runtime/tasks/{task_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+def retry_task(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    try:
+        return retry_task_execution(task_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
