@@ -1,0 +1,40 @@
+{
+  "defaultTaskType": "research-learning",
+  "defaultRunType": "main",
+  "defaultCapabilities": [
+    "task-takeover",
+    "text-memory",
+    "context-pruning",
+    "mcp-bridge",
+    "subagent-runtime",
+    "scene-research-deep",
+    "scene-writing-epic",
+    "relation-discovery",
+    "memory-organizer",
+    "multimodal-memory",
+    "shared-memory",
+    "pause-resume"
+  ],
+  "tokenBudget": {
+    "defaultTotal": 10000000,
+    "mode": "spend-on-learning",
+    "finalReportBudgetRatioMax": 0.15,
+    "planningAndEvidenceBudgetRatioMin": 0.85
+  },
+  "learningLoop": {
+    "prioritizeProcessOverSingleReport": true,
+    "requireMemoryTreeConsolidation": true,
+    "requireWebAndComputeUsage": true,
+    "allowLongHorizonExploration": true
+  },
+  "toolProfile": {
+    "mode": "tool-rich",
+    "requireAtLeastOneToolActionPerStep": true,
+    "preferMcpForWebResearch": true,
+    "preferComputeValidationBeforeConclusion": true,
+    "recordToolEvidenceInStepOutput": true
+  },
+  "promptPreviewDefaults": {
+    "responseRequirements": "先给学习进展，再给新增证据与记忆树沉淀，最后给下一阶段计划。论文与综述是阶段汇报，不是任务终点。"
+  }
+}

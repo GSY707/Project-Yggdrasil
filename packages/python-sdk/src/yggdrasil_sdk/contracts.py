@@ -1,44 +1,30 @@
 from __future__ import annotations
-
 from datetime import datetime, timezone
 import json
 from hashlib import sha256
 from typing import Any, Literal
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-
 class ExternalRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["url", "file", "object-storage", "package-entry", "citation"]
     locator: str
     checksum: str | None = None
-
-
 class ActorRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["user", "agent", "module", "system"]
     id: str
-
-
 class EntityRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: str
     id: str
-
-
 def _contracts_utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
 def _normalized_string(value: Any) -> str | None:
     normalized = str(value or "").strip()
     return normalized or None
-
-
 def _normalized_string_list(values: Any) -> list[str]:
     if values is None:
         return []
@@ -57,13 +43,9 @@ def _normalized_string_list(values: Any) -> list[str]:
         seen.add(normalized)
         normalized_values.append(normalized)
     return normalized_values
-
-
 def _stable_contract_digest(payload: Any) -> str:
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
     return sha256(serialized.encode("utf-8")).hexdigest()[:16]
-
-
 def _normalized_child_completion_payloads(values: Any) -> list[dict[str, Any]]:
     normalized_payloads: list[dict[str, Any]] = []
     for item in values or []:
@@ -79,8 +61,6 @@ def _normalized_child_completion_payloads(values: Any) -> list[dict[str, Any]]:
             }
         )
     return normalized_payloads
-
-
 def build_work_context_prefix_cache_key(
     frame: Any,
     *,
@@ -113,8 +93,6 @@ def build_work_context_prefix_cache_key(
             "parentPrefixCacheKey": _normalized_string(parent_prefix_cache_key),
         }
     )
-
-
 def normalize_work_context_frames_payload(frames: list[Any] | None) -> list[dict[str, Any]]:
     normalized_frames: list[dict[str, Any]] = []
     parent_frame_id: str | None = None
@@ -155,23 +133,17 @@ def normalize_work_context_frames_payload(frames: list[Any] | None) -> list[dict
         parent_frame_id = frame_id
         parent_prefix_cache_key = normalized_payload["prefixCacheKey"]
     return normalized_frames
-
-
 def _working_node_annotation(node_id: Any) -> str | None:
     normalized = _normalized_string(node_id)
     if normalized is None:
         return None
     return f"<Working_Node: {normalized}>"
-
-
 def _raw_work_tree_node_payload(node: Any) -> dict[str, Any]:
     if isinstance(node, dict):
         return dict(node)
     if hasattr(node, "model_dump"):
         return node.model_dump(by_alias=True, mode="json")
     return {}
-
-
 def _preferred_work_tree_node_id(nodes: list[Any]) -> str | None:
     normalized_nodes = [_raw_work_tree_node_payload(node) for node in nodes]
     executable_nodes = [
@@ -198,8 +170,6 @@ def _preferred_work_tree_node_id(nodes: list[Any]) -> str | None:
         if candidate is not None:
             return candidate
     return None
-
-
 def _build_active_path_node_ids(nodes: list[Any], *, current_node_id: str | None, root_node_id: str | None) -> list[str]:
     if current_node_id is None and root_node_id is None:
         return []
@@ -221,16 +191,12 @@ def _build_active_path_node_ids(nodes: list[Any], *, current_node_id: str | None
     if root_node_id is not None and (not path or path[0] != root_node_id):
         path.insert(0, root_node_id)
     return _normalized_string_list(path)
-
-
 def _work_tree_protocol_id(task_id: str | None, root_node_id: str | None, root_objective: str) -> str:
     if task_id is not None:
         return f"work-tree-{task_id}"
     if root_node_id is not None:
         return f"work-tree-{root_node_id}"
     return f"work-tree-{_stable_contract_digest({'rootObjective': root_objective})}"
-
-
 def _first_request_state(actions: Any) -> dict[str, Any]:
     if not isinstance(actions, list):
         return {}
@@ -241,8 +207,6 @@ def _first_request_state(actions: Any) -> dict[str, Any]:
         if isinstance(request_state, dict):
             return request_state
     return {}
-
-
 def _runtime_pointer_from_request_state(request_state: dict[str, Any]) -> dict[str, str | None]:
     takeover_protocol = request_state.get("takeoverProtocol") if isinstance(request_state.get("takeoverProtocol"), dict) else {}
     work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
@@ -279,8 +243,6 @@ def _runtime_pointer_from_request_state(request_state: dict[str, Any]) -> dict[s
         "topFrameId": top_frame_id,
         "stackDigest": stack_digest,
     }
-
-
 class BudgetState(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -294,8 +256,6 @@ class BudgetState(BaseModel):
         alias="childBudgetMode",
     )
     max_sub_agents: int | None = Field(default=None, alias="maxSubAgents")
-
-
 class ToolDescriptor(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -311,8 +271,6 @@ class ToolDescriptor(BaseModel):
     permission_required: list[str] = Field(default_factory=list, alias="permissionRequired")
     input_schema: dict[str, Any] = Field(default_factory=dict, alias="inputSchema")
     implementation_ref: str | None = Field(default=None, alias="implementationRef")
-
-
 class ModuleManifestSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -331,8 +289,6 @@ class ModuleManifestSummary(BaseModel):
     publishes: list[str] = Field(default_factory=list)
     subscribes: list[str] = Field(default_factory=list)
     requested_permissions: list[str] = Field(default_factory=list, alias="requestedPermissions")
-
-
 class ModuleInstallRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -348,8 +304,6 @@ class ModuleInstallRecord(BaseModel):
     enabled_at: datetime | None = Field(default=None, alias="enabledAt")
     disabled_at: datetime | None = Field(default=None, alias="disabledAt")
     last_error: str | None = Field(default=None, alias="lastError")
-
-
 class ModuleConfigBinding(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -360,8 +314,6 @@ class ModuleConfigBinding(BaseModel):
     source_mode: Literal["database-primary-file-overlay"] = Field(alias="sourceMode")
     updated_at: datetime = Field(alias="updatedAt")
     updated_by: ActorRef = Field(alias="updatedBy")
-
-
 class HookContributionRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -374,8 +326,6 @@ class HookContributionRecord(BaseModel):
     side_effects: Literal["none", "read-only", "controlled-write"] = Field(alias="sideEffects")
     enabled: bool
     created_at: datetime = Field(alias="createdAt")
-
-
 class EventSubscriptionRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -387,8 +337,6 @@ class EventSubscriptionRecord(BaseModel):
     status: Literal["active", "paused", "error"]
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
-
-
 class HealthReport(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -398,8 +346,6 @@ class HealthReport(BaseModel):
     summary: str
     details_ref: ExternalRef | None = Field(default=None, alias="detailsRef")
     observed_at: datetime = Field(alias="observedAt")
-
-
 class EventEnvelope(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -419,8 +365,6 @@ class EventEnvelope(BaseModel):
     causation_id: str | None = Field(default=None, alias="causationId")
     schema_ref: str = Field(alias="schemaRef")
     payload: dict[str, Any]
-
-
 class ModuleEventEmission(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -438,8 +382,6 @@ class ModuleEventEmission(BaseModel):
     correlation_id: str | None = Field(default=None, alias="correlationId")
     causation_id: str | None = Field(default=None, alias="causationId")
     schema_ref: str | None = Field(default=None, alias="schemaRef")
-
-
 class EventHandlingResult(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -451,8 +393,6 @@ class EventHandlingResult(BaseModel):
         default=None,
         alias="healthStatus",
     )
-
-
 class BudgetCheckResult(BaseModel):
     """Result of pre-invocation budget check."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -463,8 +403,6 @@ class BudgetCheckResult(BaseModel):
     available_cost_budget: float = Field(alias="availableCostBudget")
     estimated_total_tokens: int = Field(alias="estimatedTotalTokens")
     estimated_cost: float = Field(alias="estimatedCost")
-
-
 class BudgetOverrunResult(BaseModel):
     """Result of post-invocation budget validation."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -477,8 +415,6 @@ class BudgetOverrunResult(BaseModel):
     cost_used: float = Field(alias="costUsed")
     tokens_exceeded_by: int = Field(alias="tokensExceededBy")
     cost_exceeded_by: float = Field(alias="costExceededBy")
-
-
 class ToolExecutionFailure(BaseModel):
     """Record of a tool execution failure with retry information."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -489,8 +425,6 @@ class ToolExecutionFailure(BaseModel):
     retry_count: int = Field(default=0, alias="retryCount")
     is_retryable: bool = Field(alias="isRetryable")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
 class ToolExecutionResult(BaseModel):
     """Detailed result of a single tool execution."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -501,8 +435,6 @@ class ToolExecutionResult(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
     failure: ToolExecutionFailure | None = None
     duration_ms: int = Field(alias="durationMs")
-
-
 class RuntimeMetricsSnapshot(BaseModel):
     """Snapshot of runtime metrics at a specific point in execution."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -519,8 +451,6 @@ class RuntimeMetricsSnapshot(BaseModel):
     tool_round_count: int = Field(alias="toolRoundCount")
     tool_failures_count: int = Field(alias="toolFailuresCount")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
 class RuntimeMetricsArtifact(BaseModel):
     """Persistent artifact storing runtime metrics across windows."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -534,8 +464,6 @@ class RuntimeMetricsArtifact(BaseModel):
     cumulative_cost: float = Field(alias="cumulativeCost")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-
 class SnapshotIntegrityCheck(BaseModel):
     """Integrity check information for snapshot verification."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -544,8 +472,6 @@ class SnapshotIntegrityCheck(BaseModel):
     checksum_algorithm: str = Field(default="sha256", alias="checksumAlgorithm")
     verified_at: datetime = Field(default_factory=datetime.utcnow)
     is_valid: bool = True
-
-
 class PendingActionSnapshot(BaseModel):
     """Restorable pending action with deterministic integrity checksum."""
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -557,8 +483,6 @@ class PendingActionSnapshot(BaseModel):
     checksum_verified_at: datetime | None = Field(default=None, alias="checksumVerifiedAt")
     checksum_failed: bool = Field(default=False, alias="checksumFailed")
     failure_reason: str | None = Field(default=None, alias="failureReason")
-
-
 class RootMountPackage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -589,8 +513,6 @@ class RootMountPackage(BaseModel):
     top_frame_id: str | None = Field(default=None, alias="topFrameId")
     stack_digest: str | None = Field(default=None, alias="stackDigest")
     generated_at: datetime = Field(alias="generatedAt")
-
-
 class TaskRuntimeState(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -607,8 +529,6 @@ class TaskRuntimeState(BaseModel):
     work_context_stack: WorkContextStack | None = Field(default=None, alias="workContextStack")
     memory_retrieval_state: dict[str, Any] | None = Field(default=None, alias="memoryRetrievalState")
     budget_state: BudgetState | None = Field(default=None, alias="budgetState")
-
-
 class TaskSnapshotSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -658,8 +578,6 @@ class TaskSnapshotSummary(BaseModel):
         if _normalized_string(data.get("stackDigest") or data.get("stack_digest")) is None and pointer["stackDigest"] is not None:
             data["stackDigest"] = pointer["stackDigest"]
         return data
-
-
 class ContextPruningPlan(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -675,8 +593,6 @@ class ContextPruningPlan(BaseModel):
     status: Literal["proposed", "executed", "verified", "failed"]
     created_by: ActorRef = Field(alias="createdBy")
     created_at: datetime = Field(alias="createdAt")
-
-
 class TaskTakeoverAmbiguity(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -684,8 +600,6 @@ class TaskTakeoverAmbiguity(BaseModel):
     prompt: str
     reason: str | None = None
     required: bool = True
-
-
 class TaskTakeoverConstraint(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -695,8 +609,6 @@ class TaskTakeoverConstraint(BaseModel):
     value: str
     required: bool = True
     source: str | None = None
-
-
 class TaskTakeoverPlanStep(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -707,8 +619,6 @@ class TaskTakeoverPlanStep(BaseModel):
     status: Literal["pending", "in-progress", "completed", "blocked", "skipped"] = "pending"
     expected_evidence: list[str] = Field(default_factory=list, alias="expectedEvidence")
     depends_on: list[str] = Field(default_factory=list, alias="dependsOn")
-
-
 class WorkTreeNode(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -783,8 +693,6 @@ class WorkTreeNode(BaseModel):
         data.setdefault("createdAt", data.get("created_at") or _contracts_utcnow())
         data.setdefault("updatedAt", data.get("updated_at") or data.get("createdAt") or _contracts_utcnow())
         return data
-
-
 class WorkTreeProtocol(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -988,6 +896,18 @@ class WorkTreeProtocol(BaseModel):
                 self.recovery_anchor = current_node.recovery_anchor
         return self
 
+from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .contracts__part01 import (  # noqa: F401
+    _contracts_utcnow,
+    _normalized_string,
+    _stable_contract_digest,
+    _working_node_annotation,
+)
+from .contracts__part01 import *  # noqa: F403,F401
 
 class WorkContextChildCompletionSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -1000,8 +920,6 @@ class WorkContextChildCompletionSummary(BaseModel):
     )
     evidence_refs: list[EntityRef] = Field(default_factory=list, alias="evidenceRefs")
     completed_at: datetime = Field(default_factory=_contracts_utcnow, alias="completedAt")
-
-
 class WorkContextFrame(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1044,8 +962,6 @@ class WorkContextFrame(BaseModel):
         data.setdefault("childCompletionSummaries", data.get("child_completion_summaries") or [])
         data["prefixCacheKey"] = _normalized_string(data.get("prefixCacheKey") or data.get("prefix_cache_key")) or build_work_context_prefix_cache_key(data)
         return data
-
-
 class WorkContextStack(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1086,8 +1002,6 @@ class WorkContextStack(BaseModel):
         )
         data.setdefault("updatedAt", data.get("updated_at") or _contracts_utcnow())
         return data
-
-
 class TaskTakeoverVerificationItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1096,8 +1010,6 @@ class TaskTakeoverVerificationItem(BaseModel):
     status: Literal["passed", "warning", "failed", "not-run"]
     detail: str | None = None
     gate_mode: Literal["hard", "advisory"] = Field(default="advisory", alias="gateMode")
-
-
 class TaskTakeoverDeliverySection(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1105,8 +1017,6 @@ class TaskTakeoverDeliverySection(BaseModel):
     section: Literal["result", "evidence", "pending", "incomplete"]
     content: str
     status: Literal["present", "missing", "not-applicable"] = "present"
-
-
 class TaskTakeoverMetrics(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1118,8 +1028,6 @@ class TaskTakeoverMetrics(BaseModel):
     plan_confirmed: bool = Field(default=False, alias="planConfirmed")
     delivery_completeness_score_0_100: float = Field(default=0.0, alias="deliveryCompletenessScore0_100")
     verification_pass_rate: float = Field(default=0.0, alias="verificationPassRate")
-
-
 class TaskTakeoverProtocol(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1153,8 +1061,6 @@ class TaskTakeoverProtocol(BaseModel):
         if work_tree is not None and task_id is not None and _normalized_string(work_tree.get("taskId") or work_tree.get("task_id")) is None:
             data["workTree"] = {**work_tree, "taskId": task_id}
         return data
-
-
 class ModelRouteDecision(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1170,8 +1076,6 @@ class ModelRouteDecision(BaseModel):
     latency_score: float = Field(alias="latencyScore")
     route_policy_version: str = Field(alias="routePolicyVersion")
     created_at: datetime = Field(alias="createdAt")
-
-
 class WorkerActivityDescriptor(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1181,8 +1085,6 @@ class WorkerActivityDescriptor(BaseModel):
     implementation_ref: str = Field(alias="implementationRef")
     timeout_ms: int = Field(alias="timeoutMs")
     retryable: bool = True
-
-
 class PullRequestRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1200,8 +1102,6 @@ class PullRequestRecord(BaseModel):
     merge_commit_ref: str | None = Field(default=None, alias="mergeCommitRef")
     merged_at: datetime | None = Field(default=None, alias="mergedAt")
     created_at: datetime = Field(alias="createdAt")
-
-
 class ReviewCommentRecord(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1214,8 +1114,6 @@ class ReviewCommentRecord(BaseModel):
     status: Literal["open", "resolved", "rejected"]
     created_at: datetime = Field(alias="createdAt")
     resolved_at: datetime | None = Field(default=None, alias="resolvedAt")
-
-
 class SpecDocumentSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1226,8 +1124,6 @@ class SpecDocumentSummary(BaseModel):
     status: str | None = None
     version: str | None = None
     updated_at: str | None = Field(default=None, alias="updatedAt")
-
-
 class ModuleCatalogSnapshot(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -1237,8 +1133,6 @@ class ModuleCatalogSnapshot(BaseModel):
     hooks: list[HookContributionRecord]
     subscriptions: list[EventSubscriptionRecord]
     health: list[HealthReport]
-
-
 class ApplicationManifestSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -1255,20 +1149,18 @@ class ApplicationManifestSummary(BaseModel):
     default_prompt_profile_id: str | None = Field(default=None, alias="defaultPromptProfileId")
     subagent_prompt_profile_id: str | None = Field(default=None, alias="subagentPromptProfileId")
     default_seed_template_id: str | None = Field(default=None, alias="defaultSeedTemplateId")
+    memory_namespace: str | None = Field(default=None, alias="memoryNamespace")
+    memory_asset_files: list[str] = Field(default_factory=list, alias="memoryAssetFiles")
     prompt_profile_files: list[str] = Field(default_factory=list, alias="promptProfileFiles")
     seed_template_files: list[str] = Field(default_factory=list, alias="seedTemplateFiles")
     config_defaults_ref: ExternalRef | None = Field(default=None, alias="configDefaultsRef")
     frontend_entry_route: str | None = Field(default=None, alias="frontendEntryRoute")
     dashboard_ref: ExternalRef | None = Field(default=None, alias="dashboardRef")
-
-
 class ApplicationCatalogSnapshot(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     generated_at: datetime = Field(alias="generatedAt")
     manifests: list[ApplicationManifestSummary]
-
-
 class ApplicationConfigBinding(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

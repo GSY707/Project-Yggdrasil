@@ -113,7 +113,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -468,7 +468,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -819,7 +819,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -1177,7 +1177,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -1449,5 +1449,3 @@
     ]
   }
 }
-
-

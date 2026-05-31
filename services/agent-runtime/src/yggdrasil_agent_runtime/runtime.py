@@ -8,6 +8,7 @@ from yggdrasil_sdk.runtime_kernel import (
     queue_main_agent_execution,
     request_task_revision,
     request_task_pause,
+    retry_task_execution,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "queue_main_agent_execution",
     "request_task_revision",
     "request_task_pause",
+    "retry_task_execution",
 ]

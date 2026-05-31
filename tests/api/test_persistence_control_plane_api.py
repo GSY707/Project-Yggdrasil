@@ -293,6 +293,57 @@ def test_core_api_exposes_task_control_actions() -> None:
     assert resume_payload["workItem"]["command"] == "resume"
     assert resume_payload["task"]["status"] == "queued"
 
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task_repository.create_task(
+            {
+                "id": "task_api_retry_control",
+                "title": "失败重试控制验证",
+                "goal": "验证 core-api 失败任务重试入口。",
+                "status": "failed",
+                "currentFocus": "execution-failed: Token budget exceeded after model invocation.",
+                "resumeMessage": "追加预算后继续执行。",
+                "budgetState": {
+                    "tokenBudgetTotal": 1200,
+                    "tokenBudgetUsed": 1200,
+                    "costBudgetTotal": 2.0,
+                    "costBudgetUsed": 2.0,
+                },
+            }
+        )
+
+    retry_detail = client.get("/tasks/task_api_retry_control")
+    assert retry_detail.status_code == 200
+    retry_runtime_control = retry_detail.json()["runtimeControl"]
+    assert retry_runtime_control["canRetry"] is True
+    assert retry_runtime_control["canTopUp"] is True
+
+    retry_response = client.post(
+        "/tasks/task_api_retry_control/retry",
+        json={
+            "reason": "manual-budget-top-up-retry",
+            "budgetState": {
+                "tokenBudgetTotal": 4200,
+                "tokenBudgetUsed": 1200,
+                "costBudgetTotal": 12.0,
+                "costBudgetUsed": 2.0,
+            },
+        },
+    )
+    assert retry_response.status_code == 202
+    retry_payload = retry_response.json()
+    assert retry_payload["status"] == "queued"
+    assert retry_payload["workItem"]["command"] == "retry"
+    assert retry_payload["task"]["status"] == "queued"
+
+    retry_task_detail = client.get("/tasks/task_api_retry_control")
+    assert retry_task_detail.status_code == 200
+    retry_task_payload = retry_task_detail.json()
+    assert retry_task_payload["task"]["budget"]["tokenBudgetTotal"] == 4200
+    assert retry_task_payload["task"]["budget"]["costBudgetTotal"] == 12.0
+    assert retry_task_payload["runtimeControl"]["canRetry"] is False
+
     overview_response = client.get("/workbench/overview")
     assert overview_response.status_code == 200
     overview_cards = overview_response.json()["cards"]

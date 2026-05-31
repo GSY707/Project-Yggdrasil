@@ -1,46 +1,64 @@
 from __future__ import annotations
-
 from pathlib import Path
 import time
 from threading import RLock
 from typing import Any, Literal
-
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
-
 from .app_catalog import active_application_id, build_application_catalog_snapshot, get_application_manifest
 from .contracts import TaskTakeoverProtocol, WorkContextStack
 from .catalog import build_module_catalog_snapshot
 from .hook_runtime import collect_hook_results
 from .hooks import HookNames
 from .persistence.constants import DEFAULT_APP_ID
-from .support import normalize_excerpt, read_json, resolve_workspace_root
+from .support import normalize_excerpt, read_json, relative_workspace_path, resolve_workspace_root
 from .tool_runtime import resolve_registered_tool_descriptors
-
-
 _PROMPT_REGISTRY_CACHE: dict[tuple[Any, ...], tuple[dict[str, Any], float]] = {}
 _PROMPT_REGISTRY_CACHE_TTL = 2.0
 _PROMPT_REGISTRY_CACHE_LOCK = RLock()
-
-
 def invalidate_prompt_registry_cache() -> None:
     with _PROMPT_REGISTRY_CACHE_LOCK:
         _PROMPT_REGISTRY_CACHE.clear()
-
-
 def _prompt_registry_cache_key(app_id: str, active_capabilities: list[str] | None) -> tuple[Any, ...]:
     application_snapshot = build_application_catalog_snapshot()
     module_snapshot = build_module_catalog_snapshot()
     normalized_capabilities = tuple(sorted({str(item) for item in active_capabilities or []}))
+    manifest = next((item for item in application_snapshot.manifests if item.app_id == app_id), None)
+    memory_token: tuple[Any, ...] = ()
+    if manifest is not None:
+        workspace_root = resolve_workspace_root()
+        manifest_dir = (workspace_root / manifest.manifest_path).parent
+        memory_paths: list[Path] = []
+        seen_paths: set[str] = set()
+        for relative_path in manifest.memory_asset_files:
+            candidate = manifest_dir / relative_path
+            candidate_key = str(candidate.resolve())
+            if candidate.is_file() and candidate_key not in seen_paths:
+                memory_paths.append(candidate)
+                seen_paths.add(candidate_key)
+        memory_dir = manifest_dir / "memory"
+        if memory_dir.exists():
+            for candidate in sorted(memory_dir.rglob("*")):
+                if not candidate.is_file() or candidate.suffix.lower() not in {".yaml", ".yml", ".json", ".md", ".txt"}:
+                    continue
+                candidate_key = str(candidate.resolve())
+                if candidate_key in seen_paths:
+                    continue
+                memory_paths.append(candidate)
+                seen_paths.add(candidate_key)
+        memory_token = tuple(
+            (str(path.resolve()), path.stat().st_mtime_ns, path.stat().st_size)
+            for path in memory_paths
+            if path.exists()
+        )
     return (
         str(resolve_workspace_root()),
         app_id,
         normalized_capabilities,
         application_snapshot.generated_at.isoformat(),
         module_snapshot.generated_at.isoformat(),
+        memory_token,
     )
-
-
 class PromptProfile(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -59,8 +77,6 @@ class PromptProfile(BaseModel):
     few_shot_refs: list[str] = Field(default_factory=list, alias="fewShotRefs")
     source_app_id: str | None = Field(default=None, alias="sourceAppId")
     source_module_id: str | None = Field(default=None, alias="sourceModuleId")
-
-
 class SeedTemplate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -79,15 +95,11 @@ class SeedTemplate(BaseModel):
     few_shot_refs: list[str] = Field(default_factory=list, alias="fewShotRefs")
     source_app_id: str | None = Field(default=None, alias="sourceAppId")
     source_module_id: str | None = Field(default=None, alias="sourceModuleId")
-
-
 class FewShotMessage(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     role: Literal["user", "assistant", "system"]
     content: str
-
-
 class FewShotAsset(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -98,8 +110,16 @@ class FewShotAsset(BaseModel):
     messages: list[FewShotMessage] = Field(default_factory=list)
     source_app_id: str | None = Field(default=None, alias="sourceAppId")
     source_module_id: str | None = Field(default=None, alias="sourceModuleId")
+class ApplicationMemoryAsset(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-
+    id: str
+    name: str
+    version: str
+    content: str
+    source_app_id: str | None = Field(default=None, alias="sourceAppId")
+    source_module_id: str | None = Field(default=None, alias="sourceModuleId")
+    source_path: str | None = Field(default=None, alias="sourcePath")
 class CompiledPrompt(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -118,8 +138,6 @@ class CompiledPrompt(BaseModel):
     few_shot_refs: list[str] = Field(default_factory=list, alias="fewShotRefs")
     takeover_protocol: TaskTakeoverProtocol | None = Field(default=None, alias="takeoverProtocol")
     messages: list[dict[str, str]]
-
-
 def _format_memory_retrieval_state(state: dict[str, Any]) -> str:
     lines = [
         f"摘要: {state.get('summary') or '未记录检索摘要。'}",
@@ -133,8 +151,6 @@ def _format_memory_retrieval_state(state: dict[str, Any]) -> str:
     if state.get("reverseTraceMode") is not None:
         lines.append(f"反向追踪模式: {'是' if bool(state.get('reverseTraceMode')) else '否'}")
     return "\n".join(lines)
-
-
 def _load_structured_payload(path: Path) -> dict[str, Any]:
     if path.suffix.lower() == ".json":
         payload = read_json(path, {})
@@ -146,8 +162,57 @@ def _load_structured_payload(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"Prompt asset at {path} is not a mapping.")
     return payload
+def _load_application_memory_asset(path: Path, *, source_app_id: str | None = None, source_module_id: str | None = None) -> ApplicationMemoryAsset:
+    if path.suffix.lower() in {".json", ".yaml", ".yml"}:
+        payload = _load_structured_payload(path)
+        content = str(payload.get("content") or payload.get("body") or "").strip()
+        if not content:
+            content = yaml.safe_dump(payload, allow_unicode=True, sort_keys=False).strip()
+        asset_id = str(payload.get("id") or path.stem)
+        name = str(payload.get("name") or asset_id)
+        version = str(payload.get("version") or "v1")
+    else:
+        content = path.read_text(encoding="utf-8").strip()
+        asset_id = path.stem
+        name = path.stem.replace("-", " ").replace("_", " ").title()
+        version = "v1"
+    return ApplicationMemoryAsset(
+        id=asset_id,
+        name=name,
+        version=version,
+        content=content,
+        sourceAppId=source_app_id,
+        sourceModuleId=source_module_id,
+        sourcePath=relative_workspace_path(path, resolve_workspace_root()),
+    )
+def _load_application_memory_assets_from_application(app_manifest: Any) -> list[ApplicationMemoryAsset]:
+    workspace_root = resolve_workspace_root()
+    manifest_dir = (workspace_root / app_manifest.manifest_path).parent
+    asset_paths: list[Path] = []
+    seen_paths: set[str] = set()
 
+    for relative_path in getattr(app_manifest, "memory_asset_files", []) or []:
+        candidate = manifest_dir / relative_path
+        candidate_key = str(candidate.resolve())
+        if candidate.is_file() and candidate_key not in seen_paths:
+            asset_paths.append(candidate)
+            seen_paths.add(candidate_key)
 
+    memory_dir = manifest_dir / "memory"
+    if memory_dir.exists():
+        for candidate in sorted(memory_dir.rglob("*")):
+            if not candidate.is_file() or candidate.suffix.lower() not in {".yaml", ".yml", ".json", ".md", ".txt"}:
+                continue
+            candidate_key = str(candidate.resolve())
+            if candidate_key in seen_paths:
+                continue
+            asset_paths.append(candidate)
+            seen_paths.add(candidate_key)
+
+    return [
+        _load_application_memory_asset(path, source_app_id=app_manifest.app_id)
+        for path in asset_paths
+    ]
 def _load_profiles_from_application(app_manifest: Any) -> list[PromptProfile]:
     workspace_root = resolve_workspace_root()
     profiles: list[PromptProfile] = []
@@ -156,8 +221,6 @@ def _load_profiles_from_application(app_manifest: Any) -> list[PromptProfile]:
         payload.setdefault("sourceAppId", app_manifest.app_id)
         profiles.append(PromptProfile.model_validate(payload))
     return profiles
-
-
 def _load_seed_templates_from_application(app_manifest: Any) -> list[SeedTemplate]:
     workspace_root = resolve_workspace_root()
     templates: list[SeedTemplate] = []
@@ -166,8 +229,6 @@ def _load_seed_templates_from_application(app_manifest: Any) -> list[SeedTemplat
         payload.setdefault("sourceAppId", app_manifest.app_id)
         templates.append(SeedTemplate.model_validate(payload))
     return templates
-
-
 def _load_few_shot_assets_from_directory(
     directory: Path,
     *,
@@ -186,14 +247,10 @@ def _load_few_shot_assets_from_directory(
         payload.setdefault("sourceModuleId", source_module_id)
         assets.append(FewShotAsset.model_validate(payload))
     return assets
-
-
 def _load_few_shot_assets_from_application(app_manifest: Any) -> list[FewShotAsset]:
     workspace_root = resolve_workspace_root()
     manifest_dir = (workspace_root / app_manifest.manifest_path).parent
     return _load_few_shot_assets_from_directory(manifest_dir, source_app_id=app_manifest.app_id)
-
-
 def _allowed_module_ids(app_manifest: Any, active_capabilities: list[str] | None) -> list[str]:
     allowlist: list[str] = []
     for module_id in [
@@ -204,8 +261,6 @@ def _allowed_module_ids(app_manifest: Any, active_capabilities: list[str] | None
         if module_id not in allowlist:
             allowlist.append(module_id)
     return allowlist
-
-
 def _collect_module_prompt_profiles(app_id: str, module_ids: list[str]) -> list[PromptProfile]:
     profiles: list[PromptProfile] = []
     if not module_ids:
@@ -227,8 +282,6 @@ def _collect_module_prompt_profiles(app_id: str, module_ids: list[str]) -> list[
             normalized.setdefault("sourceModuleId", module_id)
             profiles.append(PromptProfile.model_validate(normalized))
     return profiles
-
-
 def _collect_module_seed_templates(app_id: str, module_ids: list[str]) -> list[SeedTemplate]:
     templates: list[SeedTemplate] = []
     if not module_ids:
@@ -250,8 +303,6 @@ def _collect_module_seed_templates(app_id: str, module_ids: list[str]) -> list[S
             normalized.setdefault("sourceModuleId", module_id)
             templates.append(SeedTemplate.model_validate(normalized))
     return templates
-
-
 def _collect_module_few_shot_assets(app_id: str, module_ids: list[str]) -> list[FewShotAsset]:
     if not module_ids:
         return []
@@ -277,8 +328,6 @@ def _collect_module_few_shot_assets(app_id: str, module_ids: list[str]) -> list[
             )
         )
     return assets
-
-
 def assemble_prompt_registry(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
@@ -315,22 +364,23 @@ def assemble_prompt_registry(
     ]:
         few_shot_assets_by_id[asset.id] = asset
 
+    application_memory_assets_by_id: dict[str, ApplicationMemoryAsset] = {}
+    for asset in _load_application_memory_assets_from_application(app_manifest):
+        application_memory_assets_by_id[asset.id] = asset
+
     registry = {
         "application": app_manifest,
         "selectedModuleIds": selected_module_ids,
         "promptProfiles": [profiles_by_id[key] for key in sorted(profiles_by_id)],
         "seedTemplates": [templates_by_id[key] for key in sorted(templates_by_id)],
         "fewShotAssets": [few_shot_assets_by_id[key] for key in sorted(few_shot_assets_by_id)],
+        "applicationMemoryAssets": [application_memory_assets_by_id[key] for key in sorted(application_memory_assets_by_id)],
     }
     with _PROMPT_REGISTRY_CACHE_LOCK:
         _PROMPT_REGISTRY_CACHE[cache_key] = (registry, time.monotonic())
     return registry
-
-
 def list_registered_agent_tools(active_capabilities: list[str] | None = None) -> list[dict[str, Any]]:
     return [tool.model_dump(by_alias=True, mode="json") for tool in resolve_registered_tool_descriptors(active_capabilities)]
-
-
 def get_prompt_profile_definition(
     prompt_profile_id: str,
     app_id: str | None = None,
@@ -342,8 +392,6 @@ def get_prompt_profile_definition(
         (profile for profile in resolved_registry["promptProfiles"] if profile.id == prompt_profile_id),
         None,
     )
-
-
 def list_prompt_profile_definitions(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
@@ -351,8 +399,6 @@ def list_prompt_profile_definitions(
 ) -> list[PromptProfile]:
     resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
     return list(resolved_registry["promptProfiles"])
-
-
 def get_seed_template_definition(
     seed_template_id: str | None,
     app_id: str | None = None,
@@ -366,8 +412,6 @@ def get_seed_template_definition(
         (template for template in resolved_registry["seedTemplates"] if template.id == seed_template_id),
         None,
     )
-
-
 def list_seed_template_definitions(
     app_id: str | None = None,
     active_capabilities: list[str] | None = None,
@@ -375,8 +419,6 @@ def list_seed_template_definitions(
 ) -> list[SeedTemplate]:
     resolved_registry = registry or assemble_prompt_registry(app_id=app_id, active_capabilities=active_capabilities)
     return list(resolved_registry["seedTemplates"])
-
-
 def _select_prompt_profile(run_type: str, request: dict[str, Any], app_manifest: Any, profiles: list[PromptProfile]) -> PromptProfile:
     explicit = str(request.get("promptProfileId") or "").strip()
     profiles_by_id = {profile.id: profile for profile in profiles}
@@ -401,8 +443,6 @@ def _select_prompt_profile(run_type: str, request: dict[str, Any], app_manifest:
     if ranked_candidates:
         return ranked_candidates[0]
     raise KeyError(f"No prompt profile available for run type {run_type} in app {app_manifest.app_id}.")
-
-
 def _normalized_markers(request: dict[str, Any], keys: list[str]) -> set[str]:
     markers: set[str] = set()
     for key in keys:
@@ -411,8 +451,6 @@ def _normalized_markers(request: dict[str, Any], keys: list[str]) -> set[str]:
             continue
         markers.add(str(value).strip().lower())
     return markers
-
-
 def _selection_score(
     template: SeedTemplate,
     *,
@@ -455,8 +493,6 @@ def _selection_score(
     if default_seed_template_id and template.id == default_seed_template_id:
         score += 1
     return score
-
-
 def _select_seed_template(
     task_type: str,
     run_type: str,
@@ -499,19 +535,13 @@ def _select_seed_template(
     if generic is not None:
         return generic
     raise KeyError(f"No seed template available for task type {task_type} in app {app_manifest.app_id}.")
-
-
 def _format_section(tag: str, content: str | None) -> str:
     text = (content or "").strip()
     if not text:
         return ""
     return f"<{tag}>\n{text}\n</{tag}>"
-
-
 def _normalize_prompt_text(value: str | None) -> str:
     return " ".join((value or "").split())
-
-
 def _dedupe_section_contents(sections: dict[str, str]) -> dict[str, str]:
     deduped: dict[str, str] = {}
     seen_signatures: set[str] = set()
@@ -525,8 +555,6 @@ def _dedupe_section_contents(sections: dict[str, str]) -> dict[str, str]:
         deduped[tag] = text
         seen_signatures.add(signature)
     return deduped
-
-
 def _localized_output_style(style: str | None) -> str:
     normalized = str(style or "concise").strip().lower()
     return {
@@ -535,16 +563,12 @@ def _localized_output_style(style: str | None) -> str:
         "structured": "结构化",
         "narrative": "叙事化",
     }.get(normalized, str(style or "concise"))
-
-
 def _example_role_label(role: str) -> str:
     if role == "user":
         return "用户示例"
     if role == "assistant":
         return "助手示例"
     return "系统示例"
-
-
 def _format_few_shot_examples(few_shot_assets: list[FewShotAsset]) -> str:
     if not few_shot_assets:
         return ""
@@ -565,14 +589,22 @@ def _format_few_shot_examples(few_shot_assets: list[FewShotAsset]) -> str:
         blocks.append("\n".join(block_lines))
         example_index += 1
     return "\n\n".join(block for block in blocks if block.strip())
-
-
+def _format_application_memory_assets(memory_assets: list[ApplicationMemoryAsset]) -> str:
+    if not memory_assets:
+        return ""
+    blocks: list[str] = ["应用出厂记忆资产:"]
+    for asset in memory_assets:
+        block_lines = [f"- {asset.id}（{asset.name} @ {asset.version}）"]
+        if asset.source_path:
+            block_lines.append(f"  路径: {asset.source_path}")
+        if asset.content:
+            block_lines.append(f"  内容:\n{asset.content.strip()}")
+        blocks.append("\n".join(block_lines))
+    return "\n\n".join(block for block in blocks if block.strip())
 def _format_active_capabilities(active_capabilities: list[str]) -> str:
     if not active_capabilities:
         return "当前未显式挂载模块能力清单。"
     return "\n".join(f"- {module_id}" for module_id in active_capabilities)
-
-
 def _format_registered_tools(registered_tools: list[dict[str, Any]], strip_body: bool = False) -> str:
     if not registered_tools:
         return "当前没有通过模块 hook 暴露的结构化工具描述。"
@@ -588,8 +620,6 @@ def _format_registered_tools(registered_tools: list[dict[str, Any]], strip_body:
             line += f"\n  输入参数 Schema: {schema_str}"
         lines.append(line)
     return "\n".join(lines)
-
-
 def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int = 10, strip_body: bool = False) -> str:
     lines: list[str] = []
     for index, item in enumerate(current_context[:limit], start=1):
@@ -602,8 +632,6 @@ def _format_context_lines(current_context: list[dict[str, Any]], *, limit: int =
             content = raw_content if bool(item.get("verbatim")) else normalize_excerpt(raw_content, 240)
             lines.append(f"{index}. [{root_branch}] {title}: {content}")
     return "\n".join(lines) if lines else "当前没有额外挂载的上下文切片。"
-
-
 def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message: bool = True) -> str:
     mounted_refs = root_mount.get("mountedNodeRefs") or []
     lines = [
@@ -619,8 +647,6 @@ def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message:
         ]
     )
     return "\n".join(lines).strip()
-
-
 def _format_runtime_glossary() -> str:
     return "\n".join(
         [
@@ -634,19 +660,13 @@ def _format_runtime_glossary() -> str:
             "- 规则: 如遇术语冲突或不理解，按本速览定义执行，不要依赖历史隐含语义。",
         ]
     )
-
-
 def _normalized_optional_text(value: Any) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
-
-
 _PROMPT_REPEAT_TOKENS: tuple[str, ...] = (
     "## 结果/## 证据/## 风险/## 已知问题",
     "## 结果, ## 证据, ## 风险, ## 已知问题",
 )
-
-
 def sanitize_prompt_contract_text(value: Any) -> str | None:
     """Normalize and dedupe repeated contract fragments before they reach the model prompt."""
     text = str(value).strip() if value is not None else ""
@@ -688,13 +708,9 @@ def sanitize_prompt_contract_text(value: Any) -> str | None:
         compacted.append(line)
     result = "\n".join(compacted).strip()
     return result or None
-
-
 def _working_node_tag(node_id: str | None) -> str:
     normalized = _normalized_optional_text(node_id) or "standby"
     return f"<Working_Node: {normalized}>"
-
-
 def _resolved_current_node_id(
     request: dict[str, Any],
     root_mount: dict[str, Any],
@@ -710,8 +726,6 @@ def _resolved_current_node_id(
         or takeover_current_node_id
         or _normalized_optional_text((memory_retrieval_state or {}).get("workTreeNodeId"))
     )
-
-
 def _resolve_runtime_pointer_fields(
     request: dict[str, Any],
     root_mount: dict[str, Any],
@@ -749,8 +763,6 @@ def _resolve_runtime_pointer_fields(
         "topFrameId": top_frame_id or "",
         "stackDigest": stack_digest or "",
     }
-
-
 def _canonicalize_memory_retrieval_state(
     memory_retrieval_state: dict[str, Any] | None,
     *,
@@ -762,8 +774,6 @@ def _canonicalize_memory_retrieval_state(
     if current_node_id is not None:
         normalized["workTreeNodeId"] = current_node_id
     return normalized
-
-
 def _canonicalize_takeover_protocol(
     takeover_protocol: TaskTakeoverProtocol | None,
     *,
@@ -786,8 +796,6 @@ def _canonicalize_takeover_protocol(
             "work_tree": takeover_protocol.work_tree.model_copy(update=work_tree_updates),
         }
     )
-
-
 def _work_context_stack_from_request(request: dict[str, Any]) -> WorkContextStack | None:
     candidate = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
     if candidate is None:
@@ -796,8 +804,6 @@ def _work_context_stack_from_request(request: dict[str, Any]) -> WorkContextStac
         return WorkContextStack.model_validate(candidate)
     except Exception:
         return None
-
-
 def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
     frames = work_context_stack.frames
     if not frames:
@@ -822,8 +828,6 @@ def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
                 status_label = f"[{item.status}] " if item.status != "completed" else ""
                 lines.append(f"  - {status_label}{item.child_node_id}: {normalize_excerpt(item.summary, 120)}")
     return "\n".join(lines)
-
-
 def _format_tool_usage_preferences(
     profile: PromptProfile,
     seed_template: SeedTemplate | None,
@@ -853,6 +857,7 @@ def _format_tool_usage_preferences(
         )
     return "\n\n".join(sections)
 
+from .prompting__part01 import *  # noqa: F403,F401
 
 def _format_world_roots(root_mount: dict[str, Any]) -> str:
     semantic_roots = root_mount.get("semanticRoots") if isinstance(root_mount.get("semanticRoots"), dict) else {}
@@ -906,8 +911,6 @@ def _format_world_roots(root_mount: dict[str, Any]) -> str:
             f"任务说明: {root_mount.get('taskObjective') or ''}",
         ]
     )
-
-
 def _format_behavior_constitution(profile: PromptProfile) -> str:
     constitution_lines = [
         "行为宪法:",
@@ -917,8 +920,6 @@ def _format_behavior_constitution(profile: PromptProfile) -> str:
         "4. 面对大量未知文件或长文本重活，优先委派 Sub-Agent 预读和摘要。",
     ]
     return "\n".join(constitution_lines)
-
-
 def _format_scene_preferences(profile: PromptProfile) -> str:
     return "\n\n".join(
         section
@@ -931,8 +932,6 @@ def _format_scene_preferences(profile: PromptProfile) -> str:
         ]
         if section
     )
-
-
 def _format_capability_protocol_index(
     active_capabilities: list[str],
     registered_tools: list[dict[str, Any]],
@@ -945,8 +944,6 @@ def _format_capability_protocol_index(
             "- 协议入口: SYS_ROOT_PROTOCOL / WorkTreeProtocol v0.2 / Agent Runtime v0.2",
         ]
     )
-
-
 def _format_scene_recovery(
     *,
     resume_path: str | None,
@@ -972,8 +969,6 @@ def _format_scene_recovery(
         lines.append("记忆检索状态:")
         lines.append(_format_memory_retrieval_state(memory_retrieval_state))
     return "\n".join(lines)
-
-
 def _format_task_contract(
     task: Any,
     run_type: str,
@@ -1003,8 +998,6 @@ def _format_task_contract(
     if resume_path:
         lines.append(f"恢复路径: {resume_path}")
     return "\n".join(lines)
-
-
 def _format_response_requirements(
     request: dict[str, Any],
     seed_template: SeedTemplate | None,
@@ -1046,8 +1039,6 @@ def _format_response_requirements(
     if has_delivery_contract:
         lines.append(f"{len(lines) + 1}. 附加要求: {additional.strip()}")
     return "\n".join(lines)
-
-
 def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProtocol | None:
     candidate = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else None
     if candidate is None:
@@ -1067,8 +1058,6 @@ def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProt
         return TaskTakeoverProtocol.model_validate(candidate)
     except Exception:
         return None
-
-
 def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     lines = [
         f"目标摘要: {protocol.objective_summary}",
@@ -1105,8 +1094,6 @@ def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
         ]
     )
     return "\n".join(lines)
-
-
 def _merged_few_shot_refs(profile: PromptProfile, seed_template: SeedTemplate) -> list[str]:
     refs: list[str] = []
     for candidate in [*profile.few_shot_refs, *seed_template.few_shot_refs]:
@@ -1114,8 +1101,6 @@ def _merged_few_shot_refs(profile: PromptProfile, seed_template: SeedTemplate) -
         if normalized and normalized not in refs:
             refs.append(normalized)
     return refs
-
-
 def _resolve_few_shot_assets(
     profile: PromptProfile,
     seed_template: SeedTemplate,
@@ -1135,8 +1120,6 @@ def _resolve_few_shot_assets(
             "Missing few-shot assets for refs: " + ", ".join(missing_refs)
         )
     return [assets_by_id[ref] for ref in refs]
-
-
 def compile_runtime_prompt(
     *,
     task: Any,
@@ -1267,6 +1250,8 @@ def compile_runtime_prompt(
     few_shot_assets = _resolve_few_shot_assets(profile, seed_template, resolved_registry)
     few_shot_refs = [asset.id for asset in few_shot_assets]
     few_shot_examples = "" if resume_path else _format_few_shot_examples(few_shot_assets)
+    application_memory_assets = list(resolved_registry.get("applicationMemoryAssets") or [])
+    application_memory_examples = _format_application_memory_assets(application_memory_assets)
 
     boot_sections = {
         "physical_interface": "\n\n".join(
@@ -1304,6 +1289,8 @@ def compile_runtime_prompt(
     }
     if few_shot_examples:
         system_sections["few_shot_examples"] = few_shot_examples
+    if application_memory_examples:
+        system_sections["application_memory"] = application_memory_examples
     if profile.self_evolution:
         system_sections["self_evolution"] = profile.self_evolution
 

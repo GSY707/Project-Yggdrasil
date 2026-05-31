@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import argparse
 import base64
 from dataclasses import asdict, dataclass
@@ -13,12 +12,8 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
-
 from yggdrasil_model_providers.gateway import invoke_model
-
 from .support import load_workspace_dotenv, normalize_excerpt, read_json, resolve_state_dir, resolve_workspace_root
-
-
 _JSON_FENCE_PATTERN = re.compile(r"```(?:json)?\s*(?P<body>.*?)```", re.IGNORECASE | re.DOTALL)
 _REHYDRATED_WINDOW_PATTERN = re.compile(
     r"Rehydrated\s+\d+\s+context\s+items\s+from\s+snapshot\s+snap_[a-z0-9]+",
@@ -79,17 +74,11 @@ _DYNAMIC_ID_PATTERNS = [
     (re.compile(r"promptcmp_[a-z0-9]+", re.IGNORECASE), "promptcmp_*"),
 ]
 _NULLISH_TEXTS = {"", "null", "none", "{}", "[]"}
-
-
-@dataclass(frozen=True)
 class ConversationMessage:
     role: str
     content: str
     source: str
     index: int
-
-
-@dataclass(frozen=True)
 class WindowRecord:
     window: int
     snapshot: str
@@ -100,17 +89,11 @@ class WindowRecord:
     restoredFieldCount: int | None
     retrievedNodeCount: int | None
     materializedContextCount: int | None
-
-
-@dataclass(frozen=True)
 class LocalInvocationArtifacts:
     requestPath: str | None
     responsePath: str | None
     requestPayload: dict[str, Any]
     responsePayload: dict[str, Any]
-
-
-@dataclass(frozen=True)
 class ObservationEvidence:
     observationId: str
     model: str
@@ -132,9 +115,6 @@ class ObservationEvidence:
     assistantProcessUtterances: list[dict[str, Any]]
     toolCallNames: list[str]
     localArtifacts: LocalInvocationArtifacts | None
-
-
-@dataclass(frozen=True)
 class LocalDbTraceMatch:
     dbPath: str
     matchedBy: str
@@ -144,15 +124,11 @@ class LocalDbTraceMatch:
     nodeWritesByWindow: dict[int, list[dict[str, Any]]]
     restartSnapshotsByWindow: dict[int, list[dict[str, Any]]]
     windowExecutionByWindow: dict[int, list[dict[str, Any]]]
-
-
 def _fetch_json(url: str, auth_header: str) -> dict[str, Any]:
     request = urllib_request.Request(url)
     request.add_header("Authorization", auth_header)
     with urllib_request.urlopen(request, timeout=60) as response:
         return json.load(response)
-
-
 def _fetch_observations(trace_id: str, *, base_url: str, auth_header: str) -> dict[str, Any]:
     candidate_queries = [
         urllib_parse.urlencode({"traceId": trace_id, "limit": 200}),
@@ -169,8 +145,6 @@ def _fetch_observations(trace_id: str, *, base_url: str, auth_header: str) -> di
     if last_error is not None:
         raise last_error
     raise RuntimeError("Failed to fetch Langfuse observations.")
-
-
 def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
@@ -197,12 +171,8 @@ def _normalize_text(value: Any) -> str:
         text = re.sub(r"(?<![A-Za-z0-9])/n(?=(?:\s|[#>*\-]|\d|[A-Z]|[\u3400-\u9fff]))", "\n", text)
 
     return text.strip()
-
-
 def _is_meaningful_text(value: str) -> bool:
     return value.strip().lower() not in _NULLISH_TEXTS
-
-
 def _flatten_message_content(content: Any) -> str:
     if isinstance(content, str):
         return _normalize_text(content)
@@ -232,8 +202,6 @@ def _flatten_message_content(content: Any) -> str:
                     return nested_text
         return _normalize_text(content)
     return _normalize_text(content)
-
-
 def _flatten_output(value: Any) -> str:
     if isinstance(value, dict) and isinstance(value.get("choices"), list):
         parts: list[str] = []
@@ -248,16 +216,12 @@ def _flatten_output(value: Any) -> str:
         if parts:
             return "\n\n".join(parts)
     return _flatten_message_content(value)
-
-
 def _profile_role(text: str) -> str:
     lowered = text.lower()
     for profile, hints in _PROFILE_HINTS.items():
         if any(hint in lowered for hint in hints):
             return profile
     return "unknown"
-
-
 def _extract_messages(payload: dict[str, Any]) -> list[ConversationMessage]:
     messages_payload = payload.get("messages") if isinstance(payload.get("messages"), list) else []
     messages: list[ConversationMessage] = []
@@ -268,13 +232,9 @@ def _extract_messages(payload: dict[str, Any]) -> list[ConversationMessage]:
         content = _flatten_message_content(message.get("content"))
         messages.append(ConversationMessage(role=role, content=content, source="prompt", index=index))
     return messages
-
-
 def _input_tools(payload: dict[str, Any]) -> list[dict[str, Any]]:
     tools = payload.get("tools") if isinstance(payload.get("tools"), list) else []
     return [dict(tool) for tool in tools if isinstance(tool, dict)]
-
-
 def _find_runtime_message(messages: list[ConversationMessage]) -> ConversationMessage | None:
     for message in reversed(messages):
         if message.role != "user":
@@ -283,8 +243,6 @@ def _find_runtime_message(messages: list[ConversationMessage]) -> ConversationMe
         if "<runtime_state>" in lowered or "system intro: project yggdrasil mounts identity" in lowered:
             return message
     return None
-
-
 def _split_window_contexts(runtime_message: str) -> list[str]:
     normalized = _normalize_text(runtime_message)
     if not normalized:
@@ -306,21 +264,15 @@ def _split_window_contexts(runtime_message: str) -> list[str]:
         if chunk:
             chunks.append(chunk)
     return chunks
-
-
 def _extract_first_int(pattern: re.Pattern[str], text: str) -> int | None:
     match = pattern.search(text)
     if match is None:
         return None
     return int(match.group(1))
-
-
 def _split_top_nodes(raw_value: str | None) -> list[str]:
     if raw_value is None:
         return []
     return [item.strip() for item in raw_value.split(",") if item.strip()]
-
-
 def _build_window_records(runtime_message: str) -> list[WindowRecord]:
     chunks = _split_window_contexts(runtime_message)
     windows: list[WindowRecord] = []
@@ -342,21 +294,15 @@ def _build_window_records(runtime_message: str) -> list[WindowRecord]:
             )
         )
     return windows
-
-
 def _extract_task_field(pattern: re.Pattern[str], text: str) -> str:
     match = pattern.search(text)
     if match is None:
         return "未显式记录"
     return _normalize_text(match.group(1))
-
-
 def _append_unique(items: list[str], value: str) -> None:
     if not value or value in items:
         return
     items.append(value)
-
-
 def _extract_tool_call_names(value: Any, accumulator: list[str]) -> None:
     if isinstance(value, dict):
         lowered_keys = {str(key).lower(): key for key in value}
@@ -376,8 +322,6 @@ def _extract_tool_call_names(value: Any, accumulator: list[str]) -> None:
     if isinstance(value, list):
         for item in value:
             _extract_tool_call_names(item, accumulator)
-
-
 def _collect_self_talk_and_tools(payload: Any) -> tuple[list[dict[str, str]], list[str]]:
     self_talk_fields: list[dict[str, str]] = []
     tool_call_names: list[str] = []
@@ -403,8 +347,6 @@ def _collect_self_talk_and_tools(payload: Any) -> tuple[list[dict[str, str]], li
 
     _walk(payload, "observation")
     return self_talk_fields, tool_call_names
-
-
 def _local_artifact_candidates(workspace_root: Path, invocation_id: str) -> list[tuple[Path, Path]]:
     state_dir = resolve_state_dir(workspace_root)
     candidates = [
@@ -426,8 +368,6 @@ def _local_artifact_candidates(workspace_root: Path, invocation_id: str) -> list
                 )
             )
     return candidates
-
-
 def _load_local_invocation_artifacts(invocation_id: str | None, workspace_root: Path | None) -> LocalInvocationArtifacts | None:
     if not invocation_id or workspace_root is None:
         return None
@@ -443,8 +383,6 @@ def _load_local_invocation_artifacts(invocation_id: str | None, workspace_root: 
             responsePayload=response_payload if isinstance(response_payload, dict) else {},
         )
     return None
-
-
 def _assistant_process_utterances(messages: list[ConversationMessage], runtime_message_index: int | None) -> list[dict[str, Any]]:
     utterances: list[dict[str, Any]] = []
     for message in messages:
@@ -462,8 +400,6 @@ def _assistant_process_utterances(messages: list[ConversationMessage], runtime_m
             }
         )
     return utterances
-
-
 def _build_observation_evidence(observation: dict[str, Any], workspace_root: Path | None = None) -> ObservationEvidence:
     input_payload = observation.get("input") if isinstance(observation.get("input"), dict) else {}
     messages = _extract_messages(input_payload)
@@ -503,8 +439,6 @@ def _build_observation_evidence(observation: dict[str, Any], workspace_root: Pat
         toolCallNames=tool_call_names,
         localArtifacts=local_artifacts,
     )
-
-
 def _has_required_sections(output_text: str) -> bool:
     required_fragments = [
         "任务价值判断",
@@ -517,8 +451,6 @@ def _has_required_sections(output_text: str) -> bool:
     ]
     lowered = output_text.lower()
     return all(fragment.lower() in lowered for fragment in required_fragments)
-
-
 def _fallback_summary(window: WindowRecord, total_windows: int) -> str:
     if window.window == 1:
         top_nodes = "、".join(window.topNodes[:3]) or "初始任务约束"
@@ -528,8 +460,6 @@ def _fallback_summary(window: WindowRecord, total_windows: int) -> str:
         return f"在最终窗口整合恢复态上下文，基于 {top_nodes} 产出最终交付。"
     top_nodes = "、".join(window.topNodes[:3]) or "恢复态最小证据集"
     return f"恢复快照 {window.snapshot} 并继续围绕 {top_nodes} 推进任务主线。"
-
-
 def _fallback_steps(window: WindowRecord, total_windows: int) -> list[str]:
     if window.window == 1:
         steps = [
@@ -555,8 +485,6 @@ def _fallback_steps(window: WindowRecord, total_windows: int) -> list[str]:
     if window.window == total_windows:
         steps.append("最后基于恢复态上下文直接产出最终结果。")
     return steps or ["该窗口缺少足够的结构化证据，无法进一步细分步骤。"]
-
-
 def _fallback_reason_text(reason_code: str) -> str:
     if reason_code == "analysis-json-truncated":
         return "分析模型已被成功调用，但结构化 JSON 输出在返回阶段被截断，已退回到基于窗口证据和最终输出的启发式判断。"
@@ -565,8 +493,6 @@ def _fallback_reason_text(reason_code: str) -> str:
     if reason_code == "analysis-llm-fallback":
         return "分析模型调用走了 fallback，已退回到基于窗口证据和最终输出的启发式判断。"
     return "分析阶段未能得到可解析的结构化结果，已退回到基于窗口证据和最终输出的启发式判断。"
-
-
 def _fallback_layer_analysis(evidence: ObservationEvidence, reason_code: str) -> dict[str, Any]:
     output_text = evidence.outputText
     windows = evidence.windows or [
@@ -610,8 +536,6 @@ def _fallback_layer_analysis(evidence: ObservationEvidence, reason_code: str) ->
             for window in windows
         ],
     }
-
-
 def _analysis_prompt_payload(evidence: ObservationEvidence) -> dict[str, Any]:
     return {
         "observationId": evidence.observationId,
@@ -633,8 +557,6 @@ def _analysis_prompt_payload(evidence: ObservationEvidence) -> dict[str, Any]:
         "usageDetails": evidence.usageDetails,
         "finalOutput": evidence.outputText,
     }
-
-
 def _build_analysis_messages(evidence: ObservationEvidence) -> list[dict[str, str]]:
     system_prompt = (
         "你是一个严格基于证据的真实任务窗口分析器。"
@@ -671,8 +593,6 @@ def _build_analysis_messages(evidence: ObservationEvidence) -> list[dict[str, st
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": json.dumps(user_prompt, ensure_ascii=False, indent=2)},
     ]
-
-
 def _strip_json_wrappers(text: str) -> str:
     stripped = text.strip()
     fenced_match = _JSON_FENCE_PATTERN.search(stripped)
@@ -685,22 +605,16 @@ def _strip_json_wrappers(text: str) -> str:
     if start >= 0 and end > start:
         return stripped[start : end + 1]
     return stripped
-
-
 def _analysis_token_budget(evidence: ObservationEvidence, *, retry: bool = False) -> int:
     window_count = max(len(evidence.windows), 1)
     budget = 1400 + window_count * 520
     if retry:
         budget = int(budget * 1.5)
     return max(3200, min(budget, 14000))
-
-
 def _json_failure_reason(error: json.JSONDecodeError, candidate: str) -> str:
     if error.pos >= max(len(candidate) - 8, 0):
         return "analysis-json-truncated"
     return "analysis-json-invalid"
-
-
 def _run_llm_layer_analysis(
     *,
     evidence: ObservationEvidence,
@@ -735,8 +649,6 @@ def _run_llm_layer_analysis(
                 break
     assert result is not None
     return _fallback_layer_analysis(evidence, parse_status), result, parse_status
-
-
 def _tool_names_from_local_artifacts(artifacts: LocalInvocationArtifacts | None) -> list[str]:
     if artifacts is None:
         return []
@@ -761,8 +673,6 @@ def _tool_names_from_local_artifacts(artifacts: LocalInvocationArtifacts | None)
             if isinstance(tool_name, str):
                 _append_unique(tool_names, tool_name)
     return tool_names
-
-
 def _self_talk_from_local_artifacts(artifacts: LocalInvocationArtifacts | None) -> list[dict[str, str]]:
     if artifacts is None:
         return []
@@ -798,8 +708,6 @@ def _self_talk_from_local_artifacts(artifacts: LocalInvocationArtifacts | None) 
                 }
             )
     return fields
-
-
 def _extract_output_tags(output_text: str) -> list[dict[str, str]]:
     tags: list[dict[str, str]] = []
     for match in _OUTPUT_TAG_PATTERN.finditer(output_text):
@@ -808,8 +716,6 @@ def _extract_output_tags(output_text: str) -> list[dict[str, str]]:
             continue
         tags.append({"path": f"assistantFinalOutput.{match.group('name')}", "value": body})
     return tags
-
-
 def _build_layer4_windows(evidence: ObservationEvidence) -> list[dict[str, Any]]:
     windows = evidence.windows or [
         WindowRecord(
@@ -871,8 +777,6 @@ def _build_layer4_windows(evidence: ObservationEvidence) -> list[dict[str, Any]]
             }
         )
     return layer4
-
-
 def _structured_window_state(window: WindowRecord) -> dict[str, Any]:
     return {
         "window": window.window,
@@ -884,8 +788,6 @@ def _structured_window_state(window: WindowRecord) -> dict[str, Any]:
         "retrievedNodeCount": window.retrievedNodeCount,
         "materializedContextCount": window.materializedContextCount,
     }
-
-
 def _split_runtime_sections(text: str) -> list[dict[str, str]]:
     sections: list[dict[str, str]] = []
     for match in _RUNTIME_SECTION_PATTERN.finditer(text):
@@ -900,8 +802,6 @@ def _split_runtime_sections(text: str) -> list[dict[str, str]]:
             }
         )
     return sections
-
-
 def _build_full_conversation(evidence: ObservationEvidence) -> list[dict[str, Any]]:
     windows = evidence.windows
     if not windows:
@@ -997,8 +897,6 @@ def _build_full_conversation(evidence: ObservationEvidence) -> list[dict[str, An
             }
         )
     return transcript
-
-
 def _safe_json_loads(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return value
@@ -1011,8 +909,6 @@ def _safe_json_loads(value: Any) -> Any:
         return json.loads(text)
     except json.JSONDecodeError:
         return value
-
-
 def _coerce_int(value: Any) -> int | None:
     try:
         if value is None or value == "":
@@ -1020,8 +916,6 @@ def _coerce_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
 def _compact_window_list(windows: list[int]) -> str:
     if not windows:
         return "-"
@@ -1038,8 +932,6 @@ def _compact_window_list(windows: list[int]) -> str:
         previous = value
     ranges.append(f"{start}-{previous}" if start != previous else str(start))
     return ", ".join(ranges)
-
-
 def _canonicalize_runtime_text(text: str) -> str:
     normalized = _normalize_text(text)
     for pattern, replacement in _DYNAMIC_ID_PATTERNS:
@@ -1047,15 +939,11 @@ def _canonicalize_runtime_text(text: str) -> str:
     normalized = re.sub(r"\b\d{4,}\b", "<num>", normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
-
-
 def _window_text_excerpt(window: WindowRecord, limit: int = 260) -> str:
     if not window.rawContext.strip():
         return "-"
     canonical = _canonicalize_runtime_text(window.rawContext)
     return normalize_excerpt(canonical, limit) or "-"
-
-
 def _text_units(text: str) -> list[str]:
     normalized = _canonicalize_runtime_text(text)
     if not normalized:
@@ -1067,8 +955,6 @@ def _text_units(text: str) -> list[str]:
         if len(compact) >= 12:
             units.append(compact)
     return units
-
-
 def _text_delta_summary(current_text: str, reference_text: str) -> str:
     current_canonical = _canonicalize_runtime_text(current_text)
     reference_canonical = _canonicalize_runtime_text(reference_text)
@@ -1088,8 +974,6 @@ def _text_delta_summary(current_text: str, reference_text: str) -> str:
     if parts:
         return "；".join(parts)
     return "文本整体相近，但存在局部措辞变化。"
-
-
 def _message_excerpt_payload(messages: list[ConversationMessage], *, limit: int = 220) -> list[dict[str, Any]]:
     payload: list[dict[str, Any]] = []
     for message in messages:
@@ -1101,13 +985,9 @@ def _message_excerpt_payload(messages: list[ConversationMessage], *, limit: int 
             }
         )
     return payload
-
-
 def _hash_fingerprint_payload(payload: dict[str, Any]) -> str:
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha1(serialized.encode("utf-8")).hexdigest()[:12]
-
-
 def _normalize_list(values: list[str]) -> list[str]:
     normalized: list[str] = []
     for raw in values:
@@ -1115,8 +995,6 @@ def _normalize_list(values: list[str]) -> list[str]:
         if compact:
             normalized.append(compact)
     return normalized
-
-
 def _extract_window_contract_fields(window: WindowRecord) -> dict[str, Any]:
     raw_context = window.rawContext
     work_tree_match = _WORK_TREE_HANDOFF_PATTERN.search(raw_context)
@@ -1135,8 +1013,6 @@ def _extract_window_contract_fields(window: WindowRecord) -> dict[str, Any]:
         ),
         "workTreeRecoveryAnchor": work_tree_match.group("recoveryAnchor").strip() if work_tree_match is not None else "",
     }
-
-
 def _window_fingerprint_payload(window: WindowRecord, runtime_window_record: dict[str, Any] | None = None) -> dict[str, Any]:
     contract = _extract_window_contract_fields(window)
     runtime_memory_state = runtime_window_record.get("memoryRetrievalState") if isinstance(runtime_window_record, dict) and isinstance(runtime_window_record.get("memoryRetrievalState"), dict) else {}
@@ -1158,8 +1034,6 @@ def _window_fingerprint_payload(window: WindowRecord, runtime_window_record: dic
         "workTreeRecoveryAnchor": str((runtime_window_record or {}).get("workTreeRecoveryAnchor") or contract.get("workTreeRecoveryAnchor") or ""),
         "stateFingerprint": str((runtime_window_record or {}).get("stateFingerprint") or ""),
     }
-
-
 def _candidate_db_paths(workspace_root: Path) -> list[Path]:
     candidates = [
         workspace_root / ".yggdrasil" / "evaluation.db",
@@ -1177,8 +1051,6 @@ def _candidate_db_paths(workspace_root: Path) -> list[Path]:
         seen.add(candidate_str)
         deduped.append(candidate)
     return deduped
-
-
 def _candidate_window_execution_paths(workspace_root: Path) -> list[Path]:
     state_dir = resolve_state_dir(workspace_root)
     candidate_dirs = [state_dir / "runtime" / "window-executions"]
@@ -1200,8 +1072,6 @@ def _candidate_window_execution_paths(workspace_root: Path) -> list[Path]:
             seen.add(candidate_str)
             deduped.append(candidate)
     return deduped
-
-
 def _load_window_execution_records(task_id: str, workspace_root: Path) -> dict[int, list[dict[str, Any]]]:
     records_by_window: dict[int, list[dict[str, Any]]] = {}
     if not task_id:
@@ -1216,16 +1086,12 @@ def _load_window_execution_records(task_id: str, workspace_root: Path) -> dict[i
         payload["artifactPath"] = str(candidate)
         records_by_window.setdefault(window_index, []).append(payload)
     return records_by_window
-
-
 def _table_exists(cursor: sqlite3.Cursor, table_name: str) -> bool:
     row = cursor.execute(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
         (table_name,),
     ).fetchone()
     return bool(row and row[0])
-
-
 def _load_local_db_trace_match(
     *,
     trace_id: str,
@@ -1354,8 +1220,6 @@ def _load_local_db_trace_match(
             windowExecutionByWindow=fallback_window_records,
         )
     return None
-
-
 def _observation_tool_execution_count(evidence: ObservationEvidence) -> int | None:
     if evidence.localArtifacts is not None:
         tool_executions = evidence.localArtifacts.responsePayload.get("toolExecutions")
@@ -1365,16 +1229,12 @@ def _observation_tool_execution_count(evidence: ObservationEvidence) -> int | No
     if metadata_count is not None:
         return metadata_count
     return None
-
-
 def _observation_output_tokens(evidence: ObservationEvidence) -> int | None:
     for key in ("completion_tokens", "output_tokens", "outputTokens"):
         value = _coerce_int(evidence.usageDetails.get(key))
         if value is not None:
             return value
     return None
-
-
 def _final_invocation_token_delta(evidence: ObservationEvidence) -> int | None:
     if evidence.localArtifacts is None:
         return None
@@ -1395,8 +1255,6 @@ def _final_invocation_token_delta(evidence: ObservationEvidence) -> int | None:
     if before_model is None or task_end is None:
         return None
     return task_end - before_model
-
-
 def _build_window_execution_audits(
     evidence: ObservationEvidence,
     local_db_match: LocalDbTraceMatch | None,
@@ -1546,8 +1404,6 @@ def _build_window_execution_audits(
             }
         )
     return audits
-
-
 def _build_observation_execution_audit(
     *,
     trace_id: str,
@@ -1650,8 +1506,6 @@ def _build_observation_execution_audit(
         "uiReviewPlan": ui_review_plan,
         "recommendations": recommendations,
     }
-
-
 def _serialize_observation_evidence(evidence: ObservationEvidence) -> dict[str, Any]:
     return {
         "observationId": evidence.observationId,
@@ -1673,8 +1527,6 @@ def _serialize_observation_evidence(evidence: ObservationEvidence) -> dict[str, 
         "toolCallNames": evidence.toolCallNames,
         "localArtifacts": asdict(evidence.localArtifacts) if evidence.localArtifacts is not None else None,
     }
-
-
 def _build_execution_audit_payload(
     *,
     trace_id: str,
@@ -1694,8 +1546,6 @@ def _build_execution_audit_payload(
         "observations": [_serialize_observation_evidence(evidence) for evidence in observations],
         "observationAudits": observation_audits,
     }
-
-
 def _build_execution_audit_markdown(
     *,
     trace_id: str,
@@ -1791,8 +1641,6 @@ def _build_execution_audit_markdown(
         lines.append("")
 
     return "\n".join(lines).strip() + "\n"
-
-
 def analyze_trace(
     *,
     trace_id: str,
@@ -1826,8 +1674,6 @@ def analyze_trace(
         requested_model=requested_model,
         langfuse_base_url=base_url,
     )
-
-
 def analyze_trace_payload(
     *,
     trace_id: str,
@@ -1859,8 +1705,6 @@ def analyze_trace_payload(
         requested_model=requested_model,
         langfuse_base_url=base_url,
     )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a Langfuse real-task trace into a deterministic execution audit report.")
     parser.add_argument("--trace-id", required=True)
@@ -1890,7 +1734,5 @@ def main() -> None:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(report)
-
-
 if __name__ == "__main__":
     main()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
@@ -112,7 +113,30 @@ def _build_constraint(category: str, label: str, value: str, *, source: str | No
     ).model_dump(by_alias=True, mode="json")
 
 
-def _plan_blueprint(task_type: str) -> list[tuple[str, str, str, list[str]]]:
+def _stable_exploration_variant(entropy_source: str) -> tuple[str, str, list[str]]:
+    variants: list[tuple[str, str, list[str]]] = [
+        (
+            "探索样本池（文献优先）",
+            "先做小样本外部探索：快速扫描近期来源与经典基线，提取候选研究问题与术语边界，禁止直接进入正式规划。",
+            ["candidate questions", "term boundary", "source shortlist"],
+        ),
+        (
+            "探索冲突面（争议优先）",
+            "先做矛盾探索：主动寻找相互冲突的观点或实验结论，记录冲突点与待裁决证据，再进入正式规划。",
+            ["conflict map", "open disputes", "evidence gaps"],
+        ),
+        (
+            "探索验证面（实验优先）",
+            "先做可验证性探索：确定可快速复现的微实验与度量口径，形成验证入口后再进入正式规划。",
+            ["micro experiment candidates", "metrics frame", "repro constraints"],
+        ),
+    ]
+    digest = hashlib.sha256(entropy_source.encode("utf-8")).hexdigest()
+    idx = int(digest[:8], 16) % len(variants)
+    return variants[idx]
+
+
+def _plan_blueprint(task_type: str, *, entropy_source: str = "") -> list[tuple[str, str, str, list[str]]]:
     if task_type == "coding":
         return [
             ("objective", "固定目标", "明确验收目标、当前焦点和不可越过的边界。", ["normalized objective", "acceptance target"]),
@@ -122,7 +146,9 @@ def _plan_blueprint(task_type: str) -> list[tuple[str, str, str, list[str]]]:
             ("deliver", "结构化交付", "按结果、证据、待确认项、未完成项交付，避免半成品。", ["result section", "evidence section"]),
         ]
     if task_type == "research":
+        explore_title, explore_instructions, explore_evidence = _stable_exploration_variant(entropy_source or "research")
         return [
+            ("objective", explore_title, explore_instructions, explore_evidence),
             ("objective", "固定研究问题", "明确问题边界、交付口径和已知未知项。", ["question scope", "decision target"]),
             ("constraints", "抽取约束", "固定来源、时间窗、证据标准和风险边界。", ["source policy", "time window"]),
             ("plan", "收集与归纳", "组织检索、筛选、比较与综合步骤。", ["source list", "comparison frame"]),
@@ -458,9 +484,19 @@ class TaskTakeoverModule(BaseModulePlugin):
         objective_result = payload.get("objectiveResult") if isinstance(payload.get("objectiveResult"), dict) else {}
         constraints_result = payload.get("constraintsResult") if isinstance(payload.get("constraintsResult"), dict) else {}
         task_type = _task_type(payload)
+        entropy_source = "|".join(
+            [
+                _text(payload.get("taskId")),
+                _text(objective_result.get("objective")),
+                _text((payload.get("request") or {}).get("currentFocus") if isinstance(payload.get("request"), dict) else ""),
+            ]
+        )
         plan_steps: list[dict[str, object]] = []
         previous_step_id: str | None = None
-        for index, (phase, title, instructions, expected_evidence) in enumerate(_plan_blueprint(task_type), start=1):
+        for index, (phase, title, instructions, expected_evidence) in enumerate(
+            _plan_blueprint(task_type, entropy_source=entropy_source),
+            start=1,
+        ):
             step_id = new_id("takeover-step", task_type, phase, index, stable=True)
             plan_steps.append(
                 TaskTakeoverPlanStep(

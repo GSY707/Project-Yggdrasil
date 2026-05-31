@@ -1,8 +1,6 @@
-from .execution_loop_part_a import *  # noqa: F401,F403
+from .execution_loop_state import *  # noqa: F401,F403
 from .execution_loop_transitions import _finalize_execution_transition
 from .root_mount import _elapsed_ms, _infer_task_type, build_task_runtime_state
-
-
 def _mailbox_context_item(message: dict[str, Any]) -> dict[str, Any]:
     subject = normalize_excerpt(str(message.get("subject") or message.get("messageKind") or "Mailbox message"), 160)
     body = normalize_excerpt(str(message.get("body") or message.get("summary") or subject or ""), 320)
@@ -17,8 +15,6 @@ def _mailbox_context_item(message: dict[str, Any]) -> dict[str, Any]:
         "createdAt": message.get("createdAt"),
         "importance": 1.0,
     }
-
-
 def _hydrate_mailbox_runtime_state(
     *,
     task,
@@ -82,7 +78,6 @@ def _hydrate_mailbox_runtime_state(
             "pendingMailboxCount": int(root_mount["mailboxState"].get("pendingCount") or 0),
         }
     return current_context
-
 def _retrieve_context_from_memory_tree(
     session,
     *,
@@ -256,8 +251,6 @@ def _retrieve_context_from_memory_tree(
         "retrievalRequest": retrieval_request,
         "retrievalBundle": retrieval_bundle,
     }
-
-
 def _mark_takeover_execution_failed(
     *,
     request: dict[str, Any],
@@ -294,8 +287,6 @@ def _mark_takeover_execution_failed(
         return failed_protocol, stack_payload, failure_transition
     except Exception:  # noqa: BLE001
         return takeover_protocol, request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None, None
-
-
 def _queue_takeover_failure_continuation(
     *,
     session,
@@ -417,8 +408,6 @@ def _queue_takeover_failure_continuation(
         "windowExecutionArtifact": window_execution_artifact,
         "continuationEvent": continuation_event,
     }
-
-
 def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]:
     task_id = str(work_item.get("taskId"))
     request = work_item.get("payload") if isinstance(work_item.get("payload"), dict) else {}
@@ -807,8 +796,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             required_context_window = (
                 int(request["requiredContextWindow"])
                 if request.get("requiredContextWindow") is not None
-                else runtime_metrics["effectiveContextWindow"]
-                if runtime_metrics["effectiveContextWindow"] > 0
                 else None
             )
             route_preview = build_model_route_decision(
@@ -1374,8 +1361,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         output_tokens=actual_output_tokens,
                         cost_used=actual_cost,
                     ),
-                    "status": "failed" if budget_overrun is not None else task.status,
-                    "currentFocus": f"execution-failed: {budget_overrun}" if budget_overrun is not None else task.current_focus,
+                    "status": task.status,
+                    "currentFocus": task.current_focus,
                 },
             )
             model_invocation_event = _persist_runtime_event(
@@ -1387,27 +1374,81 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 locator=f"agent-runtime/runtime/model-invocations/{llm_result['invocation']['id']}",
             )
             if budget_overrun is not None:
-                failure_transition = None
-                takeover_protocol, _, failure_transition = _mark_takeover_execution_failed(
-                    request=request,
-                    root_mount=root_mount,
-                    takeover_protocol=takeover_protocol,
-                    task_id=task_id,
-                    agent_run_id=run.id,
-                    failure_summary=budget_overrun,
+                pause_resume_message = (
+                    f"预算达到上限，等待追加预算后继续: {budget_overrun}"
                 )
-                takeover_protocol_ref = (
-                    persist_task_takeover_protocol(takeover_protocol, task_id=task.id, run_id=run.id)
-                    if takeover_protocol is not None and takeover_protocol.work_tree is not None
-                    else None
+                pause_state = _build_pause_snapshot_state(
+                    task_id,
+                    {
+                        "projectId": task.project_id,
+                        "branchId": task.branch_id,
+                        "spaceId": task.space_id,
+                        "agentRunId": run.id,
+                        "pendingWrites": [],
+                        "pendingActions": request.get("pendingActions") if isinstance(request.get("pendingActions"), list) else [],
+                        "currentResponseState": "completed",
+                        "currentContextState": effective_context,
+                        "rootMountPreview": root_mount,
+                        "resumeMessage": pause_resume_message,
+                        "taskObjective": task.current_objective or task.goal,
+                        "takeoverProtocol": request.get("takeoverProtocol"),
+                        "memoryRetrievalState": request.get("memoryRetrievalState"),
+                        "runtimeMetrics": request.get("runtimeMetrics"),
+                        "selectedModel": run.selected_model,
+                        "selectedProvider": run.selected_provider,
+                        "safeStopReason": "budget-exhausted",
+                    },
                 )
-                run = task_repository.update_agent_run(run.id, {"status": "failed"})
+                pause_snapshot_summary: TaskSnapshotSummary = pause_state["snapshot"]
+                task_repository.supersede_snapshots(task_id)
+                task_repository.create_snapshot(pause_snapshot_summary)
+                snapshot_created_event = _persist_runtime_event(
+                    session,
+                    project_id=task.project_id,
+                    aggregate_type="task-snapshot",
+                    aggregate_id=pause_snapshot_summary.id,
+                    event_type="task.snapshot.created",
+                    locator=f"agent-runtime/tasks/{task_id}/snapshots/{pause_snapshot_summary.id}",
+                )
+                pause_snapshot = pause_snapshot_summary.model_dump(by_alias=True, mode="json")
+                pause_snapshot["safeStop"] = pause_snapshot_summary.safe_to_pause
+                pause_snapshot["activeToolCalls"] = pause_state["activeToolCalls"]
+                pause_snapshot["rootMountPreview"] = pause_state["rootMountPreview"]
+                pause_snapshot["flushedWrites"] = pause_state["flushedWrites"]
+                pause_snapshot["persisted"] = True
+                pause_snapshot["rootMountCached"] = pause_state["rootMountCached"]
+                pause_snapshot["contextCached"] = pause_state["contextCached"]
                 task = task_repository.update_task(
                     task_id,
                     {
-                        "status": "failed",
-                        "currentFocus": (failure_transition or {}).get("currentFocus") or f"execution-failed: {budget_overrun}",
+                        "status": "paused",
+                        "pauseRequested": False,
+                        "activeSnapshotId": pause_snapshot["id"],
+                        "lastSafeStopAt": utc_now(),
+                        "resumeMessage": pause_snapshot["resumeMessage"],
+                        "currentFocus": f"budget-exhausted: {budget_overrun}",
                     },
+                )
+                run = task_repository.update_agent_run(run.id, {"status": "paused"})
+                paused_locator = f"agent-runtime/tasks/{task.id}/pause/{pause_snapshot['id']}"
+                _cache_package_entry(
+                    coordinator,
+                    paused_locator,
+                    {
+                        "snapshotId": pause_snapshot["id"],
+                        "flushedWrites": pause_state["flushedWrites"],
+                        "pendingExternalActions": pause_snapshot_summary.pending_actions,
+                        "resumeToken": pause_snapshot["resumeToken"],
+                        "budgetOverrun": budget_overrun,
+                    },
+                )
+                paused_event = _persist_runtime_event(
+                    session,
+                    project_id=task.project_id,
+                    aggregate_type="task",
+                    aggregate_id=task.id,
+                    event_type="task.paused",
+                    locator=paused_locator,
                 )
                 window_execution_artifact = _persist_window_execution_artifact(
                     session,
@@ -1424,7 +1465,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         protected_items=protected_items,
                         llm_result=llm_result,
                         transition_stage="window-delivery",
-                        transition_outcome="failed",
+                        transition_outcome="paused-budget-exhausted",
                         resume_path=resume_path,
                         source_snapshot_id=snapshot.id if snapshot is not None and command == "resume" else None,
                         rehydration_result=rehydration_result,
@@ -1432,7 +1473,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 )
                 runtime_timings["totalMs"] = _elapsed_ms(work_started_at)
                 return {
-                    "status": "failed",
+                    "status": "paused",
                     "taskId": task_id,
                     "task": task.model_dump(by_alias=True, mode="json"),
                     "run": run.model_dump(by_alias=True, mode="json"),
@@ -1442,9 +1483,11 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         "modelInvocationCompleted": model_invocation_event.model_dump(by_alias=True, mode="json"),
                         "runCreated": run_created_event.model_dump(by_alias=True, mode="json"),
                         "routeSelected": route_event.model_dump(by_alias=True, mode="json"),
+                        "snapshotCreated": snapshot_created_event.model_dump(by_alias=True, mode="json"),
+                        "taskPaused": paused_event.model_dump(by_alias=True, mode="json"),
                     },
+                    "snapshot": pause_snapshot,
                     "takeoverProtocol": takeover_protocol.model_dump(by_alias=True, mode="json") if takeover_protocol is not None else None,
-                    "takeoverProtocolRef": takeover_protocol_ref.model_dump(mode="json") if takeover_protocol_ref is not None else None,
                     "windowExecutionArtifact": window_execution_artifact,
                     "runtimeMetricsArtifact": runtime_metrics_artifact,
                     "detail": budget_overrun,

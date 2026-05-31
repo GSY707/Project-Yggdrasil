@@ -1,10 +1,10 @@
 from __future__ import annotations
-
 from collections import defaultdict
 from pathlib import Path
 import re
-from typing import Any
-
+import time
+from typing import Any, Callable
+from sqlalchemy.exc import OperationalError
 from yggdrasil_sdk.contracts import EventEnvelope, EventHandlingResult, ModuleEventEmission, ToolDescriptor
 from yggdrasil_sdk.hook_runtime import collect_hook_results
 from yggdrasil_sdk.hooks import HookNames
@@ -13,8 +13,6 @@ from yggdrasil_sdk.persistence import get_persistence_runtime
 from yggdrasil_sdk.persistence.constants import DEFAULT_BRANCH_ID
 from yggdrasil_sdk.persistence.repositories import NodeRepository, WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import new_id, normalize_excerpt, utc_now
-
-
 STOP_WORDS = {
     "the",
     "a",
@@ -32,24 +30,32 @@ STOP_WORDS = {
     "是",
     "与",
 }
-
 _PLAN_TREE_TARGET_CHARS = 320
 _PLAN_TREE_DEPTH = 2
 _MAX_RETRIEVAL_LEAF_NODES = 4
 _MAX_RETRIEVAL_RELATED_NODES = 4
-
-
+_SQLITE_LOCK_RETRY_ATTEMPTS = 3
+_SQLITE_LOCK_RETRY_BASE_DELAY_SECONDS = 0.15
+def _is_sqlite_lock_error(error: Exception) -> bool:
+    return "database is locked" in str(error).lower()
+def _run_with_sqlite_lock_retry(action: Callable[[], dict[str, object]]) -> dict[str, object]:
+    for attempt in range(1, _SQLITE_LOCK_RETRY_ATTEMPTS + 1):
+        try:
+            return action()
+        except OperationalError as error:
+            if not _is_sqlite_lock_error(error) or attempt >= _SQLITE_LOCK_RETRY_ATTEMPTS:
+                raise
+            # SQLite lock in concurrent eval sandboxes is usually transient; short backoff is enough.
+            delay_seconds = _SQLITE_LOCK_RETRY_BASE_DELAY_SECONDS * attempt
+            time.sleep(delay_seconds)
+    raise RuntimeError("unreachable")
 def _tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[A-Za-z0-9_\-\u4e00-\u9fff]+", text.lower())
     return [token for token in tokens if token not in STOP_WORDS]
-
-
 def _derive_title(text: str, fallback: str) -> str:
     first_sentence = re.split(r"[。！？.!?\n]", text, maxsplit=1)[0].strip()
     title = normalize_excerpt(first_sentence or fallback, 48)
     return title or fallback
-
-
 def _classify_root_branch(text: str) -> str:
     lowered = text.lower()
     if any(keyword in lowered for keyword in ("identity", "role", "persona", "风格", "身份", "偏好")):
@@ -57,8 +63,6 @@ def _classify_root_branch(text: str) -> str:
     if any(keyword in lowered for keyword in ("task", "goal", "todo", "计划", "任务", "目标")):
         return "execution"
     return "context"
-
-
 def _derive_related_hints(text: str, limit: int = 4) -> list[str]:
     hints: list[str] = []
     for token in _tokenize(text):
@@ -68,8 +72,6 @@ def _derive_related_hints(text: str, limit: int = 4) -> list[str]:
         if len(hints) >= limit:
             break
     return hints
-
-
 def _split_source_text(text: str, target_chars: int) -> list[str]:
     paragraphs = [segment.strip() for segment in re.split(r"\n\s*\n", text) if segment.strip()]
     if not paragraphs:
@@ -98,8 +100,6 @@ def _split_source_text(text: str, target_chars: int) -> list[str]:
     if current:
         segments.append(current)
     return segments
-
-
 def _normalize_fragment(fragment: dict[str, Any], fallback_import_job_id: str, index: int) -> dict[str, Any]:
     text = str(fragment.get("normalizedText") or fragment.get("text") or "").strip()
     fragment_id = str(fragment.get("id") or new_id("frag", fallback_import_job_id, index, stable=True))
@@ -112,8 +112,6 @@ def _normalize_fragment(fragment: dict[str, Any], fallback_import_job_id: str, i
         "relatedHints": [str(hint) for hint in related_hints],
         "approxTokens": int(fragment.get("approxTokens") or max(len(text) // 4, 1)),
     }
-
-
 def _build_edge_candidates(nodes: list[dict[str, Any]], project_id: str, space_id: str, branch_id: str) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
     node_tokens = {node["id"]: set(_tokenize(f"{node['title']} {node['content']}")) for node in nodes}
@@ -151,8 +149,6 @@ def _build_edge_candidates(nodes: list[dict[str, Any]], project_id: str, space_i
                 }
             )
     return edges
-
-
 def _score_node_for_query(
     node: dict[str, Any],
     query_tokens: set[str],
@@ -170,8 +166,6 @@ def _score_node_for_query(
     if work_tree_node_id is not None and source_work_tree_node_id == work_tree_node_id:
         work_tree_bonus = 3.0 if reverse_trace_mode else 1.5
     return overlap + seed_bonus + branch_bonus + work_tree_bonus + float(node.get("importance", 0.5))
-
-
 class TextMemoryModule(BaseModulePlugin):
     module_id = "text-memory"
 
@@ -738,15 +732,11 @@ class TextMemoryModule(BaseModulePlugin):
             emittedEvents=[emission],
             healthStatus="healthy",
         )
-
-
 def _memory_tool_actor(execution_context: dict[str, Any]) -> dict[str, str]:
     run_id = str(execution_context.get("runId") or "").strip()
     if run_id:
         return {"type": "agent", "id": run_id}
     return {"type": "module", "id": "text-memory"}
-
-
 def _memory_source_work_tree_node_id(execution_context: dict[str, Any]) -> str | None:
     direct_value = str(execution_context.get("sourceWorkTreeNodeId") or "").strip()
     if direct_value:
@@ -759,18 +749,32 @@ def _memory_source_work_tree_node_id(execution_context: dict[str, Any]) -> str |
     work_tree = takeover_protocol.get("workTree") if isinstance(takeover_protocol.get("workTree"), dict) else {}
     work_tree_value = str(work_tree.get("currentNodeId") or "").strip()
     return work_tree_value or None
-
-
 def _memory_node_payload(node: Any) -> dict[str, Any]:
     return node.model_dump(by_alias=True, mode="json")
-
-
 def _memory_version_payload(version: Any) -> dict[str, Any]:
     return version.model_dump(by_alias=True, mode="json")
-
-
 def read_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
-    node_id = str(payload.get("nodeId") or "").strip()
+    raw_node_id = payload.get("nodeId")
+    node_id = "" if isinstance(raw_node_id, (dict, list, tuple, set)) else str(raw_node_id or "").strip()
+    if node_id in {"{}", "[]"}:
+        node_id = ""
+    fallback_selected = False
+    if not node_id:
+        fallback_candidates = read_memory_index_tool(
+            {
+                "executionContext": payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {},
+                "branchId": payload.get("branchId"),
+                "rootBranch": payload.get("rootBranch"),
+                "nodeType": payload.get("nodeType"),
+                "includeArchived": False,
+                "limit": 1,
+            }
+        )
+        nodes = fallback_candidates.get("nodes") if isinstance(fallback_candidates, dict) else []
+        first_node = nodes[0] if isinstance(nodes, list) and nodes else None
+        if isinstance(first_node, dict):
+            node_id = str(first_node.get("id") or "").strip()
+            fallback_selected = bool(node_id)
     if not node_id:
         raise KeyError("nodeId")
     include_versions = bool(payload.get("includeVersions"))
@@ -791,13 +795,12 @@ def read_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
         "latestVersionId": node.latest_version_id,
         "latestVersion": _memory_version_payload(latest_version) if latest_version is not None else None,
         "versions": [_memory_version_payload(version) for version in versions] if include_versions else [],
+        "fallbackNodeSelected": fallback_selected,
         "summary": normalize_excerpt(
             f"Read memory node {node.title} with latest version {node.latest_version_id}.",
             160,
         ),
     }
-
-
 def read_memory_index_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     branch_id = str(payload.get("branchId") or execution_context.get("branchId") or DEFAULT_BRANCH_ID)
@@ -860,8 +863,6 @@ def read_memory_index_tool(payload: dict[str, object]) -> dict[str, object]:
             160,
         ),
     }
-
-
 def update_memory_with_version_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     node_id = str(payload.get("nodeId") or "").strip()
@@ -878,83 +879,85 @@ def update_memory_with_version_tool(payload: dict[str, object]) -> dict[str, obj
     source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
 
     runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        node_repository = NodeRepository(session)
-        node = node_repository.get_node(node_id)
-        if node is None:
-            raise KeyError(f"Node {node_id} not found.")
-        if node.latest_version_id != expected_latest_version_id:
-            recent_versions = node_repository.list_versions(node_id, limit=5)
-            return {
-                "status": "conflict",
-                "mode": mode,
-                "node": _memory_node_payload(node),
-                "expectedLatestVersionId": expected_latest_version_id,
-                "currentLatestVersionId": node.latest_version_id,
-                "recentVersions": [_memory_version_payload(version) for version in recent_versions],
-                "recommendedActions": [
-                    "text_memory.append_memory_log",
-                    "text_memory.submit_memory_proposal",
-                ],
-                "summary": normalize_excerpt(
-                    f"Version conflict on node {node.title}; latest pointer moved to {node.latest_version_id}.",
-                    180,
-                ),
-            }
 
-        if mode == "relate":
-            related_node_id = str(payload.get("relatedNodeId") or "").strip()
-            if not related_node_id:
-                raise KeyError("relatedNodeId")
-            related_node = node_repository.get_node(related_node_id)
-            if related_node is None:
-                raise KeyError(f"Node {related_node_id} not found.")
-            edge = node_repository.create_edge(
-                {
-                    "projectId": node.project_id,
-                    "spaceId": node.space_id,
-                    "branchId": node.branch_id,
-                    "fromNodeId": node.id,
-                    "toNodeId": related_node.id,
-                    "relationType": str(payload.get("relationType") or "related-to"),
-                    "reason": str(payload.get("reason") or f"Linked from memory tool at {source_work_tree_node_id or 'no-work-tree'}"),
-                    "createdBy": actor,
-                    "updatedBy": actor,
+    def _action() -> dict[str, object]:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            node_repository = NodeRepository(session)
+            node = node_repository.get_node(node_id)
+            if node is None:
+                raise KeyError(f"Node {node_id} not found.")
+            if node.latest_version_id != expected_latest_version_id:
+                recent_versions = node_repository.list_versions(node_id, limit=5)
+                return {
+                    "status": "conflict",
+                    "mode": mode,
+                    "node": _memory_node_payload(node),
+                    "expectedLatestVersionId": expected_latest_version_id,
+                    "currentLatestVersionId": node.latest_version_id,
+                    "recentVersions": [_memory_version_payload(version) for version in recent_versions],
+                    "recommendedActions": [
+                        "text_memory.append_memory_log",
+                        "text_memory.submit_memory_proposal",
+                    ],
+                    "summary": normalize_excerpt(
+                        f"Version conflict on node {node.title}; latest pointer moved to {node.latest_version_id}.",
+                        180,
+                    ),
                 }
-            )
+
+            if mode == "relate":
+                related_node_id = str(payload.get("relatedNodeId") or "").strip()
+                if not related_node_id:
+                    raise KeyError("relatedNodeId")
+                related_node = node_repository.get_node(related_node_id)
+                if related_node is None:
+                    raise KeyError(f"Node {related_node_id} not found.")
+                edge = node_repository.create_edge(
+                    {
+                        "projectId": node.project_id,
+                        "spaceId": node.space_id,
+                        "branchId": node.branch_id,
+                        "fromNodeId": node.id,
+                        "toNodeId": related_node.id,
+                        "relationType": str(payload.get("relationType") or "related-to"),
+                        "reason": str(payload.get("reason") or f"Linked from memory tool at {source_work_tree_node_id or 'no-work-tree'}"),
+                        "createdBy": actor,
+                        "updatedBy": actor,
+                    }
+                )
+                return {
+                    "status": "updated",
+                    "mode": mode,
+                    "node": _memory_node_payload(node),
+                    "edge": edge.model_dump(by_alias=True, mode="json"),
+                    "summary": normalize_excerpt(f"Created relation from {node.title} to {related_node.title}.", 160),
+                }
+
+            version_payload: dict[str, Any] = {
+                "changeReason": str(payload.get("changeReason") or f"memory-tool-{mode}"),
+                "createdBy": actor,
+                "updatedBy": actor,
+                "sourceWorkTreeNodeId": source_work_tree_node_id,
+            }
+            if payload.get("title") is not None:
+                version_payload["title"] = str(payload.get("title") or "")
+            if payload.get("content") is not None:
+                version_payload["content"] = str(payload.get("content") or "")
+            if "title" not in version_payload and "content" not in version_payload:
+                raise ValueError("write/revise mode requires title or content.")
+
+            version = node_repository.append_version(node_id, version_payload)
+            updated_node = node_repository.get_node(node_id)
             return {
                 "status": "updated",
                 "mode": mode,
-                "node": _memory_node_payload(node),
-                "edge": edge.model_dump(by_alias=True, mode="json"),
-                "summary": normalize_excerpt(f"Created relation from {node.title} to {related_node.title}.", 160),
+                "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+                "version": _memory_version_payload(version),
+                "summary": normalize_excerpt(f"Updated memory node {node.title} via {mode} mode.", 160),
             }
 
-        version_payload: dict[str, Any] = {
-            "changeReason": str(payload.get("changeReason") or f"memory-tool-{mode}"),
-            "createdBy": actor,
-            "updatedBy": actor,
-            "sourceWorkTreeNodeId": source_work_tree_node_id,
-        }
-        if payload.get("title") is not None:
-            version_payload["title"] = str(payload.get("title") or "")
-        if payload.get("content") is not None:
-            version_payload["content"] = str(payload.get("content") or "")
-        if "title" not in version_payload and "content" not in version_payload:
-            raise ValueError("write/revise mode requires title or content.")
-
-        version = node_repository.append_version(node_id, version_payload)
-        updated_node = node_repository.get_node(node_id)
-        return {
-            "status": "updated",
-            "mode": mode,
-            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
-            "version": _memory_version_payload(version),
-            "summary": normalize_excerpt(f"Updated memory node {node.title} via {mode} mode.", 160),
-        }
-
-
+    return _run_with_sqlite_lock_retry(_action)
 def append_memory_log_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     node_id = str(payload.get("nodeId") or "").strip()
@@ -967,31 +970,33 @@ def append_memory_log_tool(payload: dict[str, object]) -> dict[str, object]:
     actor = _memory_tool_actor(execution_context)
     source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
     runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        node_repository = NodeRepository(session)
-        version = node_repository.append_memory_log_entry(
-            node_id,
-            log_entry,
-            {
-                "changeReason": str(payload.get("changeReason") or "append-memory-log"),
-                "createdBy": actor,
-                "updatedBy": actor,
-                "sourceWorkTreeNodeId": source_work_tree_node_id,
-            },
-        )
-        updated_node = node_repository.get_node(node_id)
-        return {
-            "status": "appended",
-            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
-            "version": _memory_version_payload(version),
-            "summary": normalize_excerpt(
-                f"Appended memory log to node {updated_node.title if updated_node is not None else node_id}.",
-                160,
-            ),
-        }
 
+    def _action() -> dict[str, object]:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            node_repository = NodeRepository(session)
+            version = node_repository.append_memory_log_entry(
+                node_id,
+                log_entry,
+                {
+                    "changeReason": str(payload.get("changeReason") or "append-memory-log"),
+                    "createdBy": actor,
+                    "updatedBy": actor,
+                    "sourceWorkTreeNodeId": source_work_tree_node_id,
+                },
+            )
+            updated_node = node_repository.get_node(node_id)
+            return {
+                "status": "appended",
+                "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+                "version": _memory_version_payload(version),
+                "summary": normalize_excerpt(
+                    f"Appended memory log to node {updated_node.title if updated_node is not None else node_id}.",
+                    160,
+                ),
+            }
 
+    return _run_with_sqlite_lock_retry(_action)
 def submit_memory_proposal_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     node_id = str(payload.get("nodeId") or "").strip()
@@ -1004,47 +1009,49 @@ def submit_memory_proposal_tool(payload: dict[str, object]) -> dict[str, object]
     actor = _memory_tool_actor(execution_context)
     source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
     runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        node_repository = NodeRepository(session)
-        node = node_repository.get_node(node_id)
-        if node is None:
-            raise KeyError(f"Node {node_id} not found.")
-        proposal_node = node_repository.create_node(
-            {
-                "projectId": node.project_id,
-                "spaceId": node.space_id,
-                "branchId": node.branch_id,
-                "parentId": node.id,
-                "rootBranch": node.root_branch,
-                "nodeType": "task",
-                "status": "temporary",
-                "title": str(payload.get("title") or normalize_excerpt(f"Memory proposal for {node.title}", 72)),
-                "content": "\n".join(
-                    part
-                    for part in [
-                        f"Target node: {node.id}",
-                        f"Target latest version: {node.latest_version_id}",
-                        f"Proposal: {proposal}",
-                        f"Rationale: {str(payload.get('rationale') or '').strip()}" if payload.get("rationale") else None,
-                    ]
-                    if part
-                ),
-                "sourceWorkTreeNodeId": source_work_tree_node_id,
-                "createdBy": actor,
-                "updatedBy": actor,
-                "changeReason": "memory-proposal",
+
+    def _action() -> dict[str, object]:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            node_repository = NodeRepository(session)
+            node = node_repository.get_node(node_id)
+            if node is None:
+                raise KeyError(f"Node {node_id} not found.")
+            proposal_node = node_repository.create_node(
+                {
+                    "projectId": node.project_id,
+                    "spaceId": node.space_id,
+                    "branchId": node.branch_id,
+                    "parentId": node.id,
+                    "rootBranch": node.root_branch,
+                    "nodeType": "task",
+                    "status": "temporary",
+                    "title": str(payload.get("title") or normalize_excerpt(f"Memory proposal for {node.title}", 72)),
+                    "content": "\n".join(
+                        part
+                        for part in [
+                            f"Target node: {node.id}",
+                            f"Target latest version: {node.latest_version_id}",
+                            f"Proposal: {proposal}",
+                            f"Rationale: {str(payload.get('rationale') or '').strip()}" if payload.get("rationale") else None,
+                        ]
+                        if part
+                    ),
+                    "sourceWorkTreeNodeId": source_work_tree_node_id,
+                    "createdBy": actor,
+                    "updatedBy": actor,
+                    "changeReason": "memory-proposal",
+                }
+            )
+            return {
+                "status": "proposed",
+                "proposalNode": _memory_node_payload(proposal_node),
+                "targetNodeId": node.id,
+                "targetLatestVersionId": node.latest_version_id,
+                "summary": normalize_excerpt(f"Created memory proposal under node {node.title}.", 160),
             }
-        )
-        return {
-            "status": "proposed",
-            "proposalNode": _memory_node_payload(proposal_node),
-            "targetNodeId": node.id,
-            "targetLatestVersionId": node.latest_version_id,
-            "summary": normalize_excerpt(f"Created memory proposal under node {node.title}.", 160),
-        }
 
-
+    return _run_with_sqlite_lock_retry(_action)
 def forget_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     node_id = str(payload.get("nodeId") or "").strip()
@@ -1054,35 +1061,35 @@ def forget_memory_node_tool(payload: dict[str, object]) -> dict[str, object]:
     actor = _memory_tool_actor(execution_context)
     source_work_tree_node_id = _memory_source_work_tree_node_id(execution_context)
     runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        node_repository = NodeRepository(session)
-        node = node_repository.get_node(node_id)
-        if node is None:
-            raise KeyError(f"Node {node_id} not found.")
-        version = node_repository.append_version(
-            node_id,
-            {
-                "status": str(payload.get("status") or "archived"),
-                "mergedIntoNodeId": str(payload.get("mergedIntoNodeId")) if payload.get("mergedIntoNodeId") is not None else None,
-                "changeReason": str(payload.get("reason") or "forget-memory-node"),
-                "createdBy": actor,
-                "updatedBy": actor,
-                "sourceWorkTreeNodeId": source_work_tree_node_id,
-            },
-        )
-        updated_node = node_repository.get_node(node_id)
-        return {
-            "status": "forgotten",
-            "node": _memory_node_payload(updated_node) if updated_node is not None else None,
-            "version": _memory_version_payload(version),
-            "summary": normalize_excerpt(f"Soft-forgot memory node {node.title}.", 160),
-        }
 
+    def _action() -> dict[str, object]:
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            node_repository = NodeRepository(session)
+            node = node_repository.get_node(node_id)
+            if node is None:
+                raise KeyError(f"Node {node_id} not found.")
+            version = node_repository.append_version(
+                node_id,
+                {
+                    "status": str(payload.get("status") or "archived"),
+                    "mergedIntoNodeId": str(payload.get("mergedIntoNodeId")) if payload.get("mergedIntoNodeId") is not None else None,
+                    "changeReason": str(payload.get("reason") or "forget-memory-node"),
+                    "createdBy": actor,
+                    "updatedBy": actor,
+                    "sourceWorkTreeNodeId": source_work_tree_node_id,
+                },
+            )
+            updated_node = node_repository.get_node(node_id)
+            return {
+                "status": "forgotten",
+                "node": _memory_node_payload(updated_node) if updated_node is not None else None,
+                "version": _memory_version_payload(version),
+                "summary": normalize_excerpt(f"Soft-forgot memory node {node.title}.", 160),
+            }
 
+    return _run_with_sqlite_lock_retry(_action)
 plugin = TextMemoryModule()
-
-
 def retrieve_memory_tool(payload: dict[str, object]) -> dict[str, object]:
     execution_context = payload.get("executionContext") if isinstance(payload.get("executionContext"), dict) else {}
     branch_id = str(payload.get("branchId") or execution_context.get("branchId") or DEFAULT_BRANCH_ID)

@@ -126,6 +126,27 @@ def queue_main_agent_execution(task_id: str, payload: dict[str, Any] | None = No
                 event_type="task.resume.requested",
                 locator=resume_request_locator,
             )
+        elif command == "retry":
+            if task.status != "failed":
+                raise ValueError(f"Task {task_id} is in state {task.status} and cannot be retried.")
+            update_payload["status"] = "queued"
+            update_payload["pauseRequested"] = False
+            retry_request_locator = f"agent-runtime/tasks/{task.id}/retry-requests/{new_id('retry', task.id)}"
+            retry_request_payload = {
+                "requestedBy": request.get("requestedBy") or {"type": "user", "id": "operator"},
+                "reason": request.get("reason") or "manual-retry",
+                "resumeMessage": request.get("resumeMessage") or task.resume_message,
+                "requestedAt": utc_now().isoformat(),
+            }
+            _cache_package_entry(coordinator, retry_request_locator, retry_request_payload)
+            outbox_record = _persist_runtime_event(
+                session,
+                project_id=task.project_id,
+                aggregate_type="task",
+                aggregate_id=task.id,
+                event_type="task.retry.requested",
+                locator=retry_request_locator,
+            )
         else:
             if task.status in {"paused", "completed", "failed", "cancelled"}:
                 raise ValueError(f"Task {task_id} is in state {task.status} and cannot be started directly.")
@@ -194,6 +215,13 @@ def request_task_pause(task_id: str, payload: dict[str, Any] | None = None) -> d
         "task": task.model_dump(by_alias=True, mode="json"),
         "outboxRecord": event.model_dump(by_alias=True, mode="json"),
     }
+
+
+def retry_task_execution(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+    request = dict(payload or {})
+    request["command"] = "retry"
+    request.setdefault("reason", "manual-retry")
+    return queue_main_agent_execution(task_id, request)
 
 
 def _latest_takeover_protocol(task_repository: TaskRepository, task_id: str) -> tuple[Any | None, TaskTakeoverProtocol | None]:

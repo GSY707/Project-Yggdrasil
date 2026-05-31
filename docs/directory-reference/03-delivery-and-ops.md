@@ -58,6 +58,9 @@ docs/
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
+│   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面与控制面 API
+│   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义与计划-步骤-动作三层模型
+│   ├── graduate-researcher-test-standard-v0.1.md # Graduate Researcher 测试标准：机器学习研究生场景的行为验收口径
 │   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │

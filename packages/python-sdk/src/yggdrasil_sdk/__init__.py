@@ -112,6 +112,7 @@ from .persistence import (
     sync_module_catalog_snapshot,
 )
 from .prompting import (
+    assemble_prompt_registry,
     CompiledPrompt,
     PromptProfile,
     SeedTemplate,
@@ -227,6 +228,7 @@ __all__ = [
     "run_evaluation_suite",
     "set_mcp_bridge_server_enabled",
     "set_active_application",
+    "assemble_prompt_registry",
     "compile_runtime_prompt",
     "get_prompt_profile_definition",
     "get_seed_template_definition",

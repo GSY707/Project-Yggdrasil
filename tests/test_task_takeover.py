@@ -28,6 +28,49 @@ def test_task_takeover_module_builds_coding_protocol() -> None:
     assert protocol["metrics"]["planQualityScore0_100"] > 0
 
 
+def test_task_takeover_research_plan_starts_with_explore_phase() -> None:
+    plugin = TaskTakeoverModule()
+    protocol = plugin.build_protocol(
+        {
+            "taskId": "task_research_explore_01",
+            "taskType": "research",
+            "runType": "main",
+            "request": {
+                "taskObjective": "研究表示学习中的泛化边界，并形成可复验结论。",
+                "currentFocus": "g4-graduate-ml-deepseek-v4",
+            },
+            "rootMount": {
+                "budgetState": {"tokenBudgetTotal": 4000, "tokenBudgetUsed": 0},
+                "activeCapabilities": ["task-takeover", "mcp-bridge", "text-memory"],
+            },
+        }
+    )
+
+    assert protocol["taskType"] == "research"
+    assert protocol["plan"]
+    assert protocol["plan"][0]["phase"] == "objective"
+    assert "探索" in str(protocol["plan"][0]["title"])
+
+
+def test_task_takeover_research_exploration_variant_is_stable_for_same_task() -> None:
+    plugin = TaskTakeoverModule()
+    payload = {
+        "taskId": "task_research_explore_stable",
+        "taskType": "research",
+        "runType": "main",
+        "request": {
+            "taskObjective": "研究优化方法在小样本学习中的鲁棒性。",
+            "currentFocus": "g4-graduate-ml-longcat2",
+        },
+        "rootMount": {"activeCapabilities": ["task-takeover"]},
+    }
+    protocol_a = plugin.build_protocol(payload)
+    protocol_b = plugin.build_protocol(payload)
+
+    assert protocol_a["plan"][0]["title"] == protocol_b["plan"][0]["title"]
+    assert protocol_a["plan"][0]["instructions"] == protocol_b["plan"][0]["instructions"]
+
+
 def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None:
     plugin = TaskTakeoverModule()
     protocol = plugin.build_protocol(

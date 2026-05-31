@@ -1,18 +1,15 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 import json
 import os
 import re
+import ssl
 import time
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-
 from yggdrasil_sdk.support import new_id, normalize_excerpt
-
-
 _DEEPSEEK_MODEL_ALIASES = {
     "deepseek-chat": "deepseek-v4-flash",
     "deepseek-reasoner": "deepseek-v4-pro",
@@ -41,9 +38,6 @@ _LONGCAT_ARGUMENT_ALIASES = {
     "working_directory": "workingDirectory",
     "timeout_ms": "timeoutMs",
 }
-
-
-@dataclass(frozen=True)
 class ProviderConfig:
     provider: str
     api_key: str
@@ -56,8 +50,6 @@ class ProviderConfig:
     context_window: int
     free_tier: bool
     priority: int
-
-
 PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
     "longcat": {
         "base_url": "https://api.longcat.chat/openai/v1",
@@ -139,15 +131,11 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
         "priority": 20,
     },
 }
-
-
 def _truthy_env(name: str, *, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def _canonical_model_name(model: str | None) -> str | None:
     if model is None:
         return None
@@ -155,8 +143,6 @@ def _canonical_model_name(model: str | None) -> str | None:
     if not normalized:
         return None
     return _DEEPSEEK_MODEL_ALIASES.get(normalized.lower(), normalized)
-
-
 def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] | None:
     profile = PROVIDER_PROFILES.get(provider)
     if profile is None:
@@ -193,8 +179,6 @@ def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] 
         "supports_thinking": bool(model_profile.get("supports_thinking", False)),
         "thinking_enabled_by_default": bool(model_profile.get("thinking_enabled_by_default", False)),
     }
-
-
 def _provider_catalog_entries(provider: str, default_model: str | None) -> list[dict[str, Any]]:
     profile = PROVIDER_PROFILES.get(provider)
     if profile is None:
@@ -216,8 +200,6 @@ def _provider_catalog_entries(provider: str, default_model: str | None) -> list[
         entries.append(model_profile)
     entries.sort(key=lambda item: int(item["priority"]), reverse=True)
     return entries
-
-
 def _normalize_thinking_type(value: Any) -> str | None:
     candidate = value
     if isinstance(candidate, dict):
@@ -232,14 +214,10 @@ def _normalize_thinking_type(value: Any) -> str | None:
     if lowered in {"0", "false", "disabled", "disable", "off", "none"}:
         return "disabled"
     return None
-
-
 def _normalize_reasoning_effort(value: Any) -> str | None:
     if value is None:
         return None
     return _DEEPSEEK_REASONING_EFFORT_ALIASES.get(str(value).strip().lower())
-
-
 def _prepare_provider_tools(provider: str, tools: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]] | None, dict[str, str]]:
     if not tools:
         return None, {}
@@ -262,8 +240,6 @@ def _prepare_provider_tools(provider: str, tools: list[dict[str, Any]] | None) -
         if original_name:
             aliases[aliased_name] = original_name
     return prepared, aliases
-
-
 def _environment_provider_keys() -> dict[str, str]:
     candidates = {
         "longcat": os.environ.get("YGGDRASIL_LLM_API_KEY_LONGCAT") or os.environ.get("LONGCAT_API_KEY"),
@@ -274,8 +250,6 @@ def _environment_provider_keys() -> dict[str, str]:
     if os.environ.get("YGGDRASIL_LLM_PROVIDER") and os.environ.get("YGGDRASIL_LLM_API_KEY"):
         candidates[str(os.environ["YGGDRASIL_LLM_PROVIDER"]).strip()] = str(os.environ["YGGDRASIL_LLM_API_KEY"]).strip()
     return {provider: token for provider, token in candidates.items() if token}
-
-
 def _build_provider_config(provider: str, api_key: str) -> ProviderConfig | None:
     profile = PROVIDER_PROFILES.get(provider)
     if profile is None:
@@ -298,8 +272,6 @@ def _build_provider_config(provider: str, api_key: str) -> ProviderConfig | None
         free_tier=bool(profile["free_tier"]),
         priority=int(profile["priority"]),
     )
-
-
 def _available_provider_configs(workspace_root: Path | None = None) -> dict[str, ProviderConfig]:
     tokens = _environment_provider_keys()
     configs: dict[str, ProviderConfig] = {}
@@ -308,8 +280,6 @@ def _available_provider_configs(workspace_root: Path | None = None) -> dict[str,
         if config is not None:
             configs[provider] = config
     return configs
-
-
 def get_provider_catalog(workspace_root: Path | None = None) -> list[dict[str, Any]]:
     if _truthy_env("YGGDRASIL_DISABLE_LIVE_LLM", default=False):
         return []
@@ -336,8 +306,6 @@ def get_provider_catalog(workspace_root: Path | None = None) -> list[dict[str, A
     for candidate in candidates:
         candidate.pop("_priority", None)
     return candidates
-
-
 def _infer_provider_from_model(model: str | None) -> str | None:
     if not model:
         return None
@@ -349,8 +317,6 @@ def _infer_provider_from_model(model: str | None) -> str | None:
     if "/" in lowered or lowered.endswith(":free"):
         return "openrouter"
     return None
-
-
 def _select_provider(
     *,
     requested_provider: str | None,
@@ -373,13 +339,9 @@ def _select_provider(
         return None
     eligible.sort(key=lambda item: item.priority, reverse=True)
     return eligible[0]
-
-
 def _estimate_tokens(text: str) -> int:
     compact = " ".join(text.split())
     return max(1, len(compact) // 4)
-
-
 def _usage_value(payload: dict[str, Any], *path: str) -> Any:
     current: Any = payload
     for part in path:
@@ -387,8 +349,6 @@ def _usage_value(payload: dict[str, Any], *path: str) -> Any:
             return None
         current = current.get(part)
     return current
-
-
 def _usage_int(payload: dict[str, Any], *candidates: tuple[str, ...]) -> int:
     for candidate in candidates:
         value = _usage_value(payload, *candidate)
@@ -399,8 +359,6 @@ def _usage_int(payload: dict[str, Any], *candidates: tuple[str, ...]) -> int:
         except (TypeError, ValueError):
             continue
     return 0
-
-
 def _normalize_usage(raw_usage: dict[str, Any], messages: list[dict[str, Any]], output_text: str) -> dict[str, int]:
     input_tokens = _usage_int(
         raw_usage,
@@ -453,8 +411,6 @@ def _normalize_usage(raw_usage: dict[str, Any], messages: list[dict[str, Any]], 
         "nonCacheInputTokens": max(input_tokens - cache_hit_input_tokens, 0),
         "reasoningTokens": max(reasoning_tokens, 0),
     }
-
-
 def _extract_text_content(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
@@ -487,8 +443,6 @@ def _extract_text_content(payload: Any) -> str:
                 return fragment
 
     return ""
-
-
 def _coerce_tool_argument_value(value: str) -> Any:
     candidate = str(value or "").strip()
     if not candidate:
@@ -497,8 +451,48 @@ def _coerce_tool_argument_value(value: str) -> Any:
         return json.loads(candidate)
     except Exception:
         return candidate
+def _strip_json_code_fence(text: str) -> str:
+    stripped = str(text or "").strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
+        stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
+def _extract_json_object_candidate(text: str) -> str:
+    stripped = _strip_json_code_fence(text)
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start >= 0 and end > start:
+        return stripped[start : end + 1]
+    return stripped
+def _parse_tool_arguments_text(arguments_text: str) -> dict[str, Any]:
+    candidate = _extract_json_object_candidate(arguments_text)
+    if not candidate:
+        return {}
 
+    for attempt in (
+        candidate,
+        re.sub(r",\s*([}\]])", r"\1", candidate),
+        candidate.replace("'", '"'),
+    ):
+        try:
+            parsed = json.loads(attempt)
+            if isinstance(parsed, dict):
+                return parsed
+            return {"value": parsed}
+        except Exception:
+            pass
 
+    # Fallback for loose `key=value` / `key: value` payloads frequently emitted in non-strict tool mode.
+    kv_pairs = re.findall(r"([A-Za-z_][A-Za-z0-9_.-]*)\s*(?:=|:)\s*([^,\n]+)", candidate)
+    if kv_pairs:
+        repaired: dict[str, Any] = {}
+        for raw_key, raw_value in kv_pairs:
+            normalized_key = _LONGCAT_ARGUMENT_ALIASES.get(raw_key.strip(), raw_key.strip())
+            repaired[normalized_key] = _coerce_tool_argument_value(raw_value.strip().strip('"').strip("'"))
+        if repaired:
+            return repaired
+
+    return {"_raw": str(arguments_text or "").strip()}
 def _extract_longcat_tagged_tool_calls(content: str) -> tuple[str, list[dict[str, Any]]]:
     if not content or "<longcat_tool_call>" not in content.lower():
         return str(content or ""), []
@@ -530,8 +524,6 @@ def _extract_longcat_tagged_tool_calls(content: str) -> tuple[str, list[dict[str
     cleaned = _LONGCAT_TOOL_CALL_PATTERN.sub(_replace, content)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned, tool_calls
-
-
 def _extract_inline_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
     if not content or "<" not in content or "/>" not in content:
         return str(content or ""), []
@@ -562,8 +554,6 @@ def _extract_inline_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
     cleaned = _INLINE_TOOL_TAG_PATTERN.sub(_replace, content)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned, tool_calls
-
-
 def _extract_block_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
     if not content or "<tool_calls>" not in content.lower():
         return str(content or ""), []
@@ -597,15 +587,11 @@ def _extract_block_tool_tags(content: str) -> tuple[str, list[dict[str, Any]]]:
     cleaned = _BLOCK_TOOL_CALLS_PATTERN.sub(_replace_container, content)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned, tool_calls
-
-
 def _extract_embedded_tool_calls(content: str) -> tuple[str, list[dict[str, Any]]]:
     cleaned_text, tool_calls = _extract_longcat_tagged_tool_calls(content)
     cleaned_text, block_tool_calls = _extract_block_tool_tags(cleaned_text)
     cleaned_text, inline_tool_calls = _extract_inline_tool_tags(cleaned_text)
     return cleaned_text, [*tool_calls, *block_tool_calls, *inline_tool_calls]
-
-
 def _extract_tool_call_candidates(payload: Any) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     if isinstance(payload, list):
@@ -638,6 +624,7 @@ def _extract_tool_call_candidates(payload: Any) -> list[dict[str, Any]]:
         candidates.append(
             {
                 "id": payload.get("id") or payload.get("call_id"),
+                "index": payload.get("index"),
                 "type": payload.get("type") or "function",
                 "function": {
                     "name": name,
@@ -651,23 +638,25 @@ def _extract_tool_call_candidates(payload: Any) -> list[dict[str, Any]]:
         if value is not None:
             candidates.extend(_extract_tool_call_candidates(value))
     return candidates
-
-
 def _normalize_tool_call(raw_call: dict[str, Any], *, default_name: str) -> dict[str, Any] | None:
     function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
     name = str(function_payload.get("name") or default_name or "").strip()
-    if not name:
+    arguments_payload = function_payload.get("arguments")
+    if arguments_payload is None:
+        arguments_payload = raw_call.get("arguments")
+    if arguments_payload is None:
+        arguments_payload = raw_call.get("input")
+    if not name and arguments_payload is None and raw_call.get("id") is None and raw_call.get("call_id") is None and raw_call.get("index") is None:
         return None
     return {
         "id": raw_call.get("id") or raw_call.get("call_id"),
+        "index": raw_call.get("index"),
         "type": str(raw_call.get("type") or "function"),
         "function": {
             "name": name,
-            "arguments": function_payload.get("arguments") if function_payload.get("arguments") is not None else "{}",
+            "arguments": arguments_payload if arguments_payload is not None else "",
         },
     }
-
-
 def _merge_stream_tool_call(tool_calls: dict[int, dict[str, Any]], raw_call: dict[str, Any]) -> None:
     raw_index = raw_call.get("index")
     try:
@@ -684,18 +673,28 @@ def _merge_stream_tool_call(tool_calls: dict[int, dict[str, Any]], raw_call: dic
     )
     if raw_call.get("id"):
         entry["id"] = str(raw_call["id"])
+    elif raw_call.get("call_id"):
+        entry["id"] = str(raw_call["call_id"])
     if raw_call.get("type"):
         entry["type"] = str(raw_call["type"])
     function_payload = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
     entry_function = entry["function"]
-    name_part = str(function_payload.get("name") or "")
+    name_part = str(
+        function_payload.get("name")
+        or raw_call.get("name")
+        or raw_call.get("tool_name")
+        or raw_call.get("function_name")
+        or ""
+    )
     if name_part:
         entry_function["name"] += name_part
     arguments_part = function_payload.get("arguments")
+    if arguments_part is None:
+        arguments_part = raw_call.get("arguments")
+    if arguments_part is None:
+        arguments_part = raw_call.get("input")
     if arguments_part is not None:
         entry_function["arguments"] += str(arguments_part)
-
-
 def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[dict[str, Any], float | None]:
     request_started_at = time.perf_counter()
     first_token_latency_ms: float | None = None
@@ -785,8 +784,6 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
         },
         first_token_latency_ms,
     )
-
-
 def _result_from_raw_response(
     raw_response: dict[str, Any],
     *,
@@ -829,12 +826,7 @@ def _result_from_raw_response(
         name = str(function_payload.get("name") or "").strip()
         original_name = tool_name_aliases.get(name, name)
         arguments_text = str(function_payload.get("arguments") or "{}").strip() or "{}"
-        try:
-            arguments = json.loads(arguments_text)
-            if not isinstance(arguments, dict):
-                arguments = {"value": arguments}
-        except Exception:
-            arguments = {"_raw": arguments_text}
+        arguments = _parse_tool_arguments_text(arguments_text)
         tool_calls.append(
             {
                 "id": str(raw_call.get("id") or new_id("toolcall", original_name or resolved_model)),
@@ -866,8 +858,6 @@ def _result_from_raw_response(
         "requestPayload": request_payload,
         "firstTokenLatencyMs": first_token_latency_ms,
     }
-
-
 def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested_model: str | None, requested_provider: str | None) -> dict[str, Any]:
     user_message = next((message for message in reversed(messages) if message.get("role") == "user"), {"content": ""})
     summarized_prompt = normalize_excerpt(str(user_message.get("content") or ""), 400)
@@ -915,16 +905,49 @@ def _fallback_response(messages: list[dict[str, Any]], reason: str, *, requested
             },
         },
     }
-
-
 def _retry_max() -> int:
     return int(os.environ.get("YGGDRASIL_LLM_RETRY_MAX", "3"))
-
-
 def _retry_backoff_base() -> float:
     return float(os.environ.get("YGGDRASIL_LLM_RETRY_BACKOFF_BASE", "2.0"))
-
-
+def _deepseek_extra_retry_max() -> int:
+    return max(int(os.environ.get("YGGDRASIL_LLM_DEEPSEEK_EXTRA_RETRY_MAX", "2")), 0)
+def _retry_max_for_provider(provider: str) -> int:
+    base = _retry_max()
+    if provider == "deepseek_direct":
+        return base + _deepseek_extra_retry_max()
+    return base
+def _is_retryable_transport_error(exc: Exception) -> bool:
+    if isinstance(exc, urllib_error.URLError):
+        reason = exc.reason
+        if isinstance(reason, (ssl.SSLError, TimeoutError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            return True
+        if isinstance(reason, OSError):
+            lowered_reason = str(reason).lower()
+            return any(
+                token in lowered_reason
+                for token in (
+                    "ssl",
+                    "eof",
+                    "unexpected_eof",
+                    "timed out",
+                    "timeout",
+                    "connection reset",
+                    "connection aborted",
+                )
+            )
+    lowered = str(exc).lower()
+    return any(
+        token in lowered
+        for token in (
+            "unexpected_eof_while_reading",
+            "eof occurred in violation of protocol",
+            "ssl",
+            "connection reset",
+            "connection aborted",
+            "timed out",
+            "timeout",
+        )
+    )
 def invoke_model(
     *,
     requested_model: str | None,
@@ -998,15 +1021,24 @@ def invoke_model(
         headers["HTTP-Referer"] = os.environ.get("YGGDRASIL_OPENROUTER_REFERER", "https://yggdrasil.local")
         headers["X-Title"] = os.environ.get("YGGDRASIL_OPENROUTER_TITLE", "Project Yggdrasil")
 
-    _max_retries = _retry_max()
+    _max_retries = _retry_max_for_provider(config.provider)
     _backoff_base = _retry_backoff_base()
     _last_exc: Exception | None = None
     _raw_response: dict | None = None
 
     for _attempt in range(_max_retries + 1):
         try:
-            http_request = urllib_request.Request(endpoint, data=encoded_payload, headers=headers, method="POST")
+            attempt_payload = dict(request_payload)
+            attempt_headers = dict(headers)
+            if config.provider == "deepseek_direct" and _attempt > 0:
+                # DeepSeek transport can occasionally fail on streamed chunk boundaries.
+                # Retry with non-stream mode and explicit connection close for a more stable retry path.
+                attempt_payload["stream"] = False
+                attempt_headers["Connection"] = "close"
+            attempt_encoded_payload = json.dumps(attempt_payload).encode("utf-8")
+            http_request = urllib_request.Request(endpoint, data=attempt_encoded_payload, headers=attempt_headers, method="POST")
             _raw_response, first_token_latency_ms = _assemble_stream_response(http_request, timeout_seconds=timeout_seconds)
+            request_payload = attempt_payload
             break  # success
         except urllib_error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -1027,6 +1059,9 @@ def invoke_model(
             raise RuntimeError(f"Model provider HTTP error: {exc.code}: {detail}") from exc
         except Exception as exc:
             _last_exc = exc
+            if _attempt < _max_retries and _is_retryable_transport_error(exc):
+                time.sleep(min(_backoff_base ** _attempt, 60.0))
+                continue
             if _attempt < _max_retries:
                 time.sleep(min(_backoff_base ** _attempt, 60.0))
                 continue

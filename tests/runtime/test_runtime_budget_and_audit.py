@@ -21,6 +21,65 @@ from yggdrasil_worker.registry import run_worker_once
 client = TestClient(runtime_app)
 pytestmark = pytest.mark.slow
 
+
+def _single_root_protocol(task_id: str) -> dict[str, object]:
+    return {
+        "id": f"takeover_{task_id}",
+        "version": "0.1.0",
+        "taskId": task_id,
+        "taskType": "coding",
+        "runType": "main",
+        "currentPhase": "execute",
+        "status": "executing",
+        "objective": "完成一次最小运行。",
+        "objectiveSummary": "直接在根节点收尾并进入审批。",
+        "ambiguities": [],
+        "constraints": [],
+        "plan": [],
+        "workTree": {
+            "version": "0.2.0",
+            "id": f"work_tree_{task_id}",
+            "taskId": task_id,
+            "rootNodeId": "root",
+            "rootObjective": "完成一次最小运行。",
+            "status": "active",
+            "currentNodeId": "root",
+            "loadedNodeIds": ["root"],
+            "activePathNodeIds": ["root"],
+            "pcMemo": "continue:root",
+            "entropyBudgetRemaining": 9,
+            "versionCounter": 1,
+            "nodes": [
+                {
+                    "id": "root",
+                    "title": "根节点",
+                    "parentNodeId": None,
+                    "questionsItAnswers": ["最小运行是否完成"],
+                    "nodeText": "完成最小运行并输出交付。",
+                    "localGoal": "完成最小运行并输出交付。",
+                    "workingNodeAnnotation": "<Working_Node: root>",
+                    "phase": "delivery",
+                    "status": "in-progress",
+                    "childNodeIds": [],
+                    "detailLevel": 0,
+                    "recoveryAnchor": "resume:root",
+                }
+            ],
+        },
+        "deliverySections": [],
+        "verificationItems": [],
+        "metrics": {
+            "planQualityScore0_100": 90.0,
+            "reworkCount": 0,
+            "reworkRate": 0.0,
+            "clarificationNeeded": False,
+            "deliveryCompletenessScore0_100": 0.0,
+            "verificationPassRate": 0.0,
+        },
+        "appliedModules": ["task-takeover"],
+        "hookTrace": [],
+    }
+
 def test_main_agent_runtime_fails_when_budget_is_exhausted() -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -156,8 +215,9 @@ def test_main_agent_runtime_fails_when_actual_usage_exceeds_budget(monkeypatch) 
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "failed"
+    assert processed["result"]["status"] == "paused"
     assert "budget exceeded after model invocation" in processed["result"]["detail"].lower()
+    assert processed["result"]["snapshot"]["status"] == "restorable"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -165,15 +225,182 @@ def test_main_agent_runtime_fails_when_actual_usage_exceeds_budget(monkeypatch) 
         runtime_repository = RuntimeRepository(session)
         task = task_repository.get_task("task_budget_actual_fail")
         assert task is not None
-        assert task.status == "failed"
+        assert task.status == "paused"
+        assert task.active_snapshot_id is not None
         runs = task_repository.list_agent_runs("task_budget_actual_fail")
         assert len(runs) == 1
-        assert runs[0].status == "failed"
+        assert runs[0].status == "paused"
+        snapshots = task_repository.list_snapshots("task_budget_actual_fail")
+        assert len(snapshots) == 1
+        assert snapshots[0].status == "restorable"
         assert len(runtime_repository.list_model_route_decisions(task_id="task_budget_actual_fail")) == 1
         assert len(runtime_repository.list_model_invocations(task_id="task_budget_actual_fail")) == 1
 
 
-def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
+def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "LongCat-2.0-Preview",
+                "provider": "longcat",
+                "quality": 0.9,
+                "costPer1k": 0.001,
+                "latencyMs": 120,
+                "contextWindow": 128000,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "longcat",
+            "model": "LongCat-2.0-Preview",
+            "outputText": "## 结果\n完成\n## 证据\nhttp://example.com\n## 风险\n暂无\n## 已知问题\n暂无",
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 200,
+                "outputTokens": 100,
+                "totalTokens": 300,
+            },
+            "costUsed": 0.0,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": "## 结果\n完成\n## 证据\nhttp://example.com\n## 风险\n暂无\n## 已知问题\n暂无",
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 200,
+                    "completion_tokens": 100,
+                    "total_tokens": 300,
+                },
+            },
+            "requestPayload": {
+                "model": "LongCat-2.0-Preview",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 80.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": "task_effective_ctx_not_hard_filter",
+                "title": "effective context soft routing",
+                "goal": "验证 effectiveContextWindow 不会作为模型候选硬过滤条件。",
+                "status": "draft",
+                "budgetState": {
+                    "tokenBudgetTotal": 5000,
+                    "costBudgetTotal": 5.0,
+                },
+            }
+        )
+
+    started = client.post(
+        "/runtime/tasks/task_effective_ctx_not_hard_filter/start",
+        json={
+            "effectiveContextWindow": 200000,
+            "requestedProvider": "longcat",
+            "requestedModel": "LongCat-2.0-Preview",
+            "currentContext": [
+                {
+                    "id": "ctx_effective_ctx",
+                    "title": "ctx",
+                    "content": "保证能够进入模型调用，不在候选筛选阶段失败。",
+                    "importance": 0.9,
+                }
+            ],
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] != "failed"
+
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        runtime_repository = RuntimeRepository(session)
+        task = task_repository.get_task("task_effective_ctx_not_hard_filter")
+        assert task is not None
+        assert task.current_focus is None or "No viable candidate model" not in (task.current_focus or "")
+        routes = runtime_repository.list_model_route_decisions(task_id="task_effective_ctx_not_hard_filter")
+        assert len(routes) == 1
+        assert routes[0].selected_model == "LongCat-2.0-Preview"
+
+
+def test_runtime_audit_level_lean_writes_compact_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "lean-audit-model",
+                "provider": "lean-audit-provider",
+                "quality": 0.8,
+                "costPer1k": 0.001,
+                "latencyMs": 50,
+                "contextWindow": 1_000_000,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        formal_output = "## 结果\n完成\n\n## 证据\n已写入 lean 审计工件。\n\n## 风险\n无。\n\n## 已知问题\n无。"
+        return {
+            "mode": "live",
+            "provider": "lean-audit-provider",
+            "model": "lean-audit-model",
+            "outputText": formal_output,
+            "finishReason": "stop",
+            "usage": {
+                "inputTokens": 160,
+                "outputTokens": 80,
+                "totalTokens": 240,
+            },
+            "costUsed": 0.0,
+            "error": None,
+            "toolCalls": [],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": formal_output},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 160,
+                    "completion_tokens": 80,
+                    "total_tokens": 240,
+                },
+            },
+            "requestPayload": {
+                "model": "lean-audit-model",
+                "messages": [],
+                "stream": True,
+            },
+            "firstTokenLatencyMs": 50.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -197,6 +424,7 @@ def test_runtime_audit_level_lean_writes_compact_artifacts() -> None:
         json={
             "auditLevel": "lean",
             "currentFocus": "lean-audit",
+            "takeoverProtocol": _single_root_protocol("task_audit_lean"),
             "currentContext": [
                 {
                     "id": "ctx_audit",

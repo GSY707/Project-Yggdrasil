@@ -1,17 +1,13 @@
 from __future__ import annotations
-
 import os
 from pathlib import Path
 from types import SimpleNamespace
-
 import pytest
-
 from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment, local_evaluation_runtime_environment
 import yggdrasil_sdk.evaluation_runtime.scorer as evaluation_scorer
 import yggdrasil_sdk.evaluation_runtime.suite_cases_g4 as suite_cases_g4
 from yggdrasil_sdk import list_evaluation_suite_definitions, run_evaluation_suite
-
-
+from yggdrasil_sdk.contracts import BudgetState
 def test_seed_runtime_task_can_skip_token_cap_for_live_provider_matrix() -> None:
     task = _seed_runtime_task(
         "eval_task_g4_unbounded_token_budget",
@@ -21,8 +17,6 @@ def test_seed_runtime_task_can_skip_token_cap_for_live_provider_matrix() -> None
 
     assert task["budget"]["tokenBudgetTotal"] is None
     assert task["budget"]["costBudgetTotal"] == 5.0
-
-
 def test_g4_multiscene_suite_passes_official_scene_contracts() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -40,8 +34,6 @@ def test_g4_multiscene_suite_passes_official_scene_contracts() -> None:
         "evalcase_g4_research_recovery",
         "evalcase_g4_writing_recovery",
     }
-
-
 def test_g4_multiscene_suite_encodes_single_path_recovery_contracts() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -61,8 +53,6 @@ def test_g4_multiscene_suite_encodes_single_path_recovery_contracts() -> None:
     assert recovery_cases["yggdrasil.app.epic-writing"]["expectedResultStatus"] == "awaiting-approval"
     assert recovery_cases["yggdrasil.app.epic-writing"]["expectedTaskStatus"] == "awaiting-approval"
     assert recovery_cases["yggdrasil.app.epic-writing"]["expectedWorkTreeStatus"] == "awaiting-approval"
-
-
 def test_g4_longform_provider_matrix_suite_focuses_on_one_task() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -79,8 +69,6 @@ def test_g4_longform_provider_matrix_suite_focuses_on_one_task() -> None:
         assert len(case["taskGoal"]) >= 600
         assert len(case["currentContext"]) >= 4
         assert case["workspaceProfile"] == "g4-longform-single-task"
-
-
 def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -92,8 +80,6 @@ def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() ->
     assert all(case.get("allowToolExecution") is True for case in cases)
     assert {case["parityPairKey"] for case in cases} == {"g4-web-research-default-grid-storage"}
     assert {case.get("auditLevel") for case in cases} == {"strict"}
-
-
 def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -103,8 +89,6 @@ def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -
     assert len(cases) == 1
     case = cases[0]
     assert "takeoverProtocol" not in case
-
-
 def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated() -> None:
     start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
         {
@@ -131,8 +115,44 @@ def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated
     assert "takeoverProtocol" not in start_payload
     assert start_payload["allowToolExecution"] is True
     assert start_payload["takeoverPlanConfirmed"] is True
+def test_g4_live_provider_matrix_start_payload_pins_expected_prompt_contract() -> None:
+    start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
+        {
+            "currentFocus": "g4-graduate-ml-longcat2",
+            "currentObjective": "Keep the graduate researcher prompt contract pinned.",
+            "currentContext": [
+                {
+                    "id": "ctx_grad_contract",
+                    "title": "graduate contract",
+                    "content": "Use the graduate researcher prompt profile and seed template.",
+                    "importance": 1.0,
+                }
+            ],
+            "expectedPromptProfileId": "yggdrasil.graduate-researcher.main-agent",
+            "expectedSeedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+        },
+        {"id": "task_grad_contract", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
+        app_id="yggdrasil.app.graduate-researcher",
+        task_type="research",
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+    )
 
+    assert start_payload["promptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert start_payload["seedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
+def test_g4_live_provider_matrix_start_payload_passes_tool_name_policy() -> None:
+    start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
+        {
+            "currentFocus": "g4-graduate-ml-longcat2",
+            "currentObjective": "Keep tool visibility constrained.",
+            "toolNameDenylist": ["mcp.read.*", "mcp.search.*"],
+        },
+        {"id": "task_grad_policy", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
+        app_id="yggdrasil.app.graduate-researcher",
+        task_type="research",
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+    )
 
+    assert start_payload["toolNameDenylist"] == ["mcp.read.*", "mcp.search.*"]
 def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_protocol() -> None:
     explicit_protocol = {
         "id": "takeover_debug_case",
@@ -218,8 +238,20 @@ def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_proto
     assert explicit_protocol["taskId"] == "placeholder-task"
     assert explicit_protocol["workTree"]["taskId"] == "placeholder-task"
     assert start_payload["candidateModels"][0]["provider"] == "longcat"
+def test_g4_preview_request_pins_expected_prompt_contract() -> None:
+    preview_request = suite_cases_g4._g4_preview_request(
+        {
+            "appId": "yggdrasil.app.graduate-researcher",
+            "taskType": "research",
+            "currentFocus": "g4-graduate-ml-longcat2",
+            "currentObjective": "Keep the graduate researcher preview contract pinned.",
+            "expectedPromptProfileId": "yggdrasil.graduate-researcher.main-agent",
+            "expectedSeedTemplateId": "yggdrasil.seed.graduate-researcher.default",
+        }
+    )
 
-
+    assert preview_request["request"]["promptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
+    assert preview_request["request"]["seedTemplateId"] == "yggdrasil.seed.graduate-researcher.default"
 def test_g4_wait_for_target_worker_result_ignores_foreign_payloads() -> None:
     events = iter(
         [
@@ -257,8 +289,6 @@ def test_g4_wait_for_target_worker_result_ignores_foreign_payloads() -> None:
     assert all(str((item.get("payload") or {}).get("taskId") or "") == "task_target" for item in processed_runs)
     assert str((processed.get("payload") or {}).get("taskId") or "") == "task_target"
     assert result_payload["status"] == "awaiting-approval"
-
-
 def test_g4_wait_for_target_worker_result_fails_fast_on_worker_poll_timeout() -> None:
     def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
         del timeout_seconds
@@ -276,8 +306,133 @@ def test_g4_wait_for_target_worker_result_fails_fast_on_worker_poll_timeout() ->
             run_worker_once_fn=_run_worker_once,
             worker_poll_timeout_seconds=0.05,
         )
+def test_g4_budget_state_with_top_up_preserves_used_budget_fields() -> None:
+    updated = suite_cases_g4._g4_budget_state_with_top_up(
+        BudgetState.model_validate(
+            {
+                "tokenBudgetTotal": 1000,
+                "tokenBudgetUsed": 900,
+                "costBudgetTotal": 5.0,
+                "costBudgetUsed": 5.4,
+                "childBudgetMode": "inherit",
+            }
+        ),
+        {},
+    )
 
+    assert updated["tokenBudgetUsed"] == 900
+    assert updated["costBudgetUsed"] == 5.4
+    assert updated["tokenBudgetTotal"] > 1000
+    assert updated["costBudgetTotal"] > 5.4
+    assert updated["childBudgetMode"] == "inherit"
+def test_g4_wait_for_target_worker_result_allows_budget_recovery_callback() -> None:
+    events = iter(
+        [
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {"status": "paused", "snapshot": {"resumeToken": "resume-1"}},
+            },
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {"status": "awaiting-approval"},
+            },
+        ]
+    )
+    recovery_calls: list[str] = []
 
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        assert timeout_seconds == 1
+        return next(events)
+
+    def _recover(**kwargs) -> bool:
+        result_payload = dict(kwargs.get("result_payload") or {})
+        recovery_calls.append(str(result_payload.get("status") or ""))
+        return str(result_payload.get("status") or "") == "paused"
+
+    processed_runs, processed, result_payload = suite_cases_g4._g4_wait_for_target_worker_result(
+        task_id="task_target",
+        expected_result_status="awaiting-approval",
+        max_window_cycles=8,
+        max_worker_wait_seconds=30,
+        run_worker_once_fn=_run_worker_once,
+        recovery_handler_fn=_recover,
+    )
+
+    assert recovery_calls == ["paused", "awaiting-approval"]
+    assert len(processed_runs) == 2
+    assert str((processed.get("payload") or {}).get("taskId") or "") == "task_target"
+    assert result_payload["status"] == "awaiting-approval"
+def test_g4_recover_live_budget_pause_resumes_with_topped_up_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_task = SimpleNamespace(
+        status="paused",
+        current_focus="budget-exhausted: Cost budget exceeded after model invocation.",
+        active_snapshot_id="snap_1",
+        budget=BudgetState.model_validate(
+            {
+                "tokenBudgetTotal": 1000,
+                "tokenBudgetUsed": 950,
+                "costBudgetTotal": 5.0,
+                "costBudgetUsed": 5.4,
+                "childBudgetMode": "inherit",
+            }
+        ),
+        resume_message="continue evaluation",
+        current_objective="finish the live evaluation",
+        goal="finish the live evaluation",
+    )
+
+    class _FakeTaskRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def get_task(self, task_id: str):
+            assert task_id == "task_target"
+            return fake_task
+
+        def get_snapshot(self, snapshot_id: str):
+            assert snapshot_id == "snap_1"
+            return SimpleNamespace(status="restorable", resume_token="resume_1")
+
+    class _FakeScope:
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    class _FakeRuntime:
+        def session_scope(self) -> _FakeScope:
+            return _FakeScope()
+
+    posted: list[tuple[str, dict[str, object]]] = []
+
+    class _FakeClient:
+        def post(self, path: str, json: dict[str, object]):
+            posted.append((path, json))
+            return SimpleNamespace(status_code=202, text="")
+
+    monkeypatch.setattr(suite_cases_g4, "TaskRepository", _FakeTaskRepository)
+    monkeypatch.setattr(suite_cases_g4, "get_persistence_runtime", lambda: _FakeRuntime())
+
+    recovered = suite_cases_g4._g4_recover_live_budget_pause_or_failure(
+        client=_FakeClient(),
+        task_id="task_target",
+        case_payload={},
+        result_payload={"status": "paused"},
+        recovery_state={},
+    )
+
+    assert recovered is True
+    assert len(posted) == 1
+    assert posted[0][0] == "/runtime/tasks/task_target/resume"
+    payload = posted[0][1]
+    assert payload["resumeToken"] == "resume_1"
+    assert payload["budgetState"]["tokenBudgetUsed"] == 950
+    assert payload["budgetState"]["costBudgetUsed"] == 5.4
+    assert payload["budgetState"]["tokenBudgetTotal"] > 1000
+    assert payload["budgetState"]["costBudgetTotal"] > 5.4
 def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_audit() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -314,13 +469,11 @@ def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_aud
         assert "docs/specs/work-tree-protocol-v0.2.md" in paths
         assert "docs/specs/agent-runtime-protocol-v0.2.md" in paths
         assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py" in paths
-        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py" in paths
+        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py" in paths
         assert "tests/test_runtime_p4_foundation.py" in paths
         assert case["acceptanceMinRestartCount"] == 0
         assert case["acceptanceMinWindowIndex"] == 1
         assert case["acceptanceMinCumulativeWindowSpanTokens"] == 0
-
-
 def test_g4_contract_verification_accepts_work_tree_debug_report() -> None:
     response_text = "\n".join(
         [
@@ -382,8 +535,6 @@ def test_g4_contract_verification_accepts_work_tree_debug_report() -> None:
     assert result["enabled"] is True
     assert result["passed"] is True
     assert result["issues"] == []
-
-
 def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_allows_it() -> None:
     previous = os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS")
     os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
@@ -397,8 +548,6 @@ def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_al
             os.environ.pop("YGGDRASIL_ALLOW_PAID_MODELS", None)
         else:
             os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = previous
-
-
 def test_local_evaluation_runtime_environment_keeps_preserved_case_sandboxes_under_persistent_state_root(
     tmp_path,
     monkeypatch,
@@ -414,8 +563,6 @@ def test_local_evaluation_runtime_environment_keeps_preserved_case_sandboxes_und
             sandbox_root = Path(os.environ["YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT"]).resolve()
 
         assert str(sandbox_root).startswith(str((state_root / "state" / "evaluation-sandboxes").resolve()))
-
-
 def test_g4_provider_matrix_metrics_capture_token_and_context_usage() -> None:
     invocation = SimpleNamespace(input_tokens_used=3200, output_tokens_used=400)
     response_payload = {
@@ -453,8 +600,6 @@ def test_g4_provider_matrix_metrics_capture_token_and_context_usage() -> None:
     assert suite_cases_g4._g4_max_context_length_tokens(observations) == 1800
     assert runtime_metrics["restartCount"] == 2
     assert runtime_metrics["effectiveContextWindow"] == 120
-
-
 def test_g4_contract_verification_detects_planning_stub_and_missing_restart_evidence() -> None:
     result = suite_cases_g4._g4_contract_verification_results(
         {
@@ -482,8 +627,6 @@ def test_g4_contract_verification_detects_planning_stub_and_missing_restart_evid
     assert any("restartCount 不足" in issue for issue in result["issues"])
     assert any("windowIndex 不足" in issue for issue in result["issues"])
     assert any("cumulativeWindowSpanTokens 不足" in issue for issue in result["issues"])
-
-
 def test_g4_contract_verification_accepts_release_brief_with_restart_evidence() -> None:
     response_text = "\n".join(
         [
@@ -533,8 +676,145 @@ def test_g4_contract_verification_accepts_release_brief_with_restart_evidence() 
     assert result["enabled"] is True
     assert result["passed"] is True
     assert result["issues"] == []
+def test_g4_contract_verification_rejects_graduate_standard_without_tool_and_asset_evidence() -> None:
+    response_text = """
+## 摘要
+这是一个快速总结。
 
+## 结果
+给出一个结论。
 
+## 证据
+仅基于已有上下文。
+"""
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceMinIndependentSteps": 10,
+            "acceptanceMinToolBackedStepRatio0_1": 0.6,
+            "acceptanceMinMemoryNodeCount": 30,
+            "acceptanceRequireExperimentRecord": True,
+            "acceptanceRequireDisputeList": True,
+            "acceptanceRequireToolCategories": ["web", "compute", "memory"],
+            "acceptanceMinSuccessfulToolExecutions": 6,
+            "acceptanceRequiredAcademicSections": ["摘要", "引言", "相关工作", "方法", "实验", "结论", "参考文献"],
+            "acceptanceMinCitationMarkers": 8,
+        },
+        response_text,
+        {
+            "restartCount": 1,
+            "windowIndex": 2,
+            "cumulativeWindowSpanTokens": 120000,
+        },
+        {},
+        [
+            {
+                "responsePayload": {
+                    "toolExecutions": [
+                        {
+                            "tool": {"name": "text_memory.read_index"},
+                            "success": True,
+                            "result": {"result": {"count": 8}},
+                        }
+                    ]
+                }
+            }
+        ],
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is False
+    assert any("独立步骤数不足" in issue for issue in result["issues"])
+    assert any("工具支撑步骤占比不足" in issue for issue in result["issues"])
+    assert any("记忆节点数不足" in issue for issue in result["issues"])
+    assert any("缺少实验记录集合" in issue for issue in result["issues"])
+    assert any("缺少争议与未决问题清单" in issue for issue in result["issues"])
+    assert any("工具类别覆盖不足" in issue for issue in result["issues"])
+    assert any("成功工具动作不足" in issue for issue in result["issues"])
+    assert any("缺少本科论文关键小节" in issue for issue in result["issues"])
+    assert any("引用标记不足" in issue for issue in result["issues"])
+def test_g4_contract_verification_accepts_graduate_standard_with_undergrad_thesis_evidence() -> None:
+    response_text = """
+## 摘要
+研究目标与主要贡献概述。[1]
+
+## 引言
+问题背景与研究意义。[2]
+
+## 相关工作
+比较现有路线并说明差距。[3]
+
+## 方法
+给出流程与假设。[4]
+
+## 实验
+实验记录：A/B 对照、消融与复现实验。[5]
+
+## 结论
+总结发现与边界。[6]
+
+## 参考文献
+[1] ...
+[2] ...
+[3] ...
+[4] ...
+[5] ...
+[6] ...
+[7] ...
+[8] ...
+
+步骤 1：工具证据 mcp.search.search_text
+步骤 2：工具证据 mcp.python.run_python
+步骤 3：工具证据 text_memory.read_index
+步骤 4：工具证据 mcp.search.fetch_webpage
+步骤 5：工具证据 mcp.execute.run_command
+步骤 6：工具证据 text_memory.update_memory_with_version
+步骤 7：工具证据 mcp.search.search_text
+步骤 8：工具证据 mcp.python.run_python
+步骤 9：工具证据 text_memory.read_node
+步骤 10：工具证据 mcp.search.fetch_webpage
+
+争议与未决问题：记录了评估口径与外推风险。
+"""
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceMinIndependentSteps": 10,
+            "acceptanceMinToolBackedStepRatio0_1": 0.6,
+            "acceptanceMinMemoryNodeCount": 30,
+            "acceptanceRequireExperimentRecord": True,
+            "acceptanceRequireDisputeList": True,
+            "acceptanceRequireToolCategories": ["web", "compute", "memory"],
+            "acceptanceMinSuccessfulToolExecutions": 6,
+            "acceptanceRequiredAcademicSections": ["摘要", "引言", "相关工作", "方法", "实验", "结论", "参考文献"],
+            "acceptanceMinCitationMarkers": 8,
+        },
+        response_text,
+        {
+            "restartCount": 2,
+            "windowIndex": 3,
+            "cumulativeWindowSpanTokens": 220000,
+        },
+        {},
+        [
+            {
+                "responsePayload": {
+                    "toolExecutions": [
+                        {"tool": {"name": "mcp.search.search_text"}, "success": True},
+                        {"tool": {"name": "mcp.python.run_python"}, "success": True},
+                        {"tool": {"name": "text_memory.read_index"}, "success": True, "result": {"result": {"count": 36}}},
+                        {"tool": {"name": "mcp.search.fetch_webpage"}, "success": True},
+                        {"tool": {"name": "mcp.execute.run_command"}, "success": True},
+                        {"tool": {"name": "text_memory.update_memory_with_version"}, "success": True},
+                    ]
+                }
+            }
+        ],
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is True
+    assert result["issues"] == []
 def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() -> None:
     metrics = suite_cases_g4._g4_window_execution_metrics(
         [
@@ -578,8 +858,6 @@ def test_g4_window_execution_metrics_detects_continuity_and_minimal_workset() ->
     assert metrics["retrievalDriftRate0_1"] == 0.0
     assert metrics["prefixCacheReady0_1"] == 1.0
     assert metrics["cacheEvidence0_1"] == 1.0
-
-
 def test_g4_provider_matrix_summary_aggregates_new_metrics() -> None:
     summary = evaluation_scorer._provider_matrix_summary(
         [
@@ -641,8 +919,6 @@ def test_g4_provider_matrix_summary_aggregates_new_metrics() -> None:
     assert provider_summary["avgCumulativeWindowSpanTokens"] == 9600.0
     assert provider_summary["avgCarryForwardLossCount"] == 0.0
     assert provider_summary["avgEffectiveContextWindow"] == 120.0
-
-
 def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -> None:
     from fastapi.testclient import TestClient
 
@@ -692,8 +968,6 @@ def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -
     assert result["queuedWorkItem"]["command"] == "start"
     assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
     assert "failure bubbling semantics" in str(result.get("detail") or "")
-
-
 def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:
     report = suite_cases_g4._g4_restart_stability_report(
         {"restartStabilityTiers": [30, 60, 100]},
@@ -705,8 +979,6 @@ def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:
     assert report["passed"] is True
     assert report["restartSuccessRate0_1"] == 1.0
     assert [item["targetRestarts"] for item in report["tiers"]] == [30, 60, 100]
-
-
 def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> None:
     payload = evaluation_scorer._aggregate_case_metrics(
         [
@@ -754,8 +1026,6 @@ def test_g4_aggregate_case_metrics_emits_real_task_window_parity_summary() -> No
     assert parity["minimalWorksetRatio0_1"] == 0.62
     assert parity["qualityDeltaToLongWindow0_100"] == 2.0
     assert parity["parityPassed0_1"] == 1
-
-
 def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -> None:
     payload = evaluation_scorer._aggregate_case_metrics(
         [
@@ -851,3 +1121,126 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
     assert len(groups) == 2
     assert {item["provider"] for item in groups} == {"longcat", "deepseek_direct"}
     assert all(item["parityPassed0_1"] == 1 for item in groups)
+def test_g4_manual_review_report_single_reviewer_pending_after_auto_pass() -> None:
+    report = suite_cases_g4._g4_manual_review_report(
+        {
+            "acceptanceRequireHumanReview": True,
+            "humanReviewMode": "single-reviewer",
+            "humanReviewersRequired": 1,
+        },
+        {"passed": True},
+    )
+
+    assert report["required"] is True
+    assert report["mode"] == "single-reviewer"
+    assert report["reviewersRequired"] == 1
+    assert report["status"] == "pending-user-review"
+    assert report["decision"] == "pending"
+    assert report["blocking"] is False
+def test_g4_manual_review_report_blocked_when_auto_gate_fails() -> None:
+    report = suite_cases_g4._g4_manual_review_report(
+        {
+            "acceptanceRequireHumanReview": True,
+            "humanReviewMode": "single-reviewer",
+            "humanReviewersRequired": 1,
+        },
+        {"passed": False},
+    )
+
+    assert report["required"] is True
+    assert report["status"] == "blocked-by-auto-gate"
+    assert report["decision"] == "rejected-by-auto-gate"
+def test_g4_contract_verification_rejects_missing_thesis_rubric_artifacts() -> None:
+    response_text = """
+## 摘要
+这是一个初步结果。
+
+## 方法
+我们尝试了一个基础方法。
+
+## 结果
+得到初步结论。
+"""
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceRequiredDeliverables": ["论文", "文献综述", "外文翻译"],
+            "acceptanceMinEvidenceLinks": 3,
+            "acceptanceRequireInnovationStatement": True,
+            "acceptanceRequireProblemSolutionTrace": True,
+            "acceptanceRequireLimitationsAndFutureWork": True,
+            "acceptanceRequireTaskBookProgress": True,
+            "acceptanceRequireForeignTranslation": True,
+            "acceptanceRequireDefenseQAReady": True,
+        },
+        response_text,
+        {
+            "restartCount": 1,
+            "windowIndex": 2,
+            "cumulativeWindowSpanTokens": 120000,
+        },
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is False
+    assert any("缺少关键交付物" in issue for issue in result["issues"])
+    assert any("证据链接数量不足" in issue for issue in result["issues"])
+    assert any("缺少创新性或贡献说明" in issue for issue in result["issues"])
+    assert any("缺少问题分析与解决路径闭环" in issue for issue in result["issues"])
+    assert any("缺少局限性与未来工作说明" in issue for issue in result["issues"])
+    assert any("缺少任务书与进度执行说明" in issue for issue in result["issues"])
+    assert any("缺少外文翻译任务与结果说明" in issue for issue in result["issues"])
+    assert any("缺少答辩问答准备说明" in issue for issue in result["issues"])
+def test_g4_contract_verification_accepts_thesis_rubric_artifacts() -> None:
+    response_text = """
+## 摘要
+本文围绕机器学习训练稳定性给出创新点与贡献。
+
+## 相关工作
+文献综述：系统比较主流路线并给出差异。
+
+## 方法
+问题：泛化不稳定与训练震荡。
+解决：提出分阶段优化与正则化组合，并给出改进路径。
+
+## 实验
+任务书与进度：里程碑 M1/M2/M3 全部完成。
+外文翻译：完成英文论文原文-译文对照。
+
+## 结论
+局限：对小样本任务仍有波动。
+未来工作：扩展到多模态任务与更大规模数据。
+
+## 答辩准备
+答辩问答 Q&A：覆盖方法选择、失败案例与有效性边界。
+
+交付物：论文、文献综述、外文翻译。
+
+证据链接：
+https://arxiv.org/abs/2401.00001
+https://arxiv.org/abs/2402.00002
+https://api.semanticscholar.org/graph/v1/paper/search
+"""
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceRequiredDeliverables": ["论文", "文献综述", "外文翻译"],
+            "acceptanceMinEvidenceLinks": 3,
+            "acceptanceRequireInnovationStatement": True,
+            "acceptanceRequireProblemSolutionTrace": True,
+            "acceptanceRequireLimitationsAndFutureWork": True,
+            "acceptanceRequireTaskBookProgress": True,
+            "acceptanceRequireForeignTranslation": True,
+            "acceptanceRequireDefenseQAReady": True,
+        },
+        response_text,
+        {
+            "restartCount": 1,
+            "windowIndex": 2,
+            "cumulativeWindowSpanTokens": 120000,
+        },
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is True
+    assert result["issues"] == []

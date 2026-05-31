@@ -1,0 +1,65 @@
+apiVersion: yggdrasil.io/v0.1
+kind: ApplicationManifest
+metadata:
+  id: yggdrasil.app.graduate-researcher
+  displayName: Graduate Researcher
+  version: 0.1.0
+  owner: core
+  description: Student-style long-horizon learning application that spends budget on knowledge acquisition and memory-tree consolidation before reporting.
+  defaultLoad: false
+spec:
+  dependencies:
+    modules:
+      - id: task-takeover
+        version: ">=0.1.0 <0.2.0"
+      - id: subagent-runtime
+        version: ">=0.1.0 <0.2.0"
+      - id: mcp-bridge
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-research-deep
+        version: ">=0.1.0 <0.2.0"
+      - id: scene-writing-epic
+        version: ">=0.1.0 <0.2.0"
+      - id: text-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: context-pruning
+        version: ">=0.1.0 <0.2.0"
+      - id: relation-discovery
+        version: ">=0.1.0 <0.2.0"
+      - id: memory-organizer
+        version: ">=0.1.0 <0.2.0"
+      - id: multimodal-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: shared-memory
+        version: ">=0.1.0 <0.2.0"
+      - id: pause-resume
+        version: ">=0.1.0 <0.2.0"
+  prompting:
+    defaultPromptProfileId: yggdrasil.graduate-researcher.main-agent
+    subagentPromptProfileId: yggdrasil.subagent
+    defaultSeedTemplateId: yggdrasil.seed.graduate-researcher.default
+    profileFiles:
+      - prompt-profiles/main-agent.yaml
+    seedTemplateFiles:
+      - scenes/generic-default.yaml
+    capabilityModules:
+      - task-takeover
+      - subagent-runtime
+      - mcp-bridge
+      - relation-discovery
+      - memory-organizer
+      - multimodal-memory
+      - shared-memory
+      - pause-resume
+    sceneModules:
+      - scene-research-deep
+      - scene-writing-epic
+  memory:
+    namespace: yggdrasil.app.graduate-researcher
+    assetFiles:
+      - memory/core-learning-principles.yaml
+  config:
+    defaultsRef: config/defaults.json
+  frontend:
+    entryRoute: /applications/yggdrasil.app.graduate-researcher
+    dashboardRef: web/dashboard.json

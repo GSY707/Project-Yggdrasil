@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 from copy import deepcopy
 from typing import Any
-
 from ._common import *  # noqa: F403,F401
 from ..contracts import (
     ExternalRef,
@@ -19,8 +17,6 @@ from ..contracts import (
     WorkTreeProtocol,
 )
 from ..support import read_json
-
-
 _WORK_TREE_PHASE_MAP = {
     "objective": "planning",
     "constraints": "planning",
@@ -29,14 +25,11 @@ _WORK_TREE_PHASE_MAP = {
     "verify": "verification",
     "deliver": "delivery",
 }
-
 _TAKEOVER_CONFIRMATION_KEYS: tuple[str, ...] = (
     "takeoverPlanConfirmed",
     "planConfirmed",
     "confirmPlan",
 )
-
-
 def _work_tree_status(protocol_status: str) -> str:
     if protocol_status == "completed":
         return "completed"
@@ -45,8 +38,6 @@ def _work_tree_status(protocol_status: str) -> str:
     if protocol_status == "executing":
         return "active"
     return "planned"
-
-
 def _work_tree_from_protocol_parts(
     *,
     task_id: str,
@@ -112,12 +103,8 @@ def _work_tree_from_protocol_parts(
         recoveryAnchor=current_node.recovery_anchor if current_node is not None else None,
         entropyBudgetRemaining=entropy_budget_remaining,
     )
-
-
 def _work_tree_node_index(work_tree: WorkTreeProtocol) -> dict[str, WorkTreeNode]:
     return {node.id: node for node in work_tree.nodes}
-
-
 def _work_tree_active_path_node_ids(work_tree: WorkTreeProtocol, *, current_node_id: str | None = None) -> list[str]:
     node_by_id = _work_tree_node_index(work_tree)
     node_id = current_node_id or work_tree.current_node_id
@@ -131,8 +118,6 @@ def _work_tree_active_path_node_ids(work_tree: WorkTreeProtocol, *, current_node
         visited.add(cursor.id)
         cursor = node_by_id.get(cursor.parent_node_id) if cursor.parent_node_id is not None else None
     return list(reversed(path))
-
-
 def _protocol_status_from_work_tree_status(work_tree_status: str, current_status: str) -> str:
     if work_tree_status == "completed":
         return "completed"
@@ -145,15 +130,11 @@ def _protocol_status_from_work_tree_status(work_tree_status: str, current_status
     if current_status == "prepared":
         return "prepared"
     return "executing"
-
-
 def is_takeover_plan_confirmed(request: dict[str, Any]) -> bool:
     for key in _TAKEOVER_CONFIRMATION_KEYS:
         if key in request and bool(request.get(key)):
             return True
     return False
-
-
 def enforce_takeover_confirmation_gate(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -183,8 +164,6 @@ def enforce_takeover_confirmation_gate(
             "metrics": TaskTakeoverMetrics.model_validate(metrics_payload),
         }
     )
-
-
 def _current_work_tree_node(protocol: TaskTakeoverProtocol | None) -> WorkTreeNode | None:
     if protocol is None or protocol.work_tree is None:
         return None
@@ -194,8 +173,6 @@ def _current_work_tree_node(protocol: TaskTakeoverProtocol | None) -> WorkTreeNo
         if candidate is not None:
             return candidate
     return _fallback_work_tree_node(protocol.work_tree.nodes)
-
-
 def _work_tree_focus_label(protocol: TaskTakeoverProtocol | None) -> str:
     current_node = _current_work_tree_node(protocol)
     if current_node is None:
@@ -206,8 +183,6 @@ def _work_tree_focus_label(protocol: TaskTakeoverProtocol | None) -> str:
         return normalize_excerpt(f"等待批准: {current_node.title}", 96) or "awaiting-approval"
     local_goal = normalize_excerpt(current_node.local_goal or current_node.node_text or current_node.title, 96)
     return local_goal or current_node.title or current_node.id
-
-
 def _parent_orchestration_focus_label(*, parent_node: WorkTreeNode, preferred_child: WorkTreeNode | None) -> str:
     if preferred_child is None:
         return normalize_excerpt(
@@ -219,8 +194,6 @@ def _parent_orchestration_focus_label(*, parent_node: WorkTreeNode, preferred_ch
         f"Parent orchestration required: prioritize child {preferred_child.id} ({child_label})",
         120,
     ) or f"parent-orchestration-required:{preferred_child.id}"
-
-
 def _coerce_work_context_stack(candidate: WorkContextStack | dict[str, Any] | None) -> WorkContextStack | None:
     if candidate is None:
         return None
@@ -230,8 +203,6 @@ def _coerce_work_context_stack(candidate: WorkContextStack | dict[str, Any] | No
         return WorkContextStack.model_validate(candidate)
     except Exception:
         return None
-
-
 def normalize_takeover_runtime_state(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -335,8 +306,6 @@ def normalize_takeover_runtime_state(
         }
     )
     return normalized_protocol, normalized_stack
-
-
 def sync_takeover_runtime_state(
     request: dict[str, Any],
     root_mount: dict[str, Any] | None,
@@ -403,8 +372,6 @@ def sync_takeover_runtime_state(
     request["taskRuntimeState"] = task_runtime_state.model_dump(by_alias=True, mode="json")
 
     return normalized_protocol, normalized_stack
-
-
 def bootstrap_takeover_state_for_work_node(
     *,
     task_id: str,
@@ -496,8 +463,6 @@ def bootstrap_takeover_state_for_work_node(
         cursor_state=normalize_excerpt(f"await-child:{work_tree_node_id}", 96),
     )
     return normalized_protocol, normalized_stack
-
-
 def merge_child_takeover_completion_into_parent(
     parent_protocol: TaskTakeoverProtocol | None,
     *,
@@ -599,8 +564,6 @@ def merge_child_takeover_completion_into_parent(
             cursor_state=normalize_excerpt(f"child-completion:{merged_summary}", 96),
         )
     return merged_protocol, normalized_stack
-
-
 def update_cursor_state(
     work_context_stack: WorkContextStack | dict[str, Any],
     *,
@@ -621,8 +584,6 @@ def update_cursor_state(
             "updatedAt": utc_now(),
         }
     )
-
-
 def append_child_completion_summary(
     work_context_stack: WorkContextStack | dict[str, Any],
     *,
@@ -650,8 +611,6 @@ def append_child_completion_summary(
             "updatedAt": utc_now(),
         }
     )
-
-
 def push_work_context_frame(
     work_context_stack: WorkContextStack | dict[str, Any],
     *,
@@ -684,8 +643,6 @@ def push_work_context_frame(
             "updatedAt": utc_now(),
         }
     )
-
-
 def pop_work_context_frame(
     work_context_stack: WorkContextStack | dict[str, Any],
     *,
@@ -717,8 +674,6 @@ def pop_work_context_frame(
             "updatedAt": utc_now(),
         }
     )
-
-
 def list_sibling_work_nodes(protocol: TaskTakeoverProtocol | None, *, node_id: str | None = None) -> list[WorkTreeNode]:
     if protocol is None or protocol.work_tree is None:
         return []
@@ -735,8 +690,6 @@ def list_sibling_work_nodes(protocol: TaskTakeoverProtocol | None, *, node_id: s
         return []
     ordered_child_ids = parent_node.child_node_ids or [node.id for node in work_tree.nodes if node.parent_node_id == parent_node.id]
     return [node_by_id[item] for item in ordered_child_ids if item in node_by_id and item != target_node.id]
-
-
 def pick_next_sibling_work_node(protocol: TaskTakeoverProtocol | None, *, node_id: str | None = None) -> WorkTreeNode | None:
     for preferred_status in ("in-progress", "pending", "blocked"):
         candidate = next(
@@ -746,8 +699,6 @@ def pick_next_sibling_work_node(protocol: TaskTakeoverProtocol | None, *, node_i
         if candidate is not None:
             return candidate
     return None
-
-
 def switch_current_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -800,8 +751,6 @@ def switch_current_work_node(
     if normalized_protocol is None or normalized_stack is None:
         raise ValueError("Failed to normalize work-tree runtime state.")
     return normalized_protocol, normalized_stack
-
-
 def bubble_to_parent_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -822,8 +771,6 @@ def bubble_to_parent_work_node(
         work_context_stack=work_context_stack,
         cursor_state=cursor_state,
     )
-
-
 def create_child_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -902,8 +849,6 @@ def create_child_work_node(
     if normalized_protocol is None or normalized_stack is None:
         raise ValueError("Failed to normalize new child node runtime state.")
     return normalized_protocol, normalized_stack, new_node
-
-
 def _node_children_terminal(work_tree: WorkTreeProtocol, node_id: str) -> bool:
     node_by_id = _work_tree_node_index(work_tree)
     node = node_by_id.get(node_id)
@@ -917,8 +862,6 @@ def _node_children_terminal(work_tree: WorkTreeProtocol, node_id: str) -> bool:
         for child_id in child_ids
         if child_id in node_by_id
     )
-
-
 def complete_current_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -1045,8 +988,6 @@ def complete_current_work_node(
         "currentFocus": current_focus,
     }
     return normalized_protocol, normalized_stack, result
-
-
 def fail_current_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -1134,8 +1075,6 @@ def fail_current_work_node(
         "nextNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
         "currentFocus": _work_tree_focus_label(normalized_protocol),
     }
-
-
 def _check_delivery_hard_gates(protocol: TaskTakeoverProtocol) -> bool:
     """检查 hard gate 类型的 verification item 是否全部 passed。"""
     for item in protocol.verification_items:
@@ -1150,8 +1089,6 @@ def _check_delivery_hard_gates(protocol: TaskTakeoverProtocol) -> bool:
         if gate_mode == "hard" and status != "passed":
             return False
     return True
-
-
 def _blocked_gate_labels(protocol: TaskTakeoverProtocol) -> list[str]:
     """返回所有 blocked 的 hard gate 的 label。"""
     labels: list[str] = []
@@ -1163,8 +1100,6 @@ def _blocked_gate_labels(protocol: TaskTakeoverProtocol) -> list[str]:
             if item.gate_mode == "hard" and item.status != "passed":
                 labels.append(item.label)
     return labels
-
-
 def advance_takeover_after_delivery(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -1248,8 +1183,6 @@ def advance_takeover_after_delivery(
         work_context_stack=work_context_stack,
         evidence_refs=evidence_refs,
     )
-
-
 def format_parent_aggregation_prompt(
     child_summaries: list[WorkContextChildCompletionSummary],
 ) -> str:
@@ -1263,8 +1196,6 @@ def format_parent_aggregation_prompt(
         if cs.evidence_refs:
             lines.append(f"**Evidence**: {len(cs.evidence_refs)} ref(s)")
     return "\n".join(lines)
-
-
 def build_takeover_continuation_request(
     base_request: dict[str, Any],
     *,
@@ -1280,6 +1211,10 @@ def build_takeover_continuation_request(
         "spaceId",
         "branchId",
         "taskType",
+        "promptProfileId",
+        "seedTemplateId",
+        "expectedPromptProfileId",
+        "expectedSeedTemplateId",
         "currentObjective",
         "taskObjective",
         "responseRequirements",
@@ -1351,8 +1286,6 @@ def build_takeover_continuation_request(
     continuation["taskRuntimeState"] = task_runtime_state
 
     return continuation
-
-
 def approve_takeover_completion(protocol: TaskTakeoverProtocol | None) -> TaskTakeoverProtocol | None:
     if protocol is None or protocol.work_tree is None:
         return protocol
@@ -1375,8 +1308,6 @@ def approve_takeover_completion(protocol: TaskTakeoverProtocol | None) -> TaskTa
             "workTree": approved_work_tree.model_dump(by_alias=True, mode="json"),
         }
     )
-
-
 def reopen_takeover_work_node_for_revision(
     protocol: TaskTakeoverProtocol,
     *,
@@ -1440,15 +1371,11 @@ def reopen_takeover_work_node_for_revision(
         cursor_state=normalize_excerpt(revision_reason or "revision-requested", 96),
     )
     return normalized_protocol, normalized_stack
-
-
 def persist_stack_snapshot(stack: WorkContextStack, *, task_id: str, run_id: str) -> ExternalRef:
     workspace_root = resolve_workspace_root()
     path = ensure_state_subdir("runtime/work-context-stack", workspace_root) / f"{task_id}-{run_id}.json"
     write_json(path, stack.model_dump(by_alias=True, mode="json"))
     return ExternalRef(type="file", locator=relative_workspace_path(path, workspace_root))
-
-
 def load_persisted_work_context_stack(task_id: str, run_id: str) -> WorkContextStack | None:
     workspace_root = resolve_workspace_root()
     path = ensure_state_subdir("runtime/work-context-stack", workspace_root) / f"{task_id}-{run_id}.json"
@@ -1461,8 +1388,6 @@ def load_persisted_work_context_stack(task_id: str, run_id: str) -> WorkContextS
         return WorkContextStack.model_validate(payload)
     except Exception:
         return None
-
-
 def load_persisted_task_takeover_protocol(task_id: str, run_id: str) -> TaskTakeoverProtocol | None:
     workspace_root = resolve_workspace_root()
     path = ensure_state_subdir("runtime/takeover", workspace_root) / f"{task_id}-{run_id}.json"
@@ -1475,8 +1400,6 @@ def load_persisted_task_takeover_protocol(task_id: str, run_id: str) -> TaskTake
         return TaskTakeoverProtocol.model_validate(payload)
     except Exception:
         return None
-
-
 def _task_payload(task: Any) -> dict[str, Any]:
     return {
         "id": str(getattr(task, "id", "unknown")),
@@ -1485,8 +1408,6 @@ def _task_payload(task: Any) -> dict[str, Any]:
         "currentObjective": str(getattr(task, "current_objective", "") or ""),
         "currentFocus": str(getattr(task, "current_focus", "") or ""),
     }
-
-
 def _trace_entries(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -1497,8 +1418,6 @@ def _trace_entries(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for item in results
     ]
-
-
 def _first_successful_result(results: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
     applied_modules: list[str] = []
     for item in results:
@@ -1512,8 +1431,6 @@ def _first_successful_result(results: list[dict[str, Any]]) -> tuple[dict[str, A
             applied_modules.append(module_id)
         return result, applied_modules
     return {}, applied_modules
-
-
 def _update_plan_statuses(
     plan: list[Any],
     *,
@@ -1536,8 +1453,6 @@ def _update_plan_statuses(
         normalized["status"] = status
         updated.append(normalized)
     return updated
-
-
 def build_task_takeover_protocol(
     *,
     task: Any,
@@ -1631,8 +1546,6 @@ def build_task_takeover_protocol(
                 )
     protocol = protocol.model_copy(update={"work_tree": generated_work_tree})
     return protocol
-
-
 def finalize_task_takeover_protocol(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -1715,15 +1628,11 @@ def finalize_task_takeover_protocol(
             "hookTrace": [*protocol.hook_trace, *_trace_entries(format_results), *_trace_entries(verify_results)],
         }
     )
-
-
 def _work_tree_delivery_summary(text: str, *, fallback: str) -> str:
     normalized = normalize_excerpt(str(text or "").strip(), 240)
     if normalized:
         return normalized
     return normalize_excerpt(str(fallback or "Delivery completed."), 240)
-
-
 def finalize_takeover_work_tree_delivery(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -1739,15 +1648,11 @@ def finalize_takeover_work_tree_delivery(
         work_context_stack=None,
     )
     return updated_protocol
-
-
 def persist_task_takeover_protocol(protocol: TaskTakeoverProtocol, *, task_id: str, run_id: str) -> ExternalRef:
     workspace_root = resolve_workspace_root()
     path = ensure_state_subdir("runtime/takeover", workspace_root) / f"{task_id}-{run_id}.json"
     write_json(path, protocol.model_dump(by_alias=True, mode="json"))
     return ExternalRef(type="file", locator=relative_workspace_path(path, workspace_root))
-
-
 def summarize_task_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     lines = [
         f"Takeover objective: {protocol.objective_summary}",
@@ -1760,8 +1665,6 @@ def summarize_task_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     if protocol.applied_modules:
         lines.append("Applied takeover modules: " + ", ".join(protocol.applied_modules))
     return "\n".join(lines)
-
-
 def _fallback_work_tree_node(nodes: list[WorkTreeNode]) -> WorkTreeNode | None:
     if not nodes:
         return None
@@ -1780,8 +1683,6 @@ def _fallback_work_tree_node(nodes: list[WorkTreeNode]) -> WorkTreeNode | None:
     if candidate is not None:
         return candidate
     return executable_nodes[-1]
-
-
 def restore_takeover_work_tree_pointer(candidate: dict[str, Any]) -> dict[str, Any]:
     """Restore a durable work-tree pointer for resume request state.
 
@@ -1823,6 +1724,4 @@ def restore_takeover_work_tree_pointer(candidate: dict[str, Any]) -> dict[str, A
     }
     repaired_protocol = TaskTakeoverProtocol.model_validate(repaired_payload)
     return repaired_protocol.model_dump(by_alias=True, mode="json")
-
-
 __all__ = [name for name in globals() if not name.startswith("__")]

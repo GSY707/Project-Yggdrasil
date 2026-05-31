@@ -2,7 +2,6 @@ import json
 import logging
 import re
 from hashlib import sha1
-
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
 from .snapshot import *  # noqa: F403,F401
@@ -12,9 +11,7 @@ from ..contracts import RuntimeMetricsSnapshot
 from ..llm_runtime import SafeShutdownInterrupt
 from .shutdown_control import is_shutdown_requested as _is_shutdown_requested
 from .snapshot import save_pending_tool_calls_snapshot
-
 _logger = logging.getLogger(__name__)
-
 _MEMORY_WRITE_TAG_PATTERN = re.compile(
     r"<memory-write(?P<attrs>[^>]*)>(?P<content>.*?)</memory-write>",
     re.IGNORECASE | re.DOTALL,
@@ -27,13 +24,9 @@ _MEMORY_WRITE_ATTR_PATTERN = re.compile(
     r"(?P<name>[A-Za-z][A-Za-z0-9_-]*)\s*=\s*(?P<quote>[\"'])(?P<value>.*?)(?P=quote)",
     re.DOTALL,
 )
-
-
 def _estimate_context_text_tokens(text: str) -> int:
     compact = " ".join(str(text).split())
     return max(1, len(compact) // 4) if compact else 0
-
-
 def _estimate_context_item_tokens(item: dict[str, Any]) -> int:
     parts = [
         str(item.get(key) or "")
@@ -41,12 +34,8 @@ def _estimate_context_item_tokens(item: dict[str, Any]) -> int:
         if item.get(key)
     ]
     return sum(_estimate_context_text_tokens(part) for part in parts)
-
-
 def _estimate_context_tokens(items: list[dict[str, Any]]) -> int:
     return sum(_estimate_context_item_tokens(item) for item in items if isinstance(item, dict))
-
-
 def _append_context_length_observation(
     observations: list[dict[str, Any]],
     *,
@@ -64,22 +53,16 @@ def _append_context_length_observation(
     if trigger:
         observation["trigger"] = trigger
     observations.append(observation)
-
-
 def _int_metric(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
         return int(default)
-
-
 def _float_metric(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
-
-
 def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
     request_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
     effective_context_window = max(
@@ -140,8 +123,6 @@ def _runtime_metrics(task, request: dict[str, Any]) -> dict[str, Any]:
         "windowSpanTokens": max(_int_metric(request_metrics.get("windowSpanTokens"), 0), 0),
         "maxUncompressedTailBeforeDecompress": max_uncompressed_tail_before_decompress,
     }
-
-
 def _build_runtime_metrics_snapshot(
     *,
     runtime_metrics: dict[str, Any],
@@ -179,8 +160,6 @@ def _build_runtime_metrics_snapshot(
         toolRoundCount=tool_round_count,
         toolFailuresCount=tool_failures_count,
     )
-
-
 def _persist_runtime_metrics_artifact(
     session,
     *,
@@ -215,8 +194,6 @@ def _persist_runtime_metrics_artifact(
         "snapshot": metrics_snapshot.model_dump(by_alias=True, mode="json"),
         "outboxRecord": event.model_dump(by_alias=True, mode="json"),
     }
-
-
 def _window_restart_trigger(request: dict[str, Any], runtime_metrics: dict[str, Any], effective_context: list[dict[str, Any]]) -> tuple[str | None, int]:
     window_span_tokens = _estimate_context_tokens(effective_context)
     if _int_metric(runtime_metrics.get("forcedWindowRestartBudget"), 0) > 0 and effective_context:
@@ -228,8 +205,6 @@ def _window_restart_trigger(request: dict[str, Any], runtime_metrics: dict[str, 
     if effective_context_window > 0 and restart_threshold > 0 and window_span_tokens >= restart_threshold:
         return "effectiveContextWindow", window_span_tokens
     return None, window_span_tokens
-
-
 def _dedupe_memory_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -243,8 +218,6 @@ def _dedupe_memory_records(records: list[dict[str, Any]]) -> list[dict[str, Any]
         seen_ids.add(dedupe_key)
         deduped.append(record)
     return deduped
-
-
 def _coerce_takeover_protocol(candidate: Any) -> TaskTakeoverProtocol | None:
     if isinstance(candidate, TaskTakeoverProtocol):
         return candidate
@@ -254,17 +227,11 @@ def _coerce_takeover_protocol(candidate: Any) -> TaskTakeoverProtocol | None:
         return TaskTakeoverProtocol.model_validate(candidate)
     except Exception:
         return None
-
-
 def _work_tree_node_id_from_request(request: dict[str, Any]) -> str | None:
     return _runtime_pointer_fields(request).get("currentNodeId")
-
-
 def _assistant_text_summary(text: str, limit: int = 240) -> str | None:
     normalized = normalize_excerpt(" ".join(str(text).split()), limit)
     return normalized or None
-
-
 def _model_invocation_output_labels(request: dict[str, Any], memory_tag_write_result: dict[str, Any]) -> list[str]:
     labels: list[str] = []
     for item in memory_tag_write_result.get("applied") or []:
@@ -283,8 +250,6 @@ def _model_invocation_output_labels(request: dict[str, Any], memory_tag_write_re
         if normalized and normalized not in deduped:
             deduped.append(normalized)
     return deduped
-
-
 def _stable_digest(value: Any) -> str | None:
     if value is None:
         return None
@@ -299,8 +264,6 @@ def _stable_digest(value: Any) -> str | None:
     if serialized in {'""', "[]", "{}"}:
         return None
     return sha1(serialized.encode("utf-8")).hexdigest()[:16]
-
-
 def _normalize_entity_ids(items: list[Any] | None) -> list[str]:
     normalized_ids: list[str] = []
     for item in items or []:
@@ -313,8 +276,6 @@ def _normalize_entity_ids(items: list[Any] | None) -> list[str]:
         if normalized and normalized not in normalized_ids:
             normalized_ids.append(normalized)
     return normalized_ids
-
-
 def _looks_like_planning_stub(text: str) -> bool:
     normalized = " ".join(str(text).split()).strip().lower()
     if not normalized:
@@ -337,8 +298,6 @@ def _looks_like_planning_stub(text: str) -> bool:
     ]
     has_delivery_structure = any(marker in normalized for marker in delivery_markers)
     return marker_hits >= 2 and not has_delivery_structure
-
-
 def _window_execution_titles_preview(current_context: list[dict[str, Any]], limit: int = 5) -> list[str]:
     titles: list[str] = []
     for item in current_context:
@@ -350,8 +309,6 @@ def _window_execution_titles_preview(current_context: list[dict[str, Any]], limi
         if len(titles) >= limit:
             break
     return titles
-
-
 def _window_execution_memory_state(request: dict[str, Any]) -> dict[str, Any]:
     memory_retrieval_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else {}
     matched_node_ids = _normalize_entity_ids(memory_retrieval_state.get("matchedNodeRefs") if isinstance(memory_retrieval_state.get("matchedNodeRefs"), list) else [])
@@ -379,8 +336,6 @@ def _window_execution_memory_state(request: dict[str, Any]) -> dict[str, Any]:
         "windowIndex": _int_metric(memory_retrieval_state.get("windowIndex"), 0) or None,
         "retrievalFingerprint": retrieval_fingerprint,
     }
-
-
 def _window_execution_cache_summary(llm_result: dict[str, Any] | None) -> dict[str, Any]:
     usage = (llm_result or {}).get("usage") if isinstance((llm_result or {}).get("usage"), dict) else {}
     input_tokens = max(_int_metric(usage.get("inputTokens"), 0), 0)
@@ -398,8 +353,6 @@ def _window_execution_cache_summary(llm_result: dict[str, Any] | None) -> dict[s
         "cacheHitRatio0_1": round(cache_hit_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
         "cacheWriteRatio0_1": round(cache_write_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
     }
-
-
 def _coerce_work_context_stack_payload(candidate: Any) -> dict[str, Any] | None:
     if isinstance(candidate, WorkContextStack):
         return candidate.model_dump(by_alias=True, mode="json")
@@ -409,8 +362,6 @@ def _coerce_work_context_stack_payload(candidate: Any) -> dict[str, Any] | None:
         return WorkContextStack.model_validate(candidate).model_dump(by_alias=True, mode="json")
     except Exception:
         return candidate
-
-
 def _window_execution_work_tree_debug(
     work_context_stack: dict[str, Any] | None,
     *,
@@ -505,8 +456,6 @@ def _window_execution_work_tree_debug(
         "recentChildCompletionSummaries": recent_child_completion_summaries[-6:],
         "framePath": frame_path,
     }
-
-
 def _build_window_execution_record(
     *,
     task,
@@ -637,8 +586,6 @@ def _build_window_execution_record(
         "createdExecutionNodeId": created_node_id,
         "stateFingerprint": state_fingerprint,
     }
-
-
 def _persist_window_execution_artifact(
     session,
     *,
@@ -673,8 +620,6 @@ def _persist_window_execution_artifact(
         "record": record,
         "outboxRecord": event.model_dump(by_alias=True, mode="json"),
     }
-
-
 def _context_parent_for_root_branch(root_mount: dict[str, Any], execution_root_id: str, root_branch: str) -> str | None:
     if root_branch == "identity":
         refs = root_mount.get("identityRefs") or []
@@ -683,8 +628,6 @@ def _context_parent_for_root_branch(root_mount: dict[str, Any], execution_root_i
         return execution_root_id
     refs = root_mount.get("contextRefs") or []
     return str(refs[0].get("id")) if refs else None
-
-
 def _target_parent_for_root_branch(
     task,
     *,
@@ -696,8 +639,6 @@ def _target_parent_for_root_branch(
     if target_branch_id == task.branch_id:
         return _context_parent_for_root_branch(root_mount, execution_root_id, root_branch)
     return str(new_id("node", task.project_id, target_branch_id, root_branch, stable=True))
-
-
 def _materialize_runtime_context_items(
     session,
     *,
@@ -792,8 +733,6 @@ def _materialize_runtime_context_items(
         materialized_node_ids.append(node_id)
 
     return materialized_node_ids
-
-
 def _context_item_from_retrieved_node(node_payload: dict[str, Any]) -> dict[str, Any]:
     ref = node_payload.get("ref") if isinstance(node_payload.get("ref"), dict) else None
     content_lines = [str(node_payload.get("content") or "")]
@@ -810,8 +749,6 @@ def _context_item_from_retrieved_node(node_payload: dict[str, Any]) -> dict[str,
         "content": "\n".join(part for part in content_lines if part).strip(),
         "rootBranch": str(node_payload.get("rootBranch") or "context"),
     }
-
-
 def _memory_retrieval_token_budget(request: dict[str, Any]) -> int | None:
     explicit_budget = max(_int_metric(request.get("maxRetainedTokens"), 0), 0)
     if explicit_budget > 0:
@@ -836,8 +773,6 @@ def _memory_retrieval_token_budget(request: dict[str, Any]) -> int | None:
     if effective_context_window > 0:
         return max(32, effective_context_window - 8)
     return None
-
-
 def _trim_context_items_to_token_budget(context_items: list[dict[str, Any]], token_budget: int | None) -> list[dict[str, Any]]:
     if token_budget is None or token_budget <= 0 or not context_items:
         return context_items
@@ -857,8 +792,6 @@ def _trim_context_items_to_token_budget(context_items: list[dict[str, Any]], tok
         trimmed_items[0] = summary_item
 
     return trimmed_items
-
-
 def _max_uncompressed_tail_before_decompress(request: dict[str, Any] | None) -> int:
     if not isinstance(request, dict):
         return 1
@@ -870,8 +803,6 @@ def _max_uncompressed_tail_before_decompress(request: dict[str, Any] | None) -> 
         ),
         0,
     )
-
-
 def _count_uncompressed_tail_segments(current_context: list[dict[str, Any]]) -> int | None:
     last_compressed_index = None
     for index, item in enumerate(current_context):
@@ -890,8 +821,6 @@ def _count_uncompressed_tail_segments(current_context: list[dict[str, Any]]) -> 
             continue
         tail_count += 1
     return tail_count
-
-
 def _should_trim_retrieved_context(current_context: list[dict[str, Any]], *, request: dict[str, Any] | None = None) -> bool:
     has_compressed_segment = any(
         str(item.get("kind") or "") == "carry-forward-package"
@@ -907,25 +836,17 @@ def _should_trim_retrieved_context(current_context: list[dict[str, Any]], *, req
     if tail_count is not None and 0 < tail_count <= max_tail:
         return False
     return True
-
-
 def _parse_memory_write_tag_attributes(attribute_text: str) -> dict[str, str]:
     attributes: dict[str, str] = {}
     for match in _MEMORY_WRITE_ATTR_PATTERN.finditer(attribute_text):
         attributes[str(match.group("name") or "").strip().lower()] = str(match.group("value") or "").strip()
     return attributes
-
-
 def _normalize_memory_tag_root_branch(value: str | None) -> str:
     candidate = str(value or "context").strip().lower()
     return candidate if candidate in {"identity", "context", "execution"} else "context"
-
-
 def _normalize_memory_tag_action(value: str | None, *, has_node_id: bool) -> str:
     candidate = str(value or ("append" if has_node_id else "create")).strip().lower()
     return candidate if candidate in {"create", "append", "replace"} else ("append" if has_node_id else "create")
-
-
 def _extract_assistant_memory_write_tags(assistant_text: str, *, enabled: bool) -> dict[str, Any]:
     if not enabled:
         return {
@@ -997,8 +918,6 @@ def _extract_assistant_memory_write_tags(assistant_text: str, *, enabled: bool) 
         "blocked": blocked,
         "detectedCount": len(parsed_writes) + len(blocked),
     }
-
-
 def _split_structured_tag_values(value: str | None, *, fallback: list[str] | None = None) -> list[str]:
     parts = [
         normalize_excerpt(str(item).strip(), 120)
@@ -1009,8 +928,6 @@ def _split_structured_tag_values(value: str | None, *, fallback: list[str] | Non
     if normalized:
         return normalized
     return [item for item in (fallback or []) if str(item).strip()]
-
-
 def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) -> dict[str, Any]:
     if not enabled:
         return {
@@ -1082,8 +999,6 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
         "blocked": blocked,
         "detectedCount": len(parsed_actions) + len(blocked),
     }
-
-
 def _apply_parsed_assistant_work_tree_actions(
     *,
     task_id: str,
@@ -1215,8 +1130,6 @@ def _apply_parsed_assistant_work_tree_actions(
         "blocked": blocked,
         **transition,
     }
-
-
 def _assistant_memory_write_annotation(
     *,
     task,
@@ -1237,8 +1150,6 @@ def _assistant_memory_write_annotation(
         "confidence": 0.95,
         "createdBy": {"type": "module", "id": "runtime-kernel"},
     }
-
-
 def _apply_memory_write_annotations(
     node_repository: NodeRepository,
     *,
@@ -1264,8 +1175,6 @@ def _apply_memory_write_annotations(
                 "createdBy": annotation.get("createdBy") or {"type": "module", "id": "runtime-kernel"},
             },
         )
-
-
 def _apply_assistant_memory_write_tags(
     session,
     *,
@@ -1547,8 +1456,4 @@ def _apply_assistant_memory_write_tags(
         "blocked": blocked,
         "events": events,
     }
-
-
 __all__ = [name for name in globals() if not name.startswith("__")]
-
-

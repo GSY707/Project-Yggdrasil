@@ -1,10 +1,8 @@
 from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
 from typing import Any, Iterable
-
 from .persistence import PromptAssetRepository, RuntimeRepository, TaskRepository, get_persistence_runtime
 from .persistence.orm import AgentRunORM, ModelInvocationORM
 from .persistence.repositories import WorkspaceBootstrapRepository
@@ -20,8 +18,6 @@ from .support import (
     utc_now,
     write_json,
 )
-
-
 _ALLOWED_GRANULARITIES = {"all", "run", "window", "turn", "tool", "artifact", "source"}
 _GRANULARITY_SECTIONS = {
     "run": {"task", "agentRun", "summary", "coverage", "sources"},
@@ -31,8 +27,6 @@ _GRANULARITY_SECTIONS = {
     "artifact": {"artifacts"},
     "source": {"sources"},
 }
-
-
 def parse_llm_work_granularities(value: str | Iterable[str] | None) -> set[str]:
     if value is None:
         return {"all"}
@@ -51,8 +45,6 @@ def parse_llm_work_granularities(value: str | Iterable[str] | None) -> set[str]:
     if "all" in granularities:
         return {"all"}
     return granularities
-
-
 def filter_llm_work_analysis_payload(
     payload: dict[str, Any],
     granularities: str | Iterable[str] | None = None,
@@ -82,8 +74,6 @@ def filter_llm_work_analysis_payload(
         if section in sections and section in payload:
             filtered[section] = payload[section]
     return filtered
-
-
 def analyze_llm_work_run(
     *,
     task_id: str | None = None,
@@ -118,8 +108,6 @@ def analyze_llm_work_run(
     if persist:
         payload = _persist_llm_work_analysis_payload(payload, resolved_workspace_root)
     return filter_llm_work_analysis_payload(payload, granularities)
-
-
 def load_persisted_llm_work_analysis(
     analysis_id: str,
     *,
@@ -132,8 +120,6 @@ def load_persisted_llm_work_analysis(
     if not isinstance(payload, dict):
         raise KeyError(analysis_id)
     return filter_llm_work_analysis_payload(payload, granularities)
-
-
 def get_latest_llm_work_analysis_ref(
     task_id: str,
     *,
@@ -143,8 +129,6 @@ def get_latest_llm_work_analysis_ref(
     latest_path = ensure_state_subdir("analysis/llm-work/latest-by-task", resolved_workspace_root) / f"{task_id}.json"
     payload = read_json(latest_path, None)
     return payload if isinstance(payload, dict) else None
-
-
 def load_latest_task_llm_work_analysis(
     task_id: str,
     *,
@@ -163,8 +147,6 @@ def load_latest_task_llm_work_analysis(
     if not isinstance(payload, dict):
         raise KeyError(task_id)
     return filter_llm_work_analysis_payload(payload, granularities)
-
-
 def render_llm_work_analysis_markdown(payload: dict[str, Any]) -> str:
     analysis = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
     task = payload.get("task") if isinstance(payload.get("task"), dict) else {}
@@ -307,8 +289,6 @@ def render_llm_work_analysis_markdown(payload: dict[str, Any]) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
-
-
 def _resolve_analysis_target(
     session,
     *,
@@ -348,8 +328,6 @@ def _resolve_analysis_target(
         "runId": resolved_run_id,
         "invocationId": resolved_invocation_id,
     }
-
-
 def _build_llm_work_analysis_payload(
     session,
     *,
@@ -570,8 +548,6 @@ def _build_llm_work_analysis_payload(
         },
     }
     return payload
-
-
 def _build_summary(
     *,
     task_payload: dict[str, Any],
@@ -622,8 +598,6 @@ def _build_summary(
         "cacheSummary": cache_summary,
         "workTreeDebug": work_tree_debug,
     }
-
-
 def _build_coverage(
     *,
     invocations: list[dict[str, Any]],
@@ -651,8 +625,6 @@ def _build_coverage(
         "hasTakeoverProtocol": bool(run_state.get("takeoverProtocol")),
         "hasWorkContextStack": bool(run_state.get("workContextStack")),
     }
-
-
 def _load_run_state_payloads(task_id: str, run_id: str | None, workspace_root: Path) -> dict[str, Any]:
     artifact_records: list[dict[str, Any]] = []
     if not run_id:
@@ -681,8 +653,6 @@ def _load_run_state_payloads(task_id: str, run_id: str | None, workspace_root: P
         "windowExecutionArtifact": window_execution_payload if isinstance(window_execution_payload, dict) else None,
         "artifactRecords": artifact_records,
     }
-
-
 def _load_invocation_artifacts(
     invocation: dict[str, Any],
     *,
@@ -726,8 +696,6 @@ def _load_invocation_artifacts(
         "windowExecutionPayload": read_json(window_execution_path, None),
         "artifactRecords": artifact_records,
     }
-
-
 def _build_analysis_cache_summary(windows: list[dict[str, Any]]) -> dict[str, Any]:
     cache_hit_input_tokens = 0
     cache_write_input_tokens = 0
@@ -760,8 +728,6 @@ def _build_analysis_cache_summary(windows: list[dict[str, Any]]) -> dict[str, An
         "cacheHitRatio0_1": round(cache_hit_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
         "cacheWriteRatio0_1": round(cache_write_input_tokens / denominator, 4) if tracked_input_tokens > 0 else 0.0,
     }
-
-
 def _build_analysis_work_tree_debug_summary(windows: list[dict[str, Any]]) -> dict[str, Any]:
     timeline: list[dict[str, Any]] = []
     distinct_node_ids: list[str] = []
@@ -839,8 +805,6 @@ def _build_analysis_work_tree_debug_summary(windows: list[dict[str, Any]]) -> di
         "latestPrefixCacheKey": distinct_prefix_cache_keys[-1] if distinct_prefix_cache_keys else None,
         "timeline": timeline,
     }
-
-
 def _build_window_record(
     *,
     invocation: dict[str, Any],
@@ -921,8 +885,6 @@ def _build_window_record(
         "planningStub0_1": (((window_execution or {}).get("llm") or {}).get("planningStub0_1") if isinstance((window_execution or {}).get("llm"), dict) else None),
         "workTreeDebug": work_tree_debug or None,
     }
-
-
 def _build_turn_records(
     invocation: dict[str, Any],
     request_payload: dict[str, Any],
@@ -983,8 +945,6 @@ def _build_turn_records(
             "synthetic": True,
         }
     ]
-
-
 def _build_tool_records(
     invocation: dict[str, Any],
     request_payload: dict[str, Any],
@@ -1054,8 +1014,6 @@ def _build_tool_records(
             }
         )
     return records
-
-
 def _infer_window_index(
     *,
     invocation: dict[str, Any],
@@ -1080,8 +1038,6 @@ def _infer_window_index(
         if normalized is not None and normalized > 0:
             return normalized
     return fallback_window_index
-
-
 def _match_window_execution_record(
     window_execution: dict[str, Any] | None,
     *,
@@ -1098,8 +1054,6 @@ def _match_window_execution_record(
     if _coerce_int(window_execution.get("windowIndex")) == fallback_window_index:
         return window_execution
     return None
-
-
 def _artifact_record(
     kind: str,
     path: Path | None,
@@ -1119,8 +1073,6 @@ def _artifact_record(
         "path": path.as_posix() if path is not None else None,
         "exists": exists,
     }
-
-
 def _resolve_artifact_path_from_ref(
     ref: dict[str, Any] | None,
     workspace_root: Path,
@@ -1134,8 +1086,6 @@ def _resolve_artifact_path_from_ref(
             if resolved is not None:
                 return resolved
     return fallback
-
-
 def _resolve_artifact_path(locator: str | None, workspace_root: Path) -> Path | None:
     if not locator:
         return None
@@ -1143,8 +1093,6 @@ def _resolve_artifact_path(locator: str | None, workspace_root: Path) -> Path | 
     if candidate.is_absolute():
         return candidate
     return (workspace_root / candidate).resolve()
-
-
 def _persist_llm_work_analysis_payload(payload: dict[str, Any], workspace_root: Path) -> dict[str, Any]:
     analysis = dict(payload.get("analysis") or {})
     analysis_id = str(analysis.get("analysisId") or new_id("llmwork", utc_now().isoformat()))
@@ -1174,8 +1122,6 @@ def _persist_llm_work_analysis_payload(payload: dict[str, Any], workspace_root: 
         }
         write_json(latest_dir / f"{task_id}.json", latest_payload)
     return persisted
-
-
 def _coerce_int(value: Any) -> int | None:
     if value is None or value == "":
         return None
@@ -1183,8 +1129,6 @@ def _coerce_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Analyze Project Yggdrasil LLM work traces.")
     parser.add_argument("--task-id", dest="task_id")
@@ -1217,12 +1161,8 @@ def main(argv: list[str] | None = None) -> None:
         output_path.write_text(output_text, encoding="utf-8")
         return
     print(output_text)
-
-
 if __name__ == "__main__":
     main()
-
-
 __all__ = [
     "analyze_llm_work_run",
     "filter_llm_work_analysis_payload",

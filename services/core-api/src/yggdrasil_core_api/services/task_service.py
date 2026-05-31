@@ -19,6 +19,12 @@ class TaskServiceMixin:
         request["command"] = "resume"
         return queue_runtime_task_execution(task_id, request)
 
+    def retry_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        request = dict(payload or {})
+        request["command"] = "retry"
+        request.setdefault("reason", "manual-retry")
+        return queue_runtime_task_execution(task_id, request)
+
     def approve_task_completion(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
         return approve_runtime_task_completion(task_id, dict(payload or {}))
 

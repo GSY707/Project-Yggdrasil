@@ -9,11 +9,46 @@ import { postApiJson, useApiResource } from "../lib/use-api-resource";
 import { ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
 import { TaskLlmWorkAnalysisView } from "./task-llm-work-analysis";
 
+type BudgetStatePayload = {
+  tokenBudgetTotal?: number | null;
+  tokenBudgetUsed?: number;
+  costBudgetTotal?: number | null;
+  costBudgetUsed?: number;
+  [key: string]: unknown;
+};
+
+function normalizeBudgetState(task: TaskDetailResponse["task"]): BudgetStatePayload {
+  const budgetCandidate = task.budgetState ?? task.budget;
+  if (!budgetCandidate || typeof budgetCandidate !== "object" || Array.isArray(budgetCandidate)) {
+    return {};
+  }
+  return { ...(budgetCandidate as BudgetStatePayload) };
+}
+
+function parseOptionalInt(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseOptionalFloat(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function TaskDetailPage({ taskId }: { taskId: string }) {
   const { data, error, isLoading, reload } = useApiResource<TaskDetailResponse>(`/tasks/${encodeURIComponent(taskId)}`);
   const [controlError, setControlError] = useState<string | null>(null);
   const [controlMessage, setControlMessage] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<"pause" | "resume" | "approve" | "revise" | null>(null);
+  const [activeAction, setActiveAction] = useState<"pause" | "safe-stop" | "resume" | "retry" | "top-up" | "approve" | "revise" | null>(null);
+  const [budgetTopUp, setBudgetTopUp] = useState<{ tokenDelta: string; costDelta: string }>({ tokenDelta: "", costDelta: "" });
 
   if (isLoading) {
     return <LoadingState title="正在装配任务详情" />;
@@ -36,6 +71,26 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
       });
       setControlMessage(`已提交暂停请求，当前状态 ${String(response.task.status ?? response.status)}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitSafeStopRequest() {
+    setActiveAction("safe-stop");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/pause-request`, {
+        reason: "operator-safe-stop",
+        pauseMode: "safe-stop",
+        waitForSafeStop: true,
+        resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
+      });
+      setControlMessage(`已提交 Safe-Stop 请求，当前状态 ${String(response.task.status ?? response.status)}。`);
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -79,6 +134,25 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
     }
   }
 
+  async function submitRetryRequest(extraPayload?: Record<string, unknown>) {
+    setActiveAction("retry");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/retry`, {
+        reason: "manual-retry",
+        resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
+        ...extraPayload,
+      });
+      setControlMessage(`失败任务已重试入队，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
   async function submitRevisionRequest() {
     setActiveAction("revise");
     setControlError(null);
@@ -89,6 +163,59 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         reason: `operator-revision:${taskDetail.runtimeControl.recommendedRevisionNodeId ?? "root"}`,
       });
       setControlMessage(`已请求修订，任务重新入队，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitBudgetTopUpAndContinue() {
+    setActiveAction("top-up");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const tokenDelta = parseOptionalInt(budgetTopUp.tokenDelta);
+      const costDelta = parseOptionalFloat(budgetTopUp.costDelta);
+      if ((tokenDelta ?? 0) <= 0 && (costDelta ?? 0) <= 0) {
+        throw new Error("请至少填写一个大于 0 的预算追加值。\n例如 token +50000 或 cost +5。");
+      }
+
+      const currentBudget = normalizeBudgetState(taskDetail.task);
+      const tokenUsed = Number(currentBudget.tokenBudgetUsed ?? 0);
+      const costUsed = Number(currentBudget.costBudgetUsed ?? 0);
+      const tokenTotal =
+        typeof currentBudget.tokenBudgetTotal === "number" ? currentBudget.tokenBudgetTotal : null;
+      const costTotal = typeof currentBudget.costBudgetTotal === "number" ? currentBudget.costBudgetTotal : null;
+
+      const nextTokenTotal =
+        (tokenDelta ?? 0) > 0 ? Math.max(tokenTotal ?? tokenUsed, tokenUsed) + Number(tokenDelta) : tokenTotal;
+      const nextCostTotal =
+        (costDelta ?? 0) > 0 ? Math.max(costTotal ?? costUsed, costUsed) + Number(costDelta) : costTotal;
+
+      const nextBudgetState: BudgetStatePayload = {
+        ...currentBudget,
+        tokenBudgetTotal: nextTokenTotal,
+        costBudgetTotal: nextCostTotal,
+      };
+
+      if (taskDetail.runtimeControl.canResume) {
+        const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
+          resumeToken: taskDetail.runtimeControl.recommendedResumeToken ?? undefined,
+          resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
+          budgetState: nextBudgetState,
+        });
+        setControlMessage(
+          `预算已追加并从快照续跑。token 上限=${String(nextTokenTotal ?? "不限制")}，cost 上限=${String(nextCostTotal ?? "不限制")}，队列深度 ${String(response.queueDepth ?? "-")}。`,
+        );
+      } else if (taskDetail.runtimeControl.canRetry) {
+        await submitRetryRequest({ budgetState: nextBudgetState, reason: "manual-budget-top-up-retry" });
+      } else {
+        throw new Error("当前任务状态不支持预算追加后续跑（仅 paused/failed 支持）。");
+      }
+
+      setBudgetTopUp({ tokenDelta: "", costDelta: "" });
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -109,6 +236,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
               LLM 工作分析
             </Link>
             {taskDetail.runtimeControl.canRequestPause ? (
+              <button className="action-button" disabled={activeAction !== null} onClick={() => void submitSafeStopRequest()} type="button">
+                {activeAction === "safe-stop" ? "正在安全停止" : "Safe-Stop"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canRequestPause ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitPauseRequest()} type="button">
                 {activeAction === "pause" ? "正在提交暂停" : "请求暂停"}
               </button>
@@ -121,6 +253,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             {taskDetail.runtimeControl.canRequestRevision ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitRevisionRequest()} type="button">
                 {activeAction === "revise" ? "正在请求修订" : "请求修订"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canRetry ? (
+              <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitRetryRequest()} type="button">
+                {activeAction === "retry" ? "正在重试" : "失败后重试"}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canApprove ? (
@@ -199,10 +336,55 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           <span className="inline-chip">consumed {taskDetail.runtimeControl.consumedSnapshotCount}</span>
           <span className="inline-chip">canResume {String(taskDetail.runtimeControl.canResume)}</span>
           <span className="inline-chip">canPause {String(taskDetail.runtimeControl.canRequestPause)}</span>
+          <span className="inline-chip">canRetry {String(taskDetail.runtimeControl.canRetry ?? false)}</span>
+          <span className="inline-chip">canTopUp {String(taskDetail.runtimeControl.canTopUp ?? false)}</span>
           <span className="inline-chip">canApprove {String(taskDetail.runtimeControl.canApprove)}</span>
           <span className="inline-chip">canRevise {String(taskDetail.runtimeControl.canRequestRevision)}</span>
           <span className="inline-chip">mailbox {taskDetail.mailboxState.pendingCount}</span>
         </div>
+        {taskDetail.runtimeControl.canTopUp ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitBudgetTopUpAndContinue();
+            }}
+          >
+            <p className="section-kicker">Budget Top-Up</p>
+            <h4 className="subsection-title">预算追加后无损续跑</h4>
+            <div className="kv-grid">
+              <label className="kv-item" htmlFor="task-token-topup">
+                <p className="meta-label">追加 Token 上限</p>
+                <input
+                  className="field-input"
+                  id="task-token-topup"
+                  min={0}
+                  onChange={(event) => setBudgetTopUp((value) => ({ ...value, tokenDelta: event.target.value }))}
+                  placeholder="例如 50000"
+                  type="number"
+                  value={budgetTopUp.tokenDelta}
+                />
+              </label>
+              <label className="kv-item" htmlFor="task-cost-topup">
+                <p className="meta-label">追加 Cost 上限 (USD)</p>
+                <input
+                  className="field-input"
+                  id="task-cost-topup"
+                  min={0}
+                  onChange={(event) => setBudgetTopUp((value) => ({ ...value, costDelta: event.target.value }))}
+                  placeholder="例如 5"
+                  step="0.1"
+                  type="number"
+                  value={budgetTopUp.costDelta}
+                />
+              </label>
+            </div>
+            <div className="field-actions">
+              <button className="action-button" disabled={activeAction !== null} type="submit">
+                {activeAction === "top-up" ? "正在追加并续跑" : "追加预算并续跑"}
+              </button>
+            </div>
+          </form>
+        ) : null}
         <div className="kv-grid">
           <div className="kv-item">
             <p className="meta-label">Recommended Revision Node</p>
