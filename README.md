@@ -4,9 +4,9 @@
 
 世界树计划的正式工程仓库。
 
-note：我们正在进行一项大型修改，改变 LLM 的工作流程，本项目的很多文档、模块组装，预计都会发生较大变化
+note：部分技术验证成功，我们搭建了一个验证型应用，研究生，验证了本项目思路的可行性。见 sample 文件夹。
 
-note2：这个项目目前还不能用，但有技术性验证的版本：https://github.com/GSY707/Project-Yggdrasil-dev-test.git
+note2：应用包 api 和制作文档均准备完毕，见 docs\specs\application-package-interface-v0.1.md。
 
 当前仓库是一个长期任务系统，具体目标见 docs\research\系统概念：
 
