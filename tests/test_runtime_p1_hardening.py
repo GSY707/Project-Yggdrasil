@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import yggdrasil_sdk.prompting as runtime_prompting
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_state as runtime_execution_loop_state
+import yggdrasil_sdk.runtime_kernel.execution_loop.state as runtime_execution_loop_state
 import yggdrasil_sdk.runtime_kernel.root_mount as runtime_root_mount
 import yggdrasil_sdk.runtime_kernel.snapshot as runtime_snapshot
 import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover

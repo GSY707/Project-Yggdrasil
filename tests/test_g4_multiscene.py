@@ -469,7 +469,7 @@ def test_g4_real_task_work_tree_debug_suite_uses_nested_work_tree_and_strict_aud
         assert "docs/specs/work-tree-protocol-v0.2.md" in paths
         assert "docs/specs/agent-runtime-protocol-v0.2.md" in paths
         assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py" in paths
-        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py" in paths
+        assert "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py" in paths
         assert "tests/test_runtime_p4_foundation.py" in paths
         assert case["acceptanceMinRestartCount"] == 0
         assert case["acceptanceMinWindowIndex"] == 1

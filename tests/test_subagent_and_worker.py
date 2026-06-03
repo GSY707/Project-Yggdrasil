@@ -14,7 +14,6 @@ from yggdrasil_sdk.contracts import WorkerActivityDescriptor
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID, DEFAULT_BRANCH_ID
 from yggdrasil_sdk.persistence.repositories import CollaborationRepository, NodeRepository, RuntimeRepository, TaskRepository, WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 import yggdrasil_worker.registry as worker_registry
 import yggdrasil_worker.main as worker_main
 from yggdrasil_worker.registry import build_worker_report, enqueue_work_item, pop_work_item, run_worker_once
@@ -351,8 +350,7 @@ def test_subagent_completion_merges_into_parent_work_tree_and_wakes_parent(monke
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     launched = launch_subagent_task(
         str(parent_task["id"]),
         {

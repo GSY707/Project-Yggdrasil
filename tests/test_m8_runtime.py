@@ -10,11 +10,11 @@ from types import SimpleNamespace
 import pytest
 import yggdrasil_sdk.observability_exporters as observability_exporters
 import yggdrasil_sdk.llm_runtime as sdk_llm_runtime
-import yggdrasil_sdk.ops_runtime_scorecard as ops_runtime_scorecard
+import yggdrasil_sdk.ops_runtime.scorecard as ops_runtime_scorecard
 
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
-from yggdrasil_sdk.evaluation_runtime.suite_cases_part_a import _run_live_llm_task_case, _run_live_llm_tool_case
+from yggdrasil_sdk.evaluation_runtime.suite_cases import _run_live_llm_task_case, _run_live_llm_tool_case
 from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
 from yggdrasil_sdk.ops_runtime import prepare_real_user_validation_sandbox, summarize_real_user_scorecard
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
@@ -207,7 +207,7 @@ def test_real_user_validation_sandbox_activation_command_uses_file_mode(tmp_path
 
 
 def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_mapping(tmp_path: Path, monkeypatch) -> None:
-    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+    import yggdrasil_sdk.ops_runtime.live_setup as ops_runtime_live
 
     source_workspace = tmp_path / "source-workspace-ci01"
     target_workspace = tmp_path / "target-workspace-ci01"
@@ -235,10 +235,8 @@ def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_ma
     (source_workspace / "README.md").write_text(readme_text, encoding="utf-8")
     (source_workspace / "docs" / "DIRECTORY_REFERENCE.md").write_text(directory_text, encoding="utf-8")
 
-    import yggdrasil_sdk.ops_runtime_live_part_a as ops_runtime_live_part_a
     monkeypatch.setattr(ops_runtime_live, "resolve_workspace_root", lambda: source_workspace)
     monkeypatch.setattr(ops_runtime_live, "_run_git_command", lambda *args: "")
-    monkeypatch.setattr(ops_runtime_live_part_a, "_run_git_command", lambda *args: "")
 
     ops_runtime_live._prepare_ci01_baseline(target_workspace)
 
@@ -256,7 +254,7 @@ def test_ci01_baseline_and_runtime_context_follow_current_directory_reference_ma
 
 
 def test_live_task_token_budget_defaults_to_unbounded_without_override() -> None:
-    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+    import yggdrasil_sdk.ops_runtime.live_setup as ops_runtime_live
 
     assert ops_runtime_live._live_task_token_budget({"maxTokens": 900, "maxToolRounds": 12}) is None
     assert ops_runtime_live._live_task_token_budget({"maxTokens": 2200, "maxToolRounds": 36}) is None
@@ -332,7 +330,7 @@ def test_runtime_metrics_for_response_uses_persisted_task_cumulative_span() -> N
 
 
 def test_drain_worker_attempts_consumes_requeued_results_before_returning() -> None:
-    import yggdrasil_sdk.ops_runtime_live as ops_runtime_live
+    import yggdrasil_sdk.ops_runtime.live_setup as ops_runtime_live
 
     attempts = iter(
         [

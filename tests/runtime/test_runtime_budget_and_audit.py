@@ -10,7 +10,7 @@ from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
 from yggdrasil_context_pruning.plugin import ContextPruningModule
 from yggdrasil_sdk import PromptAssetRepository, TaskRepository, get_persistence_runtime, resolve_workspace_root
-import yggdrasil_sdk.llm_runtime_part_b as llm_runtime_part_b
+import yggdrasil_sdk.llm_runtime as llm_runtime_part_b
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.orm import RetrievalRequestORM
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository

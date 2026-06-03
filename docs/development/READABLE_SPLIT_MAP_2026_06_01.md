@@ -24,49 +24,45 @@
 - `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py`
   - `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis__part01.py`
   - `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis__part02.py`
-- `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_core.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_tools_and_artifacts.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_invoke.py`
-- `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_a.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_a_core.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_a_artifacts.py`
-- `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b_state_utils.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b_invoke.py`
+- `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/`
+  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/__init__.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/core.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/artifacts.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py`
 - `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis.py`
   - `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis__part01.py`
   - `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis__part02.py`
+- `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/__init__.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/shared.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/backup.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/compose.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/sandbox.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/scorecard.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live_setup.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live_runner.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py`
 - `packages/python-sdk/src/yggdrasil_sdk/prompting.py`
   - `packages/python-sdk/src/yggdrasil_sdk/prompting__part01.py`
   - `packages/python-sdk/src/yggdrasil_sdk/prompting__part02.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_metrics_memory_tags.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_context_retrieval.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_exports.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_metrics_memory_tags.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_context_retrieval.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_exports.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a__part01.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a__part02.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a__part01.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_a__part02.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part01.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part02.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part03.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part01.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part02.py`
-  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_part_b__part03.py`
+- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/__init__.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/state_metrics.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/state_window.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/state_memory.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`
   - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover__part01.py`
   - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover__part02.py`
+- `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime/`
+  - `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime/__init__.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime/context.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime/subagents.py`
+- `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/`
+  - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/__init__.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py`
+  - `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/m9.py`
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`
   - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover__part01.py`
   - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover__part02.py`

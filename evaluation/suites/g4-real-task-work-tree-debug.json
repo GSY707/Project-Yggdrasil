@@ -65,7 +65,7 @@
         { "path": "docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md", "title": "world build and task start execution doc", "lineStart": 1, "lineEnd": 260, "importance": 0.99 },
         { "path": "docs/LLM_WORK_ANALYZER_USER_GUIDE.md", "title": "llm work analyzer guide", "lineStart": 1, "lineEnd": 220, "importance": 0.98 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py", "title": "takeover reducer", "lineStart": 820, "lineEnd": 1160, "importance": 1.0 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py", "title": "runtime overflow and continuation", "lineStart": 820, "lineEnd": 950, "importance": 1.0 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py", "title": "runtime overflow and continuation", "lineStart": 820, "lineEnd": 950, "importance": 1.0 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live runner and acceptance", "lineStart": 860, "lineEnd": 1110, "importance": 0.99 },
         { "path": "tests/test_runtime_p4_foundation.py", "title": "runtime p4 work tree expectations", "lineStart": 22, "lineEnd": 900, "importance": 0.99 }
       ],
@@ -291,7 +291,7 @@
         { "path": "docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md", "title": "world build and task start execution doc", "lineStart": 1, "lineEnd": 260, "importance": 0.99 },
         { "path": "docs/LLM_WORK_ANALYZER_USER_GUIDE.md", "title": "llm work analyzer guide", "lineStart": 1, "lineEnd": 220, "importance": 0.98 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py", "title": "takeover reducer", "lineStart": 820, "lineEnd": 1160, "importance": 1.0 },
-        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py", "title": "runtime overflow and continuation", "lineStart": 820, "lineEnd": 950, "importance": 1.0 },
+        { "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py", "title": "runtime overflow and continuation", "lineStart": 820, "lineEnd": 950, "importance": 1.0 },
         { "path": "packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py", "title": "g4 live runner and acceptance", "lineStart": 860, "lineEnd": 1110, "importance": 0.99 },
         { "path": "tests/test_runtime_p4_foundation.py", "title": "runtime p4 work tree expectations", "lineStart": 22, "lineEnd": 900, "importance": 0.99 }
       ],

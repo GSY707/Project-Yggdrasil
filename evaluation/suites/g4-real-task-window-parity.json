@@ -113,7 +113,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -127,7 +127,7 @@
           "importance": 0.99
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py",
           "title": "llm runtime metrics path",
           "lineStart": 520,
           "lineEnd": 725,
@@ -148,14 +148,14 @@
           "importance": 0.95
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live pack",
           "lineStart": 1,
           "lineEnd": 340,
           "importance": 0.96
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live execution path",
           "lineStart": 350,
           "lineEnd": 776,
@@ -468,7 +468,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -482,7 +482,7 @@
           "importance": 0.99
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py",
           "title": "llm runtime metrics path",
           "lineStart": 520,
           "lineEnd": 725,
@@ -503,14 +503,14 @@
           "importance": 0.95
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live pack",
           "lineStart": 1,
           "lineEnd": 340,
           "importance": 0.96
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live execution path",
           "lineStart": 350,
           "lineEnd": 776,
@@ -819,7 +819,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -833,7 +833,7 @@
           "importance": 0.99
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py",
           "title": "llm runtime metrics path",
           "lineStart": 520,
           "lineEnd": 725,
@@ -854,14 +854,14 @@
           "importance": 0.95
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live pack",
           "lineStart": 1,
           "lineEnd": 340,
           "importance": 0.96
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live execution path",
           "lineStart": 350,
           "lineEnd": 776,
@@ -1177,7 +1177,7 @@
           "importance": 0.98
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py",
           "title": "execution loop",
           "lineStart": 1,
           "lineEnd": 760,
@@ -1191,7 +1191,7 @@
           "importance": 0.99
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py",
           "title": "llm runtime metrics path",
           "lineStart": 520,
           "lineEnd": 725,
@@ -1212,14 +1212,14 @@
           "importance": 0.95
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_a.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live pack",
           "lineStart": 1,
           "lineEnd": 340,
           "importance": 0.96
         },
         {
-          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime_live_part_b.py",
+          "path": "packages/python-sdk/src/yggdrasil_sdk/ops_runtime/live.py",
           "title": "real-user live execution path",
           "lineStart": 350,
           "lineEnd": 776,

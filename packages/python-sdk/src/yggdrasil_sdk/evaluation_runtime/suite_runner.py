@@ -2,8 +2,8 @@ from ._common import *  # noqa: F403,F401
 from .bootstrap import *  # noqa: F403,F401
 from .scorer import *  # noqa: F403,F401
 
-from .suite_cases_part_a import *  # noqa: F403,F401
-from .suite_cases_part_b import *  # noqa: F403,F401
+from .suite_cases import *  # noqa: F403,F401
+
 from .suite_cases_g2 import *  # noqa: F403,F401
 from .suite_cases_g4 import *  # noqa: F403,F401
 from .suite_cases_g4 import (  # noqa: F401

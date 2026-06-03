@@ -22,7 +22,6 @@ from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.orm import RetrievalRequestORM
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -321,8 +320,7 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         f"/runtime/tasks/{task_id}/start",
         json={

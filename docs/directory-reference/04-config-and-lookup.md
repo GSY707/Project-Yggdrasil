@@ -59,8 +59,8 @@ docs/
 
 | 我想找… | 去哪里找 |
 |---------|---------|
-| 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
-| LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` |
+| 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
+| LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
 | 某个 API 的业务逻辑 | `services/core-api/src/yggdrasil_core_api/services/<resource>_service.py` |

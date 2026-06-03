@@ -346,8 +346,8 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 主链当前通过 execution_loop.py + execution_loop_worker_entry.py 稳定导出，保留 part_a/b + transitions 作为内部实现；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
-│       ├── llm_runtime.py          # LLM 调用封装兼容门面（正式主链使用 core + tools_and_artifacts；llm_runtime_part_b.py 仅保留 invoke 兼容代理）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── llm_runtime/            # LLM 调用封装包（core/artifacts/invoke 三层；包入口保留原 `yggdrasil_sdk.llm_runtime` 导入面）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
@@ -372,7 +372,7 @@ packages/
 │       ├── mcp_servers/            # 内置 MCP Server 实现（含 execute_server 默认拒绝网络命令的 permission layer）
 │       │
 │       ├── # ── 协作与评测 ──────────────────────────────
-│       ├── collaboration_runtime.py# PR 协作运行时兼容门面（实现拆分到 collaboration_runtime_part_a/b）
+│       ├── collaboration_runtime/  # PR 协作运行时包（context/subagents 语义模块）
 │       ├── evaluation_runtime/     # 评测运行时子包（bootstrap / scorer / suite_runner；含 G4 longform / window stress / real-task parity 指标聚合、文件/目录语料装载、可选隔离沙箱保留，以及 live-provider-matrix 的正式合同型 acceptance 检查；fallback local evaluation 环境在 preserve sandbox 或显式 state root 下也会把 suite metrics 与 case sandboxes 写入持久 state，case 级 isolated runtime 现也会继承 suite 传入的 workspace_root，避免 clean workspace run 仍回拷原仓库）
 │       ├── evaluation_cli.py       # 评测命令行工具
 │       │
@@ -381,13 +381,7 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime.py      # 运维兼容门面，保持 CLI 与外部导入路径稳定
-│           ├── ops_runtime_backup.py # runtime 备份与恢复实现
-│           ├── ops_runtime_compose.py # compose smoke 检查实现
-│           ├── ops_runtime_live.py # 真实用户 live task pack 兼容门面（实现拆分到 ops_runtime_live_part_a/b）
-│           ├── ops_runtime_sandbox.py # 真实用户试跑沙箱准备实现
-│           ├── ops_runtime_scorecard.py # scorecard 汇总与 live 评分行生成
-│           ├── ops_runtime_shared.py # 运维共享 helper（路径、命令、冻结材料）
+│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
 │           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
@@ -403,14 +397,14 @@ packages/
 **关键说明：**
 - `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
-- `runtime_kernel/execution_loop.py` 当前为兼容导出门面，核心实现位于 `runtime_kernel/execution_loop_part_a.py`、`runtime_kernel/execution_loop_part_b.py` 与 `runtime_kernel/execution_loop_transitions.py`；执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态；当前 retrieval 还支持“压缩段尾部自动解压”判定：当最后一个 `carry-forward-package` 之后的未压缩段数量在 `1..n`（`maxUncompressedTailBeforeDecompress`，默认 `1`）时，不再对检索结果执行 carry-forward trim。当前运行时的窗口超阈值路径已回到“两级续跑”语义：若当前节点是非根叶子，仍优先写回 `failed + failureSummary` 并按 `childCompletionSummaries(status=failed)` 上浮到父节点，再由父节点决定进入已有 child / 创建新 child / 汇总交付；若本地 work-tree continuation 不可用（例如 root/single-path overflow），则改走 carry-forward restart snapshot，排队一个带 `resumeToken` 的 `window-restart-queued` 闭环，而不是直接把任务终结成 `failed-window-overflow`。
+- `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
 - `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，非根子节点完成/失败会先回父节点，由父节点通过 `work-node-enter` / `work-node-create` 显式编排后续路径，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。`task-takeover` 模块现已把 `delivery.result / evidence / pending / incomplete` 全部升级为正式门禁；若首次输出缺少 `pending` 或 `incomplete`，runtime 会先在同一节点排一轮纠偏续跑，要求直接补齐正式交付；若纠偏后仍未过 gate，才会收敛成 `delivery-gate-blocked`。
-- `runtime_kernel/execution_loop_part_b.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
+- `runtime_kernel/execution_loop/worker.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
 - `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法，并显式给出 `work-node-create` / `work-node-enter` 标签契约（父节点强编排下由父节点决定进入已有 child、创建新 child 或汇总交付）；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
 - `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
-- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；当前正式主链走 `llm_runtime_core.py` + `llm_runtime_tools_and_artifacts.py`，`llm_runtime_part_b.py` 只保留 invoke monkeypatch/兼容代理，避免再依赖无意义的 `part_b_*` 再分片。
+- `llm_runtime/` + `tool_runtime.py` 构成正式工具分发链；当前正式主链走 `llm_runtime/core.py`、`llm_runtime/artifacts.py` 与 `llm_runtime/invoke.py`，包入口负责 Langfuse monkeypatch 同步，不再保留无意义的 `part_a/part_b` 文件。
 - `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 
@@ -965,8 +959,8 @@ docs/
 
 | 我想找… | 去哪里找 |
 |---------|---------|
-| 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` |
-| LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` |
+| 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
+| LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
 | 某个 API 的业务逻辑 | `services/core-api/src/yggdrasil_core_api/services/<resource>_service.py` |

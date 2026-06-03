@@ -17,7 +17,6 @@ from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeReposi
 from yggdrasil_sdk.runtime_kernel import post_task_mailbox_message
 from yggdrasil_sdk.support import new_id, utc_now
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -73,8 +72,7 @@ def test_main_agent_start_without_active_work_enters_standby_without_running_mod
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post("/runtime/tasks/task_start_standby/start", json={})
     assert started.status_code == 202
 
@@ -143,8 +141,7 @@ def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_start_resume_node/start",
         json={
@@ -313,8 +310,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     delivered = post_task_mailbox_message(
         "task_mailbox_wake",
         {
@@ -493,8 +489,7 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_retrieval_work_tree_focus/start",
         json={

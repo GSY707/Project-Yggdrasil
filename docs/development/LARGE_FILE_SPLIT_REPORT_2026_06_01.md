@@ -37,6 +37,13 @@
   - `pnpm-lock.yaml`
   - `uv.lock`
 
+## 2026-06-03 技术债修正
+- 纠正上一轮按行数产生的错误 `part_a/part_b` 拆分命名。
+- `llm_runtime.py` 平铺文件已收敛为 `yggdrasil_sdk/llm_runtime/` 包：`core.py`、`artifacts.py`、`invoke.py`。
+- `ops_runtime.py` / `ops_runtime_live.py` 平铺文件已收敛为 `yggdrasil_sdk/ops_runtime/` 包：`backup.py`、`compose.py`、`sandbox.py`、`scorecard.py`、`shared.py`、`live_setup.py`、`live_runner.py`。
+- `runtime_kernel/execution_loop.py` 与 `execution_loop_part_*` 已收敛为 `runtime_kernel/execution_loop/` 包：`state_metrics.py`、`state_window.py`、`state_memory.py`、`transitions.py`、`worker.py`。
+- 同类错误拆分也已同步清理：`collaboration_runtime_part_a/b.py` -> `collaboration_runtime/context.py` + `subagents.py`，`evaluation_runtime/suite_cases_part_a/b.py` -> `evaluation_runtime/suite_cases/runtime.py` + `m9.py`，`persistence/repositories/_records_part_a/b.py` -> `_records.py`。
+
 ## 例外说明
 - `pnpm-lock.yaml` 与 `uv.lock` 是包管理器锁文件，属于工具生成产物。
 - 这两类文件无法以“多文件拆分”方式被工具链消费，强行拆分会破坏依赖解析与可复现性。

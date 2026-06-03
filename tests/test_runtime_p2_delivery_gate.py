@@ -8,7 +8,6 @@ from yggdrasil_sdk import TaskRepository, get_persistence_runtime
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.runtime_kernel.execution_control import approve_task_completion, request_task_revision
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_task_takeover.plugin import TaskTakeoverModule  # Ensure module hooks are registered
 from yggdrasil_worker.registry import run_worker_once
 
@@ -227,8 +226,7 @@ def _fake_completion_factory(text: str = "# result\n完成。\n# evidence\n通�
 def test_approve_task_completion_moves_to_completed(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _fake_completion_factory()
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", fake)
-
+    
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -283,8 +281,7 @@ def test_request_task_revision_reopens_and_requeues(monkeypatch: pytest.MonkeyPa
             "contextLengthObservations": [],
         }
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake)
-
+    
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -335,8 +332,7 @@ def test_approve_rejects_non_awaiting_approval_task() -> None:
 def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _fake_completion_factory(text="# result\n完成。\n# evidence\n通过。")
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", fake)
-
+    
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -401,8 +397,7 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake)
-
+    
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -460,8 +455,7 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake)
-
+    
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()

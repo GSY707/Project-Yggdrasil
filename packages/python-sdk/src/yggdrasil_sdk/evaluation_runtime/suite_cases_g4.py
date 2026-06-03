@@ -4,7 +4,7 @@ from .bootstrap import *  # noqa: F403,F401
 from .scorer import *  # noqa: F403,F401
 import re
 from ..contracts import BudgetState
-from ..ops_runtime_scorecard import (  # noqa: F401
+from ..ops_runtime.scorecard import (  # noqa: F401
     _build_scorecard_row,
     _first_token_seconds,
     _first_useful_output_seconds,

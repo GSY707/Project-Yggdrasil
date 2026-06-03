@@ -8,7 +8,6 @@ import yggdrasil_model_providers
 from yggdrasil_sdk import TaskRepository, get_persistence_runtime
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_sdk.runtime_kernel.takeover import (
     build_takeover_continuation_request,
     normalize_takeover_runtime_state,
@@ -343,8 +342,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake)
-
+    
     POLICY_PARAMS = {
         "allowToolExecution": False,
         "temperature": 0.15,

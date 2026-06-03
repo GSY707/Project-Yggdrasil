@@ -7,7 +7,6 @@ from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package
 import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-import yggdrasil_sdk.runtime_kernel.execution_loop_worker_entry as runtime_execution_loop_worker_entry
 from yggdrasil_sdk.contracts import TaskTakeoverProtocol
 from yggdrasil_sdk import TaskRepository, get_persistence_runtime
 from yggdrasil_sdk.persistence.constants import DEFAULT_PROJECT_ID
@@ -590,8 +589,7 @@ def test_runtime_single_path_moves_root_delivery_to_awaiting_approval(monkeypatc
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_awaiting_approval/start",
         json={
@@ -661,8 +659,7 @@ def test_runtime_default_mode_moves_root_delivery_to_awaiting_approval(monkeypat
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_default_mode_awaiting_approval/start",
         json={
@@ -744,8 +741,7 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_multi_node_loop/start",
         json={
@@ -880,8 +876,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
         }
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _fake_invoke_runtime_completion)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_dynamic_child/start",
         json={
@@ -934,8 +929,7 @@ def test_runtime_single_path_marks_failed_node_summary_on_exception(monkeypatch:
         raise RuntimeError("模拟模型调用异常")
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _boom)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _boom)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_failed_node/start",
         json={
@@ -1055,8 +1049,7 @@ def test_runtime_provider_exception_leaf_failure_returns_parent_for_reorchestrat
         raise RuntimeError("Model provider failed after 4 attempts: transient EOF")
 
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _boom)
-    monkeypatch.setattr(runtime_execution_loop_worker_entry, "invoke_runtime_completion", _boom)
-
+    
     started = client.post(
         "/runtime/tasks/task_p4_provider_exception_leaf_failure/start",
         json={
