@@ -5,8 +5,112 @@
     "summary": "面向长期学习辅导的具体应用，先摄入资料与学习背景，再持续跟踪学习状态并主动推进学习。"
   },
   "quickActions": [
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.learning-coach"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.learning-coach"},
-    {"label": "任务", "href": "/tasks"}
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.learning-coach"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.learning-coach"
+    },
+    {
+      "label": "任务",
+      "href": "/tasks"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "learning-session",
+      "title": "启动学习辅导",
+      "goal": "输入学习者背景、材料和本次目标，让应用设计辅导路径并跟踪掌握情况。",
+      "description": "适合资料摄入后的持续学习辅导。",
+      "taskType": "learning",
+      "currentFocus": "learning-guidance",
+      "currentObjective": "完成一次学习辅导循环"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.learning-coach"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .ops_runtime import create_runtime_backup, latest_snapshot_dir, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
+from .ops_runtime import create_runtime_backup, latest_snapshot_dir, launch_local_product, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
 from .support import load_workspace_dotenv
 
 
@@ -25,6 +25,13 @@ def main() -> None:
 
     smoke_parser = subparsers.add_parser("compose-smoke", help="Verify local compose dependencies.")
     smoke_parser.add_argument("--ensure-up", action="store_true", help="Run docker compose up -d before smoke checks.")
+
+    launch_parser = subparsers.add_parser("launch", help="Start local product mode and print the Web URL.")
+    launch_parser.add_argument("--allow-missing-provider", action="store_true", help="Allow fallback-only startup when no provider key is configured.")
+    launch_parser.add_argument("--allow-existing-services", action="store_true", help="Do not fail if product ports are already in use.")
+    launch_parser.add_argument("--skip-infra", action="store_true", help="Do not run docker compose up -d.")
+    launch_parser.add_argument("--detach", action="store_true", help="Return after startup instead of keeping services in the foreground.")
+    launch_parser.add_argument("--wait-timeout-seconds", type=int, default=90, help="Timeout while waiting for Core API and Web.")
 
     pilot_parser = subparsers.add_parser("pilot-sandbox", help="Prepare an isolated sandbox for real-user validation.")
     pilot_subparsers = pilot_parser.add_subparsers(dest="pilot_command", required=True)
@@ -73,6 +80,18 @@ def main() -> None:
     if args.command == "compose-smoke":
         result = run_compose_smoke(ensure_up=args.ensure_up)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "launch":
+        result = launch_local_product(
+            allow_missing_provider=bool(args.allow_missing_provider),
+            allow_existing_services=bool(args.allow_existing_services),
+            skip_infra=bool(args.skip_infra),
+            detach=bool(args.detach),
+            wait_timeout_seconds=int(args.wait_timeout_seconds),
+        )
+        if args.detach:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
     if args.command == "pilot-sandbox" and args.pilot_command == "create":

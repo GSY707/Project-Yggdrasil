@@ -5,7 +5,108 @@
     "summary": "当没有选择任何具体应用时，Kernel 会装载这个基础模板。它只提供主 Agent、通用 Sub-Agent 和 generic fallback。"
   },
   "quickActions": [
-    {"label": "预览 Prompt", "href": "/prompting"},
-    {"label": "查看应用管理", "href": "/applications"}
+    {
+      "label": "预览 Prompt",
+      "href": "/prompting"
+    },
+    {
+      "label": "查看应用管理",
+      "href": "/applications"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "general-start",
+      "title": "通用任务启动",
+      "goal": "描述你要完成的目标，让基础应用用通用场景启动一次任务。",
+      "description": "适合没有明确应用归属的试运行。",
+      "taskType": "general",
+      "currentFocus": "general-start",
+      "currentObjective": "完成一个通用任务"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.base-template"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

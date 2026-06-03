@@ -11,7 +11,7 @@ apps/
     │   ├── page.tsx                # 总览页（工作台首页）
     │   ├── layout.tsx              # 全局布局
     │   ├── api/
-    │   │   └── core/               # Core API 的前端代理（透传到 :8000）
+    │   │   └── core/               # Core API 的前端代理（默认透传到 :5000）
     │   ├── applications/           # 应用场景浏览页
     │   ├── assets/                 # 资产管理页（上传、查看、版本）
     │   ├── collaboration/          # PR 审查与协作页
@@ -22,6 +22,7 @@ apps/
     │   ├── observability/          # 调用链路追踪页
     │   ├── prompting/              # Prompt 模板管理与预览页
     │   ├── tasks/
+    │   │   ├── page.tsx            # 任务页：应用模板创建/草稿/立即启动入口
     │   │   └── [taskId]/           # 任务详情页（动态路由，现已挂接 LLM 工作分析摘要与独立分析路由）
     │   ├── training/               # 训练实验管理页
     │   └── components/             # 可复用 React 组件
@@ -32,8 +33,11 @@ apps/
 ```
 
 **关键说明：**
-- `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（`:8000`）。
+- `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（默认 `:5000`，可用 `YGGDRASIL_CORE_API_BASE_URL` 覆盖）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
+- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户。
+- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`，并在 `/tasks`、`/applications` 和应用详情页接入。
+- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式。
 - `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
 - `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
 - `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
@@ -44,7 +48,7 @@ apps/
 
 ```
 services/
-├── core-api/                       # 控制面 API 服务（:8000）
+├── core-api/                       # 控制面 API 服务（:5000）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_core_api/
 │       ├── main.py                 # 服务启动入口（uvicorn）
@@ -63,7 +67,7 @@ services/
 │               ├── assets.py       # /assets/ - 资产 CRUD
 │               ├── collaboration.py# /collaboration/ - PR 协作
 │               ├── evaluations.py  # /evaluations/ - 评测结果
-│               ├── health.py       # /health - 健康检查
+│               ├── health.py       # /health - 健康检查（含首次启动 setupChecklist）
 │               ├── mcp.py          # /mcp/ - MCP 协议
 │               ├── memory.py       # /memory/ - 记忆树操作
 │               ├── modules.py      # /modules/ - 模块管理
@@ -75,16 +79,16 @@ services/
 │               ├── specs.py        # /specs/ - 规格查询
 │               ├── tasks.py        # /tasks/ - 任务生命周期、P4 approve/revision 控制面与 latest LLM analysis 入口
 │               ├── training.py     # /training/ - 训练实验
-│               └── workbench.py    # /workbench/ - 总览数据
+│               └── workbench.py    # /workbench/ - 总览数据（首页也消费嵌套 health setupChecklist）
 │
-├── agent-runtime/                  # Agent 执行引擎服务（:8001）
+├── agent-runtime/                  # Agent 执行引擎服务（:5001）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_agent_runtime/
 │       ├── main.py                 # 服务启动入口
 │       ├── app.py                  # FastAPI 应用实例
 │       └── runtime.py              # Agent 执行主逻辑（任务分发、LLM 调用闭环；现导出 approve/revision 运行时控制）
 │
-├── module-host/                    # 模块宿主服务（:8002）
+├── module-host/                    # 模块宿主服务（:5002）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_module_host/
 │       ├── main.py                 # 服务启动入口
@@ -162,8 +166,8 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
-│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-live/pilot-scorecard）
+│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/launch/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
 ├── contracts/                      # 跨语言共享类型定义
@@ -172,7 +176,7 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse 的 runtimeControl approve/revision、mailbox 与 side-channel 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema 与 setupChecklist 契约
 ```
 
 **关键说明：**
@@ -290,10 +294,16 @@ applications/
 ```
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
-└── prompts/
-    ├── system.md           # 系统提示（定义 Agent 身份与工作方式）
-    └── seed.md             # 种子记忆（初始化上下文）
+├── config/defaults.json     # 应用默认配置
+├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、settingsSchema
+├── memory/                  # 应用静态记忆资产（随包发布，运行时按应用命名空间叠加）
+├── prompt-profiles/          # 主 Agent / Sub-Agent prompt profile
+└── scenes/                   # seed template / 场景启动资产
 ```
+
+**关键说明：**
+- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
+- `services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `list_applications()` 已把 dashboard payload 随 `GET /applications` 返回，任务页无需再逐个请求应用详情才能显示模板。
 
 ---
 

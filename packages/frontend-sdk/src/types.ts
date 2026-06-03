@@ -31,6 +31,15 @@ export interface ServiceHealthSnapshot {
   service: string;
   database?: Record<string, unknown>;
   redis?: Record<string, unknown>;
+  setupChecklist?: SetupChecklistItem[];
+}
+
+export interface SetupChecklistItem {
+  id: string;
+  label: string;
+  status: "ready" | "warning" | "blocked";
+  detail: string;
+  remediation?: string | null;
 }
 
 export interface TaskSummaryRecord {
@@ -275,6 +284,46 @@ export interface ApplicationManifestSummary {
   dashboardRef?: { type: string; locator: string } | null;
 }
 
+export interface ApplicationTaskTemplate {
+  id: string;
+  title: string;
+  goal: string;
+  description?: string;
+  currentFocus?: string;
+  currentObjective?: string;
+  taskType?: string;
+  startPayload?: Record<string, unknown>;
+  budget?: Record<string, unknown>;
+}
+
+export interface ApplicationSettingsField {
+  key: string;
+  label: string;
+  type: "text" | "number" | "select" | "boolean" | "textarea";
+  description?: string;
+  required?: boolean;
+  options?: Array<{ label: string; value: string }>;
+  defaultValue?: string | number | boolean | null;
+}
+
+export interface ApplicationDashboard {
+  hero?: {
+    eyebrow?: string;
+    title?: string;
+    summary?: string;
+  };
+  quickActions?: Array<{ label?: string; href?: string }>;
+  taskTemplates?: ApplicationTaskTemplate[];
+  settingsSchema?: ApplicationSettingsField[];
+  [key: string]: unknown;
+}
+
+export interface ApplicationCatalogItem {
+  application: ApplicationManifestSummary;
+  configBinding: ApplicationConfigBinding;
+  dashboard?: ApplicationDashboard | null;
+}
+
 export interface ApplicationMemoryAssetRecord {
   id: string;
   name: string;
@@ -290,6 +339,11 @@ export interface ApplicationConfigBinding {
   active: boolean;
   importantConfig: Record<string, unknown>;
   updatedAt: string;
+}
+
+export interface TaskCreateResponse {
+  task: TaskSummaryRecord;
+  outboxRecord?: Record<string, unknown>;
 }
 
 export interface MCPWorkspaceOption {

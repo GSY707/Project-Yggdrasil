@@ -5,8 +5,112 @@
     "summary": "面向长线创作任务的具体应用，强调叙事连续性、角色一致性、时间线管理和长期设定资产。"
   },
   "quickActions": [
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.epic-writing"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.epic-writing"},
-    {"label": "任务", "href": "/tasks"}
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.epic-writing"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.epic-writing"
+    },
+    {
+      "label": "任务",
+      "href": "/tasks"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "story-development",
+      "title": "推进长线创作",
+      "goal": "输入世界观、角色、当前章节目标和连续性约束，推进一段创作任务。",
+      "description": "适合长篇叙事、设定维护和章节推进。",
+      "taskType": "writing",
+      "currentFocus": "story-continuity",
+      "currentObjective": "推进长线创作并保持连续性"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.epic-writing"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

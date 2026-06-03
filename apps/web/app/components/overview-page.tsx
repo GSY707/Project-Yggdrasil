@@ -2,10 +2,44 @@
 
 import Link from "next/link";
 
-import type { WorkbenchOverview } from "@yggdrasil/frontend-sdk";
+import type { SetupChecklistItem, WorkbenchOverview } from "@yggdrasil/frontend-sdk";
 
 import { useApiResource } from "../lib/use-api-resource";
 import { ErrorState, LoadingState, PageHeader, StatCard, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+
+function SetupChecklist({ items }: { items: SetupChecklistItem[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+  const blocked = items.filter((item) => item.status === "blocked").length;
+  const warnings = items.filter((item) => item.status === "warning").length;
+  return (
+    <Surface>
+      <div className="record-head">
+        <div>
+          <p className="section-kicker">First Run</p>
+          <h3 className="section-title">首次任务启动检查</h3>
+          <p className="section-copy">先确认依赖、模型 key、状态目录和工作区路径。全部阻塞项清掉后，再进入任务模板创建第一任务。</p>
+        </div>
+        <StatusBadge value={blocked > 0 ? "blocked" : warnings > 0 ? "warning" : "ready"} />
+      </div>
+      <div className="setup-grid">
+        {items.map((item) => (
+          <article className="setup-item" key={item.id}>
+            <div className="record-head">
+              <div>
+                <h4 className="record-title">{item.label}</h4>
+                <p className="meta-copy">{item.detail}</p>
+              </div>
+              <StatusBadge value={item.status} />
+            </div>
+            {item.remediation ? <p className="meta-copy mono">{item.remediation}</p> : null}
+          </article>
+        ))}
+      </div>
+    </Surface>
+  );
+}
 
 export function OverviewPage() {
   const { data, error, isLoading } = useApiResource<WorkbenchOverview>("/workbench/overview");
@@ -18,31 +52,34 @@ export function OverviewPage() {
     return <ErrorState detail={error ?? "总览数据不可用。"} />;
   }
 
+  const setupItems = data.health.setupChecklist ?? [];
+
   return (
     <div>
       <PageHeader
         eyebrow="Workbench Overview"
-        title="正式控制台已经切到运行态数据面"
+        title="从这里启动第一任务"
         summary={
           <>
-            当前工作台直接消费 core-api 的任务、节点、协作、评测与观测接口，不再依赖仓库文件扫描。
-            这里同时收口了 M4 到 M6 的运行脉冲，以及 M9 的共享空间、资产、训练与 PromptOps 控制面。
+            打开本地产品后，先确认启动检查，再选择应用模板创建任务。内部运行指标仍在下方，用于排查和复盘。
           </>
         }
         actions={
           <>
-            <Link className="action-button" href="/prompting">
-              进入 Prompt 控制面
+            <Link className="action-button" href="/tasks">
+              New task
             </Link>
-            <Link className="ghost-button" href="/assets">
-              查看多模态资产
+            <Link className="ghost-button" href="/applications">
+              选择应用
             </Link>
-            <Link className="ghost-button" href="/training">
-              查看训练实验
+            <Link className="ghost-button" href="/prompting">
+              Prompt 控制面
             </Link>
           </>
         }
       />
+
+      <SetupChecklist items={setupItems} />
 
       <section className="stat-grid">
         <StatCard label="Tasks" value={data.cards.tasks} copy={`当前累计任务 ${data.cards.tasks} 个，待处理 ${data.taskStatusCounts.queued ?? 0} 个。`} />

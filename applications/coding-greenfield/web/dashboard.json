@@ -5,8 +5,112 @@
     "summary": "面向项目冷启动阶段的具体应用，优先处理需求摄入、架构设计、模块边界和后续可持续开发。"
   },
   "quickActions": [
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.coding-greenfield"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.coding-greenfield"},
-    {"label": "任务", "href": "/tasks"}
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.coding-greenfield"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.coding-greenfield"
+    },
+    {
+      "label": "任务",
+      "href": "/tasks"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "new-project-plan",
+      "title": "启动一个新项目",
+      "goal": "输入产品目标、用户场景和技术约束，生成架构方案并开始实现第一版。",
+      "description": "适合从零搭建项目或模块。",
+      "taskType": "coding",
+      "currentFocus": "greenfield-design",
+      "currentObjective": "设计并启动全新项目"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.coding-greenfield"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

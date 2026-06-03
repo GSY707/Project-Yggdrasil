@@ -292,6 +292,8 @@ few-shot 资产会被递归扫描，结构由 `FewShotAsset` 固定：
 2. `hero.title`
 3. `hero.summary`
 4. `quickActions[]`
+5. `taskTemplates[]`
+6. `settingsSchema[]`
 
 `quickActions[]` 内每项至少应包含：
 
@@ -299,6 +301,36 @@ few-shot 资产会被递归扫描，结构由 `FewShotAsset` 固定：
 2. `href`
 
 可选扩展字段可以保留，但控制面只保证读取上述最小字段。
+
+`taskTemplates[]` 用于 Web-first 任务启动。每项至少应包含：
+
+1. `id`：模板稳定 ID。
+2. `title`：默认任务标题。
+3. `goal`：默认任务目标。
+
+推荐字段：
+
+1. `description`：模板适用说明。
+2. `taskType`：传给运行时的任务类型。
+3. `currentFocus`：启动时的当前焦点。
+4. `currentObjective`：启动时的当前目标。
+5. `budget`：可直接映射到 `BudgetState` 的默认预算，如 `tokenBudgetTotal`。
+6. `startPayload`：传给 `POST /tasks/{taskId}/start` 的附加运行时字段。
+
+`settingsSchema[]` 用于把 `importantConfig` 从原始 JSON 提升为用户可编辑控件。每项至少应包含：
+
+1. `key`：写入 `importantConfig` 的字段名。
+2. `label`：控制面显示名称。
+3. `type`：`text`、`number`、`select`、`boolean` 或 `textarea`。
+
+推荐字段：
+
+1. `description`：字段说明。
+2. `required`：是否必填。
+3. `options[]`：`select` 的候选项，每项包含 `label` 与 `value`。
+4. `defaultValue`：未配置时的显示默认值。
+
+常见用户级设置字段包括 `provider`、`model`、`tokenBudgetTotal`、`costBudgetTotal`、`workspace`、`outputStyle`、`memoryNamespace`、`toolPermissions`。原始 JSON 只应作为高级模式保留，不应是普通用户的主配置入口。
 
 ### 6.3 前端页面约定
 
@@ -333,6 +365,7 @@ few-shot 资产会被递归扫描，结构由 `FewShotAsset` 固定：
 2. `applications[]`
 3. `applications[].application`
 4. `applications[].configBinding`
+5. `applications[].dashboard`
 
 #### GET /applications/{appId}
 

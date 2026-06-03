@@ -2,18 +2,27 @@
 
 import Link from "next/link";
 import { useDeferredValue, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-import type { TaskSummaryRecord } from "@yggdrasil/frontend-sdk";
+import type { ApplicationCatalogItem, TaskSummaryRecord } from "@yggdrasil/frontend-sdk";
 
 import { useApiResource } from "../lib/use-api-resource";
+import { TaskLaunchPanel } from "./task-launch-panel";
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
 
 type TasksResponse = {
   tasks: TaskSummaryRecord[];
 };
 
+type ApplicationsResponse = {
+  activeAppId: string;
+  applications: ApplicationCatalogItem[];
+};
+
 export function TasksPage() {
+  const searchParams = useSearchParams();
   const { data, error, isLoading, reload } = useApiResource<TasksResponse>("/tasks?limit=200");
+  const applications = useApiResource<ApplicationsResponse>("/applications");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
@@ -42,10 +51,19 @@ export function TasksPage() {
     <div>
       <PageHeader
         eyebrow="Tasks"
-        title="任务执行与安全停顿总览"
-        summary={<>这里聚合 task、agent run、snapshot 和 route decision 的正式记录，用来验证 M5 主代理执行闭环。</>}
+        title="任务创建、启动与运行总览"
+        summary={<>先从应用模板创建任务并启动；已运行任务仍可在这里进入详情、查看恢复状态和运行记录。</>}
         actions={<button className="ghost-button" onClick={reload} type="button">刷新任务视图</button>}
       />
+
+      {applications.error ? <ErrorState title="应用模板不可用" detail={applications.error} /> : null}
+      {!applications.isLoading && applications.data ? (
+        <TaskLaunchPanel
+          applications={applications.data.applications}
+          defaultAppId={searchParams.get("appId") ?? applications.data.activeAppId}
+          onTaskCreated={reload}
+        />
+      ) : null}
 
       <Surface>
         <p className="section-kicker">Filters</p>

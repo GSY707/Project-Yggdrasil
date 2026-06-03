@@ -5,8 +5,112 @@
     "summary": "面向接手既有工程的具体应用，强调现状分析、约束识别、最小变更和回归安全。"
   },
   "quickActions": [
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.coding-inherit"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.coding-inherit"},
-    {"label": "任务", "href": "/tasks"}
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.coding-inherit"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.coding-inherit"
+    },
+    {
+      "label": "任务",
+      "href": "/tasks"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "existing-project-change",
+      "title": "接手既有项目改动",
+      "goal": "说明当前代码库、要修复或新增的行为，以及必须保留的约束。",
+      "description": "适合进入已有工程后做最小安全改动。",
+      "taskType": "coding",
+      "currentFocus": "existing-project-analysis",
+      "currentObjective": "完成既有项目的安全改动"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.coding-inherit"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

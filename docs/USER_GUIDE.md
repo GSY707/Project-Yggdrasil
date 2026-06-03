@@ -80,7 +80,13 @@ created → running → paused → running → completed
 
 ## 3. 访问工作台
 
-系统启动后，通过浏览器访问：
+首次本地使用时，先在项目根目录启动本地产品模式：
+
+```powershell
+corepack pnpm yggdrasil:up
+```
+
+该命令会启动本地依赖、数据库迁移、Core API、Agent Runtime、Module Host、Worker 和 Web 工作台。系统启动后，通过浏览器访问：
 
 ```
 http://localhost:3000
@@ -106,7 +112,16 @@ http://localhost:3000
 
 ## 4. 工作台总览
 
-总览页面提供系统的整体状态快照：
+总览页面现在首先显示首次任务启动检查：
+
+- **Core API**：控制面是否可访问
+- **Database**：数据库是否可连接
+- **Redis coordination**：任务队列协调后端是否可用
+- **Worker queue**：队列是否可访问，并提示是否需要启动 worker
+- **Model provider**：是否配置了可用模型 provider key
+- **State root / Workspace path**：本地状态目录和工作区路径是否有效
+
+检查项下方保留系统运行快照：
 
 - **任务统计**：运行中、已完成、失败的任务数量
 - **记忆节点统计**：总节点数、最近写入
@@ -120,11 +135,15 @@ http://localhost:3000
 
 ### 5.1 创建任务
 
-1. 进入 **任务** 页面，点击「新建任务」。
-2. 选择**应用场景**（决定 Agent 的工作方式）。
-3. 填写**任务描述**，可以是自然语言的工作指令。
-4. （可选）选择关联的记忆空间。
-5. 点击「启动」，任务开始执行。
+1. 进入 **任务** 页面。
+2. 在页面顶部的 **New Task** 面板选择应用。
+3. 选择该应用提供的任务模板。
+4. 修改任务标题和目标。
+5. 点击「创建并启动」，系统会先调用 `POST /tasks` 创建任务，再调用 `POST /tasks/{taskId}/start` 进入运行队列。
+
+也可以点击「只创建草稿」。草稿创建后，面板会显示 `Start now`，可立即启动并跳转到任务详情页。
+
+应用列表页和应用详情页也提供 New task 入口，会带着对应 `appId` 跳到任务页。
 
 ### 5.2 查看任务执行
 
@@ -469,6 +488,9 @@ uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot ./.yggdrasil-ba
 ### 13.3 基础设施管理
 
 ```bash
+# 一键启动本地产品
+corepack pnpm yggdrasil:up
+
 # 启动基础设施
 corepack pnpm infra:up
 

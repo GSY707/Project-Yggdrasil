@@ -1,3 +1,4 @@
+| `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计（2026-06-03）：盘点 Web 工作台、应用包、设置、安装、打包与用户文档，明确当前仍是 CLI/操作台导向，并给出 Web-first 首次成功路径、设置向导、任务创建启动和产品化启动器的 P0/P1/P2 收口计划 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐（2026-05-27）：冻结“理解任务 -> 形成计划 -> 向发起者核对 -> 再执行”的目标流程，并对照当前协议、提示词、运行时与测试缺口 |
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑（2026-05-26）：冻结“父节点强编排、child 完成/失败先回编排父节点、允许有限线性 continuation 轨迹、leaf 拆分尽量交给 LLM、根节点停在 awaiting-approval”的目标口径 |
@@ -127,6 +128,7 @@
 > 2026/6/1 nightly acceptance 稳定化：`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_part_b.py` 的 `m9.pause_resume_memory_tree` case 现对该单测范围内的模型调用注入固定 formal-footer 响应，避免 deterministic fallback 文案变化把 acceptance 从“验证 safe-stop/rehydration”误变成“验证开放式交付写作”。
 > 2026/6/1 nightly acceptance 续跑语义对齐：同一 `m9.pause_resume_memory_tree` case 不再假设 resume 后单轮 worker 即直接完成；现在会沿当前 work-tree continuation 链持续执行到终态，并在落到 `awaiting-approval` 时显式调用 approve 控制面，再断言任务 `completed`。
 > 2026/6/1 G4 live 预算恢复闭环同步：`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 已新增 `budget-exhausted` 现场恢复逻辑，provider matrix case 在 `paused + restorable snapshot` 下会自动 top-up `budgetState` 并调用 `/runtime/tasks/{taskId}/resume`，在 `failed + budget-exhausted` 下会尝试 `/retry`，同时 `_g4_wait_for_target_worker_result` 新增 recovery handler 分支以继续等待终态；`tests/test_g4_multiscene.py` 已新增回归覆盖预算 top-up 与恢复续跑路径。
+> 2026/6/3 用户采用面 P0 同步：Web 首页新增首次启动 `setupChecklist`，任务页、应用页和应用详情页已接入 `task-launch-panel`，可从应用 `dashboard.taskTemplates[]` 创建草稿并立即 `POST /tasks/{taskId}/start`；应用详情配置改为 `dashboard.settingsSchema[]` typed controls，原始 JSON 仅保留高级模式；`services/core-api/.../runtime_service.py` 的 `/health` 与 `/workbench/overview` 暴露 setup checklist，`GET /applications` 随清单返回 dashboard；`packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` 与 `yggdrasil-ops launch`/`corepack pnpm yggdrasil:up` 提供本地产品一键启动。
 > 2026/6/1 Graduate heartbeat 观测增强：`tmp/run_grad_ml_eval_with_heartbeat.py` 现会在心跳周期内读取活动 sandbox 的 `evaluation.db`，追加输出 task 状态、currentFocus 摘要、snapshot 是否存在、cost 使用进度、invocation 计数与最近一次模型调用状态/错误摘要，便于区分“长调用慢跑”与“真实队列卡死”。
 
 ---
@@ -230,7 +232,7 @@ apps/
     │   ├── page.tsx                # 总览页（工作台首页）
     │   ├── layout.tsx              # 全局布局
     │   ├── api/
-    │   │   └── core/               # Core API 的前端代理（透传到 :8000）
+    │   │   └── core/               # Core API 的前端代理（默认透传到 :5000）
     │   ├── applications/           # 应用场景浏览页
     │   ├── assets/                 # 资产管理页（上传、查看、版本）
     │   ├── collaboration/          # PR 审查与协作页
@@ -241,6 +243,7 @@ apps/
     │   ├── observability/          # 调用链路追踪页
     │   ├── prompting/              # Prompt 模板管理与预览页
     │   ├── tasks/
+    │   │   ├── page.tsx            # 任务页：应用模板创建/草稿/立即启动入口
     │   │   └── [taskId]/           # 任务详情页（动态路由，现已挂接 LLM 工作分析摘要与独立分析路由）
     │   ├── training/               # 训练实验管理页
     │   └── components/             # 可复用 React 组件
@@ -251,8 +254,11 @@ apps/
 ```
 
 **关键说明：**
-- `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（`:8000`）。
+- `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（默认 `:5000`，可用 `YGGDRASIL_CORE_API_BASE_URL` 覆盖）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
+- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户。
+- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`，并在 `/tasks`、`/applications` 和应用详情页接入。
+- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式。
 - `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
 - `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
 - `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
@@ -263,7 +269,7 @@ apps/
 
 ```
 services/
-├── core-api/                       # 控制面 API 服务（:8000）
+├── core-api/                       # 控制面 API 服务（:5000）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_core_api/
 │       ├── main.py                 # 服务启动入口（uvicorn）
@@ -282,7 +288,7 @@ services/
 │               ├── assets.py       # /assets/ - 资产 CRUD
 │               ├── collaboration.py# /collaboration/ - PR 协作
 │               ├── evaluations.py  # /evaluations/ - 评测结果
-│               ├── health.py       # /health - 健康检查
+│               ├── health.py       # /health - 健康检查（含首次启动 setupChecklist）
 │               ├── mcp.py          # /mcp/ - MCP 协议
 │               ├── memory.py       # /memory/ - 记忆树操作
 │               ├── modules.py      # /modules/ - 模块管理
@@ -294,16 +300,16 @@ services/
 │               ├── specs.py        # /specs/ - 规格查询
 │               ├── tasks.py        # /tasks/ - 任务生命周期、P4 approve/revision 控制面与 latest LLM analysis 入口
 │               ├── training.py     # /training/ - 训练实验
-│               └── workbench.py    # /workbench/ - 总览数据
+│               └── workbench.py    # /workbench/ - 总览数据（首页也消费嵌套 health setupChecklist）
 │
-├── agent-runtime/                  # Agent 执行引擎服务（:8001）
+├── agent-runtime/                  # Agent 执行引擎服务（:5001）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_agent_runtime/
 │       ├── main.py                 # 服务启动入口
 │       ├── app.py                  # FastAPI 应用实例
 │       └── runtime.py              # Agent 执行主逻辑（任务分发、LLM 调用闭环；现导出 approve/revision 运行时控制）
 │
-├── module-host/                    # 模块宿主服务（:8002）
+├── module-host/                    # 模块宿主服务（:5002）
 │   ├── pyproject.toml
 │   └── src/yggdrasil_module_host/
 │       ├── main.py                 # 服务启动入口
@@ -381,8 +387,8 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
-│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/pilot-sandbox/pilot-live/pilot-scorecard）
+│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/launch/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
 ├── contracts/                      # 跨语言共享类型定义
@@ -391,7 +397,7 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse 的 runtimeControl approve/revision、mailbox 与 side-channel 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema 与 setupChecklist 契约
 ```
 
 **关键说明：**
@@ -509,11 +515,16 @@ applications/
 ```
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
+├── config/defaults.json     # 应用默认配置
+├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、settingsSchema
 ├── memory/                  # 应用静态记忆资产（随包发布，运行时按应用命名空间叠加）
-└── prompts/
-    ├── system.md           # 系统提示（定义 Agent 身份与工作方式）
-    └── seed.md             # 种子记忆（初始化上下文）
+├── prompt-profiles/          # 主 Agent / Sub-Agent prompt profile
+└── scenes/                   # seed template / 场景启动资产
 ```
+
+**关键说明：**
+- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
+- `services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `list_applications()` 已把 dashboard payload 随 `GET /applications` 返回，任务页无需再逐个请求应用详情才能显示模板。
 
 ---
 
@@ -678,7 +689,7 @@ evaluation/
     ├── m9-acceptance.json          # M9 验收套件
     ├── m9-control-plane.json       # M9 控制面回归套件
     ├── g2-regression.json          # G2 受控自治回归套件（复杂文件拆分固定样本）
-    ├── g4-multiscene.json          # G4 官方三场景离线套件（快任务/跨会话/恢复/隔离）
+    ├── g4-multiscene.json          # G4 历史三场景离线套件（当前根脚本不再直接映射到此文件）
     ├── g4-provider-matrix.json     # G4 官方 live provider matrix（DeepSeek + LongCat；live artifact 现含 token 用量拆分、contextLengthObservations 与 runtimeMetrics）
     ├── g4-provider-matrix-longform.json
                                     #   G4 单任务长样本 live provider matrix（先聚焦一个更长的 coding 任务；用于观察长任务 token 与上下文窗口压力）
@@ -686,18 +697,22 @@ evaluation/
                                     #   G4 默认真实任务入口（single-goal / externalized；用于正式 real-task 合同）
     ├── g4-real-task-unrelated-dual-live.json
                                     #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照，并强制 formal delivery footer 以穿过 delivery gate）
+    ├── g4-real-task-web-research-default.json
+                                    #   G4 默认 Web Research 入口（网络检索 + 多源对比 + 矛盾处理；当前 eval:g4:multiscene 与 eval:g4:web-research:default 均映射到这里）
+    ├── g4-web-research-work-tree-long.json
+                                    #   G4 Web Research 长任务入口（固定 LongCat live，强调多窗口 continuation 与工作树连续性）
     ├── g4-graduate-ml-longcat2.json
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + LongCat 2；强调 tool-rich 学习过程、计划-步骤-动作结构与阶段汇报）
+    ├── g4-graduate-ml-deepseek-v4.json
+                                    #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + DeepSeek V4；用于 LongCat 以外的结构化对照）
     ├── g4-real-task-window-parity.json
-                                    #   G4 真实任务窗口对照（repo-wide baseline；现已接入 strict 审计、window-execution 指标、workTreeContinuity/minimalWorkset 正式门禁，并要求 7 段简报后追加 formal delivery footer 以穿过 runtime delivery gate）
+                                    #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
-                                    #   G4 真实任务窗口对照 flash 变体（保留 LongCat 2，对 DeepSeek paid 路径切到 deepseek-v4-flash；用于实际任务 flash live 复跑，同样追加 formal delivery footer 合同）
+                                    #   G4 真实任务窗口对照 flash 专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-minimal-workset.json
-                                    #   G4 真实任务最小工作集 legacy 参考（repo-specific 历史样本；不再作为默认真实任务模板）
-    ├── g4-real-task-work-tree-debug.json
-                                    #   G4 真实任务工作树调试 harness（显式嵌套 takeoverProtocol，从 child 节点起步；当前目标已切到 child 先回父节点、父节点再决定 sibling/leaf 的编排语义，不再把 failure->sibling continuation 当默认目标）
-    └── g4-window-restart-stress.json
-                                    #   G4 官方伪无限上下文窗口 stress（显式 effectiveContextWindow + forcedWindowRestartBudget；LongCat/DeepSeek 正式对照）
+                                    #   G4 真实任务最小工作集 legacy 参考（repo-specific 历史样本；当前根 package.json 不暴露 pnpm 脚本）
+    └── g4-real-task-work-tree-debug.json
+                                    #   G4 真实任务工作树调试 harness（显式嵌套 takeoverProtocol，从 child 节点起步；当前目标已切到 child 先回父节点、父节点再决定 sibling/leaf 的编排语义）
 ```
 
 **评测命令映射：**
@@ -710,16 +725,15 @@ evaluation/
 | `eval:m9:control-plane` | `suites/m9-control-plane.json` |
 | `eval:m9:acceptance` | `suites/m9-acceptance.json` |
 | `eval:g2:regression` | `suites/g2-regression.json` |
-| `eval:g4:multiscene` | `suites/g4-multiscene.json` |
+| `eval:g4:multiscene` | `suites/g4-real-task-web-research-default.json` |
+| `eval:g4:web-research:default` | `suites/g4-real-task-web-research-default.json` |
+| `eval:g4:web-research:work-tree-long` | `suites/g4-web-research-work-tree-long.json` |
+| `eval:g4:graduate-ml:longcat2` | `suites/g4-graduate-ml-longcat2.json` |
+| `eval:g4:graduate-ml:deepseek-v4` | `suites/g4-graduate-ml-deepseek-v4.json` |
 | `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
-| `eval:g4:real-task-parity` | `suites/g4-real-task-window-parity.json` |
-| `eval:g4:real-task-parity:flash` | `suites/g4-real-task-window-parity-flash.json` |
 | `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
-| `eval:g4:graduate-ml:longcat2` | `suites/g4-graduate-ml-longcat2.json` |
-| `eval:g4:real-task-minimal-workset` | `suites/g4-real-task-minimal-workset.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
-| `eval:g4:window-stress` | `suites/g4-window-restart-stress.json` |
 
 ---
 
@@ -906,7 +920,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | 文件 | 用途 |
 |------|------|
 | `pyproject.toml` | Python UV 工作区根配置，声明所有子工作区成员，Ruff 代码检查规则 |
-| `package.json` | Node.js/pnpm 根配置，定义所有 `pnpm` 脚本命令 |
+| `package.json` | Node.js/pnpm 根配置，定义所有 `pnpm` 脚本命令；`yggdrasil:up` 是本地产品一键启动入口 |
 | `pnpm-workspace.yaml` | pnpm Monorepo 工作区成员声明 |
 | `tsconfig.base.json` | TypeScript 基础配置，所有前端包继承 |
 | `alembic.ini` | Alembic 数据库迁移工具主配置 |
@@ -921,6 +935,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md` | 给 code agent 的返工任务文档：针对验收发现的残留问题，要求世界级阶段彻底不见任务信息、只有真实最近现场才能无损恢复，并让 TaskRuntimeState 成为唯一任务态入口 |
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”的目标流程，并对照当前协议/提示词/运行时/测试的缺口 |
+| `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
@@ -971,6 +986,7 @@ docs/
 | 模块清单格式规格 | `docs/protocols/yggdrasil-module-manifest-v0.1.md` |
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
+| 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |

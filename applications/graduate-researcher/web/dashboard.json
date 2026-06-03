@@ -5,9 +5,119 @@
     "summary": "面向长周期学习任务。默认启用多工具能力（网络检索、计算验证、记忆整理、关系发现、多模态摄取），把预算优先投入学习过程与记忆树沉淀。"
   },
   "quickActions": [
-    {"label": "MCP 工具", "href": "/mcp"},
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.graduate-researcher"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.graduate-researcher"},
-    {"label": "任务", "href": "/tasks"}
+    {
+      "label": "MCP 工具",
+      "href": "/mcp"
+    },
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.graduate-researcher"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.graduate-researcher"
+    },
+    {
+      "label": "任务",
+      "href": "/tasks"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "learning-research-loop",
+      "title": "启动长期学习研究",
+      "goal": "输入学习主题、当前水平和阶段目标，让应用制定学习路径、收集证据并沉淀记忆。",
+      "description": "适合长周期学习、文献阅读和研究能力建设。",
+      "taskType": "research-learning",
+      "currentFocus": "learning-loop",
+      "currentObjective": "建立长期学习研究循环",
+      "budget": {
+        "tokenBudgetTotal": 1000000
+      }
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.graduate-researcher"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

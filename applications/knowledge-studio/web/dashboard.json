@@ -5,7 +5,108 @@
     "summary": "这个应用把深度研究和史诗写作两个场景模块组合到同一应用里，适合需要证据链和长期创作资产的任务。"
   },
   "quickActions": [
-    {"label": "Prompt 管理", "href": "/prompting?appId=yggdrasil.app.knowledge-studio"},
-    {"label": "应用详情", "href": "/applications/yggdrasil.app.knowledge-studio"}
+    {
+      "label": "Prompt 管理",
+      "href": "/prompting?appId=yggdrasil.app.knowledge-studio"
+    },
+    {
+      "label": "应用详情",
+      "href": "/applications/yggdrasil.app.knowledge-studio"
+    }
+  ],
+  "taskTemplates": [
+    {
+      "id": "knowledge-artifact",
+      "title": "整理知识产物",
+      "goal": "输入主题、已有材料和目标读者，产出结构化知识资产或创作素材。",
+      "description": "适合研究和创作之间的知识整理。",
+      "taskType": "research-writing",
+      "currentFocus": "knowledge-organization",
+      "currentObjective": "生成可复用知识产物"
+    }
+  ],
+  "settingsSchema": [
+    {
+      "key": "provider",
+      "label": "Provider",
+      "type": "select",
+      "description": "Default model provider for this application.",
+      "options": [
+        {
+          "label": "LongCat",
+          "value": "longcat"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
+        {
+          "label": "DeepSeek Direct",
+          "value": "deepseek_direct"
+        },
+        {
+          "label": "VectorEngine",
+          "value": "vectorengine"
+        }
+      ]
+    },
+    {
+      "key": "model",
+      "label": "Model",
+      "type": "text",
+      "description": "Default model name used when launching tasks."
+    },
+    {
+      "key": "tokenBudgetTotal",
+      "label": "Token budget",
+      "type": "number",
+      "description": "Default total token budget for new tasks.",
+      "defaultValue": 200000
+    },
+    {
+      "key": "costBudgetTotal",
+      "label": "Cost budget",
+      "type": "number",
+      "description": "Default cost budget in USD."
+    },
+    {
+      "key": "workspace",
+      "label": "Workspace",
+      "type": "text",
+      "description": "Default working directory or material folder."
+    },
+    {
+      "key": "outputStyle",
+      "label": "Output style",
+      "type": "textarea",
+      "description": "Default answer and artifact style."
+    },
+    {
+      "key": "memoryNamespace",
+      "label": "Memory namespace",
+      "type": "text",
+      "description": "Runtime memory namespace.",
+      "defaultValue": "yggdrasil.app.knowledge-studio"
+    },
+    {
+      "key": "toolPermissions",
+      "label": "Tool permissions",
+      "type": "select",
+      "description": "Default tool-use permission profile.",
+      "options": [
+        {
+          "label": "Conservative",
+          "value": "conservative"
+        },
+        {
+          "label": "Tool rich",
+          "value": "tool-rich"
+        },
+        {
+          "label": "Unrestricted",
+          "value": "unrestricted"
+        }
+      ]
+    }
   ]
 }

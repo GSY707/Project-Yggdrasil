@@ -134,7 +134,7 @@ evaluation/
     ├── m9-acceptance.json          # M9 验收套件
     ├── m9-control-plane.json       # M9 控制面回归套件
     ├── g2-regression.json          # G2 受控自治回归套件（复杂文件拆分固定样本）
-    ├── g4-multiscene.json          # G4 官方三场景离线套件（快任务/跨会话/恢复/隔离）
+    ├── g4-multiscene.json          # G4 历史三场景离线套件（当前根脚本不再直接映射到此文件）
     ├── g4-provider-matrix.json     # G4 官方 live provider matrix（DeepSeek + LongCat；live artifact 现含 token 用量拆分、contextLengthObservations 与 runtimeMetrics）
     ├── g4-provider-matrix-longform.json
                                     #   G4 单任务长样本 live provider matrix（先聚焦一个更长的 coding 任务；用于观察长任务 token 与上下文窗口压力）
@@ -146,8 +146,16 @@ evaluation/
                                     #   G4 默认真实任务入口（网络检索 + 多源对比 + 矛盾处理；strict 审计与 formal delivery footer）
     ├── g4-web-research-work-tree-long.json
                                     #   G4 web research 长任务入口（固定 LongCat live，强调多窗口 continuation 与工作树连续性）
+    ├── g4-graduate-ml-longcat2.json
+                                    #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + LongCat 2）
+    ├── g4-graduate-ml-deepseek-v4.json
+                                    #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + DeepSeek V4）
+    ├── g4-real-task-window-parity.json
+                                    #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
+    ├── g4-real-task-window-parity-flash.json
+                                    #   G4 真实任务窗口对照 flash 专项资产（当前根 package.json 不暴露 pnpm 脚本）
     └── g4-real-task-work-tree-debug.json
-                                    #   G4 真实任务工作树调试 harness（显式嵌套 takeoverProtocol，从 child 节点起步；当前目标已切到 child 先回父节点、父节点再决定 sibling/leaf 的编排语义，不再把 failure->sibling continuation 当默认目标）
+                                    #   G4 真实任务工作树调试 harness（显式嵌套 takeoverProtocol，从 child 节点起步；当前目标已切到 child 先回父节点、父节点再决定 sibling/leaf 的编排语义）
 ```
 
 **评测命令映射：**
@@ -160,11 +168,13 @@ evaluation/
 | `eval:m9:control-plane` | `suites/m9-control-plane.json` |
 | `eval:m9:acceptance` | `suites/m9-acceptance.json` |
 | `eval:g2:regression` | `suites/g2-regression.json` |
-| `eval:g4:multiscene` | `suites/g4-multiscene.json` |
+| `eval:g4:multiscene` | `suites/g4-real-task-web-research-default.json` |
 | `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:web-research:default` | `suites/g4-real-task-web-research-default.json` |
 | `eval:g4:web-research:work-tree-long` | `suites/g4-web-research-work-tree-long.json` |
+| `eval:g4:graduate-ml:longcat2` | `suites/g4-graduate-ml-longcat2.json` |
+| `eval:g4:graduate-ml:deepseek-v4` | `suites/g4-graduate-ml-deepseek-v4.json` |
 | `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
 
@@ -309,6 +319,7 @@ scripts/
 
 **运行方式：**
 ```bash
+corepack pnpm yggdrasil:up    # 本地产品模式：infra + migration + services + Web
 bash scripts/check_migrations.sh   # 需要 docker，约 30 s
 bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 ```

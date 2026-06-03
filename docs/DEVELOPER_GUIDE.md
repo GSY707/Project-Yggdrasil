@@ -33,7 +33,7 @@
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ HTTP
 ┌───────────────────────────────▼─────────────────────────────────┐
-│                      Core API  (FastAPI :8000)                   │
+│                      Core API  (FastAPI :5000)                   │
 │  tasks / nodes / memory / assets / prompting / evaluations ...   │
 └───┬──────────────┬──────────────┬──────────────┬────────────────┘
     │              │              │              │
@@ -121,7 +121,7 @@ YGGDRASIL_NATS_URL=nats://127.0.0.1:4222
 YGGDRASIL_NATS_STREAM=YGGDRASIL
 YGGDRASIL_NATS_SUBJECT_PREFIX=yggdrasil.events
 YGGDRASIL_STATE_ROOT=.yggdrasil
-YGGDRASIL_CORE_API_BASE_URL=http://127.0.0.1:8000
+YGGDRASIL_CORE_API_BASE_URL=http://127.0.0.1:5000
 YGGDRASIL_GIT_REPO_PATH=.
 YGGDRASIL_MCP_PROJECT_WORKSPACE=.
 
@@ -176,9 +176,9 @@ CI 或长期开发环境请使用各自的 secret manager / 用户级环境变�
 
 | 服务 | 默认端口 |
 |------|---------|
-| Core API | 8000 |
-| Agent Runtime | 8001 |
-| Module Host | 8002 |
+| Core API | 5000 |
+| Agent Runtime | 5001 |
+| Module Host | 5002 |
 | Web 工作台 | 3000 |
 | PostgreSQL | 5432 |
 | Redis | 6379 |
@@ -247,7 +247,13 @@ corepack pnpm infra:smoke
 
 ## 5. 启动服务
 
-建议开 4 个终端分别运行各服务：
+本地产品模式优先使用一键启动：
+
+```bash
+corepack pnpm yggdrasil:up
+```
+
+该命令会预检 Docker、端口、依赖与 provider key，启动 infra、执行迁移，并拉起 Core API、Agent Runtime、Module Host、Worker 与 Web。需要单独调试服务时，再开多个终端分别运行：
 
 ```bash
 # 终端 1：控制面 API
@@ -260,7 +266,7 @@ uv run yggdrasil-agent-runtime
 uv run yggdrasil-module-host
 
 # 终端 4：异步任务 Worker
-uv run yggdrasil-worker
+uv run yggdrasil-worker --serve
 
 # 终端 5：Web 工作台
 corepack pnpm web:dev

@@ -1,13 +1,132 @@
+import os
+
 from ._base import *  # noqa: F403,F401
 from yggdrasil_sdk.llm_work_analysis import analyze_llm_work_run, load_persisted_llm_work_analysis
+from yggdrasil_sdk.runtime_kernel import AGENT_RUNTIME_QUEUE
+from yggdrasil_sdk.support import resolve_state_root, resolve_workspace_root
 
 class RuntimeServiceMixin:
+    def _provider_setup_status(self) -> dict[str, object]:
+        provider_keys = {
+            "longcat": ("YGGDRASIL_LLM_API_KEY_LONGCAT", "LONGCAT_API_KEY"),
+            "openrouter": ("YGGDRASIL_LLM_API_KEY_OPENROUTER", "OPENROUTER_API_KEY"),
+            "deepseek_direct": ("YGGDRASIL_LLM_API_KEY_DEEPSEEK", "DEEPSEEK_API_KEY"),
+            "vectorengine": ("YGGDRASIL_LLM_API_KEY_VECTORENGINE", "VECTORENGINE_API_KEY"),
+        }
+        configured = [
+            provider
+            for provider, env_names in provider_keys.items()
+            if any(str(os.environ.get(env_name) or "").strip() for env_name in env_names)
+        ]
+        if str(os.environ.get("YGGDRASIL_DISABLE_LIVE_LLM") or "").strip().lower() in {"1", "true", "yes", "on"}:
+            return {
+                "id": "model-provider",
+                "label": "Model provider",
+                "status": "warning",
+                "detail": "Live LLM is disabled; tasks will use deterministic fallback.",
+                "remediation": "Remove YGGDRASIL_DISABLE_LIVE_LLM or configure a provider key before real user tasks.",
+            }
+        if configured:
+            return {
+                "id": "model-provider",
+                "label": "Model provider",
+                "status": "ready",
+                "detail": f"Configured providers: {', '.join(configured)}.",
+            }
+        return {
+            "id": "model-provider",
+            "label": "Model provider",
+            "status": "blocked",
+            "detail": "No model provider key is configured.",
+            "remediation": "Set YGGDRASIL_LLM_API_KEY_LONGCAT or LONGCAT_API_KEY in .env, then restart services.",
+        }
+
+    def _path_setup_statuses(self) -> list[dict[str, object]]:
+        try:
+            workspace_root = resolve_workspace_root(self.workspace_root)
+            workspace_status = {
+                "id": "workspace-path",
+                "label": "Workspace path",
+                "status": "ready",
+                "detail": str(workspace_root),
+            }
+        except Exception as exc:
+            workspace_status = {
+                "id": "workspace-path",
+                "label": "Workspace path",
+                "status": "blocked",
+                "detail": str(exc),
+                "remediation": "Start services from the Project Yggdrasil repository root.",
+            }
+
+        try:
+            state_root = resolve_state_root(self.workspace_root)
+            state_parent = state_root if state_root.exists() else state_root.parent
+            state_status = {
+                "id": "state-root",
+                "label": "State root",
+                "status": "ready" if state_parent.exists() else "blocked",
+                "detail": str(state_root),
+                "remediation": None if state_parent.exists() else "Create the state root parent directory or set YGGDRASIL_STATE_ROOT to a writable path.",
+            }
+        except Exception as exc:
+            state_status = {
+                "id": "state-root",
+                "label": "State root",
+                "status": "blocked",
+                "detail": str(exc),
+                "remediation": "Set YGGDRASIL_STATE_ROOT to a writable local state directory.",
+            }
+        return [workspace_status, state_status]
+
+    def _setup_checklist(self, database: dict[str, object], redis: dict[str, object]) -> list[dict[str, object]]:
+        database_ready = str(database.get("status") or "").lower() == "ok"
+        redis_status = str(redis.get("status") or "").lower()
+        redis_backend = str(redis.get("backend") or "").lower()
+        redis_ready = redis_status == "ok" and redis_backend == "redis"
+        redis_warning = redis_status == "ok" and redis_backend != "redis"
+        checklist = [
+            {
+                "id": "core-api",
+                "label": "Core API",
+                "status": "ready",
+                "detail": "Core API responded to /health.",
+            },
+            {
+                "id": "database",
+                "label": "Database",
+                "status": "ready" if database_ready else "blocked",
+                "detail": str(database.get("databaseUrl") or database.get("detail") or database),
+                "remediation": None if database_ready else "Run corepack pnpm infra:up and uv run alembic upgrade head.",
+            },
+            {
+                "id": "redis",
+                "label": "Redis coordination",
+                "status": "ready" if redis_ready else "warning" if redis_warning else "blocked",
+                "detail": str(redis.get("redisUrl") or redis.get("detail") or redis),
+                "remediation": None if redis_ready else "Start Redis with corepack pnpm infra:up; memory fallback is not a durable product mode.",
+            },
+            {
+                "id": "worker-queue",
+                "label": "Worker queue",
+                "status": "warning" if redis_ready or redis_warning else "blocked",
+                "detail": f"Queue {AGENT_RUNTIME_QUEUE} is configured; worker process liveness is verified by the launcher.",
+                "remediation": "Start yggdrasil-worker --serve or use corepack pnpm yggdrasil:up.",
+            },
+            self._provider_setup_status(),
+            *self._path_setup_statuses(),
+        ]
+        return checklist
+
     def health_report(self) -> dict[str, object]:
+        database = self.runtime.ping_database()
+        redis = self.coordinator.ping()
         return {
             "status": "ok",
             "service": "core-api",
-            "database": self.runtime.ping_database(),
-            "redis": self.coordinator.ping(),
+            "database": database,
+            "redis": redis,
+            "setupChecklist": self._setup_checklist(database, redis),
         }
 
     def analyze_llm_work(self, payload: dict[str, Any] | None = None) -> dict[str, object]:
@@ -128,6 +247,7 @@ class RuntimeServiceMixin:
                 {
                     "application": manifest.model_dump(by_alias=True, mode="json"),
                     "configBinding": binding.model_dump(by_alias=True, mode="json"),
+                    "dashboard": self._load_ref_payload(manifest.dashboard_ref.locator if manifest.dashboard_ref else None),
                 }
             )
         return {

@@ -65,13 +65,27 @@ corepack pnpm install
 
 如需本地联调，可基于 `.env.example` 准备本地 `.env`，并至少注入一个可用的模型提供方 API key；不要把真实 key 提交到仓库。
 
-### 启动服务
+### 一键启动本地产品
+
+```powershell
+corepack pnpm yggdrasil:up
+```
+
+该命令会预检 Docker、端口、依赖和模型 provider key，启动本地 infra，执行 Alembic 迁移，再启动 Core API、Agent Runtime、Module Host、Worker 和 Web 工作台。成功后只需要打开：
+
+```text
+http://localhost:3000
+```
+
+### 开发者手动启动服务
+
+需要分别调试服务时，再使用多终端手动启动：
 
 ```powershell
 uv run yggdrasil-core-api
 uv run yggdrasil-agent-runtime
 uv run yggdrasil-module-host
-uv run yggdrasil-worker
+uv run yggdrasil-worker --serve
 corepack pnpm web:dev
 ```
 
@@ -120,21 +134,25 @@ corepack pnpm eval:m9:control-plane
 corepack pnpm eval:m9:acceptance
 corepack pnpm eval:g2:regression
 corepack pnpm eval:g4:multiscene
+corepack pnpm eval:g4:web-research:default
+corepack pnpm eval:g4:web-research:work-tree-long
+corepack pnpm eval:g4:graduate-ml:longcat2
+corepack pnpm eval:g4:graduate-ml:deepseek-v4
 corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
-corepack pnpm eval:g4:window-stress
-corepack pnpm eval:g4:real-task-parity
+corepack pnpm eval:g4:real-task-unrelated:dual-live
+corepack pnpm eval:g4:work-tree-debug
 ```
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-2.0-Preview`，并保留 `longcat/LongCat-Flash-Lite` 作为对照 case；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
 
-`corepack pnpm eval:g4:multiscene` 是 Gate 4 官方离线门禁，覆盖 coding / research / writing 三场景的快任务合同、跨会话恢复合同、pause/resume 恢复与场景切换隔离。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 官方 live provider matrix，覆盖同一组三场景在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上的正式复跑。
+`corepack pnpm eval:g4:multiscene` 目前沿用历史命名，但根脚本已经切到默认 Web Research 真实任务 suite；`corepack pnpm eval:g4:web-research:default` 是同一 suite 的显式入口，聚焦网络检索、多源对比和矛盾处理。`corepack pnpm eval:g4:web-research:work-tree-long` 是 Web Research 长任务入口，用于观察多窗口 continuation 与工作树连续性。
 
 `corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
 
-`corepack pnpm eval:g4:window-stress` 是当前仓库内置的伪无限上下文窗口 stress 入口：它会在同一任务上显式设置 `effectiveContextWindow`，并通过 `forcedWindowRestartBudget` 强制执行多次 restart handoff，再在最终窗口完成正式模型调用。当前批准的正式 stress provider 为 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview`。2026-05-15 的正式 live run `evalrun_1160dc08b84e4b6e8268` 已补上首轮证据：DeepSeek 与 LongCat 两个 case 都在 `effectiveContextWindow=120` 下完成 `restartCount=100`、`windowIndex=101`、`restartSuccessRate0_1=1.0`。
+`corepack pnpm eval:g4:graduate-ml:longcat2` 与 `corepack pnpm eval:g4:graduate-ml:deepseek-v4` 是 Graduate Researcher 应用的机器学习研究生 live 入口，重点检查 tool-rich 学习过程、预算、证据、阶段汇报和人工评审占位。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 live provider matrix，`corepack pnpm eval:g4:real-task-unrelated:dual-live` 用与本项目无关的 incident RCA 题面对照 LongCat 与 DeepSeek，`corepack pnpm eval:g4:work-tree-debug` 是显式工作树调试 harness。
 
-`corepack pnpm eval:g4:real-task-parity` 是当前仓库的真实任务 parity 入口：它把当前 repo 的文档、协议、评测、运行时、provider、测试和前端/应用 surface 作为真实语料装入同一任务，再比较 `64k` 与 `128k` 两档真实窗口。2026-05-16 的正式 LongCat run `evalrun_590eca26a63247308373` 给出了第一条结构性对照证据：两条路径都通过，`planQualityScore0_100=96.0`，`acceptance_pass_0_1=1`，且 `cumulativeWindowSpanTokens` 约为 `4.10M`。但同日晚的保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这还不能解释成最终交付 parity；恢复态 prompt contract 仍会把输出拉成 planning stub。当前应以 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md` 的修正结论为准。
+历史窗口 stress 与真实任务 parity suite 文件仍保留在 `evaluation/suites/` 作为专项资产，但当前根 `package.json` 不再暴露对应 `pnpm` 脚本。若恢复这些入口，必须同时更新 `package.json`、README 和 `docs/DIRECTORY_REFERENCE.md`。
 
 如果要在 live suite 或 `pilot-live` 中使用付费 provider（例如 `deepseek_direct / deepseek-v4-pro`），除了配置 API key 之外，还必须显式设置 `YGGDRASIL_ALLOW_PAID_MODELS=1`；否则 paid candidate 不会进入 runtime catalog。
 
@@ -144,6 +162,7 @@ corepack pnpm eval:g4:real-task-parity
 corepack pnpm infra:up
 corepack pnpm infra:down
 corepack pnpm infra:smoke
+corepack pnpm yggdrasil:up
 corepack pnpm ops:backup
 corepack pnpm ops:restore
 corepack pnpm real-user:prepare
@@ -180,8 +199,8 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - Gate 2 已闭合：完成 1 轮全量官方复跑 + 2 轮稳定性复跑；`YGG-CG-01` / `YGG-CG-03` 连续 3 轮全部通过，人工接管中位数 0，用户澄清回合中位数 0，恢复成功率 100%。
 - Gate 3 已闭合：首 token 观测、work tree 正式对象、post-invocation budget hard fail、`execute_server` 默认拒绝网络命令、worker retry/requeue 与 paid-provider live batch 已全部落下正式证据。
 - Gate 4 已闭合：few-shot 执行链、官方三场景资产收口、`evalsuite_g4_multiscene`、`evalsuite_g4_provider_matrix`、Prompt 控制面 few-shot 显示与手动 release gate 已完成闭环。
-- 伪无限上下文窗口第一版已落地并取得首轮 live 证据：execution loop restart controller、restart snapshot、carry-forward package、runtimeMetrics、`evalsuite_g4_window_restart_stress` 与 `eval:g4:window-stress` 已进仓；LongCat 与 DeepSeek 已作为正式 stress provider 批准，并在 `evalrun_1160dc08b84e4b6e8268` 中完成 `restartCount=100` 的正式复跑。
-- LongCat 真实任务结构性对照已补上：`evalsuite_g4_real_task_window_parity` / `eval:g4:real-task-parity` 在 `evalrun_590eca26a63247308373` 中完成 `64k` vs `128k` 的 4M 级样本对照；但保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这条证据目前只证明 restart 技术闭环，尚未证明最终交付 parity。
+- 伪无限上下文窗口第一版已落地并取得首轮 live 证据：execution loop restart controller、restart snapshot、carry-forward package、runtimeMetrics 与窗口重启 stress 评测资产已落地；LongCat 与 DeepSeek 已作为正式 stress provider 批准，并在 `evalrun_1160dc08b84e4b6e8268` 中完成 `restartCount=100` 的正式复跑。
+- LongCat 真实任务结构性对照已补上：`evalsuite_g4_real_task_window_parity` 在 `evalrun_590eca26a63247308373` 中完成 `64k` vs `128k` 的 4M 级样本对照；但保留日志重跑 `evalrun_941c8b8ca2204966812d` 已确认，这条证据目前只证明 restart 技术闭环，尚未证明最终交付 parity。
 - 当前正式闭环证据应分开看：Gate 2/3/4 基线闭环参考见 `docs/research/g2-closeout-2026-05-15.md`、`docs/research/g3-closeout-2026-05-15.md`、`docs/research/g4-closeout-2026-05-15.md`；真实任务 parity 的最新修正结论见 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md`。
 
 下一步更值得投入的是：

@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { ApplicationConfigBinding, ApplicationManifestSummary, ApplicationMemoryAssetRecord } from "@yggdrasil/frontend-sdk";
+import type {
+  ApplicationCatalogItem,
+  ApplicationConfigBinding,
+  ApplicationDashboard,
+  ApplicationManifestSummary,
+  ApplicationMemoryAssetRecord,
+  ApplicationSettingsField,
+} from "@yggdrasil/frontend-sdk";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
+import { TaskLaunchPanel } from "./task-launch-panel";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Surface, StatusBadge } from "./workbench-primitives";
 
 type ApplicationDetailResponse = {
@@ -16,17 +24,106 @@ type ApplicationDetailResponse = {
   dashboard?: Record<string, unknown> | null;
 };
 
+const DEFAULT_SETTINGS_SCHEMA: ApplicationSettingsField[] = [
+  {
+    key: "provider",
+    label: "Provider",
+    type: "select",
+    description: "默认模型供应商。",
+    options: [
+      { label: "LongCat", value: "longcat" },
+      { label: "OpenRouter", value: "openrouter" },
+      { label: "DeepSeek Direct", value: "deepseek_direct" },
+      { label: "VectorEngine", value: "vectorengine" },
+    ],
+  },
+  { key: "model", label: "Model", type: "text", description: "默认模型名称。" },
+  { key: "tokenBudgetTotal", label: "Token budget", type: "number", description: "任务默认 token 总预算。" },
+  { key: "costBudgetTotal", label: "Cost budget", type: "number", description: "任务默认成本预算，单位 USD。" },
+  { key: "workspace", label: "Workspace", type: "text", description: "任务默认工作区或资料目录。" },
+  { key: "outputStyle", label: "Output style", type: "textarea", description: "默认输出风格要求。" },
+  { key: "memoryNamespace", label: "Memory namespace", type: "text", description: "运行记忆命名空间。" },
+  {
+    key: "toolPermissions",
+    label: "Tool permissions",
+    type: "select",
+    description: "默认工具权限强度。",
+    options: [
+      { label: "Conservative", value: "conservative" },
+      { label: "Tool rich", value: "tool-rich" },
+      { label: "Unrestricted", value: "unrestricted" },
+    ],
+  },
+];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function dashboardPayload(value: Record<string, unknown> | null | undefined): ApplicationDashboard {
+  return asRecord(value) as ApplicationDashboard;
+}
+
+function settingsSchema(dashboard: ApplicationDashboard): ApplicationSettingsField[] {
+  return Array.isArray(dashboard.settingsSchema) && dashboard.settingsSchema.length > 0 ? dashboard.settingsSchema : DEFAULT_SETTINGS_SCHEMA;
+}
+
+function settingValue(config: Record<string, unknown>, field: ApplicationSettingsField): string | number | boolean {
+  const raw = config[field.key] ?? field.defaultValue ?? "";
+  if (field.type === "boolean") {
+    return Boolean(raw);
+  }
+  if (field.type === "number") {
+    return raw === "" || raw === null || raw === undefined ? "" : Number(raw);
+  }
+  return String(raw ?? "");
+}
+
+function parseSettingsDraft(fields: ApplicationSettingsField[], draft: Record<string, string | number | boolean>): Record<string, unknown> {
+  const parsed: Record<string, unknown> = {};
+  for (const field of fields) {
+    const value = draft[field.key];
+    if (field.required && (value === "" || value === undefined || value === null)) {
+      throw new Error(`${field.label} 是必填项。`);
+    }
+    if (value === "" || value === undefined || value === null) {
+      continue;
+    }
+    if (field.type === "number") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        throw new Error(`${field.label} 必须是数字。`);
+      }
+      parsed[field.key] = numeric;
+    } else if (field.type === "boolean") {
+      parsed[field.key] = Boolean(value);
+    } else {
+      parsed[field.key] = String(value);
+    }
+  }
+  return parsed;
+}
+
 export function ApplicationDetailPage({ appId }: { appId: string }) {
   const detail = useApiResource<ApplicationDetailResponse>(`/applications/${encodeURIComponent(appId)}`);
   const [configDraft, setConfigDraft] = useState("{}");
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, string | number | boolean>>({});
+  const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (detail.data?.configBinding) {
       setConfigDraft(JSON.stringify(detail.data.configBinding.importantConfig ?? {}, null, 2));
+      const dashboard = dashboardPayload(detail.data.dashboard);
+      const fields = settingsSchema(dashboard);
+      const sourceConfig = {
+        ...asRecord(detail.data.effectiveConfig),
+        ...asRecord(detail.data.configBinding.importantConfig),
+      };
+      setSettingsDraft(Object.fromEntries(fields.map((field) => [field.key, settingValue(sourceConfig, field)])));
     }
-  }, [detail.data?.configBinding]);
+  }, [detail.data?.configBinding, detail.data?.dashboard, detail.data?.effectiveConfig]);
 
   async function handleActivate() {
     setIsSaving(true);
@@ -45,7 +142,14 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const parsed = JSON.parse(configDraft) as Record<string, unknown>;
+      const dashboard = dashboardPayload(detail.data?.dashboard);
+      const fields = settingsSchema(dashboard);
+      const advancedConfig = JSON.parse(configDraft) as Record<string, unknown>;
+      const typedConfig = parseSettingsDraft(fields, settingsDraft);
+      const parsed = {
+        ...advancedConfig,
+        ...typedConfig,
+      };
       await postApiJson(`/applications/${encodeURIComponent(appId)}/config`, { importantConfig: parsed });
       detail.reload();
     } catch (error) {
@@ -70,8 +174,15 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
   const manifest = detail.data.application;
   const binding = detail.data.configBinding;
   const memoryAssets = detail.data.applicationMemoryAssets ?? [];
-  const dashboardHero = typeof detail.data.dashboard?.hero === "object" ? detail.data.dashboard?.hero as Record<string, unknown> : null;
-  const quickActions = Array.isArray(detail.data.dashboard?.quickActions) ? detail.data.dashboard?.quickActions as Array<Record<string, unknown>> : [];
+  const dashboard = dashboardPayload(detail.data.dashboard);
+  const fields = settingsSchema(dashboard);
+  const dashboardHero = typeof dashboard.hero === "object" ? dashboard.hero as Record<string, unknown> : null;
+  const quickActions = Array.isArray(dashboard.quickActions) ? dashboard.quickActions as Array<Record<string, unknown>> : [];
+  const launchItem: ApplicationCatalogItem = {
+    application: manifest,
+    configBinding: binding,
+    dashboard,
+  };
 
   return (
     <div>
@@ -79,7 +190,12 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
         eyebrow={String(dashboardHero?.eyebrow ?? "Application Detail")}
         title={String(dashboardHero?.title ?? manifest.displayName)}
         summary={<>{String(dashboardHero?.summary ?? manifest.description ?? "该应用未提供额外说明。")}</>}
-        actions={<Link className="ghost-button" href="/applications">返回应用清单</Link>}
+        actions={
+          <>
+            <Link className="action-button" href={`/tasks?appId=${encodeURIComponent(manifest.appId)}`}>New task</Link>
+            <Link className="ghost-button" href="/applications">返回应用清单</Link>
+          </>
+        }
       />
 
       {saveError ? <ErrorState title="应用管理操作失败" detail={saveError} /> : null}
@@ -111,9 +227,12 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
             <button className="action-button" disabled={binding.active || isSaving} onClick={() => void handleActivate()} type="button">
               {binding.active ? "当前激活" : isSaving ? "处理中" : "激活应用"}
             </button>
+            <Link className="ghost-button" href={`/tasks?appId=${encodeURIComponent(manifest.appId)}`}>从模板新建任务</Link>
             <Link className="ghost-button" href={`/prompting?appId=${encodeURIComponent(manifest.appId)}`}>在 Prompt 控制面中查看</Link>
           </div>
         </Surface>
+
+        <TaskLaunchPanel applications={[launchItem]} compact defaultAppId={manifest.appId} title="从这个应用启动任务" />
 
         <Surface>
           <p className="section-kicker">Modules</p>
@@ -134,12 +253,63 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
 
         <Surface>
           <p className="section-kicker">Config</p>
-          <h3 className="section-title">重要配置管理</h3>
-          <p className="meta-copy">这里写入的是基座侧 importantConfig，会覆盖应用包 defaults.json 中的同名配置。</p>
-          <div className="form-field">
-            <label className="meta-label" htmlFor="application-config">Important Config JSON</label>
-            <textarea className="field-input field-textarea" id="application-config" onChange={(event) => setConfigDraft(event.target.value)} rows={12} value={configDraft} />
+          <h3 className="section-title">用户级重要设置</h3>
+          <p className="meta-copy">这里写入基座侧 importantConfig，会覆盖应用包 defaults.json。常用字段使用可验证控件，原始 JSON 放在高级模式。</p>
+          <div className="settings-grid">
+            {fields.map((field) => (
+              <div className="form-field" key={field.key}>
+                <label className="meta-label" htmlFor={`setting-${field.key}`}>{field.label}</label>
+                {field.type === "select" ? (
+                  <select
+                    className="field-input"
+                    id={`setting-${field.key}`}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                    value={String(settingsDraft[field.key] ?? "")}
+                  >
+                    <option value="">未设置</option>
+                    {(field.options ?? []).map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : field.type === "boolean" ? (
+                  <label className="toggle-row">
+                    <input
+                      checked={Boolean(settingsDraft[field.key])}
+                      id={`setting-${field.key}`}
+                      onChange={(event) => setSettingsDraft((current) => ({ ...current, [field.key]: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    <span>{Boolean(settingsDraft[field.key]) ? "Enabled" : "Disabled"}</span>
+                  </label>
+                ) : field.type === "textarea" ? (
+                  <textarea
+                    className="field-input field-textarea"
+                    id={`setting-${field.key}`}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                    value={String(settingsDraft[field.key] ?? "")}
+                  />
+                ) : (
+                  <input
+                    className="field-input"
+                    id={`setting-${field.key}`}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                    type={field.type === "number" ? "number" : "text"}
+                    value={String(settingsDraft[field.key] ?? "")}
+                  />
+                )}
+                {field.description ? <p className="meta-copy">{field.description}</p> : null}
+              </div>
+            ))}
           </div>
+          <button className="ghost-button advanced-toggle" onClick={() => setAdvancedConfigOpen((value) => !value)} type="button">
+            {advancedConfigOpen ? "收起高级 JSON" : "高级 JSON"}
+          </button>
+          {advancedConfigOpen ? (
+            <div className="form-field">
+              <label className="meta-label" htmlFor="application-config">Important Config JSON</label>
+              <textarea className="field-input field-textarea" id="application-config" onChange={(event) => setConfigDraft(event.target.value)} rows={12} value={configDraft} />
+            </div>
+          ) : null}
           <div className="field-actions">
             <button className="action-button" disabled={isSaving} onClick={() => void handleSaveConfig()} type="button">
               {isSaving ? "保存中" : "保存重要配置"}

@@ -346,9 +346,12 @@ def test_core_api_exposes_task_control_actions() -> None:
 
     overview_response = client.get("/workbench/overview")
     assert overview_response.status_code == 200
-    overview_cards = overview_response.json()["cards"]
+    overview_payload = overview_response.json()
+    overview_cards = overview_payload["cards"]
     assert overview_cards["pausedTasks"] >= 0
     assert overview_cards["restorableSnapshots"] >= 1
+    setup_ids = {item["id"] for item in overview_payload["health"]["setupChecklist"]}
+    assert {"core-api", "database", "redis", "worker-queue", "model-provider", "state-root", "workspace-path"} <= setup_ids
 
 
 def test_core_api_exposes_awaiting_approval_controls() -> None:
@@ -523,6 +526,11 @@ def test_core_api_exposes_m9_resource_and_prompt_control_planes() -> None:
 
     applications = client.get("/applications")
     assert applications.status_code == 200
+    software_factory_item = next(
+        item for item in applications.json()["applications"] if item["application"]["appId"] == "yggdrasil.app.software-factory"
+    )
+    assert software_factory_item["dashboard"]["taskTemplates"][0]["id"] == "deliver-change"
+    assert any(field["key"] == "provider" for field in software_factory_item["dashboard"]["settingsSchema"])
     app_ids = {item["application"]["appId"] for item in applications.json()["applications"]}
     assert {
         "yggdrasil.app.base",
@@ -541,6 +549,7 @@ def test_core_api_exposes_m9_resource_and_prompt_control_planes() -> None:
     assert application_detail.status_code == 200
     assert application_detail.json()["application"]["appId"] == "yggdrasil.app.software-factory"
     assert application_detail.json()["effectiveConfig"]["defaultTaskType"] == "coding"
+    assert application_detail.json()["dashboard"]["taskTemplates"][0]["taskType"] == "coding"
 
     registered_tools = client.get(
         "/prompting/registered-tools",
