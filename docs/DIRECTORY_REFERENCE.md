@@ -90,6 +90,7 @@
 > 2026/5/31 高标准执行蓝图冻结：新增 `docs/development/GRADUATE_STANDARD_EXECUTION_PLAYBOOK_2026_05_31.md`，明确阶段路线（S0-S4）、每阶段验收标准、实现思路、预算口径、失败处理策略，以及“多角色后置、诚信日志审计、不做答辩现场”三条执行边界。
 > 2026/5/31 范围边界回写：`docs/development/GRADUATE_STANDARD_EXECUTION_CLASSIFICATION_2026_05_30.md` 已新增“范围冻结（已确认）”章节，锁定多角色后置、诚信日志审计、答辩现场不纳入自动评测。
 > 2026/5/31 Tool-call 稳定性增强：`adapters/model-providers/src/yggdrasil_model_providers/gateway.py` 已新增参数容错解析（支持 code fence 提取、JSON 片段提取、单引号 JSON、`key=value`/`key:value` 宽松修复）；`packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` 及 `llm_runtime_part_a.py`/`llm_runtime_part_b.py` 已新增 single-required 参数修复（`value`/`_raw` 自动映射到 required 字段）并接入工具执行隔离流程；`tests/test_deepseek_gateway.py` 与 `tests/test_llm_retry_and_safe_shutdown.py` 已补回归。
+> 2026/6/3 runtime/llm 窄回滚同步：`runtime_kernel/execution_loop_worker_entry.py` 已恢复为稳定兼容代理，`execution_loop_bootstrap.py` 不再依赖不存在的 `__partNN` 文件；`llm_runtime.py` 继续走 canonical `core + tools_and_artifacts`，`llm_runtime_part_b.py` 仅保留可 monkeypatch 的 invoke 代理，原 `llm_runtime_part_b_state_utils.py` / `llm_runtime_part_b_invoke.py` 已退役；G2 的复杂文件拆分检查已降为 advisory，不再把 runtime/llm split 形态本身作为硬门禁。
 > 2026/5/31 LongCat memory tool-call 兜底：`modules/text-memory/src/yggdrasil_text_memory/plugin.py` 的 `text_memory.read_node` 在缺少 `nodeId` 时将回退读取 `read_index` 首个候选节点，避免空参重复循环直接短路；回归见 `tests/test_text_memory_and_adapters.py`。
 > 2026/5/31 LongCat 重复循环收敛增强：`modules/text-memory/src/yggdrasil_text_memory/plugin.py` 已将 `nodeId={}`/`[]` 视为缺参并触发 fallback；`packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` 在检测到 duplicate idempotent tool loop 后改为强制一轮禁工具最终交付（不再立即返回短路模板）。
 > 2026/5/31 执行链与审计同步增强：`packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` 已新增“工具名别名归一化”（把 `text_memory_read_*` / `mcp_read_*` 等下划线命名自动映射到已注册 dot 命名），并在 `toolExecutions` 里保留 `requestedName` 用于诊断模型工具名漂移；`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_transitions.py` 已把 continuation 窗口 run 状态从误导性的 `completed` 改为 `aborted`，且新增 `executionStateAudit`（task/run/result/transition/queue 统一快照）；`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 已新增 `executionStatusAudit` 与 `toolFailureSummary` 输出，支持直接判断“业务未闭环”是卡在状态机还是工具执行层。
@@ -345,8 +346,8 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已拆分为 execution_loop_part_a/b + transitions，入口文件保留兼容导出；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
-│       ├── llm_runtime.py          # LLM 调用封装兼容门面（实现拆分到 llm_runtime_part_a/b；保留原导入路径）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 主链当前通过 execution_loop.py + execution_loop_worker_entry.py 稳定导出，保留 part_a/b + transitions 作为内部实现；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── llm_runtime.py          # LLM 调用封装兼容门面（正式主链使用 core + tools_and_artifacts；llm_runtime_part_b.py 仅保留 invoke 兼容代理）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
 │       ├── hooks.py                # Hook 类型定义与注册接口
@@ -409,7 +410,7 @@ packages/
 - `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法，并显式给出 `work-node-create` / `work-node-enter` 标签契约（父节点强编排下由父节点决定进入已有 child、创建新 child 或汇总交付）；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
 - `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
-- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；`llm_runtime.py` 已拆分为 `llm_runtime_part_a.py`/`llm_runtime_part_b.py` 并保持原导入路径，避免外部调用改动。
+- `llm_runtime.py` + `tool_runtime.py` 构成正式工具分发链；当前正式主链走 `llm_runtime_core.py` + `llm_runtime_tools_and_artifacts.py`，`llm_runtime_part_b.py` 只保留 invoke monkeypatch/兼容代理，避免再依赖无意义的 `part_b_*` 再分片。
 - `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 

@@ -661,6 +661,37 @@ def invoke_runtime_completion(
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+
+            final_message = {
+                "role": "assistant",
+                "content": str(final_result.get("outputText") or ""),
+            }
+            invocation_entry = {
+                "invocationId": invocation.id,
+                "taskId": task.id,
+                "agentRunId": run.id,
+                "promptCompileArtifactId": prompt_artifact.id,
+                "status": invocation.status,
+                "requestedModel": route_payload.get("selectedModel"),
+                "requestedProvider": route_payload.get("selectedProvider"),
+                "resolvedModel": invocation.resolved_model,
+                "resolvedProvider": invocation.resolved_provider,
+                "windowIndex": response_runtime_metrics.get("windowIndex"),
+                "restartCount": response_runtime_metrics.get("restartCount"),
+                "cumulativeWindowSpanTokens": response_runtime_metrics.get("cumulativeWindowSpanTokens"),
+                "contextLengthObservations": [dict(item) for item in context_length_observations if isinstance(item, dict)],
+                "messages": _to_serialized_messages(messages),
+                "conversationMessages": _to_serialized_messages([*conversation_messages, final_message]),
+                "assistantText": str(final_result.get("outputText") or ""),
+                "error": final_result.get("error"),
+                "endedAt": utc_now().isoformat(),
+            }
+            _upsert_task_conversation_record(
+                workspace_root=workspace_root,
+                task_id=str(task.id),
+                invocation_entry=invocation_entry,
+            )
+
             local_runtime_timings["totalLocalMs"] = _elapsed_ms(local_started_at)
             return {
                 "assistantText": str(final_result.get("outputText") or ""),
@@ -753,6 +784,40 @@ def invoke_runtime_completion(
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+
+            failure_final_message = {
+                "role": "assistant",
+                "content": str(failure_result.get("outputText") or ""),
+            }
+            failure_entry = {
+                "invocationId": invocation.id,
+                "taskId": task.id,
+                "agentRunId": run.id,
+                "promptCompileArtifactId": str(failure_prompt_artifact_id or prompt_metadata.get("id") or ""),
+                "status": "failed",
+                "requestedModel": route_payload.get("selectedModel"),
+                "requestedProvider": route_payload.get("selectedProvider"),
+                "resolvedModel": route_payload.get("selectedModel"),
+                "resolvedProvider": route_payload.get("selectedProvider"),
+                "windowIndex": failure_runtime_metrics.get("windowIndex"),
+                "restartCount": failure_runtime_metrics.get("restartCount"),
+                "cumulativeWindowSpanTokens": failure_runtime_metrics.get("cumulativeWindowSpanTokens"),
+                "contextLengthObservations": [
+                    dict(item)
+                    for item in failure_context_length_observations
+                    if isinstance(item, dict)
+                ],
+                "messages": _to_serialized_messages(messages),
+                "conversationMessages": _to_serialized_messages([*(failure_messages or []), failure_final_message]),
+                "assistantText": str(failure_result.get("outputText") or ""),
+                "error": str(exc),
+                "endedAt": utc_now().isoformat(),
+            }
+            _upsert_task_conversation_record(
+                workspace_root=workspace_root,
+                task_id=str(task.id),
+                invocation_entry=failure_entry,
+            )
         except Exception as persist_exc:
             record_log(
                 service_name,

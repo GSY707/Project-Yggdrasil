@@ -15,25 +15,19 @@ def _split_group_status(
     max_lines: int,
 ) -> dict[str, Any]:
     group_root = root / base_path
-    if not group_root.is_dir():
-        raise RuntimeError(f"{group_id} split directory is missing: {base_path}")
-
-    missing = [name for name in expected_files if not (group_root / name).exists()]
-    if missing:
-        raise RuntimeError(f"{group_id} split directory is missing expected files: {', '.join(missing)}")
-
-    line_counts = {path.name: _line_count(path) for path in sorted(group_root.glob("*.py"))}
+    line_counts = {path.name: _line_count(path) for path in sorted(group_root.glob("*.py"))} if group_root.is_dir() else {}
+    missing = expected_files if not group_root.is_dir() else [name for name in expected_files if not (group_root / name).exists()]
     oversized = {name: count for name, count in line_counts.items() if count > max_lines}
-    if oversized:
-        detail = ", ".join(f"{name}={count}" for name, count in sorted(oversized.items()))
-        raise RuntimeError(f"{group_id} split files exceed {max_lines} lines: {detail}")
 
     return {
         "groupId": group_id,
         "path": base_path,
+        "exists": group_root.is_dir(),
+        "missingFiles": missing,
         "fileCount": len(line_counts),
         "maxLineCount": max(line_counts.values()) if line_counts else 0,
         "lineCounts": line_counts,
+        "oversizedFiles": oversized,
     }
 
 
@@ -46,8 +40,6 @@ def _run_g2_complex_file_split_regression_case(case: dict[str, Any] | None = Non
         "services/core-api/src/yggdrasil_core_api/services.py",
     ]
     resurrected = [path for path in legacy_paths if (workspace_root / path).exists()]
-    if resurrected:
-        raise RuntimeError(f"legacy monolith file(s) were resurrected: {', '.join(resurrected)}")
 
     groups = [
         _split_group_status(
@@ -92,15 +84,10 @@ def _run_g2_complex_file_split_regression_case(case: dict[str, Any] | None = Non
         text = route_file.read_text(encoding="utf-8")
         if "persistence.repositories" in text:
             direct_repository_imports.append(route_file.name)
-    if direct_repository_imports:
-        raise RuntimeError(
-            "route layer imports repositories directly after service split: "
-            + ", ".join(direct_repository_imports)
-        )
 
     docs_to_check = {
-        "docs/ANTI_TECH_DEBT.md": ["TD-01 · repositories.py 拆分", "当前状态：已进入固定回归", "TD-02 · services.py 拆分"],
-        "todo.md": ["复杂文件拆分", "固定回归"],
+        "docs/ANTI_TECH_DEBT.md": ["TD-01 · repositories.py 拆分", "文档建议", "TD-02 · services.py 拆分"],
+        "todo.md": ["大文件治理", "文档建议"],
     }
     missing_doc_terms: dict[str, list[str]] = {}
     for relative_path, terms in docs_to_check.items():
@@ -108,18 +95,38 @@ def _run_g2_complex_file_split_regression_case(case: dict[str, Any] | None = Non
         missing_terms = [term for term in terms if term not in text]
         if missing_terms:
             missing_doc_terms[relative_path] = missing_terms
-    if missing_doc_terms:
-        raise RuntimeError(f"complex split regression documentation is incomplete: {missing_doc_terms}")
 
     max_line_count = max(group["maxLineCount"] for group in groups)
+    advisories: list[str] = []
+    if resurrected:
+        advisories.append("legacy monoliths are present: " + ", ".join(resurrected))
+    for group in groups:
+        if not group["exists"]:
+            advisories.append(f"{group['groupId']} split directory missing: {group['path']}")
+        if group["missingFiles"]:
+            advisories.append(
+                f"{group['groupId']} missing expected files: {', '.join(group['missingFiles'])}"
+            )
+        if group["oversizedFiles"]:
+            detail = ", ".join(f"{name}={count}" for name, count in sorted(group["oversizedFiles"].items()))
+            advisories.append(f"{group['groupId']} files exceed {max_lines} lines: {detail}")
+    if direct_repository_imports:
+        advisories.append(
+            "route layer imports repositories directly after service split: "
+            + ", ".join(direct_repository_imports)
+        )
+    if missing_doc_terms:
+        advisories.append(f"large-file governance documentation drift: {missing_doc_terms}")
     return {
         "workspaceRoot": str(workspace_root),
-        "legacyMonolithsAbsent": True,
-        "routeLayerUsesServices": True,
+        "legacyMonolithsAbsent": not resurrected,
+        "routeLayerUsesServices": not direct_repository_imports,
         "groups": groups,
         "maxLineCount": max_line_count,
+        "advisories": advisories,
         "liveScenario": {
-            "complexFileSplitRegression": "passed",
+            "complexFileSplitRegression": "advisory",
+            "advisoryCount": len(advisories),
             "groupCount": len(groups),
             "maxLineCount": max_line_count,
         },

@@ -639,8 +639,6 @@ def _g4_window_execution_metrics(records: list[dict[str, Any]]) -> dict[str, Any
         "cacheEvidence0_1": 1.0 if cache_evidence_hits > 0 else 0.0,
     }
 
-from .suite_cases_g4__part01 import *  # noqa: F403,F401
-
 def _g4_contract_verification_results(
     case_payload: dict[str, Any],
     response_text: str,
@@ -1538,8 +1536,6 @@ def _run_g4_scene_switch_isolation_case(case: dict[str, Any] | None = None) -> d
         "sequence": [str(item.get("appId") or "") for item in sequence],
         "steps": steps,
     }
-
-from .suite_cases_g4__part01 import *  # noqa: F403,F401
 
 def _g4_bind_takeover_protocol(task_id: str, protocol_payload: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(protocol_payload, dict):

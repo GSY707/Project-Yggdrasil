@@ -42,7 +42,7 @@
 - [x] `evaluation_runtime.py` 拆为 `evaluation_runtime/` 子包。
 - [x] `runtime_kernel.py` 拆为 `runtime_kernel/` 子包。
 - [x] Core API HTTP 关键路径 P50 / P95 已实测并回写 `docs/QUALITY_BASELINE.md`。
-- [x] 复杂文件拆分固定回归入口已建立（`evalsuite_regression_g2_controlled_autonomy`），每次发布前自动检查旧 monolith 未复活、拆分子文件行数 ≤ 600、路由层不绕过 Service 直接导入 Repository。
+- [x] 大文件治理已改为文档建议（`evalsuite_regression_g2_controlled_autonomy` 现只输出 advisory）；不再要求 runtime/llm 热路径维持 split 形态，仍保留 repositories/services 子包的结构漂移提示。
 
 ### Gate 3 前待完成
 

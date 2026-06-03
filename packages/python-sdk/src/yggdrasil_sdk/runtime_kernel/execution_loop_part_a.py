@@ -733,6 +733,9 @@ def _materialize_runtime_context_items(
         materialized_node_ids.append(node_id)
 
     return materialized_node_ids
+
+
+__all__ = [name for name in globals() if not name.startswith("__")]
 def _context_item_from_retrieved_node(node_payload: dict[str, Any]) -> dict[str, Any]:
     ref = node_payload.get("ref") if isinstance(node_payload.get("ref"), dict) else None
     content_lines = [str(node_payload.get("content") or "")]

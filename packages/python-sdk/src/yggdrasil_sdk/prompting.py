@@ -857,8 +857,6 @@ def _format_tool_usage_preferences(
         )
     return "\n\n".join(sections)
 
-from .prompting__part01 import *  # noqa: F403,F401
-
 def _format_world_roots(root_mount: dict[str, Any]) -> str:
     semantic_roots = root_mount.get("semanticRoots") if isinstance(root_mount.get("semanticRoots"), dict) else {}
     system_root_protocol = (

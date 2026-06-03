@@ -1,6 +1,16 @@
+from .execution_loop_part_a import *  # noqa: F401,F403
 from .execution_loop_state import *  # noqa: F401,F403
 from .execution_loop_transitions import _finalize_execution_transition
-from .root_mount import _elapsed_ms, _infer_task_type, build_task_runtime_state
+from .root_mount import (
+    _elapsed_ms,
+    _enforce_budget,
+    _estimate_usage,
+    _infer_task_type,
+    _remaining_cost_per_1k,
+    build_root_mount_package,
+    build_task_runtime_state,
+)
+from .snapshot import _verify_snapshot_integrity
 def _mailbox_context_item(message: dict[str, Any]) -> dict[str, Any]:
     subject = normalize_excerpt(str(message.get("subject") or message.get("messageKind") or "Mailbox message"), 160)
     body = normalize_excerpt(str(message.get("body") or message.get("summary") or subject or ""), 320)

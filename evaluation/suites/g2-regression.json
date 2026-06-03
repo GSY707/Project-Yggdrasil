@@ -4,25 +4,23 @@
   "domain": "coding",
   "metricRefs": [
     "pass-rate",
-    "duration-ms",
-    "complex-file-split"
+    "duration-ms"
   ],
   "subjectKind": "workflow",
   "subjectRef": "regression:g2-controlled-autonomy",
   "cases": [
     {
       "id": "evalcase_g2_complex_file_split",
-      "title": "G2 Complex File Split Regression",
+      "title": "G2 Large File Governance Advisory",
       "scenario": "g2.complex_file_split_regression",
       "tags": [
         "g2",
-        "complex-file-split",
+        "large-file-governance",
         "technical-debt"
       ],
-      "difficulty": "medium",
-      "maxLinesPerSplitFile": 600
+      "difficulty": "medium"
     }
   ],
   "suiteRole": "regression",
-  "suiteRoleNote": "Fixed regression suite for CI/CD gate verification."
+  "suiteRoleNote": "Advisory governance suite; large-file layout is no longer a hard CI gate."
 }

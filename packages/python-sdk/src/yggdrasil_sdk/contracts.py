@@ -896,19 +896,6 @@ class WorkTreeProtocol(BaseModel):
                 self.recovery_anchor = current_node.recovery_anchor
         return self
 
-from datetime import datetime
-from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .contracts__part01 import (  # noqa: F401
-    _contracts_utcnow,
-    _normalized_string,
-    _stable_contract_digest,
-    _working_node_annotation,
-)
-from .contracts__part01 import *  # noqa: F403,F401
-
 class WorkContextChildCompletionSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 

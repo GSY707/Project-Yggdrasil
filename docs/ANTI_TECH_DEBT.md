@@ -111,9 +111,9 @@ def test_something(monkeypatch):
     monkeypatch.setenv("YGGDRASIL_DATABASE_URL", "sqlite:///:memory:")
 ```
 
-### [必须] 大文件拆分必须配套定向回归
+### [建议] 大文件治理应配套定向验证
 
-每次拆分大文件后，必须在同一 PR 内运行受影响的测试模块并附上通过输出：
+大文件拆分不再是 runtime/llm 热路径的硬门禁。优先保证正式执行链只有一条稳定实现；只有在拆分确实降低认知负担时才拆。若拆分，建议在同一 PR 内运行受影响的测试模块并附上通过输出：
 
 ```
 uv run pytest tests/test_<affected>.py -v
@@ -232,7 +232,7 @@ persistence/
     collaboration.py   # PullRequestRepository, ReviewCommentRepository
     platform.py        # 其余平台类 Repository
 ```
-当前状态：已进入固定回归任务类型与评测样本。运行 `corepack pnpm eval:g2:regression` 会检查旧 monolith 文件未复活、拆分子文件仍在 600 行以内、路由层没有绕过 Service 直接导入 Repository。
+当前状态：repositories 子包继续保留，但“复杂文件拆分”已从 G2 固定门禁降为文档建议。`corepack pnpm eval:g2:regression` 现在只输出治理 advisory，不再因为 split 形态本身硬失败。
 
 **TD-02 · services.py 拆分（1411 行）**
 
@@ -247,7 +247,7 @@ core-api/services/
   collaboration_service.py
   runtime_service.py
 ```
-当前状态：已纳入 `evalsuite_regression_g2_controlled_autonomy`，作为 G2 “复杂文件拆分正式能力”的固定回归样本。
+当前状态：services 子包继续保留，但不再把“复杂文件拆分”当作 G2 正式能力门槛；当前只保留文档建议与结构漂移提示。
 
 **TD-03 · 补全 Core API HTTP 实测基线**
 
