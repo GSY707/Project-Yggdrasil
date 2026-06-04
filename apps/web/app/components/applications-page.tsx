@@ -44,12 +44,12 @@ export function ApplicationsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Applications"
+        eyebrow="应用"
         title="应用入口与任务模板"
         summary={<>应用现在是新任务的入口。选择一个应用后，可以直接用它的模板创建第一任务，配置仍保存在基座状态里。</>}
         actions={
           <>
-            <Link className="action-button" href={`/tasks?appId=${encodeURIComponent(applications.data?.activeAppId ?? "")}`}>New task</Link>
+            <Link className="action-button" href={`/tasks?appId=${encodeURIComponent(applications.data?.activeAppId ?? "")}`}>新建任务</Link>
             <button className="ghost-button" onClick={() => applications.reload()} type="button">刷新应用清单</button>
           </>
         }
@@ -69,17 +69,17 @@ export function ApplicationsPage() {
                 <div>
                   <p className="section-kicker">{manifest.owner ?? "application"}</p>
                   <h3 className="section-title">{manifest.displayName}</h3>
-                  <p className="meta-copy">{manifest.appId}</p>
+                  <p className="meta-copy">{manifest.description ?? "该应用未提供额外说明。"}</p>
                 </div>
                 <StatusBadge value={binding.active ? "active" : manifest.defaultLoad ? "default" : "inactive"} />
               </div>
-              <p className="meta-copy">{manifest.description ?? "该应用未提供额外说明。"}</p>
               <div className="pill-row">
-                <span className="inline-chip">version {manifest.version}</span>
-                <span className="inline-chip">modules {manifest.moduleDependencies.length}</span>
-                <span className="inline-chip">scenes {manifest.sceneModuleIds.length}</span>
-                <span className="inline-chip">templates {templateCount}</span>
-                <span className="inline-chip">updated {formatTimestamp(binding.updatedAt)}</span>
+                <span className="inline-chip">版本 {manifest.version}</span>
+                <span className="inline-chip">模块 {manifest.moduleDependencies.length}</span>
+                <span className="inline-chip">场景 {manifest.sceneModuleIds.length}</span>
+                <span className="inline-chip">模板 {templateCount}</span>
+                <span className="inline-chip">内部 ID {manifest.appId}</span>
+                <span className="inline-chip">更新 {formatTimestamp(binding.updatedAt)}</span>
               </div>
               <div className="field-actions">
                 <Link className="action-button" href={`/tasks?appId=${encodeURIComponent(manifest.appId)}`}>新建任务</Link>

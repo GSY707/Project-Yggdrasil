@@ -88,8 +88,8 @@ export function TrainingPage() {
     <div>
       <PageHeader
         eyebrow="Training Lab"
-        title="Dataset Version 与模型制品控制面"
-        summary={<>这里把 M9 的训练实验模块直接产品化为控制面，可从 prompt artifact 和记忆节点生成数据集版本，并继续 stage 模型制品。</>}
+        title="数据集与模型实验"
+        summary={<>这里从任务记录和记忆节点生成数据集版本，并管理模型制品的实验、候选和晋级状态。</>}
         actions={<button className="ghost-button" onClick={reloadTrainingData} type="button">刷新训练视图</button>}
       />
 

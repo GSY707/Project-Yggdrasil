@@ -192,6 +192,8 @@ textarea {
 .filter-chip {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
   padding: 7px 11px;
   border-radius: 999px;
@@ -200,6 +202,7 @@ textarea {
   color: var(--ink-1);
   font-size: 12px;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .page-stack {
@@ -252,6 +255,7 @@ textarea {
 .record-card,
 .detail-hero,
 .table-surface {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--card);
@@ -318,6 +322,69 @@ textarea {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.launch-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.mini-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--ink-1);
+  line-height: 1.65;
+}
+
+.compact-list {
+  margin-top: 10px;
+}
+
+.compact-record,
+.segment-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.segment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.release-matrix {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.screenshot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.screenshot-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.screenshot-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .stat-card {
   padding: 20px;
 }
@@ -343,6 +410,13 @@ textarea {
 
 .content-grid.tight {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.content-grid > *,
+.launch-grid > *,
+.settings-grid > *,
+.form-grid > * {
+  min-width: 0;
 }
 
 .section-stack {
@@ -386,6 +460,13 @@ textarea {
 .subsection-title {
   margin: 0;
   font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.meta-copy,
+.empty-copy,
+.error-copy {
+  overflow-wrap: anywhere;
 }
 
 .record-link:hover .record-title {
@@ -670,6 +751,8 @@ textarea {
   .setup-grid,
   .launch-grid,
   .settings-grid,
+  .launch-detail-grid,
+  .release-matrix,
   .form-grid,
   .record-meta,
   .table-row,

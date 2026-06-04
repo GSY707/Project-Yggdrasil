@@ -311,11 +311,15 @@ few-shot 资产会被递归扫描，结构由 `FewShotAsset` 固定：
 推荐字段：
 
 1. `description`：模板适用说明。
-2. `taskType`：传给运行时的任务类型。
-3. `currentFocus`：启动时的当前焦点。
-4. `currentObjective`：启动时的当前目标。
-5. `budget`：可直接映射到 `BudgetState` 的默认预算，如 `tokenBudgetTotal`。
-6. `startPayload`：传给 `POST /tasks/{taskId}/start` 的附加运行时字段。
+2. `exampleTasks[]`：面向用户的具体示例任务，帮助用户理解这个模板适合什么输入。
+3. `expectedOutputs[]`：模板通常会产出的结果清单，帮助用户预期完成形态。
+4. `taskType`：传给运行时的任务类型。
+5. `currentFocus`：启动时的当前焦点。
+6. `currentObjective`：启动时的当前目标。
+7. `budget`：可直接映射到 `BudgetState` 的默认预算，如 `tokenBudgetTotal`。
+8. `startPayload`：传给 `POST /tasks/{taskId}/start` 的附加运行时字段。
+
+面向普通用户的应用包应把 `taskTemplates[]` 当作场景启动器，而不是内部任务类型清单。`graduate-researcher`、`deep-research`、`coding-greenfield`、`knowledge-studio` 这类顶部应用至少应提供 1-3 个模板，并为每个模板提供非空 `exampleTasks[]` 与 `expectedOutputs[]`。
 
 `settingsSchema[]` 用于把 `importantConfig` 从原始 JSON 提升为用户可编辑控件。每项至少应包含：
 

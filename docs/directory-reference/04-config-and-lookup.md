@@ -71,6 +71,8 @@ docs/
 | 模块清单格式规格 | `docs/protocols/yggdrasil-module-manifest-v0.1.md` |
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
+| 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
+| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |

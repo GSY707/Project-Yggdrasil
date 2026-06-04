@@ -1,15 +1,17 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 export function useApiResource<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
+  const loadedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!path) {
+      loadedPathRef.current = null;
       setData(null);
       setError(null);
       setIsLoading(false);
@@ -17,11 +19,15 @@ export function useApiResource<T>(path: string | null) {
     }
 
     let cancelled = false;
+    const pathChanged = loadedPathRef.current !== path;
+    loadedPathRef.current = path;
 
     async function load() {
       setIsLoading(true);
       setError(null);
-      setData(null);
+      if (pathChanged) {
+        setData(null);
+      }
       try {
         const response = await fetch(`/api/core${path}`, { cache: "no-store" });
         if (!response.ok) {

@@ -2,6 +2,7 @@
 
 > 包含：近期关键文档速览、顶层结构、开源协作与治理入口、英文版入口。
 
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04）：把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划，并明确当前差距、风险和验收门禁 |
 | `docs/development/WEB_RESEARCH_WORK_TREE_LONG_RUN_2026_05_28.md` | Web 搜索长任务工作树入口（2026-05-28）：新增 `evalsuite_g4_web_research_work_tree_long`，固定 LongCat live 网络搜索并强化多窗口 continuation/工作树连续性观测 |
 | `docs/development/WORK_TREE_ONLY_SINGLE_TASK_DEBUG_2026_05_28.md` | 工作树单任务调试基线（2026-05-28）：将 G4 work-tree-debug case 收敛为 `activeCapabilities=[task-takeover]` 并补齐 runtime start 能力透传，用于先验证“仅工作树”执行语义 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |

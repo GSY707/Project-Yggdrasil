@@ -274,6 +274,19 @@ corepack pnpm web:dev
 
 启动后访问 `http://localhost:3000` 进入工作台。
 
+### 5.1 运行与发布模式矩阵
+
+| 模式 | 当前状态 | 主要入口 | 开发者注意事项 |
+|------|----------|----------|----------------|
+| 开发者工作区 | 可用 | 手动启动服务，或 `corepack pnpm yggdrasil:up` | 用于调试、定向测试和贡献开发；不要把多终端命令写成普通用户首选路径。 |
+| 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | 当前外部试用默认模式；更新用户文档时优先围绕这个入口。 |
+| 完整 Docker Compose 产品栈 | 计划中 | 尚未发布 | `infra/docker-compose.yml` 只启动依赖，不要在文档里承诺完整产品 compose。 |
+| 桌面封装 | 计划中 | 尚未发布 | 未冻结安装、更新、状态根和备份恢复策略。 |
+| 托管 / SaaS | 计划中 | 尚未发布 | 已进入产品路线图；当前不能承诺官方托管、商业支持或 uptime。 |
+| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除需先冻结租户、加密、保留和审计策略。 |
+
+产品内 `/release` 页面是用户可见的发布、演示、数据位置和隐私边界入口。若新增运行模式、打包方式、删除/导出动作、托管能力或官方远端数据能力，必须同步 `/release`、`README.md`、`docs/USER_GUIDE.md`、`docs/DIRECTORY_REFERENCE.md` 和对应需求/规格文档。
+
 ---
 
 ## 6. 开发工作流
@@ -418,10 +431,12 @@ async def on_node_written(ctx: HookContext) -> None:
 ```
 applications/my-app/
 ├── yggdrasil.app.yaml          # 应用清单
-├── prompts/                    # 场景专用提示模板
-│   ├── system.md
-│   └── seed.md
-└── modules/                    # 应用绑定的模块列表（可选）
+├── config/defaults.json         # 应用默认配置
+├── web/dashboard.json           # Web 入口元数据、任务模板和设置控件
+├── memory/                      # 应用出厂记忆
+├── prompt-profiles/             # 主 Agent / Sub-Agent prompt profile
+├── scenes/                      # seed template / 场景启动资产
+└── few-shots/                   # 可选 few-shot 资产
 ```
 
 ### 8.2 应用清单 (yggdrasil.app.yaml)
@@ -448,6 +463,16 @@ seed_context:
   system_prompt_template: prompts/system.md
   initial_memory_template: prompts/seed.md
 ```
+
+### 8.3 Web 入口元数据
+
+`web/dashboard.json` 是用户从 Web 启动应用的入口，不应只写内部跳转。每个可对外使用的应用至少提供：
+
+- `hero`：应用名称、简短说明和适用场景。
+- `taskTemplates[]`：1-3 个场景化任务模板，每个模板包含 `id`、`title`、`goal`、`description`、`exampleTasks[]`、`expectedOutputs[]`。
+- `settingsSchema[]`：用户可编辑的重要设置控件，例如 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限。
+
+顶部应用（如 graduate-researcher、deep-research、coding-greenfield、knowledge-studio）必须把模板写成用户场景入口，而不是内部 task type 清单。
 
 ---
 

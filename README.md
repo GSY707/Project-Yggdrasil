@@ -8,6 +8,62 @@ note：部分技术验证成功，我们搭建了一个验证型应用，研究�
 
 note2：应用包 api 和制作文档均准备完毕，见 docs\specs\application-package-interface-v0.1.md。
 
+世界树计划是一个 Web-first 的本地长期任务系统：用户从浏览器选择应用、导入素材、创建任务并启动 Agent，CLI 主要保留给开发者和运维。
+
+## 首次成功路径
+
+1. 安装依赖：
+
+```powershell
+uv sync
+corepack pnpm install
+```
+
+2. 基于 `.env.example` 准备 `.env`，至少配置一个模型 provider key。
+3. 启动本地产品：
+
+```powershell
+corepack pnpm yggdrasil:up
+```
+
+4. 打开 `http://localhost:3000`，按首页检查项修复阻塞问题。
+5. 进入 `/applications` 选择应用，或进入 `/assets` 导入文本素材。
+6. 在 `/tasks` 选择任务模板，点击「创建并启动」，进入任务详情页观察运行和结果。
+
+内置高价值入口包括 `graduate-researcher`、`deep-research`、`coding-greenfield` 和 `knowledge-studio`。这些应用现在提供场景化任务模板、示例任务和预期产物说明，适合作为第一次试用入口。
+
+### 最短演示流程
+
+1. 在 `/assets` 粘贴一段资料，确认页面显示切段预览、摘要节点和「用这个素材创建任务」。
+2. 点击「用这个素材创建任务」，任务页会显示「已附加素材」。
+3. 在应用下拉中选择 `Deep Research Lab`，确认模板显示示例任务和预期产物。
+4. 点击「只创建草稿」可先得到任务编号和「立即启动」入口；点击「创建并启动」会直接进入运行队列。
+
+完整演示脚本见 `docs/demos/LOCAL_FIRST_TASK_DEMO.md`。产品内的 `/release` 页面会说明当前支持的发布模式、本地数据位置、隐私边界和备份/恢复动作。
+
+### 产品截图
+
+![素材导入入口](apps/web/public/demo/yggdrasil-p2-assets.png)
+
+![任务模板入口](apps/web/public/demo/yggdrasil-p2-tasks.png)
+
+![发布与安全入口](apps/web/public/demo/yggdrasil-p2-release.png)
+
+### 发布模式与支持边界
+
+| 模式 | 当前状态 | 启动入口 | 数据位置 | 支持边界 |
+|------|----------|----------|----------|----------|
+| 开发者工作区 | 可用 | 手动启动服务或 `corepack pnpm yggdrasil:up` | `.yggdrasil` / compose 数据库 | 面向贡献者和调试 |
+| 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | `.yggdrasil`、`.yggdrasil/product-logs`、`.yggdrasil-backups` | 当前外部试用默认模式 |
+| 完整 Docker Compose 产品栈 | 计划中 | 尚未发布 | 尚未冻结 | `infra/docker-compose.yml` 目前只启动依赖 |
+| 桌面封装 | 计划中 | 尚未发布 | 尚未冻结 | 当前不作为支持模式 |
+| 托管 / SaaS | 计划中 | 尚未发布 | 计划支持官方远端工作区；当前不会自动上传 | 已进入路线图，但当前无 uptime 或商业支持承诺 |
+| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除待设计 | 当前仍只支持本地 backup/restore |
+
+完整需求与差距见 `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`。
+
+## 系统定位
+
 当前仓库是一个长期任务系统，具体目标见 docs\research\系统概念：
 
 - 后端以 FastAPI、SQLAlchemy、Alembic、Redis 为核心，承载任务运行、记忆树持久化、模块控制面和评测链路。
@@ -19,13 +75,13 @@ note2：应用包 api 和制作文档均准备完毕，见 docs\specs\applicatio
 
 - 正式任务执行链：任务创建、主 Agent 执行、safe-stop、pause/resume、Sub-Agent、PR 协作。
 - 正式记忆链：文本导入、建树、检索扩展、共享空间、权限 tuple、多模态资产落库、关系发现、软遗忘治理。
-- 正式 PromptOps：PromptCompiler、seed template、prompt compile artifact、模型调用请求/响应落盘、工具注册与多轮 tool execution 审计。
+- 正式 Prompt 管理：PromptCompiler、seed template、prompt compile artifact、模型调用请求/响应落盘、工具注册与多轮 tool execution 审计。
 - 正式训练实验：dataset version、model artifact、验证门和控制面 API。
 - 正式运维与评测：OpenTelemetry、Langfuse、backup/restore、compose smoke、evaluation suites。
 
 ## 基座与应用插件
 
-- 基座继续保留 Kernel + Module + Adapter 这一内部结构，并提供通用控制面、运行时、PromptOps、评测与运维能力。
+- 基座继续保留 Kernel + Module + Adapter 这一内部结构，并提供通用控制面、运行时、Prompt 管理、评测与运维能力。
 - 应用插件负责具体场景下的 Agent 组合、应用配置和应用界面；基座 Web 不承载面向单一场景的应用 UI。
 - 当前任务、AgentRun、快照、模型调用与 Prompt 编译工件已经补上 appId 维度，为后续应用插件装配和隔离查询提供基础数据轴。
 
@@ -33,7 +89,7 @@ note2：应用包 api 和制作文档均准备完毕，见 docs\specs\applicatio
 
 - docs/DEVELOPER_GUIDE.md：开发者手册。
 - docs/USER_GUIDE.md：用户手册。
-- docs/DIRECTORY_REFERENCE.md：项目完整目录（2026/4/29 更新，含 Phase 4 质量基线）。
+- docs/DIRECTORY_REFERENCE.md：项目完整目录与后续 agent 导航入口。
 - apps/web：Web 工作台，当前已提供总览、任务、节点、协作、资产、训练、Prompt、评测、观测页面。
 - services/core-api：控制面 API，当前已暴露 tasks、nodes、collaboration、runtime、memory、assets、training、prompting、evaluations、observability。
 - services/agent-runtime：运行时执行入口，负责主 Agent 启动、pause/resume、PromptCompiler 接线与模型执行闭环。

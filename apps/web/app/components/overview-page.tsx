@@ -57,7 +57,7 @@ export function OverviewPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workbench Overview"
+        eyebrow="总览"
         title="从这里启动第一任务"
         summary={
           <>
@@ -67,13 +67,16 @@ export function OverviewPage() {
         actions={
           <>
             <Link className="action-button" href="/tasks">
-              New task
+              新建任务
             </Link>
             <Link className="ghost-button" href="/applications">
               选择应用
             </Link>
-            <Link className="ghost-button" href="/prompting">
-              Prompt 控制面
+            <Link className="ghost-button" href="/assets">
+              导入素材
+            </Link>
+            <Link className="ghost-button" href="/release">
+              发布与安全
             </Link>
           </>
         }
@@ -82,21 +85,21 @@ export function OverviewPage() {
       <SetupChecklist items={setupItems} />
 
       <section className="stat-grid">
-        <StatCard label="Tasks" value={data.cards.tasks} copy={`当前累计任务 ${data.cards.tasks} 个，待处理 ${data.taskStatusCounts.queued ?? 0} 个。`} />
-        <StatCard label="Nodes" value={data.cards.nodes} copy={`非根节点 ${data.cards.nodes} 个，检索请求 ${data.cards.retrievals} 次。`} />
-        <StatCard label="Pull Requests" value={data.cards.pullRequests} copy={`分支 ${data.cards.branches} 条，待审 PR ${data.pullRequestStatusCounts.open ?? 0} 个。`} />
-        <StatCard label="LLM Runs" value={data.cards.modelInvocations} copy={`fallback ${data.cards.llmFallbacks} 次，累计成本 ${data.cards.llmCostUsed.toFixed(4)} USD。`} />
-        <StatCard label="Signals" value={data.cards.observabilityErrors} copy={`最近记录 ${data.observability.totalSpans} 个 span，错误 ${data.cards.observabilityErrors} 个。`} />
-        <StatCard label="Shared Spaces" value={data.cards.sharedSpaces} copy={`挂载 ${data.cards.spaceMounts} 条，权限 tuple ${data.cards.permissionTuples} 条。`} />
-        <StatCard label="Runtime Control" value={data.cards.pausedTasks} copy={`暂停中 ${data.cards.pausedTasks} 个，等待 safe-stop ${data.taskStatusCounts["pause-requested"] ?? 0} 个，可恢复快照 ${data.cards.restorableSnapshots} 个。`} />
+        <StatCard label="任务" value={data.cards.tasks} copy={`当前累计任务 ${data.cards.tasks} 个，待处理 ${data.taskStatusCounts.queued ?? 0} 个。`} />
+        <StatCard label="记忆" value={data.cards.nodes} copy={`已沉淀记忆节点 ${data.cards.nodes} 个，检索请求 ${data.cards.retrievals} 次。`} />
+        <StatCard label="协作" value={data.cards.pullRequests} copy={`分支 ${data.cards.branches} 条，待审协作提交 ${data.pullRequestStatusCounts.open ?? 0} 个。`} />
+        <StatCard label="模型调用" value={data.cards.modelInvocations} copy={`备用响应 ${data.cards.llmFallbacks} 次，累计成本 ${data.cards.llmCostUsed.toFixed(4)} USD。`} />
+        <StatCard label="运行信号" value={data.cards.observabilityErrors} copy={`最近记录 ${data.observability.totalSpans} 个运行区间，错误 ${data.cards.observabilityErrors} 个。`} />
+        <StatCard label="共享空间" value={data.cards.sharedSpaces} copy={`挂载 ${data.cards.spaceMounts} 条，访问规则 ${data.cards.permissionTuples} 条。`} />
+        <StatCard label="可恢复任务" value={data.cards.pausedTasks} copy={`暂停中 ${data.cards.pausedTasks} 个，等待安全停止 ${data.taskStatusCounts["pause-requested"] ?? 0} 个，可恢复快照 ${data.cards.restorableSnapshots} 个。`} />
       </section>
 
       <div className="content-grid">
         <div className="section-stack">
           <Surface>
-            <p className="section-kicker">Runtime Pulse</p>
-            <h3 className="section-title">系统脉冲</h3>
-            <p className="section-copy">数据库、缓存、模块注册表、outbox 与回归运行都在同一屏里收口。</p>
+            <p className="section-kicker">System Status</p>
+            <h3 className="section-title">系统状态</h3>
+            <p className="section-copy">数据库、缓存、模块、事件队列与最近运行状态都在这里汇总；需要深入排查时再查看原始字段。</p>
             <div className="kv-grid">
               <div className="kv-item">
                 <p className="meta-label">数据库</p>
@@ -115,7 +118,7 @@ export function OverviewPage() {
                 </div>
               </div>
               <div className="kv-item">
-                <p className="meta-label">Outbox</p>
+                <p className="meta-label">待发布事件</p>
                 <div className="pill-row">
                   {Object.entries(data.outboxStatusCounts).map(([status, count]) => (
                     <span className="inline-chip" key={status}>
@@ -128,36 +131,36 @@ export function OverviewPage() {
           </Surface>
 
           <Surface>
-            <p className="section-kicker">M9 Control</p>
-            <h3 className="section-title">共享空间与恢复控制</h3>
+            <p className="section-kicker">Collaboration</p>
+            <h3 className="section-title">共享空间与恢复</h3>
             <div className="kv-grid">
               <div className="kv-item">
-                <p className="meta-label">Shared Spaces</p>
+                <p className="meta-label">共享空间</p>
                 <p className="meta-copy">{data.cards.sharedSpaces}</p>
               </div>
               <div className="kv-item">
-                <p className="meta-label">Space Mounts</p>
+                <p className="meta-label">空间挂载</p>
                 <p className="meta-copy">{data.cards.spaceMounts}</p>
               </div>
               <div className="kv-item">
-                <p className="meta-label">Permission Tuples</p>
+                <p className="meta-label">访问规则</p>
                 <p className="meta-copy">{data.cards.permissionTuples}</p>
               </div>
               <div className="kv-item">
-                <p className="meta-label">Restorable Snapshots</p>
+                <p className="meta-label">可恢复快照</p>
                 <p className="meta-copy">{data.cards.restorableSnapshots}</p>
               </div>
             </div>
             <div className="pill-row">
-              <span className="inline-chip">paused {data.cards.pausedTasks}</span>
-              <span className="inline-chip">pause-requested {data.taskStatusCounts["pause-requested"] ?? 0}</span>
-              <span className="inline-chip">shared spaces {data.cards.sharedSpaces}</span>
-              <span className="inline-chip">mounts {data.cards.spaceMounts}</span>
+              <span className="inline-chip">暂停中 {data.cards.pausedTasks}</span>
+              <span className="inline-chip">等待安全停止 {data.taskStatusCounts["pause-requested"] ?? 0}</span>
+              <span className="inline-chip">共享空间 {data.cards.sharedSpaces}</span>
+              <span className="inline-chip">挂载 {data.cards.spaceMounts}</span>
             </div>
           </Surface>
 
           <Surface>
-            <p className="section-kicker">Recent Tasks</p>
+            <p className="section-kicker">最近任务</p>
             <h3 className="section-title">最近任务</h3>
             <div className="record-list">
               {data.recentTasks.map((task) => (

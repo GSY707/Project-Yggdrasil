@@ -28,16 +28,17 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           <div className="shell-main">
             <header className="shell-topbar">
               <div>
-                <p className="topbar-kicker">Control Plane</p>
+                <p className="topbar-kicker">控制台</p>
                 <p className="topbar-copy">Web 现在直接消费 core-api，而不是从仓库本地文件拼装页面。</p>
               </div>
               <div className="topbar-chip-group">
-                <span className="topbar-chip">Tasks</span>
-                <span className="topbar-chip">Memory</span>
-                <span className="topbar-chip">Collaboration</span>
-                <span className="topbar-chip">Evaluation</span>
-                <span className="topbar-chip">Observability</span>
+                <span className="topbar-chip">任务</span>
+                <span className="topbar-chip">记忆</span>
+                <span className="topbar-chip">协作</span>
+                <span className="topbar-chip">评测</span>
+                <span className="topbar-chip">观测</span>
                 <span className="topbar-chip">LLM</span>
+                <span className="topbar-chip">发布</span>
               </div>
             </header>
             <div className="page-stack">{children}</div>

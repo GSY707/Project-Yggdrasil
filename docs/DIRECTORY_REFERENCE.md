@@ -1,4 +1,6 @@
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04）：把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划，并明确当前差距、验收门禁和推进顺序 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计（2026-06-03）：盘点 Web 工作台、应用包、设置、安装、打包与用户文档，明确当前仍是 CLI/操作台导向，并给出 Web-first 首次成功路径、设置向导、任务创建启动和产品化启动器的 P0/P1/P2 收口计划 |
+| `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：面向外部试用者或录屏演示，按 Web 路径完成“导入素材 -> 选择应用 -> 创建任务 -> 启动任务 -> 查看结果”，并明确 provider key、备份恢复和删除边界 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐（2026-05-27）：冻结“理解任务 -> 形成计划 -> 向发起者核对 -> 再执行”的目标流程，并对照当前协议、提示词、运行时与测试缺口 |
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑（2026-05-26）：冻结“父节点强编排、child 完成/失败先回编排父节点、允许有限线性 continuation 轨迹、leaf 拆分尽量交给 LLM、根节点停在 awaiting-approval”的目标口径 |
@@ -15,7 +17,7 @@
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：继续向新三阶段口径收口，补上“初次苏醒形成起始状态、任务级单独读取工作状态、工具/知识索引优先”的关键约束，同时保留 Boot Prompt、RootMountPackage、上下文窗口和结束批准的正式结构 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：继续向任务级工作状态口径收口，明确工作树是在任务开始并读取工作状态后挂载到 `[ID: 003 我要干什么]` 语义根下的动态执行栈与工作记忆 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把“先建世界 / 再醒来 / 再开始工作”拆成世界级与任务级两层，强调建世界与初次苏醒不得接触具体工作信息，并进一步冻结“工具/知识索引优先、能力/知识到工具的关联召回、起始状态、无损恢复和分层诊断”规则 |
-| `docs/specs/application-package-interface-v0.1.md` | 应用包接口总规范 v0.1：统一定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面与控制面 API，供别的团队按正式契约开发应用包 |
+| `docs/specs/application-package-interface-v0.1.md` | 应用包接口总规范 v0.1：统一定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面、dashboard 任务模板、示例任务、预期产物和控制面 API，供别的团队按正式契约开发应用包 |
 | `docs/specs/graduate-researcher-app-v0.1.md` | Graduate Researcher 应用包定义 v0.1：定义“研究生”应用的目标、预算语义、计划-步骤-动作三层模型与 tool-rich 默认工具包 |
 | `docs/specs/graduate-researcher-test-standard-v0.1.md` | Graduate Researcher 测试标准 v0.1：定义“机器学习研究生”长任务场景的结果验收口径，聚焦自主规划、稳定性、非急性子与工具覆盖 |
 | `docs/new/工作树.md` | 新工作树方案：把工作树定义为“我要干什么”分支下的动态工作记忆与执行栈，并明确父节点强编排、有限线性 continuation 轨迹和 child 摘要上浮 |
@@ -129,6 +131,9 @@
 > 2026/6/1 nightly acceptance 续跑语义对齐：同一 `m9.pause_resume_memory_tree` case 不再假设 resume 后单轮 worker 即直接完成；现在会沿当前 work-tree continuation 链持续执行到终态，并在落到 `awaiting-approval` 时显式调用 approve 控制面，再断言任务 `completed`。
 > 2026/6/1 G4 live 预算恢复闭环同步：`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 已新增 `budget-exhausted` 现场恢复逻辑，provider matrix case 在 `paused + restorable snapshot` 下会自动 top-up `budgetState` 并调用 `/runtime/tasks/{taskId}/resume`，在 `failed + budget-exhausted` 下会尝试 `/retry`，同时 `_g4_wait_for_target_worker_result` 新增 recovery handler 分支以继续等待终态；`tests/test_g4_multiscene.py` 已新增回归覆盖预算 top-up 与恢复续跑路径。
 > 2026/6/3 用户采用面 P0 同步：Web 首页新增首次启动 `setupChecklist`，任务页、应用页和应用详情页已接入 `task-launch-panel`，可从应用 `dashboard.taskTemplates[]` 创建草稿并立即 `POST /tasks/{taskId}/start`；应用详情配置改为 `dashboard.settingsSchema[]` typed controls，原始 JSON 仅保留高级模式；`services/core-api/.../runtime_service.py` 的 `/health` 与 `/workbench/overview` 暴露 setup checklist，`GET /applications` 随清单返回 dashboard；`packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` 与 `yggdrasil-ops launch`/`corepack pnpm yggdrasil:up` 提供本地产品一键启动。
+> 2026/6/4 用户采用面 P1 同步：`graduate-researcher`、`deep-research`、`coding-greenfield`、`knowledge-studio` 的 `web/dashboard.json` 已升级为场景启动器，每个模板提供 `exampleTasks[]` 与 `expectedOutputs[]`；`apps/web/app/components/assets-page.tsx` 已从粘贴文本扩展为浏览器文本文件导入、切段预览、导入状态、摘要节点和“附加到新任务”入口；`task-launch-panel` 会展示模板示例/预期产物和已附加素材，并把素材摘要作为创建/启动上下文；全局顶栏、应用列表、应用详情和共享状态徽标已把首屏状态改成用户可读中文标签；README、用户指南、开发者指南和应用包接口规范已改成围绕首次成功路径和最短演示流程。
+> 2026/6/4 用户采用面 P2 同步：`apps/web/app/release/page.tsx` 与 `components/release-page.tsx` 新增“发布与安全”产品页，把发布模式矩阵、公开演示路径、产品截图、本地数据位置、出机边界、备份/恢复和删除状态集中到用户可见入口；README 与 `docs/USER_GUIDE.md` 已补发布模式矩阵、截图与隐私边界；`docs/demos/LOCAL_FIRST_TASK_DEMO.md` 已固定外部演示脚本。当前只把开发者工作区和本地产品模式标为可用，完整 Docker 产品栈、桌面封装和托管 SaaS 不写成已支持能力。
+> 2026/6/4 产品打包与远端数据计划同步：`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` 已把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划；`/release`、README、用户指南、开发者指南和开源边界已改为“计划中但当前不可承诺”口径。本地产品模式仍不会自动上传数据。
 > 2026/6/1 Graduate heartbeat 观测增强：`tmp/run_grad_ml_eval_with_heartbeat.py` 现会在心跳周期内读取活动 sandbox 的 `evaluation.db`，追加输出 task 状态、currentFocus 摘要、snapshot 是否存在、cost 使用进度、invocation 计数与最近一次模型调用状态/错误摘要，便于区分“长调用慢跑”与“真实队列卡死”。
 
 ---
@@ -230,7 +235,7 @@ apps/
 └── web/                            # Next.js 15 + React 19 工作台
     ├── app/                        # Next.js App Router 路由目录
     │   ├── page.tsx                # 总览页（工作台首页）
-    │   ├── layout.tsx              # 全局布局
+    │   ├── layout.tsx              # 全局布局；P1 后顶栏控制面与功能 chips 已改为中文产品标签
     │   ├── api/
     │   │   └── core/               # Core API 的前端代理（默认透传到 :5000）
     │   ├── applications/           # 应用场景浏览页
@@ -242,12 +247,14 @@ apps/
     │   │   └── [nodeId]/           # 记忆节点详情页（动态路由）
     │   ├── observability/          # 调用链路追踪页
     │   ├── prompting/              # Prompt 模板管理与预览页
+    │   ├── release/                # 发布与安全页（发布模式、演示、数据位置、隐私、远端计划与支持边界）
     │   ├── tasks/
     │   │   ├── page.tsx            # 任务页：应用模板创建/草稿/立即启动入口
     │   │   └── [taskId]/           # 任务详情页（动态路由，现已挂接 LLM 工作分析摘要与独立分析路由）
     │   ├── training/               # 训练实验管理页
     │   └── components/             # 可复用 React 组件
     ├── lib/                        # 前端工具函数
+    ├── public/demo/                # README、用户指南和 /release 使用的产品截图
     ├── package.json                # 前端包配置
     ├── next.config.ts              # Next.js 配置
     └── tsconfig.json               # TypeScript 配置（继承根配置）
@@ -256,9 +263,13 @@ apps/
 **关键说明：**
 - `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（默认 `:5000`，可用 `YGGDRASIL_CORE_API_BASE_URL` 覆盖）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
-- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户。
-- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`，并在 `/tasks`、`/applications` 和应用详情页接入。
-- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式。
+- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户；首屏默认动作是新建任务、选择应用和导入素材。
+- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，展示 `exampleTasks[]` / `expectedOutputs[]` 和已附加素材，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`；草稿创建后在面板内保留“已创建 / 立即启动 / 查看任务”反馈，不再依赖刷新任务列表维持状态。
+- `apps/web/app/components/assets-page.tsx` 是 P1 素材导入入口：支持浏览器读取文本类文件、切段预览、导入状态、摘要节点展示，并通过 `/tasks?assetId=...` 把素材附加到新任务。
+- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈、桌面封装、托管 / SaaS 和官方远端数据服务只能写成计划中，不能写成当前可用能力。
+- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式；P1 后首屏按钮、身份、模块、记忆和配置标签改为用户可读中文。
+- `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 现在保留原始状态值用于颜色判定，同时把常见运行状态、导入状态和素材角色显示为中文产品标签。
+- `apps/web/app/lib/use-api-resource.ts` 是 Web 控制面通用 API loader；路径切换会清空旧数据，普通 reload 会保留当前数据直到新响应返回，避免任务创建后刷新列表时卸载启动面板。
 - `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
 - `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
 - `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
@@ -397,7 +408,7 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema 与 setupChecklist 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment 与 setupChecklist 契约
 ```
 
 **关键说明：**
@@ -516,14 +527,14 @@ applications/
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
 ├── config/defaults.json     # 应用默认配置
-├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、settingsSchema
+├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、exampleTasks、expectedOutputs、settingsSchema
 ├── memory/                  # 应用静态记忆资产（随包发布，运行时按应用命名空间叠加）
 ├── prompt-profiles/          # 主 Agent / Sub-Agent prompt profile
 └── scenes/                   # seed template / 场景启动资产
 ```
 
 **关键说明：**
-- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
+- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用；顶部应用模板应提供 `exampleTasks[]` 与 `expectedOutputs[]`，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
 - `services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `list_applications()` 已把 dashboard payload 随 `GET /applications` 返回，任务页无需再逐个请求应用详情才能显示模板。
 
 ---
@@ -574,11 +585,16 @@ docs/
 │   │                               #   给低智商 code agent 的任务文档：把“起始状态 + 任务级工作状态读取”重构拆成明确步骤、禁止事项、测试命令与完成标准
 │   ├── TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md
 │   │                               #   给 code agent 的返工任务文档：针对验收残留问题，强制收口世界级/任务级边界、无损恢复判定和 TaskRuntimeState 唯一入口
+│   ├── PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md
+│   │                               #   产品打包与官方远端数据能力需求差距：Docker 产品栈、桌面封装、删除治理、SaaS、远端托管/备份/删除的计划与缺口
 │   ├── ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md
 │   │                               #   提示词、启动流程、工作流程重做执行文档：Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
 │   │                               #   功能形态分类与提示词功能检查计划：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径
 │   └── ...                         #   其他开发专题文档同顶层速览
+│
+├── demos/
+│   └── LOCAL_FIRST_TASK_DEMO.md    # 本地首次成功演示脚本：按 Web 路径演示素材导入、模板任务创建、启动和结果查看
 │
 ├── new/                            # 新方案草稿与当前重做输入材料
 │   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
@@ -610,7 +626,7 @@ docs/
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
-│   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面与控制面 API
+│   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面、场景任务模板与控制面 API
 │   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义与计划-步骤-动作三层模型
 │   ├── graduate-researcher-test-standard-v0.1.md # Graduate Researcher 测试标准：机器学习研究生场景的行为验收口径
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
@@ -936,6 +952,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”的目标流程，并对照当前协议/提示词/运行时/测试的缺口 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除纳入计划，并列出需求、差距、风险和验收门禁 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
@@ -943,6 +960,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、父节点强编排、有限线性 continuation 轨迹和 Working Node 标签 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复，并要求 continuation 优先沿父节点编排位置继续 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：说明 Web 页面入口、完整分析页的七个主层次、CLI/API 用法和推荐排障流程，并固定 work-tree debug、时间线、cache trace、child bubble 与 mixed outcome 的读法 |
+| `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：用正式 Web 产品入口演示导入素材、附加任务、选择应用模板、创建/启动任务和查看结果 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
 | `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
@@ -987,6 +1005,9 @@ docs/
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
 | 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
+| Web 首次任务创建入口 | `apps/web/app/components/task-launch-panel.tsx` 与应用 `web/dashboard.json` 的 `taskTemplates[]` |
+| Web 素材导入与附加任务入口 | `apps/web/app/components/assets-page.tsx` |
+| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |

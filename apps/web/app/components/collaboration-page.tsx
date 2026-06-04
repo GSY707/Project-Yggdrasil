@@ -134,7 +134,7 @@ export function CollaborationPage() {
       <PageHeader
         eyebrow="Collaboration"
         title="分支与 PR 协作台"
-        summary={<>这里把 M6 分支协作和 M9 共享空间、挂载与权限 tuple 统一收口到正式控制面。</>}
+        summary={<>这里管理共享空间、分支、访问规则和协作提交，适合多人或多 Agent 共同维护同一批记忆。</>}
         actions={<button className="ghost-button" onClick={reloadCollaborationData} type="button">刷新协作视图</button>}
       />
 

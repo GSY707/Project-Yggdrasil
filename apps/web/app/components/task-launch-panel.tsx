@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type {
   ApplicationCatalogItem,
   ApplicationDashboard,
   ApplicationTaskTemplate,
+  TaskLaunchAttachment,
   TaskCreateResponse,
   TaskControlActionResponse,
 } from "@yggdrasil/frontend-sdk";
@@ -19,7 +21,7 @@ type TaskLaunchPanelProps = {
   defaultAppId?: string | null;
   title?: string;
   compact?: boolean;
-  onTaskCreated?: () => void;
+  initialAttachments?: TaskLaunchAttachment[];
 };
 
 type LaunchTemplate = ApplicationTaskTemplate & {
@@ -64,7 +66,37 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplate) {
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter((item) => item.length > 0)
+    : [];
+}
+
+function attachmentContext(attachments: TaskLaunchAttachment[]) {
+  return attachments.map((attachment) => ({
+    assetId: attachment.assetId,
+    label: attachment.label,
+    sourceUri: attachment.sourceUri,
+    summaryNodeId: attachment.summaryNodeId,
+    segmentCount: attachment.segmentCount,
+    summary: attachment.summary,
+  }));
+}
+
+function goalWithAttachments(goal: string, attachments: TaskLaunchAttachment[]): string {
+  if (attachments.length === 0) {
+    return goal;
+  }
+  const lines = attachments.map((attachment, index) => {
+    const label = attachment.label ?? attachment.sourceUri ?? attachment.assetId;
+    const summary = attachment.summary ? `；摘要：${attachment.summary}` : "";
+    const node = attachment.summaryNodeId ? `；摘要节点：${attachment.summaryNodeId}` : "";
+    return `${index + 1}. ${label}（素材 ${attachment.assetId}${node}${summary}）`;
+  });
+  return `${goal}\n\n已附加素材：\n${lines.join("\n")}`;
+}
+
+function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplate, attachments: TaskLaunchAttachment[]) {
   const importantConfig = asRecord(item.configBinding.importantConfig);
   const startPayload = asRecord(template.startPayload);
   const provider = stringValue(importantConfig.provider) ?? stringValue(importantConfig.selectedProvider) ?? stringValue(startPayload.selectedProvider);
@@ -82,6 +114,7 @@ function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplat
     currentObjective: template.currentObjective ?? template.goal,
     selectedProvider: provider,
     selectedModel: model,
+    attachedAssets: attachmentContext(attachments),
     requestedBy: { type: "user", id: "web-workbench" },
     reason: "web-first-task-launch",
   };
@@ -102,7 +135,7 @@ function explainLaunchError(rawError: string, stage: "create" | "start"): string
     return "模型供应商未配置。请在 `.env` 设置至少一个 provider key，例如 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`。";
   }
   if (lower.includes("application") || lower.includes("app")) {
-    return "没有可用应用或应用未正确装配。请先在 Applications 页面激活应用，再重新启动任务。";
+    return "没有可用应用或应用未正确装配。请先在应用页面激活应用，再重新启动任务。";
   }
   if (stage === "start") {
     return `任务已创建但启动失败：${rawError}。若任务长时间停在 queued，请确认 worker 正在运行。`;
@@ -115,7 +148,7 @@ export function TaskLaunchPanel({
   defaultAppId,
   title = "新建并启动任务",
   compact = false,
-  onTaskCreated,
+  initialAttachments = [],
 }: TaskLaunchPanelProps) {
   const router = useRouter();
   const [selectedAppId, setSelectedAppId] = useState(defaultAppId ?? applications.find((item) => item.configBinding.active)?.application.appId ?? applications[0]?.application.appId ?? "");
@@ -154,19 +187,20 @@ export function TaskLaunchPanel({
       throw new Error("没有可启动的应用。请先激活一个应用。");
     }
     const budget = asRecord(selectedTemplate.budget);
+    const effectiveGoal = taskGoal.trim() || selectedTemplate.goal;
+    const effectiveObjective = selectedTemplate.currentObjective ?? effectiveGoal;
     const payload = {
       appId: selectedApp.application.appId,
       title: taskTitle.trim() || selectedTemplate.title,
-      goal: taskGoal.trim() || selectedTemplate.goal,
+      goal: goalWithAttachments(effectiveGoal, initialAttachments),
       currentFocus: selectedTemplate.currentFocus ?? "web-launch",
-      currentObjective: selectedTemplate.currentObjective ?? (taskGoal.trim() || selectedTemplate.goal),
+      currentObjective: goalWithAttachments(effectiveObjective, initialAttachments),
       budget: budget,
       status: "draft",
     };
     const response = await postApiJson<TaskCreateResponse>("/tasks", payload);
     const taskId = response.task.id;
     setCreatedTaskId(taskId);
-    onTaskCreated?.();
     return taskId;
   }
 
@@ -186,7 +220,7 @@ export function TaskLaunchPanel({
     if (!selectedApp || !selectedTemplate) {
       throw new Error("没有可启动的应用。请先激活一个应用。");
     }
-    await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/start`, buildStartPayload(selectedApp, selectedTemplate));
+    await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/start`, buildStartPayload(selectedApp, selectedTemplate, initialAttachments));
     router.push(`/tasks/${encodeURIComponent(taskId)}`);
   }
 
@@ -226,7 +260,7 @@ export function TaskLaunchPanel({
     <Surface className={compact ? "task-launch compact" : "task-launch"}>
       <div className="record-head">
         <div>
-          <p className="section-kicker">New Task</p>
+          <p className="section-kicker">新任务</p>
           <h3 className="section-title">{title}</h3>
           <p className="section-copy">选择应用模板后创建任务。创建完成后可以立刻启动并进入任务详情页。</p>
         </div>
@@ -262,6 +296,47 @@ export function TaskLaunchPanel({
         <div className="launch-template">
           <p className="meta-label">模板说明</p>
           <p className="meta-copy">{selectedTemplate.description ?? selectedTemplate.goal}</p>
+          {stringList(selectedTemplate.exampleTasks).length > 0 || stringList(selectedTemplate.expectedOutputs).length > 0 ? (
+            <div className="launch-detail-grid">
+              <div>
+                <p className="meta-label">示例任务</p>
+                <ul className="mini-list">
+                  {stringList(selectedTemplate.exampleTasks).map((example) => (
+                    <li key={example}>{example}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="meta-label">预期产物</p>
+                <ul className="mini-list">
+                  {stringList(selectedTemplate.expectedOutputs).map((output) => (
+                    <li key={output}>{output}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {initialAttachments.length > 0 ? (
+        <div className="launch-template">
+          <p className="meta-label">已附加素材</p>
+          <div className="record-list compact-list">
+            {initialAttachments.map((attachment) => (
+              <article className="compact-record" key={attachment.assetId}>
+                <div>
+                  <h4 className="record-title">{attachment.label ?? attachment.sourceUri ?? attachment.assetId}</h4>
+                  <p className="meta-copy">{attachment.summary ?? "任务启动时会把这个素材作为输入上下文。"}</p>
+                </div>
+                <div className="pill-row">
+                  <span className="inline-chip">素材 {attachment.assetId}</span>
+                  {attachment.summaryNodeId ? <span className="inline-chip">摘要节点 {attachment.summaryNodeId}</span> : null}
+                  {attachment.segmentCount ? <span className="inline-chip">切段 {attachment.segmentCount}</span> : null}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -278,9 +353,9 @@ export function TaskLaunchPanel({
 
       {selectedApp ? (
         <div className="pill-row">
-          <span className="inline-chip">app {selectedApp.application.appId}</span>
-          <span className="inline-chip">taskType {selectedTemplate?.taskType ?? "general"}</span>
-          <span className="inline-chip">capabilities {selectedApp.application.capabilityModuleIds.length}</span>
+          <span className="inline-chip">应用 {selectedApp.application.displayName}</span>
+          <span className="inline-chip">模板类型 {selectedTemplate?.taskType ?? "general"}</span>
+          <span className="inline-chip">能力 {selectedApp.application.capabilityModuleIds.length}</span>
         </div>
       ) : null}
 
@@ -293,12 +368,17 @@ export function TaskLaunchPanel({
         </button>
         {createdTaskId ? (
           <button className="ghost-button" disabled={isSubmitting} onClick={() => void handleStartCreated()} type="button">
-            Start now
+            立即启动
           </button>
         ) : null}
       </div>
 
-      {createdTaskId ? <p className="meta-copy mono">created {createdTaskId}</p> : null}
+      {createdTaskId ? (
+        <div className="field-actions">
+          <p className="meta-copy mono">已创建 {createdTaskId}</p>
+          <Link className="ghost-button" href={`/tasks/${encodeURIComponent(createdTaskId)}`}>查看任务</Link>
+        </div>
+      ) : null}
     </Surface>
   );
 }

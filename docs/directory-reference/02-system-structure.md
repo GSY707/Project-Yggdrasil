@@ -9,7 +9,7 @@ apps/
 └── web/                            # Next.js 15 + React 19 工作台
     ├── app/                        # Next.js App Router 路由目录
     │   ├── page.tsx                # 总览页（工作台首页）
-    │   ├── layout.tsx              # 全局布局
+    │   ├── layout.tsx              # 全局布局；P1 后顶栏控制面与功能 chips 已改为中文产品标签
     │   ├── api/
     │   │   └── core/               # Core API 的前端代理（默认透传到 :5000）
     │   ├── applications/           # 应用场景浏览页
@@ -21,12 +21,14 @@ apps/
     │   │   └── [nodeId]/           # 记忆节点详情页（动态路由）
     │   ├── observability/          # 调用链路追踪页
     │   ├── prompting/              # Prompt 模板管理与预览页
+    │   ├── release/                # 发布与安全页（发布模式、演示路径、本地数据、远端计划和隐私边界）
     │   ├── tasks/
     │   │   ├── page.tsx            # 任务页：应用模板创建/草稿/立即启动入口
     │   │   └── [taskId]/           # 任务详情页（动态路由，现已挂接 LLM 工作分析摘要与独立分析路由）
     │   ├── training/               # 训练实验管理页
     │   └── components/             # 可复用 React 组件
     ├── lib/                        # 前端工具函数
+    ├── public/demo/                # README、用户指南和 /release 使用的产品截图
     ├── package.json                # 前端包配置
     ├── next.config.ts              # Next.js 配置
     └── tsconfig.json               # TypeScript 配置（继承根配置）
@@ -35,9 +37,13 @@ apps/
 **关键说明：**
 - `app/api/core/` 是纯代理层，不含业务逻辑，请求直接转发至 Core API（默认 `:5000`，可用 `YGGDRASIL_CORE_API_BASE_URL` 覆盖）。
 - 应用场景 UI（如 coding、research）由 `applications/` 目录下的应用插件提供，Web 工作台本身不承载场景专属页面。
-- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户。
-- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`，并在 `/tasks`、`/applications` 和应用详情页接入。
-- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式。
+- `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户；首屏默认动作是新建任务、选择应用和导入素材。
+- `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，展示 `exampleTasks[]` / `expectedOutputs[]` 和已附加素材，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`；草稿创建后在面板内保留“已创建 / 立即启动 / 查看任务”反馈，不再依赖刷新任务列表维持状态。
+- `apps/web/app/components/assets-page.tsx` 是 P1 素材导入入口：支持浏览器读取文本类文件、切段预览、导入状态、摘要节点展示，并通过 `/tasks?assetId=...` 把素材附加到新任务。
+- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈、桌面封装、托管 / SaaS 和官方远端数据服务只能写成计划中，不能写成当前可用能力。
+- `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式；P1 后首屏按钮、身份、模块、记忆和配置标签改为用户可读中文。
+- `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 现在保留原始状态值用于颜色判定，同时把常见运行状态、导入状态和素材角色显示为中文产品标签。
+- `apps/web/app/lib/use-api-resource.ts` 是 Web 控制面通用 API loader；路径切换会清空旧数据，普通 reload 会保留当前数据直到新响应返回，避免任务创建后刷新列表时卸载启动面板。
 - `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
 - `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
 - `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
@@ -176,7 +182,7 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema 与 setupChecklist 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment 与 setupChecklist 契约
 ```
 
 **关键说明：**
@@ -295,14 +301,14 @@ applications/
 applications/<name>/
 ├── yggdrasil.app.yaml      # 应用清单（绑定模块、模型路由、种子上下文）
 ├── config/defaults.json     # 应用默认配置
-├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、settingsSchema
+├── web/dashboard.json       # 控制面元数据：hero、quickActions、taskTemplates、exampleTasks、expectedOutputs、settingsSchema
 ├── memory/                  # 应用静态记忆资产（随包发布，运行时按应用命名空间叠加）
 ├── prompt-profiles/          # 主 Agent / Sub-Agent prompt profile
 └── scenes/                   # seed template / 场景启动资产
 ```
 
 **关键说明：**
-- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
+- `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用；顶部应用模板应提供 `exampleTasks[]` 与 `expectedOutputs[]`，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
 - `services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `list_applications()` 已把 dashboard payload 随 `GET /applications` 返回，任务页无需再逐个请求应用详情才能显示模板。
 
 ---

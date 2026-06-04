@@ -8,7 +8,7 @@
 docs/
 ├── PRD-v0.1.md                     # 产品需求文档 v0.1
 ├── DEVELOPER_GUIDE.md              # 开发指南（本套文档之一）
-├── USER_GUIDE.md                   # 使用指南（本套文档之一）
+├── USER_GUIDE.md                   # 使用指南（本套文档之一；当前围绕首次成功路径、素材导入、模板启动、演示流程、发布模式和隐私边界）
 ├── DIRECTORY_REFERENCE.md          # 目录说明书（本文档）
 ├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值与长任务伪无限上下文评测口径
 ├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
@@ -24,9 +24,14 @@ docs/
 │   │                               #   给低智商 code agent 的任务文档：把“起始状态 + 任务级工作状态读取”重构拆成明确步骤、禁止事项、测试命令与完成标准
 │   ├── TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md
 │   │                               #   给 code agent 的返工任务文档：针对验收残留问题，强制收口世界级/任务级边界、无损恢复判定和 TaskRuntimeState 唯一入口
+│   ├── PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md
+│   │                               #   产品打包与官方远端数据能力需求差距：Docker 产品栈、桌面封装、删除治理、SaaS、远端托管/备份/删除的计划与缺口
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
 │   │                               #   功能形态分类与提示词功能检查计划：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径
 │   └── ...                         #   其他开发专题文档同顶层速览
+│
+├── demos/
+│   └── LOCAL_FIRST_TASK_DEMO.md    # 本地首次成功演示脚本：Web 导入素材、附加任务、模板启动与结果查看
 │
 ├── new/                            # 新方案草稿与当前重做输入材料
 │   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
@@ -58,7 +63,7 @@ docs/
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
-│   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面与控制面 API
+│   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面、场景任务模板与控制面 API
 │   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义与计划-步骤-动作三层模型
 │   ├── graduate-researcher-test-standard-v0.1.md # Graduate Researcher 测试标准：机器学习研究生场景的行为验收口径
 │   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格

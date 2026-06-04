@@ -191,6 +191,24 @@ export interface AssetSegmentRecord {
   [key: string]: unknown;
 }
 
+export interface AssetIngestResponse {
+  asset: AssetRecord;
+  segments?: AssetSegmentRecord[];
+  segmentCount: number;
+  processingPlan?: Record<string, unknown>;
+  summary?: string;
+  summaryNode?: { id: string; title: string; content: string; [key: string]: unknown };
+}
+
+export interface TaskLaunchAttachment {
+  assetId: string;
+  label?: string;
+  sourceUri?: string;
+  summary?: string;
+  summaryNodeId?: string;
+  segmentCount?: number;
+}
+
 export interface AssetEmbeddingRecord {
   id: string;
   ownerKind: string;
@@ -289,6 +307,8 @@ export interface ApplicationTaskTemplate {
   title: string;
   goal: string;
   description?: string;
+  exampleTasks?: string[];
+  expectedOutputs?: string[];
   currentFocus?: string;
   currentObjective?: string;
   taskType?: string;

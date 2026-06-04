@@ -51,7 +51,7 @@ The current open source support matrix is prioritized as follows:
 - Tier 2: documented Windows local development paths in this repository
 - Tier 3: macOS and other environments on a best-effort basis
 
-The project currently provides source code, documentation, and self-hosting paths. It does not provide an official hosted SaaS, commercial support, or uptime guarantees.
+The project currently provides source code, documentation, and self-hosting paths. It does not provide a launched official hosted SaaS, commercial support, or uptime guarantees. Hosted SaaS, official remote data hosting, remote backup, and remote deletion have been added to the product plan; they are not a current support commitment until service terms, privacy policy, tenant isolation, encryption, retention, and deletion proof are finalized.
 
 ## Contribution Boundary
 

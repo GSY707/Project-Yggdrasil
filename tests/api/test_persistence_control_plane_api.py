@@ -531,6 +531,22 @@ def test_core_api_exposes_m9_resource_and_prompt_control_planes() -> None:
     )
     assert software_factory_item["dashboard"]["taskTemplates"][0]["id"] == "deliver-change"
     assert any(field["key"] == "provider" for field in software_factory_item["dashboard"]["settingsSchema"])
+    scenario_launcher_app_ids = {
+        "yggdrasil.app.graduate-researcher",
+        "yggdrasil.app.deep-research",
+        "yggdrasil.app.coding-greenfield",
+        "yggdrasil.app.knowledge-studio",
+    }
+    scenario_launchers = [
+        item for item in applications.json()["applications"] if item["application"]["appId"] in scenario_launcher_app_ids
+    ]
+    assert len(scenario_launchers) == len(scenario_launcher_app_ids)
+    for item in scenario_launchers:
+        templates = item["dashboard"]["taskTemplates"]
+        assert 1 <= len(templates) <= 3
+        for template in templates:
+            assert template["exampleTasks"]
+            assert template["expectedOutputs"]
     app_ids = {item["application"]["appId"] for item in applications.json()["applications"]}
     assert {
         "yggdrasil.app.base",
