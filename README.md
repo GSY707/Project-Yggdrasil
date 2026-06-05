@@ -39,7 +39,7 @@ corepack pnpm yggdrasil:up
 3. 在应用下拉中选择 `Deep Research Lab`，确认模板显示示例任务和预期产物。
 4. 点击「只创建草稿」可先得到任务编号和「立即启动」入口；点击「创建并启动」会直接进入运行队列。
 
-完整演示脚本见 `docs/demos/LOCAL_FIRST_TASK_DEMO.md`。产品内的 `/release` 页面会说明当前支持的发布模式、本地数据位置、隐私边界和备份/恢复动作。
+完整演示脚本见 `docs/demos/LOCAL_FIRST_TASK_DEMO.md`。产品内的 `/release` 页面会说明当前支持的发布模式、本地数据位置、隐私边界、备份/恢复动作和数据治理入口。
 
 ### 产品截图
 
@@ -55,12 +55,12 @@ corepack pnpm yggdrasil:up
 |------|----------|----------|----------|----------|
 | 开发者工作区 | 可用 | 手动启动服务或 `corepack pnpm yggdrasil:up` | `.yggdrasil` / compose 数据库 | 面向贡献者和调试 |
 | 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | `.yggdrasil`、`.yggdrasil/product-logs`、`.yggdrasil-backups` | 当前外部试用默认模式 |
-| 完整 Docker Compose 产品栈 | 计划中 | 尚未发布 | 尚未冻结 | `infra/docker-compose.yml` 目前只启动依赖 |
-| 桌面封装 | 计划中 | 尚未发布 | 尚未冻结 | 当前不作为支持模式 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | Compose volume：`postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` | 使用 `infra/docker-compose.product.yml`，仍需冷启动、备份恢复和升级回滚验收后才能作为正式发行 |
+| 桌面封装 | 薄封装预览 | `packaging/desktop/windows/Yggdrasil Desktop.cmd` | 同产品 Compose volume | Windows 启动/停止/状态/日志/备份入口已提供；还不是正式安装包、托盘或自动更新器 |
 | 托管 / SaaS | 计划中 | 尚未发布 | 计划支持官方远端工作区；当前不会自动上传 | 已进入路线图，但当前无 uptime 或商业支持承诺 |
 | 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除待设计 | 当前仍只支持本地 backup/restore |
 
-完整需求与差距见 `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`。
+数据治理 dry-run 与审计入口位于 `/data-governance`；当前 Web 只开放删除预览，不直接暴露危险硬删除按钮。完整需求与差距见 `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`，删除协议见 `docs/specs/data-governance-manifest-v0.1.md`。
 
 ## 系统定位
 
@@ -90,8 +90,8 @@ corepack pnpm yggdrasil:up
 - docs/DEVELOPER_GUIDE.md：开发者手册。
 - docs/USER_GUIDE.md：用户手册。
 - docs/DIRECTORY_REFERENCE.md：项目完整目录与后续 agent 导航入口。
-- apps/web：Web 工作台，当前已提供总览、任务、节点、协作、资产、训练、Prompt、评测、观测页面。
-- services/core-api：控制面 API，当前已暴露 tasks、nodes、collaboration、runtime、memory、assets、training、prompting、evaluations、observability。
+- apps/web：Web 工作台，当前已提供总览、任务、节点、协作、资产、训练、Prompt、评测、观测、发布与数据治理页面。
+- services/core-api：控制面 API，当前已暴露 tasks、nodes、collaboration、runtime、memory、assets、training、prompting、evaluations、observability、data-governance。
 - services/agent-runtime：运行时执行入口，负责主 Agent 启动、pause/resume、PromptCompiler 接线与模型执行闭环。
 - services/module-host：模块发现、装配、注册与健康管理。
 - services/worker：异步执行活动与任务消费入口。
@@ -101,7 +101,8 @@ corepack pnpm yggdrasil:up
 - packages/frontend-sdk：前端共享类型。
 - docs：PRD、ADR、协议与数据规格。
 - evaluation：正式评测样本、suite 定义与基线数据。
-- infra：本地依赖基础设施与观测组件。
+- infra：本地依赖基础设施、产品 Docker Compose 预览栈与观测组件。
+- packaging/desktop/windows：Windows 桌面薄启动器预览，包装产品 Compose 的启动、停止、状态、日志、备份和恢复入口。
 
 ## 开源协作
 
@@ -132,6 +133,18 @@ corepack pnpm yggdrasil:up
 ```text
 http://localhost:3000
 ```
+
+### Docker Compose 产品栈预览
+
+完整产品栈预览入口：
+
+```powershell
+corepack pnpm product:compose:config
+corepack pnpm product:up
+corepack pnpm product:smoke
+```
+
+该入口使用 `infra/docker-compose.product.yml`，会构建 Core API、Agent Runtime、Module Host、Worker 和 Web 镜像，并拉起数据库、Redis、NATS、MinIO、Temporal、Jaeger 与 OTel Collector。它目前是预览发行路径，适合验证自托管产品形态；正式发行前仍需补齐冷启动、备份/恢复、升级/回滚和 provider key 阻塞提示验收。
 
 ### 开发者手动启动服务
 

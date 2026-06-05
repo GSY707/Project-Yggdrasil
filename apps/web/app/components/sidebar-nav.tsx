@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/prompting", kicker: "prompts", label: "Prompt", description: "调试 Prompt 资产、工具清单和编译结果。" },
   { href: "/evaluations", kicker: "regression", label: "评测", description: "运行 M4-M6 回归 suite 并查看结果。" },
   { href: "/observability", kicker: "signals", label: "观测", description: "汇总 HTTP、worker、evaluation 与 LLM 的 span、日志和指标。" },
+  { href: "/data-governance", kicker: "data", label: "数据治理", description: "查看数据资产清单、删除预览和治理审计。" },
   { href: "/release", kicker: "release", label: "发布与安全", description: "查看发布模式、演示路径、本地数据和隐私边界。" },
 ];
 

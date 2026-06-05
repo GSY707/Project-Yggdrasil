@@ -189,7 +189,11 @@ evaluation/
 
 ```
 infra/
-├── README.md                       # 基础设施使用说明（端口、环境变量、备份恢复）
+├── README.md                       # 基础设施和产品 Compose 使用说明（端口、环境变量、备份恢复）
+├── product.env.template            # 产品 Compose 环境模板（provider key、端口、DB/Redis/NATS、state root）
+├── docker/
+│   ├── python-service.Dockerfile   # Core API / Agent Runtime / Module Host / Worker 共用 Python 镜像
+│   └── web.Dockerfile              # Next.js standalone Web 镜像
 ├── docker-compose.yml              # 主基础设施栈
 │                                   #   PostgreSQL 17 :5432
 │                                   #   Redis 7.4 :6379
@@ -198,12 +202,33 @@ infra/
 │                                   #   Temporal :7233 + UI :8088
 │                                   #   Jaeger :16686
 │                                   #   OTel Collector :4318
+├── docker-compose.product.yml      # 完整产品栈预览（依赖 + migrate + Core API/Agent Runtime/Module Host/Worker/Web）
 ├── langfuse-compose.yml            # Langfuse 本地观测栈（独立端口段，避免冲突）
 │                                   #   Langfuse Web :3100
 │                                   #   ClickHouse :18123
 │                                   #   Langfuse MinIO :19090
 └── otel-collector-config.yaml      # OTel Collector 配置（Traces → Jaeger + Debug）
 ```
+
+---
+
+## packaging/ · 桌面薄封装
+
+```
+packaging/
+└── desktop/
+    └── windows/
+        ├── README.md                    # Windows 薄封装说明与支持边界
+        ├── Yggdrasil.Desktop.ps1        # start/stop/status/open/logs/backup/restore 主脚本
+        ├── Yggdrasil Desktop.cmd        # 启动产品 Compose 并打开 Web
+        ├── Yggdrasil Stop.cmd           # 停止产品 Compose
+        ├── Yggdrasil Status.cmd         # 查看产品 Compose 状态与 smoke
+        └── Yggdrasil Logs.cmd           # 打开产品日志跟随窗口
+```
+
+**关键说明：**
+- 这是桌面封装预览，不是正式安装包、托盘控制器或自动更新器。
+- 它包装 `corepack pnpm product:*` 命令，依赖 Docker Desktop 可用。
 
 ---
 
@@ -227,6 +252,7 @@ migrations/
 - `migrations/versions/5f7c2e9a1b44_task_snapshot_runtime_pointer_fields.py`：为 task_snapshots 补 currentNodeId / workingNodeAnnotation / pcMemo / topFrameId / stackDigest，支撑 P1 的 v0.2 工作树恢复指针与 WorkContextStack 持久化。
 - `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
 - `migrations/versions/a91c2e7d4f33_memory_tree_worktree_audit_fields.py`：为 nodes / retrieval_requests / model_invocations / assets / prompt_compile_artifacts 补 work tree 审计字段，支撑“记忆树即全部记忆”的 snapshot、rehydrate 与多模态/关系发现闭环。
+- `migrations/versions/0f7c6e2a8d91_data_governance_operations.py`：新增 `data_governance_operations` 审计表，支撑删除 dry-run、task 硬删除和阻塞记录。
 
 ---
 
@@ -240,6 +266,8 @@ tests/
 ├── # ── 基础层测试 ────────────────────────────────────────
 ├── test_persistence_api.py         # 迁移索引文件（持久化 API 专项测试已拆分到 tests/api）
 ├── api/
+│   ├── test_data_governance_api.py
+│   │                               # 数据治理 manifest、dry-run 审计、运行中任务阻塞与 task 级硬删除回归
 │   ├── test_persistence_task_runtime_api.py
 │   │                               # tasks/nodes/runtime/workbench 等基础 API 持久化与读取回归
 │   ├── test_persistence_control_plane_api.py
@@ -308,6 +336,7 @@ tests/
 ```
 scripts/
 ├── analyze_llm_work_run.py        # LLM 工作分析脚本包装器：按 task/run/invocation 生成 run/window/turn/tool/artifact/source 报告
+├── product-compose.mjs            # 产品 Compose 包装器：调用 product compose，关闭 BuildKit/bake，并封装恢复维护窗口流程
 ├── analyze_langfuse_real_task_trace.py # Langfuse trace 分析：恢复真实任务最终输出、结论段与逐窗口快照/工作树历史
 ├── analyze_langfuse_real_task_trace_layered.py # Langfuse 文本审查兼容入口：输出 prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点
 ├── analyze_langfuse_real_task_execution_audit.py # Langfuse 文本审查主入口：面向 Langfuse 文字交互分析的报告生成器，内部可接本地状态增强

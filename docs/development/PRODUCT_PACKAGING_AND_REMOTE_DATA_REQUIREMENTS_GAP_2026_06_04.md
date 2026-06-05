@@ -1,6 +1,7 @@
 # 产品打包与官方远端数据能力需求差距文档
 
 日期：2026-06-04
+最近更新：2026-06-05
 
 ## 1. 结论
 
@@ -8,17 +9,17 @@
 
 | 能力 | 当前状态 | 结论 |
 |------|----------|------|
-| 完整 Docker Compose 产品栈 | 计划中 | 当前 `infra/docker-compose.yml` 只启动本地依赖，不能作为外部用户产品发行物。 |
-| 桌面封装 | 计划中 | 当前没有桌面安装包、托盘控制器、自动更新或桌面级状态管理。 |
-| 删除 / 清理 / 数据治理 | 计划中 | 当前只有手动删除本地 `.yggdrasil` 的说明，没有 Web 删除、删除预览、删除审计或远端删除请求闭环。 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | 已新增 `infra/docker-compose.product.yml`、产品 Dockerfile、env 模板和 product smoke；正式发行前仍需冷启动、备份/恢复、升级/回滚验收。 |
+| 桌面封装 | 薄封装预览 | 已新增 Windows `.cmd` / PowerShell 启动器，可启动/停止/查看状态/日志/备份；还不是正式安装包、托盘控制器或自动更新器。 |
+| 删除 / 清理 / 数据治理 | 本地 dry-run 与 task 后端硬删除预览 | 已新增数据资产 manifest、删除预览、审计表、API 和 Web `/data-governance`；Web 当前只开放 dry-run，不直接暴露硬删除按钮。 |
 | 托管 / SaaS | 计划中 | 已加入路线图，但当前没有官方账号体系、远端工作区、服务条款、隐私策略、商业支持或 uptime 承诺。 |
 | 官方远端数据服务 | 计划中 | 远端数据托管、远端备份、远端恢复和远端删除已加入计划；当前本地产品模式不会自动上传数据。 |
 
 推荐推进顺序：
 
-1. 先做数据资产清单、删除契约和本地删除/导出控制面。
-2. 再做完整 Docker Compose 产品栈，让自托管产品有稳定部署形态。
-3. 再做桌面封装，把本地产品模式包装成普通用户可安装入口。
+1. 先把当前数据资产清单、删除预览和 task 级硬删除后端补齐验证与误删保护。
+2. 再把完整 Docker Compose 产品栈做冷启动、备份/恢复、升级/回滚验收。
+3. 再把桌面薄封装升级为正式安装包、托盘状态和更新策略。
 4. 最后做托管 / SaaS 与官方远端数据服务，因为它依赖账号、租户、安全、备份、删除和服务条款全部冻结。
 
 ## 2. 范围
@@ -36,7 +37,13 @@
 - 官方远端备份。
 - 官方远端删除。
 
-本文件不是服务上线公告，不是隐私政策，也不是商业支持承诺。任何用户文档、发布页或 README 都必须继续把这些能力标为“计划中”，直到实现、测试、服务条款和运维流程全部冻结。
+本文件不是服务上线公告，不是隐私政策，也不是商业支持承诺。任何用户文档、发布页或 README 都必须区分“预览可验证”“计划中”和“正式支持”，不能把未验收能力写成正式可用能力。
+
+2026-06-05 后口径更新：
+
+- 完整 Docker Compose 产品栈、桌面薄封装、数据治理 dry-run 不再是纯计划项，已经进入预览可验证状态。
+- 托管 / SaaS、官方远端数据托管、远端备份和远端删除仍是计划项，不能写成当前可用能力。
+- Web `/data-governance` 当前只展示资产清单、删除影响预览和审计记录；后端 task 级硬删除 API 必须传入 `confirmScopeId`，运行中任务会阻塞。
 
 ## 3. 当前已有基础
 
@@ -79,10 +86,10 @@
 
 差距：
 
-- Compose 不包含完整产品服务。
-- 不包含 Web、Core API、Agent Runtime、Module Host、Worker 的产品镜像。
-- 不包含统一 `.env` schema 校验。
-- 不包含产品级健康检查、升级、备份、恢复和清理流程。
+- `infra/docker-compose.yml` 仍只代表依赖栈，不应冒充产品栈。
+- `infra/docker-compose.product.yml` 已包含 Web、Core API、Agent Runtime、Module Host、Worker 和 migrate job，但仍需正式冷启动和恢复演练。
+- 统一 `.env` schema 校验仍未冻结。
+- 产品级升级、回滚和清理流程仍需验收。
 
 ### 3.3 本地备份 / 恢复
 
@@ -111,6 +118,12 @@
 
 已有：
 
+- `docs/specs/data-governance-manifest-v0.1.md`。
+- `packages/python-sdk/src/yggdrasil_sdk/data_governance.py` 数据资产 manifest、删除预览、task 硬删除执行和审计记录。
+- `data_governance_operations` 审计表与 Alembic 迁移。
+- Core API `/data-governance/manifest`、`/operations`、`/deletion-plan`、`/delete`。
+- Web `/data-governance` dry-run 预览页。
+- Web API 代理已补 `PUT` / `PATCH` / `DELETE` 转发。
 - 数据库部分关系使用 cascade / set null / restrict。
 - 部分 repository 有局部 `delete` 语句。
 - `modules/text-memory` 已有 `forget_node`，`modules/memory-organizer` 已有软遗忘能力；这属于记忆治理，不等于用户级硬删除。
@@ -118,14 +131,11 @@
 
 差距：
 
-- 没有面向用户的 Web 删除入口。
-- 没有 `DELETE /tasks/{taskId}`、`DELETE /assets/{assetId}`、`DELETE /nodes/{nodeId}` 等正式控制面。
-- 当前 Web API 代理只导出 `GET` / `POST` handler；即使后端未来新增 `DELETE` 路由，前端代理也需要同步补 `DELETE` 转发。
-- 没有删除影响预览。
-- 没有 dry-run。
-- 没有删除审计。
+- Web 当前只开放删除影响预览，不直接暴露硬删除按钮。
+- task 级硬删除后端已提供，但 `DELETE /tasks/{taskId}`、`DELETE /assets/{assetId}`、`DELETE /nodes/{nodeId}` 等 REST 资源路由尚未冻结。
+- asset / node 当前只有预览，没有硬删除执行。
 - 没有删除证明。
-- 没有跨数据库、state root、日志、备份和外部 provider 的统一数据清单。
+- 数据资产 manifest 已覆盖数据库、state root、日志、备份和外部 provider 边界，但日志/备份清理策略尚未执行化。
 - 没有远端删除请求和远端删除状态查询。
 
 ### 3.5 托管 / SaaS 与官方远端数据
@@ -175,10 +185,9 @@
 
 ### 4.3 当前差距
 
-- `infra/docker-compose.yml` 只覆盖依赖。
-- 产品服务仍从源码启动。
-- 没有 Dockerfile 体系。
-- 没有产品 compose 的健康检查矩阵。
+- `infra/docker-compose.yml` 只覆盖依赖；产品栈必须使用 `infra/docker-compose.product.yml`。
+- 产品服务镜像已有预览 Dockerfile，但正式 tag、发布镜像和升级策略未冻结。
+- 产品 compose 已有基础健康检查矩阵，但 provider key 阻塞提示和首次成功路径 smoke 仍需增强。
 - 没有 compose 模式下的升级、回滚和备份恢复验收。
 - 没有用户级故障说明。
 
@@ -214,11 +223,11 @@
 
 ### 5.3 当前差距
 
-- 没有 Electron / Tauri / 其他桌面壳选择。
-- 没有安装包。
-- 没有桌面服务管理器。
+- 已有 Windows 薄启动器，但还没有 Electron / Tauri / 其他桌面壳最终选型。
+- 没有正式安装包。
+- 没有正式桌面服务管理器。
 - 没有托盘状态。
-- 没有桌面端备份恢复 UI。
+- 当前只有命令入口封装，没有桌面端备份恢复 UI。
 - 没有桌面端更新策略。
 - 没有桌面端远端同步同意流程。
 
@@ -276,11 +285,10 @@
 
 ### 6.4 当前差距
 
-- 没有数据资产 manifest。
-- 没有统一删除 service。
-- 没有删除 API；Web 代理层也尚未导出 `DELETE` handler。
-- 没有 Web 删除页。
-- 没有删除审计表。
+- 数据资产 manifest、统一删除 service、数据治理 API、Web dry-run 页和审计表已完成第一版。
+- task 级硬删除已支持后端执行，但 Web 暂不暴露危险删除按钮。
+- asset / node 仅支持预览，尚未支持硬删除。
+- 日志和备份清理策略尚未执行化。
 - 没有远端账号 / 租户 / 工作区。
 - 没有远端备份库。
 - 没有远端删除状态机。
@@ -447,9 +455,8 @@
 
 最小可推进任务如下：
 
-1. 新增数据资产 manifest，列出数据库表、state root 文件、日志、备份和远端对象的归属关系。
-2. 设计本地删除 API：先做 dry-run、影响预览和删除审计，不直接从 Web 暴露危险按钮。
-3. 把本地备份 / 恢复接入 Web `/release` 或新的数据管理页。
-4. 设计完整 Docker 产品栈的 compose 文件和镜像边界。
-5. 在桌面封装前，先冻结本地产品启动器的机器可读健康摘要。
-6. 单独起草 SaaS RFC，明确账号、租户、远端存储、远端备份、远端删除、隐私和服务条款。
+1. 跑通并固化 `tests/api/test_data_governance_api.py`、`product:compose:config`、`product:smoke` 和 Web typecheck。
+2. 为 `/data-governance` 增加备份前置提示、二次确认设计和删除证明摘要，但仍不要直接开放无保护硬删除按钮。
+3. 验证产品 Compose 冷启动、首次成功路径、备份/恢复和升级/回滚。
+4. 将 Windows 薄启动器升级为正式安装包/托盘控制器前，先冻结健康摘要和日志目录协议。
+5. 单独起草 SaaS RFC，明确账号、租户、远端存储、远端备份、远端删除、隐私和服务条款。

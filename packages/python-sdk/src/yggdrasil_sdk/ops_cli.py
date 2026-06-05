@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .ops_runtime import create_runtime_backup, latest_snapshot_dir, launch_local_product, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
+from .ops_runtime import create_runtime_backup, latest_snapshot_dir, launch_local_product, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_product_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
 from .support import load_workspace_dotenv
 
 
@@ -25,6 +25,9 @@ def main() -> None:
 
     smoke_parser = subparsers.add_parser("compose-smoke", help="Verify local compose dependencies.")
     smoke_parser.add_argument("--ensure-up", action="store_true", help="Run docker compose up -d before smoke checks.")
+
+    product_smoke_parser = subparsers.add_parser("product-compose-smoke", help="Verify the full product compose stack.")
+    product_smoke_parser.add_argument("--ensure-up", action="store_true", help="Run docker compose up -d --build before smoke checks.")
 
     launch_parser = subparsers.add_parser("launch", help="Start local product mode and print the Web URL.")
     launch_parser.add_argument("--allow-missing-provider", action="store_true", help="Allow fallback-only startup when no provider key is configured.")
@@ -79,6 +82,11 @@ def main() -> None:
 
     if args.command == "compose-smoke":
         result = run_compose_smoke(ensure_up=args.ensure_up)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "product-compose-smoke":
+        result = run_product_compose_smoke(ensure_up=args.ensure_up)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 

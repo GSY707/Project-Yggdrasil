@@ -1,0 +1,17 @@
+.git
+.next
+.pytest_cache
+.tmp
+.venv
+.yggdrasil
+.yggdrasil-backups
+node_modules
+tmp
+eval_output.log
+eval_run.log
+*.pyc
+__pycache__
+apps/web/.next
+apps/web/node_modules
+apps/web/tsconfig.tsbuildinfo
+packages/*/dist

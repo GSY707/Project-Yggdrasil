@@ -15,6 +15,7 @@ apps/
     │   ├── applications/           # 应用场景浏览页
     │   ├── assets/                 # 资产管理页（上传、查看、版本）
     │   ├── collaboration/          # PR 审查与协作页
+    │   ├── data-governance/        # 数据治理页（资产清单、删除 dry-run、审计记录）
     │   ├── evaluations/            # 评测结果展示页
     │   ├── mcp/                    # MCP 模块状态页
     │   ├── nodes/
@@ -40,7 +41,8 @@ apps/
 - `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户；首屏默认动作是新建任务、选择应用和导入素材。
 - `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，展示 `exampleTasks[]` / `expectedOutputs[]` 和已附加素材，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`；草稿创建后在面板内保留“已创建 / 立即启动 / 查看任务”反馈，不再依赖刷新任务列表维持状态。
 - `apps/web/app/components/assets-page.tsx` 是 P1 素材导入入口：支持浏览器读取文本类文件、切段预览、导入状态、摘要节点展示，并通过 `/tasks?assetId=...` 把素材附加到新任务。
-- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈、桌面封装、托管 / SaaS 和官方远端数据服务只能写成计划中，不能写成当前可用能力。
+- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈和桌面封装当前只写成预览可验证，托管 / SaaS 和官方远端数据服务仍只能写成计划中。
+- `apps/web/app/components/data-governance-page.tsx` 是本地数据治理入口：消费 `/data-governance/manifest`、`/deletion-plan` 和 `/operations`，只开放删除影响预览与审计查看，不直接暴露硬删除按钮。
 - `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式；P1 后首屏按钮、身份、模块、记忆和配置标签改为用户可读中文。
 - `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 现在保留原始状态值用于颜色判定，同时把常见运行状态、导入状态和素材角色显示为中文产品标签。
 - `apps/web/app/lib/use-api-resource.ts` 是 Web 控制面通用 API loader；路径切换会清空旧数据，普通 reload 会保留当前数据直到新响应返回，避免任务创建后刷新列表时卸载启动面板。
@@ -72,6 +74,7 @@ services/
 │               ├── applications.py # GET /applications/ - 应用目录
 │               ├── assets.py       # /assets/ - 资产 CRUD
 │               ├── collaboration.py# /collaboration/ - PR 协作
+│               ├── data_governance.py # /data-governance/ - 数据资产清单、删除 dry-run、审计与 task 硬删除后端
 │               ├── evaluations.py  # /evaluations/ - 评测结果
 │               ├── health.py       # /health - 健康检查（含首次启动 setupChecklist）
 │               ├── mcp.py          # /mcp/ - MCP 协议
@@ -172,8 +175,9 @@ packages/
 │       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
-│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；包入口保持 `yggdrasil_sdk.ops_runtime` 导入面）
-│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/launch/pilot-sandbox/pilot-live/pilot-scorecard）
+│           ├── data_governance.py  # 数据资产 manifest、删除影响预览、task 硬删除执行与审计记录
+│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；compose 现含产品栈 smoke）
+│           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/product-compose-smoke/launch/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
 ├── contracts/                      # 跨语言共享类型定义
@@ -182,7 +186,7 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment 与 setupChecklist 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment、setupChecklist 与 DataGovernance 契约
 ```
 
 **关键说明：**

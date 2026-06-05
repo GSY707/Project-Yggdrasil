@@ -109,6 +109,7 @@ http://localhost:3000
 | 观测 | `/observability` | 调用链路追踪 |
 | 模块 | `/mcp` | MCP 模块状态 |
 | 发布与安全 | `/release` | 发布模式、演示路径、本地数据、隐私和支持边界 |
+| 数据治理 | `/data-governance` | 数据资产清单、删除影响预览和本地删除审计 |
 
 ---
 
@@ -530,8 +531,8 @@ docker compose -f infra/docker-compose.yml logs -f redis
 |------|----------|----------|----------|----------|----------|
 | 开发者工作区 | 可用 | 手动启动服务，或 `corepack pnpm yggdrasil:up` | `git pull` 后重新执行依赖安装和迁移 | `.yggdrasil` 或 compose 数据库 | 面向贡献者、调试和定向测试 |
 | 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | 停止服务后更新源码、依赖和迁移，再重新启动 | `.yggdrasil`、`.yggdrasil/product-logs`、`.yggdrasil-backups` | 当前外部试用默认模式 |
-| 完整 Docker Compose 产品栈 | 计划中 | 尚未发布 | 尚未定义镜像版本 | 尚未冻结 | 当前 `infra/docker-compose.yml` 只启动依赖 |
-| 桌面封装 | 计划中 | 尚未发布 | 尚未定义 | 尚未冻结 | 当前不作为支持模式 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | 镜像由 `infra/docker-compose.product.yml` 本地构建；正式版本标签待冻结 | `postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` | 适合自托管产品栈验证；正式发行前仍需冷启动、备份恢复、升级回滚验收 |
+| 桌面封装 | 薄封装预览 | `packaging/desktop/windows/Yggdrasil Desktop.cmd` | 跟随产品 Compose 更新 | 同产品 Compose volume | Windows 启动/停止/状态/日志/备份入口已提供；还不是正式安装包或自动更新器 |
 | 托管 / SaaS | 计划中 | 尚未发布 | 由官方托管环境负责，策略待定义 | 计划支持官方远端工作区；当前不会自动上传 | 已进入路线图，但当前无 uptime 或商业支持承诺 |
 | 官方远端数据服务 | 计划中 | 尚未发布 | 远端存储协议待定义 | 远端数据托管、远端备份、远端删除待设计 | 当前仍只支持本地 backup/restore |
 
@@ -570,7 +571,11 @@ docker compose -f infra/docker-compose.yml logs -f redis
 - **导出 / 备份**：`corepack pnpm ops:backup`
 - **恢复最近快照**：`corepack pnpm ops:restore`
 - **恢复指定快照**：`uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot ./.yggdrasil-backups/<timestamp>`
-- **删除本地状态**：当前没有 Web 删除按钮。删除前先备份，停止服务后再手动清理 `.yggdrasil`；如果使用 Docker 数据卷，需要单独确认卷清理范围。
+- **产品 Compose 备份**：`corepack pnpm product:backup`
+- **产品 Compose 恢复**：`corepack pnpm product:restore -- --snapshot <snapshot>`。恢复会先停止 Web / Worker / API 侧服务，再用一次性容器恢复，最后重新拉起应用服务；不要在任务运行中执行。
+- **删除影响预览**：进入 `/data-governance`，选择 task / asset / node 并生成 dry-run。Web 当前只展示数据资产清单、影响预览和审计记录，不直接暴露硬删除按钮。
+- **task 级本地硬删除 API**：后端已提供 `POST /data-governance/delete`，必须传入 `confirmScopeId`；运行中任务会被阻塞。使用前先备份，并确认旧备份、产品日志、LLM provider、Langfuse 和 OTel 远端数据不会被本地 task 删除自动处理。
+- **手动清理本地状态**：停止服务后再清理 `.yggdrasil`；如果使用产品 Compose，需要先确认 `postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` 等卷的清理范围。
 - **远端备份 / 远端删除**：已加入计划，但当前没有官方远端备份库、远端恢复入口、删除请求入口或删除证明。
 
 更多开源和支持边界见 `docs/OPEN_SOURCE_BOUNDARY.md`。

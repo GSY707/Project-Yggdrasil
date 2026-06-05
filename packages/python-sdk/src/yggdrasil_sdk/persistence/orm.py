@@ -477,6 +477,27 @@ class OutboxRecordORM(Base):
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
 
 
+class DataGovernanceOperationORM(Base):
+    __tablename__ = "data_governance_operations"
+    __table_args__ = (
+        sa.Index("ix_data_governance_scope_created", "scope_kind", "scope_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    operation_type: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    scope_kind: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    scope_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    dry_run: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, default=True, index=True)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    plan_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    result_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    requested_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
+    reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    executed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+
+
 class MailboxMessageORM(Base):
     __tablename__ = "mailbox_messages"
     __table_args__ = (

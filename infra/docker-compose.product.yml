@@ -1,0 +1,239 @@
+name: yggdrasil-product
+
+x-product-env: &product-env
+  env_file:
+    - ./product.env.template
+  environment:
+    YGGDRASIL_DATABASE_URL: ${YGGDRASIL_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/yggdrasil}
+    YGGDRASIL_REDIS_URL: ${YGGDRASIL_REDIS_URL:-redis://redis:6379/0}
+    YGGDRASIL_NATS_URL: ${YGGDRASIL_NATS_URL:-nats://nats:4222}
+    YGGDRASIL_COORDINATION_BACKEND: ${YGGDRASIL_COORDINATION_BACKEND:-redis}
+    YGGDRASIL_STATE_ROOT: ${YGGDRASIL_STATE_ROOT:-/workspace/.yggdrasil}
+    YGGDRASIL_CORE_API_BASE_URL: ${YGGDRASIL_CORE_API_BASE_URL:-http://core-api:5000}
+    YGGDRASIL_OTEL_EXPORTER_OTLP_ENDPOINT: ${YGGDRASIL_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+  volumes:
+    - yggdrasil-state:/workspace/.yggdrasil
+    - yggdrasil-backups:/workspace/.yggdrasil-backups
+
+x-python-service: &python-service
+  <<: *product-env
+  build:
+    context: ..
+    dockerfile: infra/docker/python-service.Dockerfile
+  image: project-yggdrasil/python-service:${YGGDRASIL_IMAGE_TAG:-local}
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: yggdrasil
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "${YGGDRASIL_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d yggdrasil"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "${YGGDRASIL_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js"]
+    ports:
+      - "${YGGDRASIL_NATS_PORT:-4222}:4222"
+      - "${YGGDRASIL_NATS_MONITOR_PORT:-8222}:8222"
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "${YGGDRASIL_MINIO_API_PORT:-9000}:9000"
+      - "${YGGDRASIL_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  temporal:
+    image: temporalio/auto-setup:1.26.2
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/docker.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${YGGDRASIL_TEMPORAL_PORT:-7233}:7233"
+
+  temporal-ui:
+    image: temporalio/ui:2.33.0
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      - temporal
+    ports:
+      - "${YGGDRASIL_TEMPORAL_UI_PORT:-8088}:8080"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.63.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${YGGDRASIL_JAEGER_UI_PORT:-16686}:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      - jaeger
+    ports:
+      - "${YGGDRASIL_OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${YGGDRASIL_OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+
+  migrate:
+    <<: *python-service
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  core-api:
+    <<: *python-service
+    command: ["yggdrasil-core-api"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    ports:
+      - "${YGGDRASIL_CORE_API_PORT:-5000}:5000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:5000/health', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  agent-runtime:
+    <<: *python-service
+    command: ["yggdrasil-agent-runtime"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      core-api:
+        condition: service_healthy
+    ports:
+      - "${YGGDRASIL_AGENT_RUNTIME_PORT:-5001}:5001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:5001/health', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  module-host:
+    <<: *python-service
+    command: ["yggdrasil-module-host"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      core-api:
+        condition: service_healthy
+    ports:
+      - "${YGGDRASIL_MODULE_HOST_PORT:-5002}:5002"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from urllib.request import urlopen; urlopen('http://127.0.0.1:5002/health', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  worker:
+    <<: *python-service
+    command: ["yggdrasil-worker", "--serve"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      core-api:
+        condition: service_healthy
+      agent-runtime:
+        condition: service_healthy
+      module-host:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "yggdrasil-worker", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+
+  web:
+    env_file:
+      - ./product.env.template
+    environment:
+      YGGDRASIL_CORE_API_BASE_URL: ${YGGDRASIL_CORE_API_BASE_URL:-http://core-api:5000}
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    image: project-yggdrasil/web:${YGGDRASIL_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      core-api:
+        condition: service_healthy
+    ports:
+      - "${YGGDRASIL_WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+volumes:
+  postgres-data:
+  minio-data:
+  yggdrasil-state:
+  yggdrasil-backups:

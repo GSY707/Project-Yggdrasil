@@ -657,6 +657,79 @@ export interface ObservabilitySummary {
   health: ServiceHealthSnapshot;
 }
 
+export interface DataGovernanceAssetManifestItem {
+  id: string;
+  label: string;
+  locations: string[];
+  deletePolicy: string;
+  sensitivity: string;
+}
+
+export interface DataGovernanceManifest {
+  version: string;
+  generatedAt: string;
+  workspaceRoot: string;
+  stateRoot: string;
+  productLogRoot: string;
+  backupRoot: string;
+  assets: DataGovernanceAssetManifestItem[];
+  remoteBoundary: Record<string, unknown>;
+}
+
+export interface DataGovernanceTablePlan {
+  table: string;
+  count: number;
+  sampleIds: string[];
+  objectIds?: string[];
+  action: string;
+}
+
+export interface DataGovernanceDeletionPlan {
+  version: string;
+  generatedAt: string;
+  scopeKind: string;
+  scopeId: string;
+  dryRunOnly?: boolean;
+  blockers?: string[];
+  warnings?: string[];
+  target?: Record<string, unknown>;
+  database?: {
+    tables: DataGovernanceTablePlan[];
+    totalRows?: number;
+    deleteOrder?: string[];
+    cascadeNotes?: string[];
+  };
+  stateFiles?: Array<Record<string, unknown>>;
+  stateFileCount?: number;
+  stateFileBytes?: number;
+  retainedData?: Array<Record<string, unknown>>;
+}
+
+export interface DataGovernanceOperationRecord {
+  id: string;
+  operationType: string;
+  scopeKind: string;
+  scopeId?: string | null;
+  dryRun: boolean;
+  status: string;
+  plan?: DataGovernanceDeletionPlan | null;
+  result?: Record<string, unknown> | null;
+  requestedBy?: Record<string, unknown>;
+  reason?: string | null;
+  createdAt: string;
+  executedAt?: string | null;
+  errorSummary?: string | null;
+}
+
+export interface DataGovernanceOperationsResponse {
+  operations: DataGovernanceOperationRecord[];
+}
+
+export interface DataGovernanceDeletionPlanResponse {
+  plan: DataGovernanceDeletionPlan;
+  operation: DataGovernanceOperationRecord;
+}
+
 export interface WorkbenchOverview {
   generatedAt: string;
   health: ServiceHealthSnapshot;

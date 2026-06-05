@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from .routes.applications import router as applications_router
 from .routes.assets import router as assets_router
 from .routes.collaboration import router as collaboration_router
+from .routes.data_governance import router as data_governance_router
 from .routes.evaluations import router as evaluations_router
 from .routes.health import router as health_router
 from .routes.mcp import router as mcp_router
@@ -30,6 +31,7 @@ router.include_router(memory_router, prefix="/memory", tags=["memory"])
 router.include_router(nodes_router, prefix="/nodes", tags=["nodes"])
 router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 router.include_router(collaboration_router, prefix="/collaboration", tags=["collaboration"])
+router.include_router(data_governance_router, prefix="/data-governance", tags=["data-governance"])
 router.include_router(training_router, prefix="/training", tags=["training"])
 router.include_router(prompting_router, prefix="/prompting", tags=["prompting"])
 router.include_router(workbench_router, prefix="/workbench", tags=["workbench"])

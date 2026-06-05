@@ -28,23 +28,23 @@ const releaseModes = [
   },
   {
     mode: "完整 Docker Compose 产品栈",
-    status: "planned",
-    install: "尚未发布",
-    launch: "infra/docker-compose.yml 目前只启动依赖，不启动完整产品",
-    update: "尚未定义镜像版本与升级策略",
-    data: "compose 卷与 .yggdrasil 的组合边界尚未冻结",
-    backup: "只能使用当前 ops:backup 备份运行时状态",
-    boundary: "不要把当前 infra compose 误当成外部用户产品发行物。",
+    status: "preview",
+    install: "infra/product.env.template + corepack pnpm product:up",
+    launch: "corepack pnpm product:up，然后访问 http://localhost:3000",
+    update: "停止产品栈，更新镜像 tag 或源码后重新 product:up；迁移由 migrate job 执行",
+    data: "postgres-data、yggdrasil-state、yggdrasil-backups、minio-data 四类 volume 分离",
+    backup: "corepack pnpm product:backup / corepack pnpm product:restore",
+    boundary: "已提供预览 compose、镜像构建和 smoke；正式发布前仍需冷启动、备份恢复和升级回滚验收。",
   },
   {
     mode: "桌面封装",
-    status: "planned",
-    install: "尚未发布安装包",
-    launch: "尚未发布托盘或桌面包装器",
-    update: "尚未定义自动更新",
-    data: "计划沿用本地 state root，但未冻结",
-    backup: "发布前必须复用或封装 ops:backup",
-    boundary: "当前不作为支持模式。",
+    status: "preview",
+    install: "packaging/desktop/windows/*.cmd",
+    launch: "双击 Yggdrasil Desktop.cmd，或运行 Yggdrasil.Desktop.ps1 start",
+    update: "自动更新和安装/卸载器尚未发布",
+    data: "复用产品 compose volume；不引入远端同步",
+    backup: "Yggdrasil.Desktop.ps1 backup / restore",
+    boundary: "这是 Windows 薄启动器预览，不是正式安装包或托盘应用。",
   },
   {
     mode: "托管 / SaaS",
@@ -140,9 +140,9 @@ const actionItems = [
   },
   {
     title: "删除本地状态",
-    status: "planned",
-    command: "停止所有服务后，先备份，再删除 .yggdrasil；Docker 卷删除需要单独确认。",
-    detail: "当前没有 Web 删除按钮，避免误删任务、记忆、素材和审计工件。 broad external use 前应补正式删除/清理向导。",
+    status: "preview",
+    command: "打开 /data-governance，先按 task / asset / node 生成删除影响预览。",
+    detail: "当前 Web 只暴露 dry-run；task 硬删除需要后端 confirmScopeId，asset/node 仍是策略冻结前的预览。",
   },
   {
     title: "密钥轮换",
@@ -222,6 +222,9 @@ export function ReleasePage() {
             </Link>
             <Link className="ghost-button" href="/observability">
               查看观测
+            </Link>
+            <Link className="ghost-button" href="/data-governance">
+              数据治理
             </Link>
           </>
         }

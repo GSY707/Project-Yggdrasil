@@ -21,6 +21,7 @@ class WorkspaceBootstrapRepository:
                     created_by=system_actor.model_dump(mode="json"),
                 )
                 self.session.add(project)
+                self.session.flush()
 
             space = self.session.get(SpaceORM, DEFAULT_SPACE_ID)
             if space is None:
@@ -33,6 +34,7 @@ class WorkspaceBootstrapRepository:
                     created_at=now,
                 )
                 self.session.add(space)
+                self.session.flush()
 
             branch = self.session.get(MemoryBranchORM, DEFAULT_BRANCH_ID)
             if branch is None:
@@ -48,8 +50,8 @@ class WorkspaceBootstrapRepository:
                     created_by=system_actor.model_dump(mode="json"),
                 )
                 self.session.add(branch)
+                self.session.flush()
 
-            self.session.flush()
             return _ensure_branch_roots(
                 self.session,
                 project_id=DEFAULT_PROJECT_ID,

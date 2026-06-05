@@ -22,6 +22,22 @@ def _sqlite_database_path(database_url: str) -> Path:
     return Path(url.database).resolve()
 
 
+def _postgresql_dump_url(database_url: str) -> str:
+    url = make_url(database_url)
+    if url.get_backend_name() != "postgresql":
+        raise ValueError("Database is not postgresql.")
+    return url.set(drivername="postgresql").render_as_string(hide_password=False)
+
+
+def _clear_directory_contents(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    for child in path.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
 def create_runtime_backup(*, workspace_root: Path | None = None, snapshot_dir: Path | None = None) -> dict[str, Any]:
     settings = PersistenceSettings.load()
     snapshot_path = (snapshot_dir or _default_snapshot_dir(workspace_root)).resolve()
@@ -44,7 +60,7 @@ def create_runtime_backup(*, workspace_root: Path | None = None, snapshot_dir: P
         metadata["databaseSnapshot"] = str(target_db)
     elif database_kind == "postgresql":
         target_dump = snapshot_path / "database.sql"
-        _run_command(["pg_dump", settings.database_url, "--clean", "--if-exists", "-f", str(target_dump)])
+        _run_command(["pg_dump", _postgresql_dump_url(settings.database_url), "--clean", "--if-exists", "-f", str(target_dump)])
         metadata["databaseKind"] = "postgresql"
         metadata["databaseSnapshot"] = str(target_dump)
     else:
@@ -85,15 +101,14 @@ def restore_runtime_backup(*, workspace_root: Path | None = None, snapshot_dir: 
         source_dump = snapshot_path / "database.sql"
         if not source_dump.exists():
             raise FileNotFoundError(f"Backup postgres dump missing: {source_dump}")
-        _run_command(["psql", settings.database_url, "-f", str(source_dump)])
+        _run_command(["psql", _postgresql_dump_url(settings.database_url), "-f", str(source_dump)])
     else:
         raise RuntimeError(f"Unsupported database backend for restore: {database_kind}")
 
     state_root = resolve_state_root(workspace_root)
     source_state_root = snapshot_path / "state-root"
     if source_state_root.exists():
-        if state_root.exists():
-            shutil.rmtree(state_root)
+        _clear_directory_contents(state_root)
         shutil.copytree(source_state_root, state_root, dirs_exist_ok=True)
 
     restored = dict(metadata)

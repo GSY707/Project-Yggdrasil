@@ -88,7 +88,13 @@ from .mcp_bridge import (
     update_mcp_bridge_workspace,
     upsert_mcp_bridge_server,
 )
-from .ops_runtime import create_runtime_backup, resolve_backup_root, restore_runtime_backup, run_compose_smoke
+from .ops_runtime import (
+    create_runtime_backup,
+    resolve_backup_root,
+    restore_runtime_backup,
+    run_compose_smoke,
+    run_product_compose_smoke,
+)
 from .observability import instrument_fastapi_app, observe_span, record_log, record_metric, summarize_observability
 from .persistence import (
     AssetRepository,
@@ -225,6 +231,7 @@ __all__ = [
     "RootMountPackage",
     "RuntimeRepository",
     "run_compose_smoke",
+    "run_product_compose_smoke",
     "run_evaluation_suite",
     "set_mcp_bridge_server_enabled",
     "set_active_application",

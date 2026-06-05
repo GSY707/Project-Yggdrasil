@@ -1,8 +1,8 @@
 # Infra
 
-这个目录承载本地联调所需的基础设施，以及 M8 收口阶段新增的观测与 smoke 入口。
+这个目录承载本地联调所需的基础设施、产品 Docker Compose 预览栈，以及观测与 smoke 入口。
 
-当前 compose 文件提供：
+`infra/docker-compose.yml` 是开发依赖栈，提供：
 
 - PostgreSQL
 - Redis
@@ -12,6 +12,17 @@
 - Temporal UI
 - Jaeger UI
 - OpenTelemetry Collector
+
+`infra/docker-compose.product.yml` 是完整产品栈预览，额外构建并启动：
+
+- Core API
+- Agent Runtime
+- Module Host
+- Worker
+- Web 工作台
+- Alembic 迁移 job
+
+产品栈环境模板为 `infra/product.env.template`，服务镜像定义位于 `infra/docker/`。
 
 另外提供一份独立的 Langfuse 本地自托管 compose：
 
@@ -25,6 +36,19 @@
 - `pnpm infra:up`
 - `pnpm infra:down`
 - `pnpm infra:smoke`
+
+产品栈预览：
+
+- `pnpm product:compose:config`
+- `pnpm product:up`
+- `pnpm product:status`
+- `pnpm product:smoke`
+- `pnpm product:logs`
+- `pnpm product:backup`
+- `pnpm product:restore`
+- `pnpm product:down`
+
+`product:*` 脚本通过 `scripts/product-compose.mjs` 调用 Docker Compose，并默认关闭 BuildKit / bake 路径，以规避 Windows 中文工作区路径下 Docker Desktop buildx session header 失败。
 
 如果本机已有端口占用，可以在执行前覆盖宿主端口，例如：
 
@@ -90,6 +114,7 @@ Langfuse 默认还会拉起自己的一组依赖：PostgreSQL、Redis、ClickHou
 
 - `pnpm ops:backup` 会创建一个新的运行时快照，默认落到 `./.yggdrasil-backups/<timestamp>`。
 - `pnpm ops:restore` 会恢复最近一次快照；需要恢复指定快照时，改用 `uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot <path>`。
+- 产品 Compose 模式下使用 `pnpm product:backup` / `pnpm product:restore`。备份会在 `core-api` 容器内执行；恢复会先停止 Web / Worker / API 侧服务，再用一次性 `core-api` 容器恢复，最后重新拉起应用服务。
 
 备份内容包括：
 
@@ -99,5 +124,6 @@ Langfuse 默认还会拉起自己的一组依赖：PostgreSQL、Redis、ClickHou
 
 注意事项：
 
-- PostgreSQL 备份恢复依赖本机可用的 `pg_dump` 和 `psql`。
-- 应用服务本身不强制放入 compose；当前 smoke 只验证基础设施、OTel Collector 和 Jaeger 是否在本地可达。
+- PostgreSQL 备份恢复依赖可用的 `pg_dump` 和 `psql`；产品 Python 镜像内已安装与产品 Postgres 对齐的 17.x client。
+- `infra/docker-compose.yml` 不包含应用服务；它只用于开发依赖和基础设施 smoke。
+- `infra/docker-compose.product.yml` 包含产品服务；正式发行前仍需完成冷启动、备份/恢复、升级/回滚和 provider key 阻塞提示验收。
