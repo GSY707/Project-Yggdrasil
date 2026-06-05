@@ -1,3 +1,4 @@
+| `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04）：把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划，并明确当前差距、验收门禁和推进顺序 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计（2026-06-03）：盘点 Web 工作台、应用包、设置、安装、打包与用户文档，明确当前仍是 CLI/操作台导向，并给出 Web-first 首次成功路径、设置向导、任务创建启动和产品化启动器的 P0/P1/P2 收口计划 |
 | `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：面向外部试用者或录屏演示，按 Web 路径完成“导入素材 -> 选择应用 -> 创建任务 -> 启动任务 -> 查看结果”，并明确 provider key、备份恢复和删除边界 |
