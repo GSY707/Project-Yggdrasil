@@ -22,7 +22,13 @@
 - Web 工作台
 - Alembic 迁移 job
 
-产品栈环境模板为 `infra/product.env.template`，服务镜像定义位于 `infra/docker/`。
+产品栈环境模板为 `infra/product.env.template`，服务镜像定义位于 `infra/docker/`。外部试用或本机产品栈应先复制为未跟踪文件：
+
+```powershell
+Copy-Item infra/product.env.template infra/product.env
+```
+
+`scripts/product-compose.mjs` 会优先读取 `infra/product.env`，不存在时才回退模板；真实 provider key 只能写入 `infra/product.env`、根 `.env` 或用户级环境变量，不能写入模板、镜像或文档。
 
 另外提供一份独立的 Langfuse 本地自托管 compose：
 
@@ -46,9 +52,12 @@
 - `pnpm product:logs`
 - `pnpm product:backup`
 - `pnpm product:restore`
+- `pnpm product:snapshots`
+- `pnpm product:upgrade`
+- `pnpm product:rollback`
 - `pnpm product:down`
 
-`product:*` 脚本通过 `scripts/product-compose.mjs` 调用 Docker Compose，并默认关闭 BuildKit / bake 路径，以规避 Windows 中文工作区路径下 Docker Desktop buildx session header 失败。
+`product:*` 脚本通过 `scripts/product-compose.mjs` 调用 Docker Compose，并默认关闭 BuildKit / bake 路径，以规避 Windows 中文工作区路径下 Docker Desktop buildx session header 失败。脚本会把实际选中的 product env 同步给 compose service `env_file`，避免 Core API / Web 读到不同环境。
 
 如果本机已有端口占用，可以在执行前覆盖宿主端口，例如：
 
@@ -114,16 +123,19 @@ Langfuse 默认还会拉起自己的一组依赖：PostgreSQL、Redis、ClickHou
 
 - `pnpm ops:backup` 会创建一个新的运行时快照，默认落到 `./.yggdrasil-backups/<timestamp>`。
 - `pnpm ops:restore` 会恢复最近一次快照；需要恢复指定快照时，改用 `uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot <path>`。
-- 产品 Compose 模式下使用 `pnpm product:backup` / `pnpm product:restore`。备份会在 `core-api` 容器内执行；恢复会先停止 Web / Worker / API 侧服务，再用一次性 `core-api` 容器恢复，最后重新拉起应用服务。
+- `uv run python -m yggdrasil_sdk.ops_cli backup list` 会列出本地快照。
+- 产品 Compose 模式下使用 `pnpm product:backup` / `pnpm product:restore` / `pnpm product:snapshots`。备份会在 `core-api` 容器内执行；恢复会先停止 Web / Worker / API 侧服务，再用一次性 `core-api` 容器恢复，最后重新拉起应用服务。
+- `pnpm product:upgrade` 会先创建保护性快照，再重建并拉起产品栈，最后执行 product smoke。
+- `pnpm product:rollback` 会先尝试创建保护性快照，再恢复最近或指定快照，并执行 product smoke。
 
 备份内容包括：
 
 - SQLite 数据库文件，或 PostgreSQL 的 `pg_dump` SQL dump
 - 整个 state-root
-- 一份 `metadata.json`
+- 一份 `metadata.json`；数据库 URL 会脱敏，不写出数据库密码
 
 注意事项：
 
 - PostgreSQL 备份恢复依赖可用的 `pg_dump` 和 `psql`；产品 Python 镜像内已安装与产品 Postgres 对齐的 17.x client。
 - `infra/docker-compose.yml` 不包含应用服务；它只用于开发依赖和基础设施 smoke。
-- `infra/docker-compose.product.yml` 包含产品服务；正式发行前仍需完成冷启动、备份/恢复、升级/回滚和 provider key 阻塞提示验收。
+- `infra/docker-compose.product.yml` 包含产品服务；provider key 状态已通过 `/health.providerStatus` 暴露并被 Web 任务启动面板阻塞。正式发行前仍需完成多版本冷启动、升级和回滚演练。

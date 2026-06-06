@@ -24,6 +24,8 @@ LLM.txt
 
 # Infra data
 *.local
+infra/product.env
+packaging/desktop/windows/update-state.json
 
 # Local runtime state
 .yggdrasil/state/

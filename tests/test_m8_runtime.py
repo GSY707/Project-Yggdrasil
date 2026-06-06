@@ -16,7 +16,7 @@ from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
 from yggdrasil_sdk.evaluation_runtime.suite_cases import _run_live_llm_task_case, _run_live_llm_tool_case
 from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
-from yggdrasil_sdk.ops_runtime import prepare_real_user_validation_sandbox, summarize_real_user_scorecard
+from yggdrasil_sdk.ops_runtime import list_runtime_backups, prepare_real_user_validation_sandbox, summarize_real_user_scorecard
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.support import resolve_state_root
 
@@ -189,6 +189,28 @@ def test_runtime_backup_restore_round_trip(tmp_path) -> None:
         assert repository.get_task("task_backup_after") is None
 
     assert state_file.read_text(encoding="utf-8") == "before-restore"
+
+
+def test_runtime_backup_list_redacts_legacy_database_urls(tmp_path: Path) -> None:
+    (tmp_path / "services").mkdir()
+    (tmp_path / "modules").mkdir()
+    snapshot_dir = tmp_path / ".yggdrasil-backups" / "20260606T000000Z"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "createdAt": "2026-06-06T00:00:00+00:00",
+                "databaseUrl": "postgresql+psycopg://postgres:secret@postgres:5432/yggdrasil",
+                "databaseKind": "postgresql",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = list_runtime_backups(workspace_root=tmp_path)
+
+    assert result["snapshots"][0]["metadata"]["databaseUrl"] == "postgresql+psycopg://postgres:***@postgres:5432/yggdrasil"
+    assert "secret" not in json.dumps(result, ensure_ascii=False)
 
 
 def test_real_user_validation_sandbox_activation_command_uses_file_mode(tmp_path: Path) -> None:

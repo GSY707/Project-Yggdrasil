@@ -1,11 +1,14 @@
-| `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-05）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面三组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
+| `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：基于应用包 `dashboard.json` 元数据设计场景页、任务模板、预期产物、应用设置，并定义 Agent 工作过程下探、返回、折叠和历史窗口回顾的 UI 规则 |
 | `docs/design-handoff/03-settings-debug-configuration.md` | 设置/调试/配置界面 brief：把 provider、模型预算、工作区、数据隐私、应用配置、Prompt、MCP、评测、观测和运行时调试拆成普通设置、高级设置和维护者调试三层 |
+| `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：面向外包团队定义安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、Docker/provider 检查、状态诊断、备份恢复、更新回滚和错误状态的用户体验要求 |
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`docs/new/`、v0.2 运行时/工作树规格、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
 | `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
-| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-05 更新）：完整 Docker Compose 产品栈、桌面薄封装和本地数据治理 dry-run 已进入预览可验证状态；托管 / SaaS、官方远端数据托管、远端备份和远端删除仍是计划项 |
-| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` dry-run、task 级硬删除后端、审计表、外部 provider / 日志 / 备份保留边界 |
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md` | 安装、启动器与应用包随包发行评估（2026-06-06）：梳理当前开发工作区、本地产品、Docker 产品栈与 Windows 桌面封装路径，判断普通用户需要产品启动器，并定义“基座产品栈 + 应用包 + 直达应用快捷方式”的可行发行改造 |
+| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
+| `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计（2026-06-03）：盘点 Web 工作台、应用包、设置、安装、打包与用户文档，明确当前仍是 CLI/操作台导向，并给出 Web-first 首次成功路径、设置向导、任务创建启动和产品化启动器的 P0/P1/P2 收口计划 |
 | `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：面向外部试用者或录屏演示，按 Web 路径完成“导入素材 -> 选择应用 -> 创建任务 -> 启动任务 -> 查看结果”，并明确 provider key、备份恢复和删除边界 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
@@ -50,7 +53,7 @@
 | `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis.py` | LLM 工作分析核心：以 run 为主键拼接 DB 与 state 工件，输出 run/window/turn/tool/artifact/source 多粒度分析，并持久化到 `state/analysis/llm-work/` |
 | `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py` | Langfuse 文本审查模块：以 Langfuse observation 重建窗口骨架，默认输出 LLM 交互文本摘录、重复窗口文本簇和 Langfuse UI 审查焦点；当前已能补读 `runtime/window-executions` 本地工件，用结构化窗口状态增强重复窗口判定与因果分析，并兼容中文化的任务目标/任务说明/当前焦点标签提取 |
 | `scripts/analyze_llm_work_run.py` | LLM 工作分析脚本包装器：按 task/run/invocation 触发正式分析器，并输出 JSON 或 Markdown 报告 |
-| `scripts/product-compose.mjs` | 产品 Docker Compose 脚本包装器：统一调用 `infra/docker-compose.product.yml`，并在 Windows 中文路径下关闭 BuildKit / bake；`product:restore` 会执行停止应用服务、一次性容器恢复、重新拉起服务的维护窗口流程 |
+| `scripts/product-compose.mjs` | 产品 Docker Compose 脚本包装器：优先读取未跟踪的 `infra/product.env`，统一调用 `infra/docker-compose.product.yml`，并在 Windows 中文路径下关闭 BuildKit / bake；提供 `product:backup`、`product:restore`、`product:snapshots`、`product:upgrade`、`product:rollback` 维护窗口流程 |
 | `scripts/analyze_langfuse_real_task_trace.py` | Langfuse 真实任务窗口分析脚本：按 trace 提取 LLM 最终输出、第 6 节结论与逐窗口 snapshot/work tree 历史 |
 | `scripts/analyze_langfuse_real_task_trace_layered.py` | Langfuse 文本审查兼容入口：按 trace 生成 LLM prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点 |
 | `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
@@ -142,7 +145,9 @@
 > 2026/6/4 用户采用面 P1 同步：`graduate-researcher`、`deep-research`、`coding-greenfield`、`knowledge-studio` 的 `web/dashboard.json` 已升级为场景启动器，每个模板提供 `exampleTasks[]` 与 `expectedOutputs[]`；`apps/web/app/components/assets-page.tsx` 已从粘贴文本扩展为浏览器文本文件导入、切段预览、导入状态、摘要节点和“附加到新任务”入口；`task-launch-panel` 会展示模板示例/预期产物和已附加素材，并把素材摘要作为创建/启动上下文；全局顶栏、应用列表、应用详情和共享状态徽标已把首屏状态改成用户可读中文标签；README、用户指南、开发者指南和应用包接口规范已改成围绕首次成功路径和最短演示流程。
 > 2026/6/4 用户采用面 P2 同步：`apps/web/app/release/page.tsx` 与 `components/release-page.tsx` 新增“发布与安全”产品页，把发布模式矩阵、公开演示路径、产品截图、本地数据位置、出机边界、备份/恢复和删除状态集中到用户可见入口；README 与 `docs/USER_GUIDE.md` 已补发布模式矩阵、截图与隐私边界；`docs/demos/LOCAL_FIRST_TASK_DEMO.md` 已固定外部演示脚本。当前只把开发者工作区和本地产品模式标为可用，完整 Docker 产品栈、桌面封装和托管 SaaS 不写成已支持能力。
 > 2026/6/4 产品打包与远端数据计划同步：`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` 已把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划；`/release`、README、用户指南、开发者指南和开源边界已改为“计划中但当前不可承诺”口径。本地产品模式仍不会自动上传数据。
-> 2026/6/5 产品打包与数据治理预览同步：新增 `infra/docker-compose.product.yml`、`infra/docker/`、`infra/product.env.template`、`corepack pnpm product:*`、Windows 桌面薄启动器、`docs/specs/data-governance-manifest-v0.1.md`、Core API `/data-governance/*`、Web `/data-governance` 和 `data_governance_operations` 审计表；完整 Docker 产品栈、桌面薄封装和本地数据治理 dry-run 改为“预览可验证”，托管 / SaaS 和官方远端数据服务仍是计划项。
+> 2026/6/5 产品打包与数据治理预览同步：新增 `infra/docker-compose.product.yml`、`infra/docker/`、`infra/product.env.template`、`corepack pnpm product:*`、Windows 桌面启动器、`docs/specs/data-governance-manifest-v0.1.md`、Core API `/data-governance/*`、Web `/data-governance` 和 `data_governance_operations` 审计表；完整 Docker 产品栈、桌面封装和本地数据治理预览改为“预览可验证”，托管 / SaaS 和官方远端数据服务仍是计划项。
+> 2026/6/6 产品栈维护与远端契约同步：新增 `packages/python-sdk/src/yggdrasil_sdk/provider_config.py`、`tests/api/test_provider_configuration_api.py` 和 `/health.providerStatus`，Web 任务启动面板在 provider key 缺失或 fallback 测试模式下阻止直接启动；`scripts/product-compose.mjs` 现在优先读取未跟踪的 `infra/product.env`，并提供快照列表、升级和回滚维护命令；Windows 桌面封装补齐未签名安装/卸载、托盘控制器、备份、恢复、快照、升级、回滚、更新检查、手动应用更新和快捷方式安装入口；新增 `docs/specs/remote-data-service-contract-v0.1.md` 冻结官方远端数据服务上线前边界。
+> 2026/6/6 数据治理保护性执行同步：Core API `/data-governance` 新增 `GET /backups` 与 `POST /backup`，`POST /delete` 支持 `backupBeforeDelete` 并返回 `deletionCertificate`；Web `/data-governance` 新增备份快照、创建备份、精确确认 task 硬删除和删除证明展示，asset / node 仍只允许预览。
 > 2026/6/1 Graduate heartbeat 观测增强：`tmp/run_grad_ml_eval_with_heartbeat.py` 现会在心跳周期内读取活动 sandbox 的 `evaluation.db`，追加输出 task 状态、currentFocus 摘要、snapshot 是否存在、cost 使用进度、invocation 计数与最近一次模型调用状态/错误摘要，便于区分“长调用慢跑”与“真实队列卡死”。
 
 ---
@@ -171,7 +176,7 @@
 ├── evaluation/     # 评测框架
 ├── infra/          # 本地基础设施与产品 Docker Compose 预览栈
 ├── migrations/     # 数据库迁移
-├── packaging/      # 桌面薄封装与安装/启动包装
+├── packaging/      # 桌面封装、未签名安装包、托盘与更新包装
 ├── scripts/        # CI 辅助脚本
 ├── tests/          # 集成测试
 └── .github/        # GitHub Actions CI 配置
@@ -251,7 +256,7 @@ apps/
     │   ├── applications/           # 应用场景浏览页
     │   ├── assets/                 # 资产管理页（上传、查看、版本）
     │   ├── collaboration/          # PR 审查与协作页
-    │   ├── data-governance/        # 数据治理页（资产清单、删除 dry-run、审计记录）
+    │   ├── data-governance/        # 数据治理页（资产清单、备份快照、删除 dry-run、保护性 task 删除、删除证明、审计记录）
     │   ├── evaluations/            # 评测结果展示页
     │   ├── mcp/                    # MCP 模块状态页
     │   ├── nodes/
@@ -277,8 +282,8 @@ apps/
 - `apps/web/app/components/overview-page.tsx` 现在把首次任务启动检查放在首页首屏，消费 `/workbench/overview.health.setupChecklist`，把 Core API、数据库、Redis、worker queue、provider key、state root 与 workspace path 的阻塞项直接展示给用户；首屏默认动作是新建任务、选择应用和导入素材。
 - `apps/web/app/components/task-launch-panel.tsx` 是 Web-first 任务入口：从应用 dashboard 的 `taskTemplates[]` 生成任务，展示 `exampleTasks[]` / `expectedOutputs[]` 和已附加素材，依次调用 `POST /tasks` 与 `POST /tasks/{taskId}/start`；草稿创建后在面板内保留“已创建 / 立即启动 / 查看任务”反馈，不再依赖刷新任务列表维持状态。
 - `apps/web/app/components/assets-page.tsx` 是 P1 素材导入入口：支持浏览器读取文本类文件、切段预览、导入状态、摘要节点展示，并通过 `/tasks?assetId=...` 把素材附加到新任务。
-- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈和桌面封装当前只写成预览可验证，托管 / SaaS 和官方远端数据服务仍只能写成计划中。
-- `apps/web/app/components/data-governance-page.tsx` 是本地数据治理入口：消费 `/data-governance/manifest`、`/deletion-plan` 和 `/operations`，只开放删除影响预览与审计查看，不直接暴露硬删除按钮。
+- `apps/web/app/components/release-page.tsx` 是 P2 发布与安全入口：展示当前真实支持的运行模式、provider 配置状态、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈和桌面封装当前只写成预览可验证，托管 / SaaS 和官方远端数据服务仍只能写成计划中。
+- `apps/web/app/components/data-governance-page.tsx` 是本地数据治理入口：消费 `/data-governance/manifest`、`/backups`、`/backup`、`/deletion-plan`、`/delete` 和 `/operations`，开放备份快照、删除影响预览、受保护 task 硬删除、删除证明与审计查看；asset / node 仍只做预览。
 - `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls，原始 JSON 只保留为高级模式；P1 后首屏按钮、身份、模块、记忆和配置标签改为用户可读中文。
 - `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 现在保留原始状态值用于颜色判定，同时把常见运行状态、导入状态和素材角色显示为中文产品标签。
 - `apps/web/app/lib/use-api-resource.ts` 是 Web 控制面通用 API loader；路径切换会清空旧数据，普通 reload 会保留当前数据直到新响应返回，避免任务创建后刷新列表时卸载启动面板。
@@ -310,7 +315,7 @@ services/
 │               ├── applications.py # GET /applications/ - 应用目录
 │               ├── assets.py       # /assets/ - 资产 CRUD
 │               ├── collaboration.py# /collaboration/ - PR 协作
-│               ├── data_governance.py # /data-governance/ - 数据资产清单、删除 dry-run、审计与 task 硬删除后端
+│               ├── data_governance.py # /data-governance/ - 数据资产清单、备份快照、删除 dry-run、审计、删除前备份与 task 硬删除后端
 │               ├── evaluations.py  # /evaluations/ - 评测结果
 │               ├── health.py       # /health - 健康检查（含首次启动 setupChecklist）
 │               ├── mcp.py          # /mcp/ - MCP 协议
@@ -549,6 +554,7 @@ applications/<name>/
 
 **关键说明：**
 - `web/dashboard.json` 现在是用户采用面的关键入口，必须提供 `taskTemplates[]` 供 Web 任务启动面板使用；顶部应用模板应提供 `exampleTasks[]` 与 `expectedOutputs[]`，并提供 `settingsSchema[]` 把 provider、model、预算、workspace、输出风格、记忆命名空间和工具权限渲染为 typed controls。
+- `apps/web/app/components/task-launch-panel.tsx` 会读取 `/health.providerStatus`；provider key 缺失或 `YGGDRASIL_DISABLE_LIVE_LLM=1` fallback 测试模式会阻止直接启动真实任务，但仍允许创建草稿。
 - `services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `list_applications()` 已把 dashboard payload 随 `GET /applications` 返回，任务页无需再逐个请求应用详情才能显示模板。
 
 ---
@@ -571,6 +577,7 @@ adapters/
 
 **关键说明：**
 - `gateway.py` 现在维护实时 provider catalog，并按当前可用凭证暴露候选模型。
+- `packages/python-sdk/src/yggdrasil_sdk/provider_config.py` 是 provider key 配置状态的共享契约，不暴露 key 值；Core API `/health.providerStatus` 和 Web 启动阻塞都应从这里取状态。
 - paid provider（如 `deepseek_direct`）只有在显式设置 `YGGDRASIL_ALLOW_PAID_MODELS=1` 时才会进入 runtime candidate catalog。
 - DeepSeek 直连 profile 已切换到 `deepseek-v4-flash` / `deepseek-v4-pro`，并兼容 thinking mode、`reasoning_effort` 与 `reasoning_content` 回传。
 - `packages/python-sdk/model_routing.py` 实现路由策略，适配器负责具体 API 调用和 provider 兼容性差异吸收。
@@ -588,11 +595,12 @@ docs/
 ├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值与长任务伪无限上下文评测口径
 ├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
 ├── P2_TASK_14_17_FILE_STATUS_AUDIT.md # P2 任务14-17 文件现状审计：成本预算检查、工具执行隔离、runtime metrics、safe-stop机制全景分析，6项关键缺失+6项重要缺失
-├── design-handoff/                 # UX 重塑外包资料包：基座用户界面、应用包体验、设置/调试/配置三组界面 brief
+├── design-handoff/                 # UX 重塑外包资料包：基座用户界面、应用包体验、设置/调试/配置、启动器/安装器四组界面 brief
 │   ├── README.md                    # 资料包总览：范围、当前真实基础、交付物、验收门槛和资料来源
 │   ├── 01-base-user-interface-agent.md # 基座客服型 Agent、应用路由、Prompt 代写、任务确认和错误支持 brief
 │   ├── 02-application-package-experience.md # 应用包场景页、任务模板、执行过程可视化和上下文折叠回顾 brief
-│   └── 03-settings-debug-configuration.md # 普通设置、高级设置和维护者调试三层配置界面 brief
+│   ├── 03-settings-debug-configuration.md # 普通设置、高级设置和维护者调试三层配置界面 brief
+│   └── 04-launcher-experience.md     # 启动器安装向导、桌面主窗口、托盘菜单、应用包快捷方式、诊断和维护体验 brief
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
 │   ├── DESIGN_COMPLETION_EVALUATION_2026_06_05.md
 │   │                               #   设计完成度评估：按当前设计文档和实现证据，给出工程设计、外部用户采用度、产品发行、数据治理、协作、模块和评测等完成度评分
@@ -779,7 +787,8 @@ evaluation/
 ```
 infra/
 ├── README.md                       # 基础设施和产品 Compose 使用说明（端口、环境变量、备份恢复）
-├── product.env.template            # 产品 Compose 环境模板（provider key、端口、DB/Redis/NATS、state root）
+├── product.env.template            # 产品 Compose 环境模板（provider key、端口、DB/Redis/NATS、state root；复制为 gitignore 的 product.env 后写真实 key）
+├── product.env                     # 本机产品 Compose 私有环境文件（gitignore；存在时 product:* 优先读取）
 ├── docker/
 │   ├── python-service.Dockerfile   # Core API / Agent Runtime / Module Host / Worker 共用 Python 镜像
 │   └── web.Dockerfile              # Next.js standalone Web 镜像
@@ -801,23 +810,43 @@ infra/
 
 ---
 
-## packaging/ · 桌面薄封装
+## packaging/ · 桌面封装
 
 ```
 packaging/
 └── desktop/
     └── windows/
-        ├── README.md                    # Windows 薄封装说明与支持边界
-        ├── Yggdrasil.Desktop.ps1        # start/stop/status/open/logs/backup/restore 主脚本
+        ├── README.md                    # Windows 桌面封装说明与支持边界
+        ├── Yggdrasil.Install.ps1        # 未签名安装/卸载脚本，写入 install.json 并安装快捷方式
+        ├── Yggdrasil Installer.cmd      # 安装到 LOCALAPPDATA 并启动托盘
+        ├── Yggdrasil Uninstaller.cmd    # 卸载桌面封装、启动项和快捷方式
+        ├── Yggdrasil.Tray.ps1           # PowerShell WinForms 托盘控制器
+        ├── Yggdrasil Tray.cmd           # 隐藏窗口启动托盘控制器
+        ├── Yggdrasil.Update.ps1         # 更新检查、fast-forward 手动应用和计划任务安装
+        ├── Yggdrasil Update.cmd         # 检查更新并写入 update-state.json
+        ├── Yggdrasil Apply Update.cmd   # 仅 fast-forward 时创建备份并手动应用更新
+        ├── Yggdrasil Install Auto Update Task.cmd
+        ├── Yggdrasil Uninstall Auto Update Task.cmd
+        ├── Build-Yggdrasil.DesktopPackage.ps1 # 构建未签名 ZIP 到 dist/desktop/
+        ├── Yggdrasil Build Installer.cmd
+        ├── Yggdrasil.Desktop.ps1        # start/stop/status/open/logs/backup/restore/snapshots/upgrade/rollback/shortcuts 主脚本
         ├── Yggdrasil Desktop.cmd        # 启动产品 Compose 并打开 Web
         ├── Yggdrasil Stop.cmd           # 停止产品 Compose
         ├── Yggdrasil Status.cmd         # 查看产品 Compose 状态与 smoke
-        └── Yggdrasil Logs.cmd           # 打开产品日志跟随窗口
+        ├── Yggdrasil Logs.cmd           # 打开产品日志跟随窗口
+        ├── Yggdrasil Backup.cmd         # 创建产品 Compose 备份快照
+        ├── Yggdrasil Restore.cmd        # 恢复产品 Compose 快照
+        ├── Yggdrasil Snapshots.cmd      # 列出产品 Compose 快照
+        ├── Yggdrasil Upgrade.cmd        # 保护性快照 + 重建产品栈 + smoke
+        ├── Yggdrasil Rollback.cmd       # 保护性快照 + 恢复快照 + smoke
+        ├── Yggdrasil Install Shortcuts.cmd
+        └── Yggdrasil Uninstall Shortcuts.cmd
 ```
 
 **关键说明：**
-- 这是桌面封装预览，不是正式安装包、托盘控制器或自动更新器。
-- 它包装 `corepack pnpm product:*` 命令，依赖 Docker Desktop 可用。
+- 这是桌面封装预览，不是签名发行版；当前安装包标记 `signed=false`。
+- 自动更新任务只检查更新，不静默应用新版代码；真正更新必须用户手动触发且只允许 fast-forward。
+- 它包装 `corepack pnpm product:*` 命令，依赖 Docker Desktop 可用；Web 端口优先读取 `infra/product.env`。
 
 ---
 
@@ -1002,13 +1031,15 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”的目标流程，并对照当前协议/提示词/运行时/测试的缺口 |
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估：按当前设计文档和静态实现证据评估工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等完成度，并给出下一步优先级 |
-| `docs/design-handoff/README.md` | UX 重塑外包资料包：聚合三组用户接触界面的设计 brief、外包交付物、当前实现依据和验收门槛 |
+| `docs/design-handoff/README.md` | UX 重塑外包资料包：聚合四组用户接触界面的设计 brief、外包交付物、当前实现依据和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：客服型 Agent、应用路由、Prompt 代写、首次启动和错误支持 |
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：场景页面、任务模板、Agent 工作过程可视化、真实上下文折叠和历史回顾 |
 | `docs/design-handoff/03-settings-debug-configuration.md` | 设置/调试/配置界面 brief：普通设置、高级设置、维护者调试、数据隐私和计划中能力边界 |
+| `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、状态诊断、备份恢复和更新回滚 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
-| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、桌面薄封装和本地数据治理 dry-run 已进入预览可验证状态；托管 / SaaS、官方远端数据托管、远端备份和远端删除仍是计划项 |
-| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议：定义数据资产 manifest、删除 dry-run、task 级硬删除后端、审计记录和 provider / 日志 / 备份保留边界 |
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议：定义数据资产 manifest、备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计记录和 provider / 日志 / 备份保留边界 |
+| `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约：定义官方远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
@@ -1060,14 +1091,15 @@ docs/
 | 模块清单格式规格 | `docs/protocols/yggdrasil-module-manifest-v0.1.md` |
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
-| 完整产品 Docker Compose 预览栈 | `infra/docker-compose.product.yml`、`infra/product.env.template`、`infra/docker/`、`corepack pnpm product:*` |
-| Windows 桌面薄封装 | `packaging/desktop/windows/` |
-| 数据治理 manifest / 删除 dry-run / 审计 | `docs/specs/data-governance-manifest-v0.1.md`、`packages/python-sdk/src/yggdrasil_sdk/data_governance.py`、`services/core-api/src/yggdrasil_core_api/api/routes/data_governance.py`、`apps/web/app/components/data-governance-page.tsx` |
+| 完整产品 Docker Compose 预览栈 | `infra/docker-compose.product.yml`、`infra/product.env.template`、`infra/product.env`、`infra/docker/`、`corepack pnpm product:*` |
+| Windows 未签名安装包 / 托盘 / 手动更新器 | `packaging/desktop/windows/` |
+| 数据治理 manifest / 备份 / 保护性 task 删除 / 审计 | `docs/specs/data-governance-manifest-v0.1.md`、`docs/specs/remote-data-service-contract-v0.1.md`、`packages/python-sdk/src/yggdrasil_sdk/data_governance.py`、`packages/python-sdk/src/yggdrasil_sdk/ops_runtime/backup.py`、`services/core-api/src/yggdrasil_core_api/api/routes/data_governance.py`、`services/core-api/src/yggdrasil_core_api/services/data_governance_service.py`、`apps/web/app/components/data-governance-page.tsx` |
+| Provider key 配置状态与启动阻塞 | `packages/python-sdk/src/yggdrasil_sdk/provider_config.py`、`services/core-api/src/yggdrasil_core_api/services/runtime_service.py`、`apps/web/app/components/task-launch-panel.tsx`、`tests/api/test_provider_configuration_api.py` |
 | 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
 | Web 首次任务创建入口 | `apps/web/app/components/task-launch-panel.tsx` 与应用 `web/dashboard.json` 的 `taskTemplates[]` |
-| UX 重塑外包资料包 | `docs/design-handoff/README.md`、`docs/design-handoff/01-base-user-interface-agent.md`、`docs/design-handoff/02-application-package-experience.md`、`docs/design-handoff/03-settings-debug-configuration.md` |
+| UX 重塑外包资料包 | `docs/design-handoff/README.md`、`docs/design-handoff/01-base-user-interface-agent.md`、`docs/design-handoff/02-application-package-experience.md`、`docs/design-handoff/03-settings-debug-configuration.md`、`docs/design-handoff/04-launcher-experience.md` |
 | Web 素材导入与附加任务入口 | `apps/web/app/components/assets-page.tsx` |
-| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` |
+| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`、`docs/specs/remote-data-service-contract-v0.1.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |

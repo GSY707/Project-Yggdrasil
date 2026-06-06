@@ -2,12 +2,14 @@
 
 > 包含：近期关键文档速览、顶层结构、开源协作与治理入口、英文版入口。
 
-| `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-05）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面三组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
+| `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：基于应用包 `dashboard.json` 元数据设计场景页、任务模板、预期产物、应用设置，并定义 Agent 工作过程下探、返回、折叠和历史窗口回顾的 UI 规则 |
 | `docs/design-handoff/03-settings-debug-configuration.md` | 设置/调试/配置界面 brief：把 provider、模型预算、工作区、数据隐私、应用配置、Prompt、MCP、评测、观测和运行时调试拆成普通设置、高级设置和维护者调试三层 |
-| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-05 更新）：完整 Docker Compose 产品栈、桌面薄封装和本地数据治理 dry-run 已进入预览可验证状态；托管 / SaaS、官方远端数据托管、远端备份和远端删除仍是计划项 |
-| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` dry-run、task 级硬删除后端、审计表、外部 provider / 日志 / 备份保留边界 |
+| `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：定义安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、Docker/provider 检查、状态诊断、备份恢复、更新回滚和错误状态 |
+| `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
+| `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
 | `docs/development/WEB_RESEARCH_WORK_TREE_LONG_RUN_2026_05_28.md` | Web 搜索长任务工作树入口（2026-05-28）：新增 `evalsuite_g4_web_research_work_tree_long`，固定 LongCat live 网络搜索并强化多窗口 continuation/工作树连续性观测 |
 | `docs/development/WORK_TREE_ONLY_SINGLE_TASK_DEBUG_2026_05_28.md` | 工作树单任务调试基线（2026-05-28）：将 G4 work-tree-debug case 收敛为 `activeCapabilities=[task-takeover]` 并补齐 runtime start 能力透传，用于先验证“仅工作树”执行语义 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
@@ -46,7 +48,7 @@
 | `packages/python-sdk/src/yggdrasil_sdk/llm_work_analysis.py` | LLM 工作分析核心：以 run 为主键拼接 DB 与 state 工件，输出 run/window/turn/tool/artifact/source 多粒度分析，并持久化到 `state/analysis/llm-work/` |
 | `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py` | Langfuse 文本审查模块：以 Langfuse observation 重建窗口骨架，默认输出 LLM 交互文本摘录、重复窗口文本簇和 Langfuse UI 审查焦点；当前已能补读 `runtime/window-executions` 本地工件，用结构化窗口状态增强重复窗口判定与因果分析，并兼容中文化的任务目标/任务说明/当前焦点标签提取 |
 | `scripts/analyze_llm_work_run.py` | LLM 工作分析脚本包装器：按 task/run/invocation 触发正式分析器，并输出 JSON 或 Markdown 报告 |
-| `scripts/product-compose.mjs` | 产品 Docker Compose 脚本包装器：统一调用 `infra/docker-compose.product.yml`，并在 Windows 中文路径下关闭 BuildKit / bake；`product:restore` 会执行停止应用服务、一次性容器恢复、重新拉起服务的维护窗口流程 |
+| `scripts/product-compose.mjs` | 产品 Docker Compose 脚本包装器：优先读取未跟踪的 `infra/product.env`，统一调用 `infra/docker-compose.product.yml`，并在 Windows 中文路径下关闭 BuildKit / bake；提供 `product:backup`、`product:restore`、`product:snapshots`、`product:upgrade`、`product:rollback` 维护窗口流程 |
 | `scripts/analyze_langfuse_real_task_trace.py` | Langfuse 真实任务窗口分析脚本：按 trace 提取 LLM 最终输出、第 6 节结论与逐窗口 snapshot/work tree 历史 |
 | `scripts/analyze_langfuse_real_task_trace_layered.py` | Langfuse 文本审查兼容入口：按 trace 生成 LLM prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点 |
 | `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
@@ -108,7 +110,7 @@
 ├── evaluation/     # 评测框架
 ├── infra/          # 本地基础设施与产品 Docker Compose 预览栈
 ├── migrations/     # 数据库迁移
-├── packaging/      # 桌面薄封装与安装/启动包装
+├── packaging/      # 桌面封装、未签名安装包、托盘与更新包装
 ├── scripts/        # CI 辅助脚本
 ├── tests/          # 集成测试
 └── .github/        # GitHub Actions CI 配置

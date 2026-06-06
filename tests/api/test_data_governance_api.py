@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from yggdrasil_core_api.app import app
+from yggdrasil_core_api.services import get_workspace_service
 from yggdrasil_sdk import (
     OutboxRepository,
     RuntimeRepository,
@@ -139,6 +140,56 @@ def test_data_governance_manifest_exposes_local_and_remote_boundaries() -> None:
     assert {item["id"] for item in payload["assets"]} >= {"tasks", "runtime", "assets", "product-logs-backups"}
 
 
+def test_data_governance_backup_routes_expose_snapshots_and_audit() -> None:
+    class FakeBackupService:
+        def list_data_governance_backups(self, *, limit: int = 20) -> dict[str, object]:
+            assert limit == 2
+            return {
+                "backupRoot": "C:/tmp/yggdrasil-backups",
+                "snapshots": [
+                    {
+                        "name": "20260606T010203Z",
+                        "snapshotDir": "C:/tmp/yggdrasil-backups/20260606T010203Z",
+                        "createdAt": "2026-06-06T01:02:03Z",
+                        "databaseKind": "sqlite",
+                    }
+                ],
+            }
+
+        def create_data_governance_backup(self, payload: dict[str, object]) -> dict[str, object]:
+            assert payload["reason"] == "web backup test"
+            return {
+                "backup": {
+                    "name": "20260606T010203Z",
+                    "snapshotDir": "C:/tmp/yggdrasil-backups/20260606T010203Z",
+                    "createdAt": "2026-06-06T01:02:03Z",
+                    "databaseKind": "sqlite",
+                },
+                "operation": {
+                    "id": "operation_backup",
+                    "operationType": "backup",
+                    "scopeKind": "workspace",
+                    "scopeId": None,
+                    "dryRun": False,
+                    "status": "completed",
+                    "createdAt": "2026-06-06T01:02:03Z",
+                    "executedAt": "2026-06-06T01:02:03Z",
+                },
+            }
+
+    app.dependency_overrides[get_workspace_service] = lambda: FakeBackupService()
+    try:
+        list_response = client.get("/data-governance/backups?limit=2")
+        create_response = client.post("/data-governance/backup", json={"reason": "web backup test"})
+    finally:
+        app.dependency_overrides.pop(get_workspace_service, None)
+
+    assert list_response.status_code == 200
+    assert list_response.json()["snapshots"][0]["databaseKind"] == "sqlite"
+    assert create_response.status_code == 200
+    assert create_response.json()["operation"]["operationType"] == "backup"
+
+
 def test_task_deletion_plan_records_dry_run_operation() -> None:
     _seed_task_runtime_case(task_id="task_data_governance_plan")
 
@@ -171,8 +222,16 @@ def test_task_deletion_plan_records_dry_run_operation() -> None:
     assert operations[0]["status"] == "planned"
 
 
-def test_running_task_delete_is_blocked_and_audited() -> None:
+def test_running_task_delete_is_blocked_and_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_task_runtime_case(task_id="task_data_governance_running", status="running")
+    backup_calls = 0
+
+    def fake_backup(**_: object) -> dict[str, object]:
+        nonlocal backup_calls
+        backup_calls += 1
+        return {"snapshotDir": "should-not-run"}
+
+    monkeypatch.setattr("yggdrasil_core_api.services.data_governance_service.create_runtime_backup", fake_backup)
 
     response = client.post(
         "/data-governance/delete",
@@ -180,20 +239,31 @@ def test_running_task_delete_is_blocked_and_audited() -> None:
             "scopeKind": "task",
             "scopeId": "task_data_governance_running",
             "confirmScopeId": "task_data_governance_running",
+            "backupBeforeDelete": True,
             "reason": "test blocked delete",
         },
     )
 
     assert response.status_code == 409
     assert "running" in response.json()["detail"]
+    assert backup_calls == 0
     assert _row_count(TaskORM, TaskORM.id == "task_data_governance_running") == 1
     operations = client.get("/data-governance/operations").json()["operations"]
     assert operations[0]["operationType"] == "delete"
     assert operations[0]["status"] == "blocked"
 
 
-def test_completed_task_delete_removes_runtime_children_and_state_files() -> None:
+def test_completed_task_delete_removes_runtime_children_and_state_files(monkeypatch: pytest.MonkeyPatch) -> None:
     request_path, response_path = _seed_task_runtime_case(task_id="task_data_governance_delete", status="completed")
+    monkeypatch.setattr(
+        "yggdrasil_core_api.services.data_governance_service.create_runtime_backup",
+        lambda **_: {
+            "name": "test-snapshot",
+            "snapshotDir": "C:/tmp/yggdrasil-backups/test-snapshot",
+            "createdAt": "2026-06-06T01:02:03Z",
+            "databaseKind": "sqlite",
+        },
+    )
 
     response = client.post(
         "/data-governance/delete",
@@ -202,6 +272,7 @@ def test_completed_task_delete_removes_runtime_children_and_state_files() -> Non
             "scopeId": "task_data_governance_delete",
             "confirmScopeId": "task_data_governance_delete",
             "includeStateFiles": True,
+            "backupBeforeDelete": True,
             "reason": "test hard delete",
         },
     )
@@ -209,6 +280,13 @@ def test_completed_task_delete_removes_runtime_children_and_state_files() -> Non
     assert response.status_code == 200
     payload = response.json()
     assert payload["result"]["status"] == "completed"
+    assert payload["result"]["backup"]["snapshotDir"] == "C:/tmp/yggdrasil-backups/test-snapshot"
+    certificate = payload["result"]["deletionCertificate"]
+    assert certificate["scopeKind"] == "task"
+    assert certificate["scopeId"] == "task_data_governance_delete"
+    assert certificate["deletedRows"] >= 1
+    assert certificate["stateFiles"]["deleted"] == 2
+    assert certificate["backupSnapshotDir"] == "C:/tmp/yggdrasil-backups/test-snapshot"
     assert payload["operation"]["status"] == "completed"
     assert _row_count(TaskORM, TaskORM.id == "task_data_governance_delete") == 0
     assert _row_count(AgentRunORM, AgentRunORM.task_id == "task_data_governance_delete") == 0

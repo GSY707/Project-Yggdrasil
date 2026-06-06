@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.engine import make_url
 
-from .shared import _default_snapshot_dir, _run_command, latest_snapshot_dir
+from .shared import _default_snapshot_dir, _run_command, latest_snapshot_dir, resolve_backup_root
 from ..persistence import reset_persistence_runtime
 from ..persistence.settings import PersistenceSettings
 from ..support import resolve_state_root, utc_now, write_json
@@ -29,6 +29,21 @@ def _postgresql_dump_url(database_url: str) -> str:
     return url.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
+def _safe_database_url(database_url: str) -> str:
+    try:
+        return make_url(database_url).render_as_string(hide_password=True)
+    except Exception:
+        return "<unparseable-database-url>"
+
+
+def _redact_backup_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(metadata)
+    database_url = redacted.get("databaseUrl")
+    if isinstance(database_url, str) and database_url.strip():
+        redacted["databaseUrl"] = _safe_database_url(database_url)
+    return redacted
+
+
 def _clear_directory_contents(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     for child in path.iterdir():
@@ -44,7 +59,7 @@ def create_runtime_backup(*, workspace_root: Path | None = None, snapshot_dir: P
     snapshot_path.mkdir(parents=True, exist_ok=True)
     metadata: dict[str, Any] = {
         "createdAt": utc_now().isoformat(),
-        "databaseUrl": settings.database_url,
+        "databaseUrl": _safe_database_url(settings.database_url),
         "snapshotDir": str(snapshot_path),
     }
     reset_persistence_runtime()
@@ -114,5 +129,40 @@ def restore_runtime_backup(*, workspace_root: Path | None = None, snapshot_dir: 
     restored = dict(metadata)
     restored["restoredAt"] = utc_now().isoformat()
     return restored
+
+
+def list_runtime_backups(*, workspace_root: Path | None = None, limit: int = 50) -> dict[str, Any]:
+    backup_root = resolve_backup_root(workspace_root)
+    snapshots: list[dict[str, Any]] = []
+    if backup_root.exists():
+        for candidate in sorted(
+            (path for path in backup_root.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+            reverse=True,
+        )[: max(1, limit)]:
+            metadata_path = candidate / "metadata.json"
+            metadata: dict[str, Any] = {}
+            if metadata_path.exists():
+                try:
+                    loaded = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    metadata = loaded if isinstance(loaded, dict) else {}
+                except json.JSONDecodeError:
+                    metadata = {"metadataError": "invalid-json"}
+            metadata = _redact_backup_metadata(metadata)
+            snapshots.append(
+                {
+                    "name": candidate.name,
+                    "snapshotDir": str(candidate),
+                    "createdAt": metadata.get("createdAt"),
+                    "databaseKind": metadata.get("databaseKind"),
+                    "databaseSnapshot": metadata.get("databaseSnapshot"),
+                    "stateSnapshot": metadata.get("stateSnapshot"),
+                    "metadata": metadata,
+                }
+            )
+    return {
+        "backupRoot": str(backup_root),
+        "snapshots": snapshots,
+    }
 
 __all__ = [name for name in globals() if not name.startswith("__")]

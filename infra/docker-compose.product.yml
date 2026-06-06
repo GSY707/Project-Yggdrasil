@@ -2,7 +2,7 @@ name: yggdrasil-product
 
 x-product-env: &product-env
   env_file:
-    - ./product.env.template
+    - ${YGGDRASIL_PRODUCT_ENV_FILE:-./product.env.template}
   environment:
     YGGDRASIL_DATABASE_URL: ${YGGDRASIL_DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/yggdrasil}
     YGGDRASIL_REDIS_URL: ${YGGDRASIL_REDIS_URL:-redis://redis:6379/0}
@@ -210,7 +210,7 @@ services:
 
   web:
     env_file:
-      - ./product.env.template
+      - ${YGGDRASIL_PRODUCT_ENV_FILE:-./product.env.template}
     environment:
       YGGDRASIL_CORE_API_BASE_URL: ${YGGDRASIL_CORE_API_BASE_URL:-http://core-api:5000}
       NODE_ENV: production

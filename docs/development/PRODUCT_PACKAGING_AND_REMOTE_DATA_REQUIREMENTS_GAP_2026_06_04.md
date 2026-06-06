@@ -1,25 +1,25 @@
 # 产品打包与官方远端数据能力需求差距文档
 
 日期：2026-06-04
-最近更新：2026-06-05
+最近更新：2026-06-06
 
 ## 1. 结论
 
-本轮把以下能力正式加入产品计划，但不把它们写成当前可用能力：
+本轮继续把产品化能力从“计划项”推进到“预览可验证”，但仍不把未完成的正式发行、托管和官方远端数据服务写成当前可用能力：
 
 | 能力 | 当前状态 | 结论 |
 |------|----------|------|
-| 完整 Docker Compose 产品栈 | 预览可验证 | 已新增 `infra/docker-compose.product.yml`、产品 Dockerfile、env 模板和 product smoke；正式发行前仍需冷启动、备份/恢复、升级/回滚验收。 |
-| 桌面封装 | 薄封装预览 | 已新增 Windows `.cmd` / PowerShell 启动器，可启动/停止/查看状态/日志/备份；还不是正式安装包、托盘控制器或自动更新器。 |
-| 删除 / 清理 / 数据治理 | 本地 dry-run 与 task 后端硬删除预览 | 已新增数据资产 manifest、删除预览、审计表、API 和 Web `/data-governance`；Web 当前只开放 dry-run，不直接暴露硬删除按钮。 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | 已新增 `infra/docker-compose.product.yml`、产品 Dockerfile、未跟踪 product env、product smoke、备份、恢复、快照列表、升级和回滚维护命令；正式发行前仍需多版本冷启动/升级演练。 |
+| 桌面封装 | 未签名安装包、托盘与手动更新器预览 | 已新增 Windows 未签名安装器、卸载器、托盘控制器、ZIP 构建脚本、更新检查/手动应用脚本和计划任务；签名、正式发布渠道和静默自动更新仍未完成。 |
+| 删除 / 清理 / 数据治理 | 本地 Web 保护性执行预览 | 已新增数据资产 manifest、删除预览、审计表、API、备份列表/创建备份、Web `/data-governance` 保护性 task 硬删除和删除证明；asset / node 仍只开放预览。 |
 | 托管 / SaaS | 计划中 | 已加入路线图，但当前没有官方账号体系、远端工作区、服务条款、隐私策略、商业支持或 uptime 承诺。 |
-| 官方远端数据服务 | 计划中 | 远端数据托管、远端备份、远端恢复和远端删除已加入计划；当前本地产品模式不会自动上传数据。 |
+| 官方远端数据服务 | 计划中 | 上线前契约已冻结草案 `docs/specs/remote-data-service-contract-v0.1.md`；远端数据托管、远端备份、远端恢复和远端删除仍未实现，当前本地产品模式不会自动上传数据。 |
 
 推荐推进顺序：
 
-1. 先把当前数据资产清单、删除预览和 task 级硬删除后端补齐验证与误删保护。
-2. 再把完整 Docker Compose 产品栈做冷启动、备份/恢复、升级/回滚验收。
-3. 再把桌面薄封装升级为正式安装包、托盘状态和更新策略。
+1. 先把当前数据资产清单、删除预览、task 级硬删除后端、provider gate 和产品维护命令纳入定向回归。
+2. 再把完整 Docker Compose 产品栈做多版本冷启动、备份/恢复、升级/回滚演练。
+3. 再把桌面预览升级为签名安装包、正式发布渠道和可验证更新策略。
 4. 最后做托管 / SaaS 与官方远端数据服务，因为它依赖账号、租户、安全、备份、删除和服务条款全部冻结。
 
 ## 2. 范围
@@ -39,11 +39,16 @@
 
 本文件不是服务上线公告，不是隐私政策，也不是商业支持承诺。任何用户文档、发布页或 README 都必须区分“预览可验证”“计划中”和“正式支持”，不能把未验收能力写成正式可用能力。
 
-2026-06-05 后口径更新：
+2026-06-06 后口径更新：
 
-- 完整 Docker Compose 产品栈、桌面薄封装、数据治理 dry-run 不再是纯计划项，已经进入预览可验证状态。
+- 完整 Docker Compose 产品栈、Windows 桌面封装、数据治理保护性执行不再是纯计划项，已经进入预览可验证状态。
+- Provider key 配置状态已抽成共享契约，Core API `/health.providerStatus` 会返回 ready / warning / blocked，Web 任务启动面板会阻止未就绪和 fallback 测试模式下的直接启动。
+- 产品 Compose 现在优先读取未跟踪的 `infra/product.env`，并提供 `product:snapshots`、`product:upgrade`、`product:rollback`。
+- Windows 桌面封装已补齐未签名安装/卸载、托盘控制器、备份、恢复、快照、升级、回滚、快捷方式安装/卸载、更新检查、手动应用更新和更新检查计划任务入口。
+- 更新检查计划任务只写入状态，不会静默应用更新；未签名状态下不允许后台自动执行新版代码。
+- 官方远端数据服务契约草案已新增，但仍不是已发布服务。
 - 托管 / SaaS、官方远端数据托管、远端备份和远端删除仍是计划项，不能写成当前可用能力。
-- Web `/data-governance` 当前只展示资产清单、删除影响预览和审计记录；后端 task 级硬删除 API 必须传入 `confirmScopeId`，运行中任务会阻塞。
+- Web `/data-governance` 当前展示资产清单、备份快照、删除影响预览、保护性 task 硬删除、删除证明和审计记录；执行前必须无 blocker、精确输入 `confirmScopeId`，且后端会在执行前重新生成 plan。运行中任务会阻塞，不创建删除前备份。
 
 ## 3. 当前已有基础
 
@@ -68,8 +73,9 @@
 - 仍依赖本机源码、`uv`、`pnpm`、Docker 和多个开发依赖。
 - 没有产品镜像。
 - 没有用户级安装器。
-- 没有稳定版本号、升级策略或回滚策略。
-- 没有桌面控制器。
+- 没有稳定版本号和正式发布镜像 tag。
+- 已有产品栈升级/回滚维护命令，但还缺多版本演练和正式发布策略。
+- 已有桌面封装脚本、快捷方式、未签名安装器、托盘控制器和手动更新器，但没有签名发行版或正式桌面服务管理器。
 
 ### 3.2 基础设施 Compose
 
@@ -87,9 +93,9 @@
 差距：
 
 - `infra/docker-compose.yml` 仍只代表依赖栈，不应冒充产品栈。
-- `infra/docker-compose.product.yml` 已包含 Web、Core API、Agent Runtime、Module Host、Worker 和 migrate job，但仍需正式冷启动和恢复演练。
+- `infra/docker-compose.product.yml` 已包含 Web、Core API、Agent Runtime、Module Host、Worker 和 migrate job，但仍需正式多版本冷启动和恢复演练。
 - 统一 `.env` schema 校验仍未冻结。
-- 产品级升级、回滚和清理流程仍需验收。
+- 产品级升级、回滚和清理流程已有预览命令，仍需多版本和异常场景验收。
 
 ### 3.3 本地备份 / 恢复
 
@@ -97,22 +103,24 @@
 
 - `corepack pnpm ops:backup`。
 - `corepack pnpm ops:restore`。
+- `corepack pnpm product:backup` / `product:restore` / `product:snapshots` / `product:upgrade` / `product:rollback`。
 - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/backup.py`。
 
 当前能力：
 
 - 备份 SQLite 或 PostgreSQL 数据库。
 - 备份完整 state root。
-- 写入 `metadata.json`。
+- 写入脱敏 `metadata.json`。
 - 恢复最近或指定快照。
+- 列出快照，并在产品栈升级/回滚前创建保护性快照。
 
 差距：
 
-- 没有 Web 备份按钮。
+- Web `/data-governance` 已有备份快照列表和创建保护性备份按钮。
 - 没有备份预览、校验、加密、压缩或远端上传。
-- 没有恢复前冲突检查。
+- 恢复前冲突检查仍不足。
 - 没有远端备份库。
-- 没有删除前自动快照策略。
+- Web task 硬删除已支持 `backupBeforeDelete` 删除前保护性快照；全局日志/备份清理策略仍未冻结。
 
 ### 3.4 删除 / 清理
 
@@ -122,7 +130,8 @@
 - `packages/python-sdk/src/yggdrasil_sdk/data_governance.py` 数据资产 manifest、删除预览、task 硬删除执行和审计记录。
 - `data_governance_operations` 审计表与 Alembic 迁移。
 - Core API `/data-governance/manifest`、`/operations`、`/deletion-plan`、`/delete`。
-- Web `/data-governance` dry-run 预览页。
+- Core API `/data-governance/backups`、`/backup`。
+- Web `/data-governance` 数据治理页，包含资产清单、备份快照、删除预览、保护性 task 硬删除和删除证明。
 - Web API 代理已补 `PUT` / `PATCH` / `DELETE` 转发。
 - 数据库部分关系使用 cascade / set null / restrict。
 - 部分 repository 有局部 `delete` 语句。
@@ -131,10 +140,10 @@
 
 差距：
 
-- Web 当前只开放删除影响预览，不直接暴露硬删除按钮。
+- Web 只对 `task` 作用域开放受保护硬删除按钮；必须无 blocker、精确确认 `scopeId`，默认先创建保护性备份。
 - task 级硬删除后端已提供，但 `DELETE /tasks/{taskId}`、`DELETE /assets/{assetId}`、`DELETE /nodes/{nodeId}` 等 REST 资源路由尚未冻结。
 - asset / node 当前只有预览，没有硬删除执行。
-- 没有删除证明。
+- task 级硬删除返回删除证明摘要，包含数据库行数、state file 删除结果、保留边界、warnings 和可选备份快照路径。
 - 数据资产 manifest 已覆盖数据库、state root、日志、备份和外部 provider 边界，但日志/备份清理策略尚未执行化。
 - 没有远端删除请求和远端删除状态查询。
 
@@ -142,6 +151,7 @@
 
 已有：
 
+- 官方远端数据服务上线前契约草案：`docs/specs/remote-data-service-contract-v0.1.md`。
 - 没有官方托管服务入口。
 - 没有官方远端数据服务入口。
 - 没有账号、组织、工作区或租户模型。
@@ -156,7 +166,7 @@
 
 - 没有账号体系。
 - 没有租户隔离。
-- 没有远端存储协议。
+- 已有远端服务契约草案，但没有远端存储实现。
 - 没有密钥管理策略。
 - 没有隐私政策和服务条款。
 - 没有数据地域、保留期、删除证明、审计导出和恢复演练机制。
@@ -186,9 +196,9 @@
 ### 4.3 当前差距
 
 - `infra/docker-compose.yml` 只覆盖依赖；产品栈必须使用 `infra/docker-compose.product.yml`。
-- 产品服务镜像已有预览 Dockerfile，但正式 tag、发布镜像和升级策略未冻结。
-- 产品 compose 已有基础健康检查矩阵，但 provider key 阻塞提示和首次成功路径 smoke 仍需增强。
-- 没有 compose 模式下的升级、回滚和备份恢复验收。
+- 产品服务镜像已有预览 Dockerfile，但正式 tag、发布镜像和发布渠道策略未冻结。
+- 产品 compose 已有基础健康检查矩阵，provider key 阻塞提示已接入 `/health.providerStatus` 和 Web 任务启动面板；首次成功路径仍需产品级 smoke 扩展。
+- compose 模式下已有备份、恢复、升级和回滚预览命令，但缺多版本和故障注入验收。
 - 没有用户级故障说明。
 
 ### 4.4 需要补充的测试
@@ -196,8 +206,8 @@
 - `docker compose config`。
 - 产品栈冷启动 smoke。
 - 首次成功路径 API smoke。
-- 备份 / 恢复 smoke。
-- provider key 缺失时的阻塞提示。
+- 备份 / 恢复 / 快照列表 / 升级 / 回滚 smoke。
+- provider key 缺失、fallback 测试模式和密钥值不泄露的阻塞提示回归。
 - 数据卷删除前 dry-run。
 
 ## 5. 功能二：桌面封装
@@ -223,12 +233,11 @@
 
 ### 5.3 当前差距
 
-- 已有 Windows 薄启动器，但还没有 Electron / Tauri / 其他桌面壳最终选型。
-- 没有正式安装包。
-- 没有正式桌面服务管理器。
-- 没有托盘状态。
-- 当前只有命令入口封装，没有桌面端备份恢复 UI。
-- 没有桌面端更新策略。
+- 已有 Windows 未签名安装器、卸载器、托盘控制器、维护命令、快捷方式安装和 ZIP 构建入口，但还没有 Electron / Tauri / 其他桌面壳最终选型。
+- 已有未签名安装包预览，没有代码签名、SmartScreen 信誉、正式发布渠道或版本发布流程。
+- 已有 PowerShell WinForms 托盘控制器，没有原生桌面服务管理器。
+- 当前只有命令入口封装，没有桌面端备份恢复图形 UI。
+- 已有更新检查和手动应用更新入口；计划任务只检查更新并写入 `update-state.json`，不做静默自动应用。
 - 没有桌面端远端同步同意流程。
 
 ### 5.4 技术路线建议
@@ -289,7 +298,7 @@
 - task 级硬删除已支持后端执行，但 Web 暂不暴露危险删除按钮。
 - asset / node 仅支持预览，尚未支持硬删除。
 - 日志和备份清理策略尚未执行化。
-- 没有远端账号 / 租户 / 工作区。
+- 已冻结远端服务契约草案，但没有远端账号 / 租户 / 工作区。
 - 没有远端备份库。
 - 没有远端删除状态机。
 - 没有隐私政策、服务条款和 DPA 级别材料。
@@ -455,8 +464,8 @@
 
 最小可推进任务如下：
 
-1. 跑通并固化 `tests/api/test_data_governance_api.py`、`product:compose:config`、`product:smoke` 和 Web typecheck。
+1. 跑通并固化 `tests/api/test_data_governance_api.py`、`tests/api/test_provider_configuration_api.py`、`product:compose:config`、`product:smoke` 和 Web typecheck。
 2. 为 `/data-governance` 增加备份前置提示、二次确认设计和删除证明摘要，但仍不要直接开放无保护硬删除按钮。
-3. 验证产品 Compose 冷启动、首次成功路径、备份/恢复和升级/回滚。
+3. 验证产品 Compose 多版本冷启动、首次成功路径、备份/恢复、快照列表、升级/回滚和故障中断恢复。
 4. 将 Windows 薄启动器升级为正式安装包/托盘控制器前，先冻结健康摘要和日志目录协议。
 5. 单独起草 SaaS RFC，明确账号、租户、远端存储、远端备份、远端删除、隐私和服务条款。

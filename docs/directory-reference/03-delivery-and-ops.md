@@ -26,6 +26,8 @@ docs/
 │   │                               #   给 code agent 的返工任务文档：针对验收残留问题，强制收口世界级/任务级边界、无损恢复判定和 TaskRuntimeState 唯一入口
 │   ├── PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md
 │   │                               #   产品打包与官方远端数据能力需求差距：Docker 产品栈、桌面封装、删除治理、SaaS、远端托管/备份/删除的计划与缺口
+│   ├── INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md
+│   │                               #   安装、启动器与应用包随包发行评估：当前安装/启动路径、启动器必要性、应用包随产品打包和直达应用快捷方式改造点
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
 │   │                               #   功能形态分类与提示词功能检查计划：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径
 │   └── ...                         #   其他开发专题文档同顶层速览
@@ -190,7 +192,8 @@ evaluation/
 ```
 infra/
 ├── README.md                       # 基础设施和产品 Compose 使用说明（端口、环境变量、备份恢复）
-├── product.env.template            # 产品 Compose 环境模板（provider key、端口、DB/Redis/NATS、state root）
+├── product.env.template            # 产品 Compose 环境模板（provider key、端口、DB/Redis/NATS、state root；复制为 gitignore 的 product.env 后写真实 key）
+├── product.env                     # 本机产品 Compose 私有环境文件（gitignore；存在时 product:* 优先读取）
 ├── docker/
 │   ├── python-service.Dockerfile   # Core API / Agent Runtime / Module Host / Worker 共用 Python 镜像
 │   └── web.Dockerfile              # Next.js standalone Web 镜像
@@ -212,23 +215,43 @@ infra/
 
 ---
 
-## packaging/ · 桌面薄封装
+## packaging/ · 桌面封装
 
 ```
 packaging/
 └── desktop/
     └── windows/
-        ├── README.md                    # Windows 薄封装说明与支持边界
-        ├── Yggdrasil.Desktop.ps1        # start/stop/status/open/logs/backup/restore 主脚本
+        ├── README.md                    # Windows 桌面封装说明与支持边界
+        ├── Yggdrasil.Install.ps1        # 未签名安装/卸载脚本，写入 install.json 并安装快捷方式
+        ├── Yggdrasil Installer.cmd      # 安装到 LOCALAPPDATA 并启动托盘
+        ├── Yggdrasil Uninstaller.cmd    # 卸载桌面封装、启动项和快捷方式
+        ├── Yggdrasil.Tray.ps1           # PowerShell WinForms 托盘控制器
+        ├── Yggdrasil Tray.cmd           # 隐藏窗口启动托盘控制器
+        ├── Yggdrasil.Update.ps1         # 更新检查、fast-forward 手动应用和计划任务安装
+        ├── Yggdrasil Update.cmd         # 检查更新并写入 update-state.json
+        ├── Yggdrasil Apply Update.cmd   # 仅 fast-forward 时创建备份并手动应用更新
+        ├── Yggdrasil Install Auto Update Task.cmd
+        ├── Yggdrasil Uninstall Auto Update Task.cmd
+        ├── Build-Yggdrasil.DesktopPackage.ps1 # 构建未签名 ZIP 到 dist/desktop/
+        ├── Yggdrasil Build Installer.cmd
+        ├── Yggdrasil.Desktop.ps1        # start/stop/status/open/logs/backup/restore/snapshots/upgrade/rollback/shortcuts 主脚本
         ├── Yggdrasil Desktop.cmd        # 启动产品 Compose 并打开 Web
         ├── Yggdrasil Stop.cmd           # 停止产品 Compose
         ├── Yggdrasil Status.cmd         # 查看产品 Compose 状态与 smoke
-        └── Yggdrasil Logs.cmd           # 打开产品日志跟随窗口
+        ├── Yggdrasil Logs.cmd           # 打开产品日志跟随窗口
+        ├── Yggdrasil Backup.cmd         # 创建产品 Compose 备份快照
+        ├── Yggdrasil Restore.cmd        # 恢复产品 Compose 快照
+        ├── Yggdrasil Snapshots.cmd      # 列出产品 Compose 快照
+        ├── Yggdrasil Upgrade.cmd        # 保护性快照 + 重建产品栈 + smoke
+        ├── Yggdrasil Rollback.cmd       # 保护性快照 + 恢复快照 + smoke
+        ├── Yggdrasil Install Shortcuts.cmd
+        └── Yggdrasil Uninstall Shortcuts.cmd
 ```
 
 **关键说明：**
-- 这是桌面封装预览，不是正式安装包、托盘控制器或自动更新器。
-- 它包装 `corepack pnpm product:*` 命令，依赖 Docker Desktop 可用。
+- 这是桌面封装预览，不是签名发行版；当前安装包标记 `signed=false`。
+- 自动更新任务只检查更新，不静默应用新版代码；真正更新必须用户手动触发且只允许 fast-forward。
+- 它包装 `corepack pnpm product:*` 命令，依赖 Docker Desktop 可用；Web 端口优先读取 `infra/product.env`。
 
 ---
 

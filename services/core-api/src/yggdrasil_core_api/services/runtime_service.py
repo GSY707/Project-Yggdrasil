@@ -1,44 +1,26 @@
-import os
-
 from ._base import *  # noqa: F403,F401
 from yggdrasil_sdk.llm_work_analysis import analyze_llm_work_run, load_persisted_llm_work_analysis
+from yggdrasil_sdk.provider_config import provider_configuration_status
 from yggdrasil_sdk.runtime_kernel import AGENT_RUNTIME_QUEUE
 from yggdrasil_sdk.support import resolve_state_root, resolve_workspace_root
 
 class RuntimeServiceMixin:
+    def _provider_status(self) -> dict[str, object]:
+        return provider_configuration_status()
+
     def _provider_setup_status(self) -> dict[str, object]:
-        provider_keys = {
-            "longcat": ("YGGDRASIL_LLM_API_KEY_LONGCAT", "LONGCAT_API_KEY"),
-            "openrouter": ("YGGDRASIL_LLM_API_KEY_OPENROUTER", "OPENROUTER_API_KEY"),
-            "deepseek_direct": ("YGGDRASIL_LLM_API_KEY_DEEPSEEK", "DEEPSEEK_API_KEY"),
-            "vectorengine": ("YGGDRASIL_LLM_API_KEY_VECTORENGINE", "VECTORENGINE_API_KEY"),
-        }
+        provider_status = self._provider_status()
         configured = [
-            provider
-            for provider, env_names in provider_keys.items()
-            if any(str(os.environ.get(env_name) or "").strip() for env_name in env_names)
+            str(provider.get("id"))
+            for provider in provider_status.get("configuredProviders", [])
+            if isinstance(provider, dict) and provider.get("id")
         ]
-        if str(os.environ.get("YGGDRASIL_DISABLE_LIVE_LLM") or "").strip().lower() in {"1", "true", "yes", "on"}:
-            return {
-                "id": "model-provider",
-                "label": "Model provider",
-                "status": "warning",
-                "detail": "Live LLM is disabled; tasks will use deterministic fallback.",
-                "remediation": "Remove YGGDRASIL_DISABLE_LIVE_LLM or configure a provider key before real user tasks.",
-            }
-        if configured:
-            return {
-                "id": "model-provider",
-                "label": "Model provider",
-                "status": "ready",
-                "detail": f"Configured providers: {', '.join(configured)}.",
-            }
         return {
             "id": "model-provider",
             "label": "Model provider",
-            "status": "blocked",
-            "detail": "No model provider key is configured.",
-            "remediation": "Set YGGDRASIL_LLM_API_KEY_LONGCAT or LONGCAT_API_KEY in .env, then restart services.",
+            "status": provider_status["status"],
+            "detail": f"Configured providers: {', '.join(configured)}." if configured else str(provider_status["detail"]),
+            "remediation": provider_status.get("remediation"),
         }
 
     def _path_setup_statuses(self) -> list[dict[str, object]]:
@@ -126,6 +108,7 @@ class RuntimeServiceMixin:
             "service": "core-api",
             "database": database,
             "redis": redis,
+            "providerStatus": self._provider_status(),
             "setupChecklist": self._setup_checklist(database, redis),
         }
 

@@ -280,10 +280,10 @@ corepack pnpm web:dev
 |------|----------|----------|----------------|
 | 开发者工作区 | 可用 | 手动启动服务，或 `corepack pnpm yggdrasil:up` | 用于调试、定向测试和贡献开发；不要把多终端命令写成普通用户首选路径。 |
 | 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | 当前外部试用默认模式；更新用户文档时优先围绕这个入口。 |
-| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | 使用 `infra/docker-compose.product.yml`；正式发行前仍需补齐冷启动、备份/恢复、升级/回滚和 provider key 阻塞提示验收。 |
-| 桌面封装 | 薄封装预览 | `packaging/desktop/windows/Yggdrasil Desktop.cmd` | Windows 启动/停止/状态/日志/备份入口已提供；仍不是正式安装包、托盘控制器或自动更新器。 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | 使用 `infra/docker-compose.product.yml`；`infra/product.env` 会优先于模板；已提供备份、恢复、快照列表、升级、回滚和 provider key 启动阻塞，正式发行前仍需多版本冷启动/升级演练。 |
+| 桌面封装 | 未签名安装包预览 | `packaging/desktop/windows/Yggdrasil Installer.cmd` / `Yggdrasil Tray.cmd` | Windows 未签名安装/卸载、托盘控制器、启动/停止/状态/日志/备份/恢复/快照/升级/回滚、更新检查和手动应用入口已提供；签名和静默自动更新未完成。 |
 | 托管 / SaaS | 计划中 | 尚未发布 | 已进入产品路线图；当前不能承诺官方托管、商业支持或 uptime。 |
-| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除需先冻结租户、加密、保留和审计策略。 |
+| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据服务契约草案见 `docs/specs/remote-data-service-contract-v0.1.md`；实现仍需账号、租户、加密、保留和审计策略。 |
 
 产品内 `/release` 页面是用户可见的发布、演示、数据位置和隐私边界入口。若新增运行模式、打包方式、删除/导出动作、托管能力或官方远端数据能力，必须同步 `/release`、`README.md`、`docs/USER_GUIDE.md`、`docs/DIRECTORY_REFERENCE.md` 和对应需求/规格文档。
 
@@ -296,10 +296,14 @@ corepack pnpm product:status
 corepack pnpm product:smoke
 corepack pnpm product:logs
 corepack pnpm product:backup
+corepack pnpm product:restore -- --snapshot <snapshot>
+corepack pnpm product:snapshots
+corepack pnpm product:upgrade
+corepack pnpm product:rollback -- --snapshot <snapshot>
 corepack pnpm product:down
 ```
 
-`infra/docker-compose.yml` 仍只代表开发依赖栈；不要再把它写成完整产品发行物。产品栈的数据卷边界见 `infra/docker-compose.product.yml` 和 `infra/product.env.template`。
+`infra/docker-compose.yml` 仍只代表开发依赖栈；不要再把它写成完整产品发行物。产品栈的数据卷边界见 `infra/docker-compose.product.yml`、`infra/product.env.template` 和未跟踪的 `infra/product.env`。真实 provider key 不得写入模板、镜像、测试 fixture 或文档。
 
 ---
 
@@ -565,7 +569,8 @@ uv run pytest --cov=yggdrasil_sdk -q
 | `tests/api/test_persistence_task_runtime_api.py` | task/node/runtime/workbench 基础持久化 API |
 | `tests/api/test_persistence_control_plane_api.py` | 任务控制面、资产/训练/prompt/mcp 控制面 API |
 | `tests/api/test_persistence_app_scope_api.py` | appId 过滤语义与 M9 control-plane suite |
-| `tests/api/test_data_governance_api.py` | 数据治理 manifest、删除 dry-run 审计、运行中任务阻塞与 task 级硬删除 |
+| `tests/api/test_data_governance_api.py` | 数据治理 manifest、备份路由、删除 dry-run 审计、运行中任务阻塞、删除前备份与 task 级硬删除证明 |
+| `tests/api/test_provider_configuration_api.py` | provider key 配置状态、`/health.providerStatus` 和密钥值不泄露 |
 | `test_prompting_runtime.py` | PromptCompiler 链路 |
 | `tests/runtime/test_runtime_core_and_memory.py` | 运行时核心挂载、上下文裁剪、记忆树物化与 memory-write 标签 |
 | `tests/runtime/test_runtime_restart_and_resume.py` | 窗口重启与 pause/resume 主闭环 |

@@ -1,10 +1,10 @@
 # UX 重塑外包资料包
 
-日期：2026-06-05
+日期：2026-06-07
 
 ## 1. 用途
 
-这个目录是交给外部 UX / 产品设计团队的工作资料包。它只覆盖“与用户接触的重新设计”，不展开安装、打包、Docker、桌面封装、SaaS 等背后工作。背后工作以已有文档为准：
+这个目录是交给外部 UX / 产品设计团队的工作资料包。它只覆盖“与用户接触的重新设计”。安装、打包、Docker、桌面封装、SaaS 等背后实现仍以已有技术文档为准；但启动器作为用户可见的安装、启动、诊断和应用包入口，需要纳入本资料包。
 
 - `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`
 - `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md`
@@ -21,13 +21,14 @@
 
 世界树计划是一个本地优先的 LLM 工作台。用户通过应用模板导入素材、创建任务、观察 Agent 运行、获得可恢复的长期工作结果；高级用户和维护者可以进入 Prompt、MCP、评测、观测、调试和 CLI 层做深度控制。
 
-## 3. 本轮要设计的三组界面
+## 3. 本轮要设计的四组界面
 
 | 界面组 | 目标 | 设计资料 |
 | --- | --- | --- |
 | 基座面向用户界面 | 给普通用户一个正门：客服型 Agent、首次启动、应用推荐、问题回答、Prompt 代写和任务启动 | `01-base-user-interface-agent.md` |
 | 特化应用包界面 | 每个应用包按场景展示价值、模板、产物、设置和必要的 Agent 工作过程 | `02-application-package-experience.md` |
 | 设置 / 调试 / 配置界面 | 把普通设置、高级配置和维护者调试分层，避免普通用户被内部控制台压住 | `03-settings-debug-configuration.md` |
+| 启动器 / 安装器体验 | 把本地产品栈、应用包直达入口、Docker/provider 检查、备份恢复、更新回滚和诊断做成普通用户可理解的桌面入口 | `04-launcher-experience.md` |
 
 ## 4. 当前真实基础
 
@@ -58,7 +59,7 @@
 最低交付物：
 
 1. 信息架构：普通模式、高级模式、开发者/维护者模式的分层导航。
-2. 三组界面的关键流程原型：首次进入、询问客服 Agent、选择应用、创建任务、观察运行、查看结果、进入设置/调试。
+2. 四组界面的关键流程原型：首次进入、询问客服 Agent、选择应用、创建任务、观察运行、查看结果、进入设置/调试、安装启动器并直达应用包。
 3. 应用包页面模板：至少覆盖研究、学习、代码、知识整理四类应用。
 4. Agent 工作过程可视化规格：真实上下文窗口、工作树下探/返回、历史窗口回顾、工具动作、错误和折叠规则。
 5. 设置/调试分层规格：普通用户设置、应用配置、高级调试、数据与隐私边界。
@@ -66,6 +67,7 @@
 7. 设计系统：组件、状态、密度、响应式规则、可访问性要求。
 8. 工程落地映射：新页面和现有 `apps/web` 组件、应用包 `dashboard.json` 字段、Core API 能力之间的映射。
 9. 删除/下沉清单：哪些旧控制台入口应从普通用户主线移走，哪些废旧测试或文档不应继续表达旧路线。
+10. 启动器交付：安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、诊断、备份恢复、更新回滚和错误状态的设计规格。
 
 ## 6. 设计验收门槛
 
@@ -80,6 +82,7 @@
 - 普通设置不要求编辑 `.env`、raw JSON 或内部 ID。
 - 高级工具仍可找到，但不会成为普通用户默认入口。
 - 数据位置、provider 出机、备份恢复、计划中的删除/远端能力必须表达清楚。
+- 用户从应用专属快捷方式打开产品时，应能直接进入对应应用包界面或任务启动页，而不是回到内部控制台。
 
 ## 7. 资料来源
 
@@ -89,9 +92,9 @@
 - `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md`
 - `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md`
 - `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`
+- `docs/development/INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md`
 - `docs/demos/LOCAL_FIRST_TASK_DEMO.md`
 - `docs/specs/application-package-interface-v0.1.md`
 - `docs/LLM_WORK_ANALYZER_USER_GUIDE.md`
 - `docs/specs/agent-runtime-protocol-v0.2.md`
 - `docs/specs/work-tree-protocol-v0.2.md`
-

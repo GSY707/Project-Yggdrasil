@@ -25,6 +25,7 @@
 - [工作树协议 v0.2](work-tree-protocol-v0.2.md) - 冻结工作树作为动态工作记忆和执行栈的节点 schema、状态机、Working Node 标签、摘要上浮和冲突语义。
 - [世界构建、初次苏醒与任务启动协议 v0.1](world-build-awakening-task-start-protocol-v0.1.md) - 重新划分“先建世界 / 再醒来 / 再开始工作”的世界级与任务级边界，强调建世界与初次苏醒不得接触具体工作信息，并引入“起始状态”作为任务起点。
 - [应用包接口总规范 v0.1](application-package-interface-v0.1.md) - 定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面与控制面 API 接口，明确应用包可携带 memory/ 静态记忆资产，供外部团队直接按契约实现应用包。
+- [官方远端数据服务契约 v0.1](remote-data-service-contract-v0.1.md) - 冻结官方远端数据服务上线前的账号、工作区、同步、远端备份、远端删除证明和本地优先边界；当前为计划契约，不代表服务已发布。
 - [Graduate Researcher 应用包定义 v0.1](graduate-researcher-app-v0.1.md) - 定义“研究生”应用的目标、预算语义与计划-步骤-动作三层行为模型。
 - [Graduate Researcher 测试标准 v0.1](graduate-researcher-test-standard-v0.1.md) - 定义“机器学习研究生”场景的结果验收口径，聚焦自主规划、长任务稳定性与非急性子行为。
 
@@ -78,6 +79,7 @@ v0.2 已冻结以下重做边界：
 - 项目、空间、分支、挂载、权限、PR。
 - 模块安装记录、配置绑定、hook 注册、健康报告、outbox。
 - 资产、切片、嵌入、项目级 package、评测与训练产物。
+- 数据治理 manifest、本地备份快照、本地 task 删除协议、删除证明和官方远端数据服务上线前契约。
 
 ## 6. 第一版硬约束
 

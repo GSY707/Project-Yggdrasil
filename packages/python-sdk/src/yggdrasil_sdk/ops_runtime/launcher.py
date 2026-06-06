@@ -11,6 +11,7 @@ from typing import Sequence
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from yggdrasil_sdk.provider_config import has_provider_key
 from yggdrasil_sdk.support import resolve_state_root, resolve_workspace_root
 
 
@@ -64,18 +65,7 @@ def _ensure_ports_available(ports: dict[int, str], *, allow_existing: bool) -> N
 
 
 def _has_provider_key() -> bool:
-    provider_env_names = (
-        "YGGDRASIL_LLM_API_KEY_LONGCAT",
-        "LONGCAT_API_KEY",
-        "YGGDRASIL_LLM_API_KEY_OPENROUTER",
-        "OPENROUTER_API_KEY",
-        "YGGDRASIL_LLM_API_KEY_DEEPSEEK",
-        "DEEPSEEK_API_KEY",
-        "YGGDRASIL_LLM_API_KEY_VECTORENGINE",
-        "VECTORENGINE_API_KEY",
-        "YGGDRASIL_LLM_API_KEY",
-    )
-    return any(str(os.environ.get(name) or "").strip() for name in provider_env_names)
+    return has_provider_key()
 
 
 def _preflight(*, workspace_root: Path, allow_missing_provider: bool, allow_existing_services: bool) -> None:

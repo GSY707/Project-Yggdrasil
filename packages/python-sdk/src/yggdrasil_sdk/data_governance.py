@@ -114,6 +114,7 @@ def data_asset_manifest(*, workspace_root: Path | None = None) -> dict[str, obje
             "localModeUploadsToOfficialService": False,
             "remoteDataServiceStatus": "planned",
             "remoteDeleteStatus": "planned",
+            "remoteContractRef": "docs/specs/remote-data-service-contract-v0.1.md",
             "providerBoundary": "LLM providers, Langfuse and remote OTel endpoints are outside local hard-delete unless their own delete APIs are integrated.",
         },
     }
@@ -434,6 +435,42 @@ def _delete_state_files(plan: dict[str, object]) -> list[dict[str, object]]:
     return results
 
 
+def _deletion_certificate(
+    plan: dict[str, object],
+    *,
+    executed_at: str,
+    file_results: list[dict[str, object]],
+) -> dict[str, object]:
+    tables = [
+        {"table": str(item.get("table")), "count": int(item.get("count") or 0), "action": str(item.get("action") or "")}
+        for item in plan.get("database", {}).get("tables", [])
+        if isinstance(item, dict)
+    ]
+    file_status_counts: dict[str, int] = {}
+    for item in file_results:
+        status = str(item.get("status") or "unknown")
+        file_status_counts[status] = file_status_counts.get(status, 0) + 1
+    scope_kind = str(plan.get("scopeKind") or "")
+    scope_id = str(plan.get("scopeId") or "")
+    return {
+        "id": new_id("delete-certificate", scope_kind, scope_id, executed_at),
+        "scopeKind": scope_kind,
+        "scopeId": scope_id,
+        "generatedAt": executed_at,
+        "deletedRows": int(plan.get("database", {}).get("totalRows") or 0),
+        "databaseTables": tables,
+        "stateFiles": {
+            "requested": len(plan.get("stateFiles") or []),
+            "deleted": file_status_counts.get("deleted", 0),
+            "alreadyMissing": file_status_counts.get("already-missing", 0),
+            "failed": file_status_counts.get("failed", 0),
+            "results": file_results,
+        },
+        "retainedData": plan.get("retainedData") or [],
+        "warnings": plan.get("warnings") or [],
+    }
+
+
 def execute_task_delete(session: Session, plan: dict[str, object], *, include_state_files: bool = True) -> dict[str, object]:
     if plan.get("scopeKind") != "task":
         raise ValueError("Only task hard delete is enabled in this phase.")
@@ -482,13 +519,15 @@ def execute_task_delete(session: Session, plan: dict[str, object], *, include_st
             session.delete(task)
     session.flush()
 
+    executed_at = utc_now().isoformat()
     file_results = _delete_state_files(plan) if include_state_files else []
     return {
         "status": "completed",
-        "executedAt": utc_now().isoformat(),
+        "executedAt": executed_at,
         "deletedRows": int(plan.get("database", {}).get("totalRows") or 0),
         "stateFiles": file_results,
         "retainedData": plan.get("retainedData") or [],
+        "deletionCertificate": _deletion_certificate(plan, executed_at=executed_at, file_results=file_results),
     }
 
 

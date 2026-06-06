@@ -31,7 +31,23 @@ export interface ServiceHealthSnapshot {
   service: string;
   database?: Record<string, unknown>;
   redis?: Record<string, unknown>;
+  providerStatus?: ProviderConfigurationStatus;
   setupChecklist?: SetupChecklistItem[];
+}
+
+export interface ProviderConfigurationStatus {
+  status: "ready" | "warning" | "blocked";
+  mode: "configured" | "live-disabled" | "missing-provider-key";
+  configuredProviders: Array<{
+    id: string;
+    label: string;
+    envNames: string[];
+    configuredEnvNames: string[];
+  }>;
+  requiredAnyOf: string[];
+  disabledEnv: string;
+  detail: string;
+  remediation?: string | null;
 }
 
 export interface SetupChecklistItem {
@@ -705,6 +721,51 @@ export interface DataGovernanceDeletionPlan {
   retainedData?: Array<Record<string, unknown>>;
 }
 
+export interface DataGovernanceBackupSnapshot {
+  name: string;
+  snapshotDir: string;
+  createdAt?: string | null;
+  databaseKind?: string | null;
+  databaseSnapshot?: string | null;
+  stateSnapshot?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DataGovernanceBackupsResponse {
+  backupRoot: string;
+  snapshots: DataGovernanceBackupSnapshot[];
+}
+
+export interface DataGovernanceDeletionCertificate {
+  id: string;
+  scopeKind: string;
+  scopeId: string;
+  generatedAt: string;
+  deletedRows: number;
+  databaseTables: Array<{ table: string; count: number; action: string }>;
+  stateFiles: {
+    requested: number;
+    deleted: number;
+    alreadyMissing: number;
+    failed: number;
+    results: Array<Record<string, unknown>>;
+  };
+  retainedData: Array<Record<string, unknown>>;
+  warnings: string[];
+  backupSnapshotDir?: string | null;
+}
+
+export interface DataGovernanceDeletionResult {
+  status: string;
+  executedAt?: string;
+  deletedRows?: number;
+  stateFiles?: Array<Record<string, unknown>>;
+  retainedData?: Array<Record<string, unknown>>;
+  deletionCertificate?: DataGovernanceDeletionCertificate;
+  backup?: DataGovernanceBackupSnapshot | Record<string, unknown>;
+  error?: string;
+}
+
 export interface DataGovernanceOperationRecord {
   id: string;
   operationType: string;
@@ -713,7 +774,7 @@ export interface DataGovernanceOperationRecord {
   dryRun: boolean;
   status: string;
   plan?: DataGovernanceDeletionPlan | null;
-  result?: Record<string, unknown> | null;
+  result?: DataGovernanceDeletionResult | Record<string, unknown> | null;
   requestedBy?: Record<string, unknown>;
   reason?: string | null;
   createdAt: string;
@@ -727,6 +788,17 @@ export interface DataGovernanceOperationsResponse {
 
 export interface DataGovernanceDeletionPlanResponse {
   plan: DataGovernanceDeletionPlan;
+  operation: DataGovernanceOperationRecord;
+}
+
+export interface DataGovernanceBackupResponse {
+  backup: DataGovernanceBackupSnapshot | Record<string, unknown>;
+  operation: DataGovernanceOperationRecord;
+}
+
+export interface DataGovernanceDeletionResponse {
+  plan: DataGovernanceDeletionPlan;
+  result: DataGovernanceDeletionResult;
   operation: DataGovernanceOperationRecord;
 }
 

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
 const SERVICES_FOR_LOGS = ["core-api", "agent-runtime", "module-host", "worker", "web"];
 const APP_SERVICES = ["web", "worker", "agent-runtime", "module-host", "core-api"];
 
 const command = process.argv[2] ?? "status";
-const rest = process.argv.slice(3);
+const rawRest = process.argv.slice(3);
+const rest = rawRest[0] === "--" ? rawRest.slice(1) : rawRest;
+const productEnvPath = existsSync("infra/product.env") ? "infra/product.env" : "infra/product.env.template";
+const productEnvFileForCompose = productEnvPath.endsWith("product.env") ? "./product.env" : "./product.env.template";
 const composePrefix = [
   "compose",
   "--env-file",
-  "infra/product.env.template",
+  productEnvPath,
   "-f",
   "infra/docker-compose.product.yml",
 ];
@@ -22,6 +26,7 @@ const commandArgs = {
   status: ["ps"],
   logs: ["logs", "-f", ...SERVICES_FOR_LOGS],
   backup: ["exec", "-T", "core-api", "yggdrasil-ops", "backup", "create"],
+  snapshots: ["run", "--rm", "--no-deps", "core-api", "yggdrasil-ops", "backup", "list"],
 };
 
 const composeEnv = {
@@ -29,11 +34,12 @@ const composeEnv = {
   COMPOSE_BAKE: "false",
   COMPOSE_DOCKER_CLI_BUILD: "0",
   DOCKER_BUILDKIT: "0",
+  YGGDRASIL_PRODUCT_ENV_FILE: productEnvFileForCompose,
 };
 
-function runCompose(args) {
+function runCommand(executable, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", [...composePrefix, ...args], {
+    const child = spawn(executable, args, {
       env: composeEnv,
       stdio: "inherit",
     });
@@ -43,16 +49,24 @@ function runCompose(args) {
         resolve();
         return;
       }
-      reject(new Error(`docker compose ${args.join(" ")} exited with code ${code ?? 1}`));
+      reject(new Error(`${executable} ${args.join(" ")} exited with code ${code ?? 1}`));
     });
   });
 }
 
-async function restoreProductStack() {
+function runCompose(args) {
+  return runCommand("docker", [...composePrefix, ...args]);
+}
+
+function runProductSmoke() {
+  return runCommand("uv", ["run", "python", "-m", "yggdrasil_sdk.ops_cli", "product-compose-smoke"]);
+}
+
+async function restoreProductStack(args) {
   await runCompose(["stop", ...APP_SERVICES]);
   let restoreError = null;
   try {
-    await runCompose(["run", "--rm", "--no-deps", "core-api", "yggdrasil-ops", "backup", "restore", ...rest]);
+    await runCompose(["run", "--rm", "--no-deps", "core-api", "yggdrasil-ops", "backup", "restore", ...args]);
   } catch (error) {
     restoreError = error;
   }
@@ -62,9 +76,38 @@ async function restoreProductStack() {
   }
 }
 
+async function upgradeProductStack() {
+  await runCompose(["exec", "-T", "core-api", "yggdrasil-ops", "backup", "create"]);
+  await runCompose(["stop", ...APP_SERVICES]);
+  await runCompose(["up", "-d", "--build"]);
+  await runProductSmoke();
+}
+
+async function tryProtectiveBackup() {
+  try {
+    await runCompose(["run", "--rm", "--no-deps", "core-api", "yggdrasil-ops", "backup", "create"]);
+  } catch (error) {
+    console.warn(`Protective pre-rollback backup failed; continuing rollback: ${error.message}`);
+  }
+}
+
+async function rollbackProductStack() {
+  await tryProtectiveBackup();
+  await restoreProductStack(rest);
+  await runProductSmoke();
+}
+
 async function main() {
   if (command === "restore") {
-    await restoreProductStack();
+    await restoreProductStack(rest);
+    return;
+  }
+  if (command === "upgrade") {
+    await upgradeProductStack();
+    return;
+  }
+  if (command === "rollback") {
+    await rollbackProductStack();
     return;
   }
   const composeArgs = commandArgs[command] ?? [command, ...rest];

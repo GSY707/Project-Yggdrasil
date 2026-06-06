@@ -3,6 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import type { ServiceHealthSnapshot } from "@yggdrasil/frontend-sdk";
+
+import { useApiResource } from "../lib/use-api-resource";
 import { PageHeader, StatCard, StatusBadge, Surface } from "./workbench-primitives";
 
 const releaseModes = [
@@ -29,22 +32,22 @@ const releaseModes = [
   {
     mode: "完整 Docker Compose 产品栈",
     status: "preview",
-    install: "infra/product.env.template + corepack pnpm product:up",
+    install: "复制 infra/product.env.template 到 infra/product.env 后执行 product:up",
     launch: "corepack pnpm product:up，然后访问 http://localhost:3000",
-    update: "停止产品栈，更新镜像 tag 或源码后重新 product:up；迁移由 migrate job 执行",
+    update: "corepack pnpm product:upgrade；失败时用 product:rollback 恢复快照",
     data: "postgres-data、yggdrasil-state、yggdrasil-backups、minio-data 四类 volume 分离",
     backup: "corepack pnpm product:backup / corepack pnpm product:restore",
-    boundary: "已提供预览 compose、镜像构建和 smoke；正式发布前仍需冷启动、备份恢复和升级回滚验收。",
+    boundary: "已提供预览 compose、镜像构建、smoke、备份、恢复、升级和回滚维护窗口；正式发布前仍需多版本升级验收。",
   },
   {
     mode: "桌面封装",
     status: "preview",
-    install: "packaging/desktop/windows/*.cmd",
-    launch: "双击 Yggdrasil Desktop.cmd，或运行 Yggdrasil.Desktop.ps1 start",
-    update: "自动更新和安装/卸载器尚未发布",
+    install: "packaging/desktop/windows/Yggdrasil Installer.cmd",
+    launch: "双击 Yggdrasil Tray.cmd，或从托盘 Start and Open",
+    update: "Yggdrasil Update.cmd 检查；Yggdrasil Apply Update.cmd 仅 fast-forward 手动应用",
     data: "复用产品 compose volume；不引入远端同步",
     backup: "Yggdrasil.Desktop.ps1 backup / restore",
-    boundary: "这是 Windows 薄启动器预览，不是正式安装包或托盘应用。",
+    boundary: "这是 Windows 未签名桌面封装预览，已提供安装/卸载、托盘、快捷方式和手动更新检查；签名和静默自动更新未完成。",
   },
   {
     mode: "托管 / SaaS",
@@ -141,14 +144,26 @@ const actionItems = [
   {
     title: "删除本地状态",
     status: "preview",
-    command: "打开 /data-governance，先按 task / asset / node 生成删除影响预览。",
-    detail: "当前 Web 只暴露 dry-run；task 硬删除需要后端 confirmScopeId，asset/node 仍是策略冻结前的预览。",
+    command: "打开 /data-governance，按 task / asset / node 生成删除影响预览；task 可在无 blocker 时精确确认执行。",
+    detail: "Web 支持保护性 task 硬删除、删除前备份和删除证明；asset/node 仍是策略冻结前的预览。",
   },
   {
     title: "密钥轮换",
     status: "available",
     command: "更新 .env 或用户级环境变量，然后重启本地产品。",
     detail: "仓库不会托管真实 key；如 key 误入仓库，应立即撤销 provider 侧凭据。",
+  },
+  {
+    title: "产品栈升级",
+    status: "preview",
+    command: "corepack pnpm product:upgrade",
+    detail: "升级前创建保护性快照，随后重建并运行 product smoke。",
+  },
+  {
+    title: "产品栈回滚",
+    status: "preview",
+    command: "corepack pnpm product:rollback -- --snapshot <snapshot>",
+    detail: "先尝试保护性快照，再恢复指定快照并重新拉起应用服务。",
   },
 ];
 
@@ -202,6 +217,11 @@ function MatrixCard({ item }: { item: (typeof releaseModes)[number] }) {
 }
 
 export function ReleasePage() {
+  const health = useApiResource<ServiceHealthSnapshot>("/health");
+  const providerStatus = health.data?.providerStatus;
+  const providerValue = providerStatus?.status === "ready" ? "已配置" : providerStatus?.status === "warning" ? "测试模式" : "未配置";
+  const providerCopy = providerStatus?.detail ?? (health.error ? `Provider 状态不可用：${health.error}` : "正在读取 provider 配置状态。");
+
   return (
     <div>
       <PageHeader
@@ -232,6 +252,7 @@ export function ReleasePage() {
 
       <section className="stat-grid">
         <StatCard label="推荐模式" value="本地产品" copy="当前外部试用优先使用 corepack pnpm yggdrasil:up。" />
+        <StatCard label="Provider" value={providerValue} copy={providerCopy} />
         <StatCard label="数据默认位置" value=".yggdrasil" copy="状态根、运行工件、观测 JSONL 与产品日志都在本机。" />
         <StatCard label="备份命令" value="ops:backup" copy="当前正式导出路径是本地运行时快照。" />
         <StatCard label="托管服务" value="计划中" copy="官方远端托管、备份和删除已进入计划；当前不提供 uptime 承诺。" />

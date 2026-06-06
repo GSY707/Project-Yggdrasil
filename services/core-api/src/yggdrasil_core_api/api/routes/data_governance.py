@@ -21,6 +21,25 @@ def list_data_governance_operations(
     return service.list_data_governance_operations(limit=limit)
 
 
+@router.get("/backups")
+def list_data_governance_backups(
+    limit: int = Query(default=20, ge=1, le=100),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    return service.list_data_governance_backups(limit=limit)
+
+
+@router.post("/backup")
+def create_data_governance_backup(
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.create_data_governance_backup(payload or {})
+    except (FileNotFoundError, RuntimeError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
 @router.post("/deletion-plan")
 def create_deletion_plan(
     payload: dict[str, Any] = Body(...),

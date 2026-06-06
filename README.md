@@ -55,12 +55,12 @@ corepack pnpm yggdrasil:up
 |------|----------|----------|----------|----------|
 | 开发者工作区 | 可用 | 手动启动服务或 `corepack pnpm yggdrasil:up` | `.yggdrasil` / compose 数据库 | 面向贡献者和调试 |
 | 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | `.yggdrasil`、`.yggdrasil/product-logs`、`.yggdrasil-backups` | 当前外部试用默认模式 |
-| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | Compose volume：`postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` | 使用 `infra/docker-compose.product.yml`，仍需冷启动、备份恢复和升级回滚验收后才能作为正式发行 |
-| 桌面封装 | 薄封装预览 | `packaging/desktop/windows/Yggdrasil Desktop.cmd` | 同产品 Compose volume | Windows 启动/停止/状态/日志/备份入口已提供；还不是正式安装包、托盘或自动更新器 |
+| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | Compose volume：`postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` | 使用 `infra/docker-compose.product.yml`；已提供 product env、备份、恢复、快照列表、升级和回滚维护命令，正式发行前仍需多版本升级验收 |
+| 桌面封装 | 未签名安装包预览 | `packaging/desktop/windows/Yggdrasil Installer.cmd` / `Yggdrasil Tray.cmd` | 同产品 Compose volume | Windows 未签名安装/卸载、托盘控制器、启动/停止/状态/日志/备份/恢复/快照/升级/回滚、更新检查和手动应用入口已提供；签名和静默自动更新未完成 |
 | 托管 / SaaS | 计划中 | 尚未发布 | 计划支持官方远端工作区；当前不会自动上传 | 已进入路线图，但当前无 uptime 或商业支持承诺 |
-| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除待设计 | 当前仍只支持本地 backup/restore |
+| 官方远端数据服务 | 计划中 | 尚未发布 | 远端数据托管、远端备份、远端删除契约已冻结草案 | 当前仍只支持本地 backup/restore；契约见 `docs/specs/remote-data-service-contract-v0.1.md` |
 
-数据治理 dry-run 与审计入口位于 `/data-governance`；当前 Web 只开放删除预览，不直接暴露危险硬删除按钮。完整需求与差距见 `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`，删除协议见 `docs/specs/data-governance-manifest-v0.1.md`。
+数据治理入口位于 `/data-governance`；当前 Web 已开放备份快照、删除预览、受保护 task 硬删除、删除证明和审计，asset / node 仍只做预览。完整需求与差距见 `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`，删除协议见 `docs/specs/data-governance-manifest-v0.1.md`，官方远端数据服务契约见 `docs/specs/remote-data-service-contract-v0.1.md`。
 
 ## 系统定位
 
@@ -102,7 +102,7 @@ corepack pnpm yggdrasil:up
 - docs：PRD、ADR、协议与数据规格。
 - evaluation：正式评测样本、suite 定义与基线数据。
 - infra：本地依赖基础设施、产品 Docker Compose 预览栈与观测组件。
-- packaging/desktop/windows：Windows 桌面薄启动器预览，包装产品 Compose 的启动、停止、状态、日志、备份和恢复入口。
+- packaging/desktop/windows：Windows 桌面封装预览，提供未签名安装器、托盘控制器、更新检查/手动应用和产品 Compose 启动、停止、状态、日志、备份、恢复入口。
 
 ## 开源协作
 
@@ -139,12 +139,19 @@ http://localhost:3000
 完整产品栈预览入口：
 
 ```powershell
+Copy-Item infra/product.env.template infra/product.env
 corepack pnpm product:compose:config
 corepack pnpm product:up
+corepack pnpm product:status
 corepack pnpm product:smoke
+corepack pnpm product:backup
+corepack pnpm product:snapshots
+corepack pnpm product:restore -- --snapshot <snapshot>
+corepack pnpm product:upgrade
+corepack pnpm product:rollback -- --snapshot <snapshot>
 ```
 
-该入口使用 `infra/docker-compose.product.yml`，会构建 Core API、Agent Runtime、Module Host、Worker 和 Web 镜像，并拉起数据库、Redis、NATS、MinIO、Temporal、Jaeger 与 OTel Collector。它目前是预览发行路径，适合验证自托管产品形态；正式发行前仍需补齐冷启动、备份/恢复、升级/回滚和 provider key 阻塞提示验收。
+该入口使用 `infra/docker-compose.product.yml`，会构建 Core API、Agent Runtime、Module Host、Worker 和 Web 镜像，并拉起数据库、Redis、NATS、MinIO、Temporal、Jaeger 与 OTel Collector。`scripts/product-compose.mjs` 会优先读取未跟踪的 `infra/product.env`，不存在时才回退到模板。Provider key 状态会通过 `/health.providerStatus` 暴露给 Web；未就绪或 fallback 测试模式会阻止直接启动真实任务，但仍允许创建草稿。它目前是预览发行路径，适合验证自托管产品形态；正式发行前仍需完成多版本升级、回滚和冷启动演练。
 
 ### 开发者手动启动服务
 

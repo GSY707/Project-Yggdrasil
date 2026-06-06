@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .ops_runtime import create_runtime_backup, latest_snapshot_dir, launch_local_product, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_product_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
+from .ops_runtime import create_runtime_backup, latest_snapshot_dir, launch_local_product, list_runtime_backups, prepare_real_user_validation_sandbox, resolve_backup_root, restore_runtime_backup, run_compose_smoke, run_product_compose_smoke, run_real_user_live_task_pack, summarize_real_user_scorecard
 from .support import load_workspace_dotenv
 
 
@@ -22,6 +22,9 @@ def main() -> None:
 
     restore_parser = backup_subparsers.add_parser("restore", help="Restore a backup snapshot.")
     restore_parser.add_argument("--snapshot", help="Snapshot directory. Defaults to the latest snapshot.")
+
+    list_parser = backup_subparsers.add_parser("list", help="List available backup snapshots.")
+    list_parser.add_argument("--limit", type=int, default=50, help="Maximum snapshots to list.")
 
     smoke_parser = subparsers.add_parser("compose-smoke", help="Verify local compose dependencies.")
     smoke_parser.add_argument("--ensure-up", action="store_true", help="Run docker compose up -d before smoke checks.")
@@ -77,6 +80,11 @@ def main() -> None:
     if args.command == "backup" and args.backup_command == "restore":
         snapshot_dir = Path(args.snapshot).resolve() if args.snapshot else None
         result = restore_runtime_backup(snapshot_dir=snapshot_dir)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "backup" and args.backup_command == "list":
+        result = list_runtime_backups(limit=int(args.limit))
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 

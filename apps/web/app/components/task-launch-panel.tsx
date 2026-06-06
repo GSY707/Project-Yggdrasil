@@ -8,12 +8,14 @@ import type {
   ApplicationCatalogItem,
   ApplicationDashboard,
   ApplicationTaskTemplate,
+  ProviderConfigurationStatus,
+  ServiceHealthSnapshot,
   TaskLaunchAttachment,
   TaskCreateResponse,
   TaskControlActionResponse,
 } from "@yggdrasil/frontend-sdk";
 
-import { postApiJson } from "../lib/use-api-resource";
+import { postApiJson, useApiResource } from "../lib/use-api-resource";
 import { EmptyState, ErrorState, StatusBadge, Surface } from "./workbench-primitives";
 
 type TaskLaunchPanelProps = {
@@ -143,6 +145,68 @@ function explainLaunchError(rawError: string, stage: "create" | "start"): string
   return rawError;
 }
 
+function ProviderReadiness({ error, isLoading, status }: { error?: string | null; isLoading?: boolean; status?: ProviderConfigurationStatus }) {
+  if (isLoading) {
+    return (
+      <div className="launch-template">
+        <div className="record-head">
+          <div>
+            <p className="meta-label">模型供应商</p>
+            <h4 className="record-title">正在检查 provider key</h4>
+            <p className="meta-copy">启动动作会在配置状态确认后开放。</p>
+          </div>
+          <StatusBadge value="pending" />
+        </div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="launch-template">
+        <div className="record-head">
+          <div>
+            <p className="meta-label">模型供应商</p>
+            <h4 className="record-title">Provider 状态不可用</h4>
+            <p className="meta-copy">{error}</p>
+          </div>
+          <StatusBadge value="blocked" />
+        </div>
+      </div>
+    );
+  }
+  if (!status) {
+    return null;
+  }
+  const configuredLabels = status.configuredProviders.map((provider) => provider.label);
+  const required = status.requiredAnyOf.slice(0, 5).join(" / ");
+  return (
+    <div className="launch-template">
+      <div className="record-head">
+        <div>
+          <p className="meta-label">模型供应商</p>
+          <h4 className="record-title">
+            {status.status === "ready" ? "Provider key 已就绪" : status.status === "warning" ? "当前为 fallback 测试模式" : "启动前必须配置 provider key"}
+          </h4>
+          <p className="meta-copy">{status.detail}</p>
+        </div>
+        <StatusBadge value={status.status} />
+      </div>
+      {configuredLabels.length > 0 ? (
+        <div className="pill-row">
+          {configuredLabels.map((label) => (
+            <span className="inline-chip" key={label}>
+              {label}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="meta-copy mono">需要设置：{required}</p>
+      )}
+      {status.remediation ? <p className="meta-copy">{status.remediation}</p> : null}
+    </div>
+  );
+}
+
 export function TaskLaunchPanel({
   applications,
   defaultAppId,
@@ -151,6 +215,9 @@ export function TaskLaunchPanel({
   initialAttachments = [],
 }: TaskLaunchPanelProps) {
   const router = useRouter();
+  const health = useApiResource<ServiceHealthSnapshot>("/health");
+  const providerStatus = health.data?.providerStatus;
+  const providerStartBlocked = providerStatus?.status !== "ready";
   const [selectedAppId, setSelectedAppId] = useState(defaultAppId ?? applications.find((item) => item.configBinding.active)?.application.appId ?? applications[0]?.application.appId ?? "");
   const selectedApp = applications.find((item) => item.application.appId === selectedAppId) ?? applications[0];
   const templates = useMemo(() => (selectedApp ? templatesFor(selectedApp) : []), [selectedApp]);
@@ -267,6 +334,8 @@ export function TaskLaunchPanel({
         {selectedApp ? <StatusBadge value={selectedApp.configBinding.active ? "active" : "available"} /> : null}
       </div>
 
+      <ProviderReadiness error={health.error} isLoading={health.isLoading} status={providerStatus} />
+
       {launchError ? <ErrorState title="任务启动失败" detail={launchError} /> : null}
 
       <div className="launch-grid">
@@ -360,14 +429,14 @@ export function TaskLaunchPanel({
       ) : null}
 
       <div className="field-actions">
-        <button className="action-button" disabled={isSubmitting || !selectedTemplate} onClick={() => void handleCreateAndStart()} type="button">
+        <button className="action-button" disabled={isSubmitting || !selectedTemplate || providerStartBlocked} onClick={() => void handleCreateAndStart()} type="button">
           {isSubmitting ? "处理中" : createdTaskId ? "启动已创建任务" : "创建并启动"}
         </button>
         <button className="ghost-button" disabled={isSubmitting || !selectedTemplate} onClick={() => void handleCreateOnly()} type="button">
           只创建草稿
         </button>
         {createdTaskId ? (
-          <button className="ghost-button" disabled={isSubmitting} onClick={() => void handleStartCreated()} type="button">
+          <button className="ghost-button" disabled={isSubmitting || providerStartBlocked} onClick={() => void handleStartCreated()} type="button">
             立即启动
           </button>
         ) : null}
