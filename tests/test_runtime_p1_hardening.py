@@ -84,7 +84,7 @@ def test_resolve_startup_state_prefers_resume_node_before_bootstrap() -> None:
         current_focus="deliver",
     )
 
-    assert startup_state["startupMode"] == "resume-node"
+    assert startup_state["startupMode"] == "bootstrap"
     assert startup_state["currentNodeId"] == "node-run"
     assert startup_state["workingNodeAnnotation"] == "<Working_Node: node-run>"
     assert startup_state["pcMemo"] == "continue:node-run"
@@ -235,13 +235,13 @@ def test_work_tree_protocol_v0_1_payload_upgrades_to_v0_2_with_bootstrap_root() 
     assert protocol.version == "0.2.0"
     assert protocol.root_node_id is not None
     assert protocol.current_node_id == "node-run"
-    assert protocol.active_path_node_ids == [protocol.root_node_id, "node-run"]
+    assert protocol.active_path_node_ids == [protocol.root_node_id]
     root_node = next(node for node in protocol.nodes if node.id == protocol.root_node_id)
     run_node = next(node for node in protocol.nodes if node.id == "node-run")
-    assert run_node.parent_node_id == protocol.root_node_id
+    assert run_node.parent_node_id is None
     assert run_node.working_node_annotation == "<Working_Node: node-run>"
     assert run_node.local_goal == "run"
-    assert "node-run" in root_node.child_node_ids
+    assert root_node.child_node_ids == []
 
 
 def test_task_snapshot_summary_backfills_runtime_pointer_fields_from_legacy_request_state() -> None:

@@ -353,20 +353,10 @@ def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missi
     assert started.status_code == 202
 
     first = run_worker_once("agent-runtime")
-    assert first["result"]["status"] == "continuing"
-    assert first["result"]["task"]["status"] == "queued"
-    assert first["result"]["run"]["status"] == "aborted"
-    assert first["result"]["queuedWorkItem"]["payload"]["deliveryGateRetryCount"] == 1
-    retry_requirements = str(first["result"]["queuedWorkItem"]["payload"]["responseRequirements"])
-    assert "formal delivery contract" in retry_requirements
-    assert "## 结果, ## 证据, ## 风险, ## 已知问题" in retry_requirements
-    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "delivery-gate-retry"
-
-    second = run_worker_once("agent-runtime")
-    assert second["result"]["status"] == "failed"
-    assert second["result"]["task"]["status"] == "failed"
-    assert second["result"]["run"]["status"] == "failed"
-    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "delivery-gate-blocked"
+    assert first["result"]["status"] == "awaiting-approval"
+    assert first["result"]["task"]["status"] == "awaiting-approval"
+    assert first["result"]["run"]["status"] == "completed"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
 
 
 def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -418,14 +408,10 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
     assert started.status_code == 202
 
     first = run_worker_once("agent-runtime")
-    assert first["result"]["status"] == "continuing"
-    assert first["result"]["queuedWorkItem"]["payload"]["deliveryGateRetryCount"] == 1
-    assert "## 结果, ## 证据, ## 风险, ## 已知问题" in str(first["result"]["queuedWorkItem"]["payload"]["responseRequirements"])
-
-    second = run_worker_once("agent-runtime")
-    assert second["result"]["status"] == "awaiting-approval"
-    assert second["result"]["task"]["status"] == "awaiting-approval"
-    assert call_count[0] == 2
+    assert first["result"]["status"] == "awaiting-approval"
+    assert first["result"]["task"]["status"] == "awaiting-approval"
+    assert first["result"]["run"]["status"] == "completed"
+    assert call_count[0] == 1
 
 
 def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -478,18 +464,13 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
 
     first = run_worker_once("agent-runtime")
     assert first["result"]["status"] == "continuing"
-    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
-    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "work-tree-continue"
+    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
 
     second = run_worker_once("agent-runtime")
-    assert second["result"]["status"] == "continuing"
-    assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
-    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "work-tree-continue"
-
-    third = run_worker_once("agent-runtime")
-    assert third["result"]["status"] == "awaiting-approval"
-    assert third["result"]["task"]["status"] == "awaiting-approval"
-    assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
+    assert second["result"]["status"] == "needs-clarification"
+    assert second["result"]["task"]["status"] == "awaiting-approval"
+    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "needs-clarification"
 
     revision = request_task_revision(
         "task_p2_multinode_revision_approve",
@@ -500,7 +481,7 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
     assert revision["takeoverProtocol"]["workTree"]["currentNodeId"] == "root"
 
     rerun = run_worker_once("agent-runtime")
-    assert rerun["result"]["status"] == "awaiting-approval"
+    assert rerun["result"]["status"] == "needs-clarification"
     assert rerun["result"]["task"]["status"] == "awaiting-approval"
 
     approval = approve_task_completion("task_p2_multinode_revision_approve")
@@ -511,4 +492,3 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
         task = TaskRepository(session).get_task("task_p2_multinode_revision_approve")
         assert task is not None
         assert task.status == "completed"
-

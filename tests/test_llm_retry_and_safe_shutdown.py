@@ -5,12 +5,15 @@ import io
 import json
 import time
 import threading
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch, call
 import urllib.error as urllib_error
 import urllib.request as urllib_request
 
 import pytest
+
+from yggdrasil_sdk.llm_runtime import core as llm_runtime_core
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +264,7 @@ def test_execute_resumed_tool_calls_inserts_assistant_tool_bridge_message(monkey
             "result": {"status": "ok", "path": arguments.get("path")},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     conversation_messages = [{"role": "user", "content": "resume pending tools"}]
     tool_executions: list[dict[str, Any]] = []
@@ -304,7 +307,7 @@ def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_a
             "result": {"status": "ok", "path": arguments.get("path")},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     conversation_messages = [{"role": "user", "content": "resume pending tools"}]
     tool_executions: list[dict[str, Any]] = []
@@ -363,7 +366,7 @@ def test_execute_tool_with_isolation_retries_timeout_then_succeeds(monkeypatch) 
             "result": {"status": "ok"},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.read.read_file", "arguments": {"path": "README.md"}},
         tool_call_id="tc_retry_1",
@@ -394,7 +397,7 @@ def test_execute_tool_with_isolation_repairs_raw_argument_for_single_required_fi
             "result": {"status": "ok", "path": arguments.get("path")},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.read.read_file", "arguments": {"_raw": "README.md"}, "argumentsText": "README.md"},
@@ -426,7 +429,7 @@ def test_execute_tool_with_isolation_repairs_value_argument_for_single_required_
             "result": {"status": "ok", "query": arguments.get("query")},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.search.search_text", "arguments": {"value": "window parity"}},
@@ -548,7 +551,7 @@ def test_execute_tool_with_isolation_fails_fast_on_placeholder_required_argument
             "result": {"status": "ok"},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.read.read_file", "arguments": {"path": {}}, "argumentsText": '{"path":"{}"}'},
@@ -581,7 +584,7 @@ def test_execute_tool_with_isolation_allows_text_memory_read_node_without_node_i
             "result": {"status": "ok"},
         }
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
 
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "text_memory.read_node", "arguments": {}, "argumentsText": "{}"},
@@ -605,7 +608,7 @@ def test_execute_tool_with_isolation_reports_failure_after_retry_budget(monkeypa
     def _fake_execute_registered_tool(name, arguments, **kwargs):
         raise ConnectionError("downstream disconnected")
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.read.read_file", "arguments": {"path": "README.md"}},
         tool_call_id="tc_retry_2",
@@ -628,7 +631,7 @@ def test_execute_tool_with_isolation_reports_argument_hint_for_invalid_arguments
     def _fake_execute_registered_tool(name, arguments, **kwargs):
         raise ValueError("missing required argument: command")
 
-    monkeypatch.setattr(llm_runtime, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
     result = llm_runtime._execute_tool_with_isolation(
         call={"name": "mcp.execute.run_command", "arguments": {}},
         tool_call_id="tc_arg_hint_1",

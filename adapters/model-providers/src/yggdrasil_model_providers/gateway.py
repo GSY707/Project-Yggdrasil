@@ -38,6 +38,7 @@ _LONGCAT_ARGUMENT_ALIASES = {
     "working_directory": "workingDirectory",
     "timeout_ms": "timeoutMs",
 }
+@dataclass
 class ProviderConfig:
     provider: str
     api_key: str

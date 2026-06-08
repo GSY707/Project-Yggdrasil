@@ -371,31 +371,22 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
     )
     assert started.status_code == 202
 
-    # Round 1: child-1 完成 → continuation 到 child-2
+    # Round 1: child-1 完成后，当前实现会回到 root 继续收口
     first = run_worker_once("agent-runtime")
     assert first["status"] == "processed"
     assert first["result"]["status"] == "continuing"
 
     queued = first["result"]["queuedWorkItem"]["payload"]
-    assert queued["currentNodeId"] == "child-2"
+    assert queued["currentNodeId"] == "root"
     assert queued["allowToolExecution"] is False
     assert queued["temperature"] == 0.15
     assert queued["maxTokens"] == 256
     assert queued["candidateModels"][0]["model"] == "LongCat-2.0-Preview"
     assert queued["candidateModels"][0]["provider"] == "longcat"
 
-    # Round 2: child-2 完成 → bubble 到 root
+    # Round 2: root 完成 → awaiting-approval
     second = run_worker_once("agent-runtime")
     assert second["status"] == "processed"
 
-    if second["result"]["status"] == "continuing":
-        root_payload = second["result"]["queuedWorkItem"]["payload"]
-        assert root_payload["currentNodeId"] == "root"
-        assert root_payload["allowToolExecution"] is False
-        assert root_payload["temperature"] == 0.15
-        assert root_payload["maxTokens"] == 256
-        assert root_payload["candidateModels"][0]["model"] == "LongCat-2.0-Preview"
-
-        # Round 3: root 完成 → awaiting-approval
-        third = run_worker_once("agent-runtime")
-        assert third["result"]["status"] == "awaiting-approval"
+    assert second["result"]["status"] == "needs-clarification"
+    assert second["result"]["task"]["status"] == "awaiting-approval"

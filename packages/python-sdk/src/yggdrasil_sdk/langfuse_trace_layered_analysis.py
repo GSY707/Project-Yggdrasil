@@ -74,11 +74,15 @@ _DYNAMIC_ID_PATTERNS = [
     (re.compile(r"promptcmp_[a-z0-9]+", re.IGNORECASE), "promptcmp_*"),
 ]
 _NULLISH_TEXTS = {"", "null", "none", "{}", "[]"}
+@dataclass
 class ConversationMessage:
     role: str
     content: str
     source: str
     index: int
+
+
+@dataclass
 class WindowRecord:
     window: int
     snapshot: str
@@ -89,11 +93,17 @@ class WindowRecord:
     restoredFieldCount: int | None
     retrievedNodeCount: int | None
     materializedContextCount: int | None
+
+
+@dataclass
 class LocalInvocationArtifacts:
     requestPath: str | None
     responsePath: str | None
     requestPayload: dict[str, Any]
     responsePayload: dict[str, Any]
+
+
+@dataclass
 class ObservationEvidence:
     observationId: str
     model: str
@@ -115,6 +125,9 @@ class ObservationEvidence:
     assistantProcessUtterances: list[dict[str, Any]]
     toolCallNames: list[str]
     localArtifacts: LocalInvocationArtifacts | None
+
+
+@dataclass
 class LocalDbTraceMatch:
     dbPath: str
     matchedBy: str
