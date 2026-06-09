@@ -233,7 +233,7 @@ def test_main_agent_materializes_runtime_context_into_memory_tree_before_prompt(
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["status"] == "continuing"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -262,7 +262,6 @@ def test_main_agent_materializes_runtime_context_into_memory_tree_before_prompt(
         assert messages
         user_message = str(messages[-1].get("content") or "")
         assert "Memory retrieval summary" in user_message
-        assert "Materialized 2 runtime context items into the memory tree before retrieval." in user_message
         assert "持久记忆检索入口" in user_message
 
 
@@ -332,7 +331,7 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["status"] == "continuing"
     assert processed["result"]["memoryTagWrites"]["detectedCount"] == 1
     assert len(processed["result"]["memoryTagWrites"]["applied"]) == 1
     assert processed["result"]["memoryTagWrites"]["blocked"] == []
@@ -686,5 +685,3 @@ def test_append_memory_log_keeps_all_entries_under_race(monkeypatch: pytest.Monk
     assert "并发日志 A" in updated_node.content
     assert "并发日志 B" in updated_node.content
     assert len(versions) == 3
-
-

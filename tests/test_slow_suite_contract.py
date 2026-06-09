@@ -15,8 +15,7 @@ SLOW_TEST_FILES = {
     "tests/test_mcp_bridge.py",
     "tests/test_module_host_eventing.py",
     "tests/test_phase3_stability_and_scale.py",
-    "tests/test_runtime_and_pruning.py",
-    "tests/test_persistence_api.py",
+    "tests/runtime/test_runtime_budget_and_audit.py",
 }
 
 
@@ -42,7 +41,7 @@ def test_fast_ci_workflows_keep_excluding_slow_tests() -> None:
 def test_nightly_slow_job_runs_in_parallel() -> None:
     nightly = _read_repo_file(".github/workflows/nightly.yml")
 
-    assert "uv run pytest -m slow -n auto --dist loadfile" in nightly
+    assert "uv run pytest -m slow -n 2 --dist loadfile" in nightly
 
 
 def test_all_suite_files_have_role_metadata() -> None:
@@ -52,4 +51,4 @@ def test_all_suite_files_have_role_metadata() -> None:
         suite = json.loads(path.read_text(encoding="utf-8"))
         if "suiteRole" not in suite:
             missing.append(path.name)
-    assert not missing, "Suites missing suiteRole: " + ", ".join(missing)
+    assert not missing, "Suites missing suiteRole: " + ", ".join(missing)

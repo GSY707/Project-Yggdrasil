@@ -26,4 +26,4 @@ jobs:
         run: uv sync --all-packages --group dev
 
       - name: Slow Python tests (parallel)
-        run: uv run pytest -m slow -n auto --dist loadfile
+        run: uv run pytest -m slow -n 2 --dist loadfile

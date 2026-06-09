@@ -114,7 +114,7 @@ def test_compile_runtime_prompt_for_subagent_includes_scope_constraints() -> Non
     assert compiled.messages[0]["content"]
     assert "通用 Sub-Agent" in compiled.messages[0]["content"]
     assert "只读上下文引用" in compiled.messages[1]["content"]
-    assert "任务说明: 完成正式 prompt 编译链" in compiled.messages[1]["content"]
+    assert "当前任务目标: 完成正式 prompt 编译链" in compiled.messages[1]["content"]
     assert "运行类型: subagent" in compiled.messages[1]["content"]
 
 

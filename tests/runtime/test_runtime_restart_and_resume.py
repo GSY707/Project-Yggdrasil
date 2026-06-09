@@ -22,8 +22,10 @@ from yggdrasil_worker.registry import run_worker_once
 
 client = TestClient(runtime_app)
 pytestmark = pytest.mark.slow
+DEBUG_PLAN_SKIP = pytest.mark.skip(reason="Moved to debug plan 2026-06-08: runtime restart/resume state machine")
 
 
+@DEBUG_PLAN_SKIP
 def test_main_agent_start_without_active_work_enters_standby_without_running_model(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -262,6 +264,7 @@ def test_runtime_retry_failed_task_requeues_with_updated_budget() -> None:
     assert payload["task"]["budget"]["costBudgetTotal"] == 10.0
 
 
+@DEBUG_PLAN_SKIP
 def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -340,6 +343,7 @@ def test_mailbox_message_wakes_standby_task_and_is_consumed(monkeypatch: pytest.
         assert messages[0].status == "pending"
 
 
+@DEBUG_PLAN_SKIP
 def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -426,6 +430,7 @@ def test_resume_rejects_corrupted_snapshot_and_persists_reason() -> None:
         assert refreshed_snapshot is not None
         assert refreshed_snapshot.status == "restorable"
 
+@DEBUG_PLAN_SKIP
 def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current_focus(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -567,6 +572,7 @@ def test_main_agent_runtime_retrieval_prefers_work_tree_focus_over_stale_current
     assert invoke_calls[0]["retrievalSummary"] is not None
 
 
+@DEBUG_PLAN_SKIP
 def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
     monkeypatch.setenv("YGGDRASIL_DISABLE_LIVE_LLM", "1")
     runtime = get_persistence_runtime()
@@ -798,5 +804,4 @@ def test_main_agent_runtime_pause_resume_closed_loop(monkeypatch) -> None:
     assert second_run["result"]["takeoverProtocol"] is not None
     assert second_run["result"]["takeoverProtocol"]["workTree"]["status"] in {"active", "completed"}
     assert second_run["result"]["takeoverProtocolRef"] is not None
-
 

@@ -6,6 +6,7 @@
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`docs/new/`、v0.2 运行时/工作树规格、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
 | `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md` | 安装、启动器与应用包随包发行评估（2026-06-06）：梳理当前开发工作区、本地产品、Docker 产品栈与 Windows 桌面封装路径，判断普通用户需要产品启动器，并定义“基座产品栈 + 应用包 + 直达应用快捷方式”的可行发行改造 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
@@ -998,6 +999,8 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
                           #   postgres-regression：pytest --postgres -m "not slow"
                           #   live-provider-smoke：可选输入，按需触发 eval:m8:live
                           #   g4-provider-matrix：可选输入，按需触发 eval:g4:provider-matrix
+    └── nightly.yml  # nightly slow-parallel（触发：schedule + workflow_dispatch）
+                      #   uv run pytest -m slow -n 2 --dist loadfile
 ```
 
 **当前测试/门禁策略：**
@@ -1039,6 +1042,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、状态诊断、备份恢复和更新回滚 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议：定义数据资产 manifest、备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计记录和 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约：定义官方远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
@@ -1049,6 +1053,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复，并要求 continuation 优先沿父节点编排位置继续 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：说明 Web 页面入口、完整分析页的七个主层次、CLI/API 用法和推荐排障流程，并固定 work-tree debug、时间线、cache trace、child bubble 与 mixed outcome 的读法 |
 | `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：用正式 Web 产品入口演示导入素材、附加任务、选择应用模板、创建/启动任务和查看结果 |
+| `tmp/6。8/测试计划.md` | Phase1 基础测试计划：数据治理、核心模块、API、M8/M9、LLM、评测与 nightly smoke 的执行清单，用于本轮测试跑批对照 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
 | `docs/research/roadmaps/pseudo-infinite-context-window-roadmap-2026-05-16.md` | 伪无限上下文窗口研究：理论依据、当前缺口、100 次窗口重启/压缩评测 |
 | `docs/research/project-assessments/g4-long-task-window-restart-baseline-2026-05-15.md` | G4 长任务基线研究：LongCat 窗口、restart 闭环缺口、任务编排与 work tree 最小落地路线 |
@@ -1105,7 +1110,7 @@ docs/
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
 | 架构决策理由 | `docs/adr/ADR-<number>-*.md` |
-| CI 工作流定义 | `.github/workflows/{pr,ci,release-check}.yml` |
+| CI 工作流定义 | `.github/workflows/{pr,ci,nightly,release-check}.yml` |
 | Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |
 | 端到端冒烟测试 | `scripts/smoke_test.sh` |
 | 项目设计完成度评估 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` |

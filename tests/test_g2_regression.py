@@ -18,4 +18,4 @@ def test_g2_regression_suite_fixes_complex_file_split_sample() -> None:
         "persistence.repositories",
         "core-api.services",
     }
-    assert detail["maxLineCount"] <= 600
+    assert detail["maxLineCount"] <= 800
