@@ -1,7 +1,8 @@
 param(
-    [ValidateSet("start", "stop", "status", "open", "open-apps", "open-settings", "logs", "backup", "restore", "snapshots", "upgrade", "rollback", "install-shortcuts", "uninstall-shortcuts")]
+    [ValidateSet("start", "start-app", "stop", "status", "open", "open-apps", "open-settings", "logs", "backup", "restore", "snapshots", "upgrade", "rollback", "install-shortcuts", "uninstall-shortcuts")]
     [string]$Action = "start",
     [string]$Snapshot = "",
+    [string]$OpenPath = "",
     [switch]$ConfirmUpgrade,
     [switch]$ConfirmRollback
 )
@@ -169,6 +170,9 @@ function Get-ProductEnvValue {
 function Get-ProductUrl {
     param([string]$Path = "")
     $Port = Get-ProductEnvValue -Name "YGGDRASIL_WEB_PORT" -Default "3000"
+    if ($Path.Trim().Length -gt 0 -and -not $Path.StartsWith("/")) {
+        $Path = "/$Path"
+    }
     return "http://localhost:$Port$Path"
 }
 
@@ -213,14 +217,42 @@ function Remove-DesktopShortcuts {
                 Remove-Item -LiteralPath $Path
             }
         }
+        foreach ($Shortcut in Get-InstallDistributionShortcuts) {
+            if ($Shortcut.name) {
+                $Path = Join-Path $Root "$($Shortcut.name).lnk"
+                if (Test-Path $Path) {
+                    Remove-Item -LiteralPath $Path
+                }
+            }
+        }
     }
+}
+
+function Get-InstallDistributionShortcuts {
+    $InstallManifest = Join-Path $ScriptRoot "install.json"
+    if (-not (Test-Path $InstallManifest)) {
+        return @()
+    }
+    $Manifest = Get-Content -Raw -Path $InstallManifest | ConvertFrom-Json
+    if (-not $Manifest.distributionShortcuts) {
+        return @()
+    }
+    return @($Manifest.distributionShortcuts)
 }
 
 switch ($Action) {
     "start" {
         Ensure-Docker
         Invoke-RepoCommand -Command @("corepack", "pnpm", "product:up")
-        Start-Process (Get-ProductUrl)
+        Start-Process (Get-ProductUrl -Path $OpenPath)
+    }
+    "start-app" {
+        Ensure-Docker
+        Invoke-RepoCommand -Command @("corepack", "pnpm", "product:up")
+        if ($OpenPath.Trim().Length -eq 0) {
+            $OpenPath = "/applications"
+        }
+        Start-Process (Get-ProductUrl -Path $OpenPath)
     }
     "stop" {
         Invoke-RepoCommand -Command @("corepack", "pnpm", "product:down")
@@ -230,7 +262,7 @@ switch ($Action) {
         Invoke-RepoCommand -Command @("corepack", "pnpm", "product:smoke")
     }
     "open" {
-        Start-Process (Get-ProductUrl)
+        Start-Process (Get-ProductUrl -Path $OpenPath)
     }
     "open-apps" {
         Start-Process (Get-ProductUrl -Path "/applications")
@@ -344,6 +376,11 @@ switch ($Action) {
         New-DesktopShortcut -Name "Yggdrasil Upgrade" -TargetPath "powershell.exe" -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRoot\Yggdrasil.Desktop.ps1`" upgrade"
         New-DesktopShortcut -Name "Yggdrasil Rollback" -TargetPath "powershell.exe" -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRoot\Yggdrasil.Desktop.ps1`" rollback"
         New-DesktopShortcut -Name "Yggdrasil Stop" -TargetPath "powershell.exe" -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRoot\Yggdrasil.Desktop.ps1`" stop"
+        foreach ($Shortcut in Get-InstallDistributionShortcuts) {
+            if ($Shortcut.name -and $Shortcut.openPath) {
+                New-DesktopShortcut -Name ([string]$Shortcut.name) -TargetPath "powershell.exe" -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRoot\Yggdrasil.Desktop.ps1`" start-app -OpenPath `"$($Shortcut.openPath)`""
+            }
+        }
         Write-Host "Yggdrasil shortcuts were installed to Desktop and Start Menu."
     }
     "uninstall-shortcuts" {

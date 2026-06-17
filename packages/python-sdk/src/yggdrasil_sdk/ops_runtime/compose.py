@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 import subprocess
+import os
 from pathlib import Path
 from typing import Any
 
@@ -9,11 +10,40 @@ from .shared import _port_from_env, _run_command
 from ..support import resolve_workspace_root, utc_now
 
 
+def _product_env_path(workspace_root: Path | None = None) -> Path:
+    infra_dir = resolve_workspace_root(workspace_root) / "infra"
+    product_env = infra_dir / "product.env"
+    if product_env.exists():
+        return product_env
+    return infra_dir / "product.env.template"
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _port_from_values(values: dict[str, str], name: str, default: int) -> int:
+    raw = str(os.environ.get(name) or values.get(name) or default).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _docker_compose_command(workspace_root: Path | None = None, *, product: bool = False) -> list[str]:
     infra_dir = resolve_workspace_root(workspace_root) / "infra"
     if product:
         compose_path = infra_dir / "docker-compose.product.yml"
-        env_path = infra_dir / "product.env.template"
+        env_path = _product_env_path(workspace_root)
         return ["docker", "compose", "--env-file", str(env_path), "-f", str(compose_path)]
     return ["docker", "compose", "-f", str(infra_dir / "docker-compose.yml")]
 
@@ -75,6 +105,7 @@ def run_compose_smoke(*, workspace_root: Path | None = None, ensure_up: bool = F
 
 def run_product_compose_smoke(*, workspace_root: Path | None = None, ensure_up: bool = False) -> dict[str, Any]:
     command = _docker_compose_command(workspace_root, product=True)
+    env_values = _read_env_file(_product_env_path(workspace_root))
     if ensure_up:
         _run_command([*command, "up", "-d", "--build"])
 
@@ -108,10 +139,10 @@ def run_product_compose_smoke(*, workspace_root: Path | None = None, ensure_up: 
     }
     required_running = expected_services - {"migrate"}
     port_checks = {
-        "web": _port_from_env("YGGDRASIL_WEB_PORT", 3000),
-        "core-api": _port_from_env("YGGDRASIL_CORE_API_PORT", 5000),
-        "agent-runtime": _port_from_env("YGGDRASIL_AGENT_RUNTIME_PORT", 5001),
-        "module-host": _port_from_env("YGGDRASIL_MODULE_HOST_PORT", 5002),
+        "web": _port_from_values(env_values, "YGGDRASIL_WEB_PORT", _port_from_env("YGGDRASIL_WEB_PORT", 3000)),
+        "core-api": _port_from_values(env_values, "YGGDRASIL_CORE_API_PORT", _port_from_env("YGGDRASIL_CORE_API_PORT", 5000)),
+        "agent-runtime": _port_from_values(env_values, "YGGDRASIL_AGENT_RUNTIME_PORT", _port_from_env("YGGDRASIL_AGENT_RUNTIME_PORT", 5001)),
+        "module-host": _port_from_values(env_values, "YGGDRASIL_MODULE_HOST_PORT", _port_from_env("YGGDRASIL_MODULE_HOST_PORT", 5002)),
     }
     checks = [
         {

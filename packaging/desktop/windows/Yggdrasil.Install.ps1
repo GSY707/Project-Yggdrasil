@@ -2,6 +2,10 @@ param(
     [ValidateSet("install", "uninstall")]
     [string]$Action = "install",
     [string]$RepoRootPath = "",
+    [string]$AppPackagePath = "",
+    [string]$DefaultAppId = "",
+    [string]$ShortcutName = "",
+    [string]$OpenPath = "",
     [switch]$StartTray,
     [switch]$DeleteLocalData,
     [switch]$ConfirmDeleteLocalData
@@ -33,6 +37,69 @@ function Resolve-InstallRepoRoot {
 }
 
 $RepoRoot = Resolve-InstallRepoRoot
+
+function Get-DistributionManifest {
+    $ReleaseManifest = Join-Path $RepoRoot "release-manifest.json"
+    if (Test-Path $ReleaseManifest) {
+        return (Get-Content -Raw -Path $ReleaseManifest | ConvertFrom-Json)
+    }
+    return $null
+}
+
+function Install-AppPackage {
+    if ([string]::IsNullOrWhiteSpace($AppPackagePath)) {
+        return $null
+    }
+    if (-not (Test-Path $AppPackagePath)) {
+        throw "AppPackagePath does not exist: $AppPackagePath"
+    }
+    $ResolvedAppPackage = (Resolve-Path $AppPackagePath).Path
+    $ManifestPath = Join-Path $ResolvedAppPackage "yggdrasil.app.yaml"
+    if (-not (Test-Path $ManifestPath)) {
+        throw "App package must contain yggdrasil.app.yaml: $ResolvedAppPackage"
+    }
+    $DestinationRoot = Join-Path $RepoRoot "applications"
+    if (-not (Test-Path $DestinationRoot)) {
+        New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    }
+    $Destination = Join-Path $DestinationRoot (Split-Path -Leaf $ResolvedAppPackage)
+    if (Test-Path $Destination) {
+        Remove-Item -LiteralPath $Destination -Recurse -Force
+    }
+    Copy-Item -LiteralPath $ResolvedAppPackage -Destination $Destination -Recurse -Force
+    return @{
+        source = $ResolvedAppPackage
+        destination = $Destination
+    }
+}
+
+function Get-InstallShortcutTargets {
+    $Targets = @()
+    $Distribution = Get-DistributionManifest
+    if ($Distribution -and $Distribution.shortcutTargets) {
+        foreach ($Target in @($Distribution.shortcutTargets)) {
+            if ($Target.name -and $Target.openPath) {
+                $Targets += @{
+                    name = [string]$Target.name
+                    openPath = [string]$Target.openPath
+                }
+            }
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ShortcutName)) {
+        $TargetOpenPath = $OpenPath
+        if ([string]::IsNullOrWhiteSpace($TargetOpenPath) -and -not [string]::IsNullOrWhiteSpace($DefaultAppId)) {
+            $TargetOpenPath = "/applications/$DefaultAppId"
+        }
+        if (-not [string]::IsNullOrWhiteSpace($TargetOpenPath)) {
+            $Targets += @{
+                name = $ShortcutName
+                openPath = $TargetOpenPath
+            }
+        }
+    }
+    return @($Targets)
+}
 
 function Test-UnderPath {
     param(
@@ -149,6 +216,13 @@ function New-Shortcut {
 }
 
 function Install-YggdrasilDesktop {
+    $InstalledAppPackage = Install-AppPackage
+    $Distribution = Get-DistributionManifest
+    $InstallDefaultAppId = $DefaultAppId
+    if ([string]::IsNullOrWhiteSpace($InstallDefaultAppId) -and $Distribution -and $Distribution.defaultAppId) {
+        $InstallDefaultAppId = [string]$Distribution.defaultAppId
+    }
+    $DistributionShortcuts = Get-InstallShortcutTargets
     New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
     Copy-Item -Path (Join-Path $ScriptRoot "*") -Destination $InstallRoot -Recurse -Force
     @{
@@ -156,6 +230,9 @@ function Install-YggdrasilDesktop {
         installedAt = (Get-Date).ToUniversalTime().ToString("o")
         installRoot = $InstallRoot
         signed = $false
+        defaultAppId = $InstallDefaultAppId
+        installedAppPackage = $InstalledAppPackage
+        distributionShortcuts = $DistributionShortcuts
     } | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $InstallRoot "install.json") -Encoding UTF8
 
     New-Item -ItemType Directory -Path $StartMenuRoot -Force | Out-Null

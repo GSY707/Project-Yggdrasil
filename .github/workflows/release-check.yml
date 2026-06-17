@@ -169,6 +169,43 @@ jobs:
       - name: Run PostgreSQL regression gate
         run: uv run pytest --postgres -m "not slow"
 
+  product-release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.8.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install Python workspace dependencies
+        run: uv sync --all-packages --group dev
+
+      - name: Install web workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run product release smoke gate
+        run: pnpm run product:release-smoke
+
   live-provider-smoke:
     if: ${{ inputs.run_live_provider_smoke }}
     runs-on: ubuntu-latest

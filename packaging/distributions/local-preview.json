@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "distributionId": "local-preview",
+  "displayName": "Project Yggdrasil Local Preview",
+  "version": "0.1.0-preview.1",
+  "releaseChannel": "github-releases-preview",
+  "updatePolicy": "manual-check-manual-apply",
+  "signing": {
+    "required": false,
+    "status": "reserved",
+    "mode": "windows-code-signing-placeholder"
+  },
+  "docker": {
+    "strategy": "detect-and-guide",
+    "desktopPath": "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe",
+    "installUrl": "https://docs.docker.com/desktop/setup/install/windows-install/"
+  },
+  "defaultAppId": "yggdrasil.app.deep-research",
+  "includedApplications": [
+    "applications/deep-research",
+    "applications/graduate-researcher",
+    "applications/coding-greenfield",
+    "applications/knowledge-studio"
+  ],
+  "shortcutTargets": [
+    {
+      "name": "Deep Research Lab",
+      "openPath": "/applications/yggdrasil.app.deep-research"
+    },
+    {
+      "name": "Graduate Researcher",
+      "openPath": "/applications/yggdrasil.app.graduate-researcher"
+    },
+    {
+      "name": "Coding Greenfield",
+      "openPath": "/applications/yggdrasil.app.coding-greenfield"
+    },
+    {
+      "name": "Knowledge Studio",
+      "openPath": "/applications/yggdrasil.app.knowledge-studio"
+    }
+  ],
+  "releaseArtifacts": {
+    "primary": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.zip",
+    "checksum": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.sha256",
+    "channel": "GitHub Releases"
+  }
+}

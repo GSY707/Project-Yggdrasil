@@ -25,6 +25,7 @@
 | `Yggdrasil Install Auto Update Task.cmd` | 注册登录时和每日 09:00 的更新检查任务；只检查，不自动应用 |
 | `Yggdrasil Uninstall Auto Update Task.cmd` | 删除更新检查计划任务 |
 | `Yggdrasil Build Installer.cmd` | 构建未签名 ZIP：`dist/desktop/yggdrasil-desktop-preview.zip` |
+| `Yggdrasil Build Release Package.cmd` | 构建完整 staged repo 发行包：`dist/releases/project-yggdrasil-<distribution>-<version>.zip` 与 `.sha256`，用于 GitHub Releases |
 | `Yggdrasil Install Shortcuts.cmd` | 安装桌面和开始菜单快捷方式 |
 | `Yggdrasil Uninstall Shortcuts.cmd` | 删除桌面和开始菜单快捷方式 |
 | `Yggdrasil.Desktop.ps1` | 机器可读产品控制脚本，支持 `start` / `stop` / `status` / `open` / `open-apps` / `open-settings` / `logs` / `backup` / `restore` / `snapshots` / `upgrade` / `rollback` / `install-shortcuts` / `uninstall-shortcuts` |
@@ -32,6 +33,7 @@
 | `Yggdrasil.Update.ps1` | 手动更新检查/应用和计划任务安装脚本 |
 | `Yggdrasil.Install.ps1` | 安装/卸载脚本；从 ZIP 运行时可传 `-RepoRootPath <repo>`，或设置 `YGGDRASIL_REPO_ROOT` |
 | `Build-Yggdrasil.DesktopPackage.ps1` | 未签名 ZIP 构建脚本 |
+| `Build-Yggdrasil.ReleasePackage.ps1` | 正式发行包构建脚本：读取 `packaging/distributions/*.json`，把基座、应用包、桌面封装和发布 manifest 打入 staged repo；签名步骤预留但默认不签名 |
 
 ## 数据边界
 
@@ -61,7 +63,9 @@
 ```powershell
 .\Yggdrasil.Install.ps1 install -StartTray
 .\Yggdrasil.Install.ps1 install -RepoRootPath C:\skzy\QuickFileTransport\世界树计划 -StartTray
+.\Yggdrasil.Install.ps1 install -AppPackagePath C:\path\to\application -DefaultAppId yggdrasil.app.example -ShortcutName "Example App"
 .\Yggdrasil.Desktop.ps1 start
+.\Yggdrasil.Desktop.ps1 start-app -OpenPath /applications/yggdrasil.app.deep-research
 .\Yggdrasil.Desktop.ps1 status
 .\Yggdrasil.Desktop.ps1 logs
 .\Yggdrasil.Desktop.ps1 backup
@@ -79,4 +83,5 @@
 .\Yggdrasil.Update.ps1 install-task
 .\Yggdrasil.Update.ps1 uninstall-task
 .\Build-Yggdrasil.DesktopPackage.ps1
+.\Build-Yggdrasil.ReleasePackage.ps1 -Distribution local-preview
 ```

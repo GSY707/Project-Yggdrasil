@@ -5,9 +5,11 @@
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：面向外包团队定义安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、Docker/provider 检查、状态诊断、备份恢复、更新回滚和错误状态的用户体验要求 |
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`docs/new/`、v0.2 运行时/工作树规格、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
 | `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md` | Stitch 设计稿四组页面验收报告（2026-06-17）：仅从 `Project Yggdrasil Design System` 验收主页、应用包、设置、启动器四组；Gemini 3.1 Pro 按第 3 节合格线连续返工至 V10；仓库只保留最终通过候选证据包，最终采用 V10 主页、V8 应用包、V6 设置、V9/V6 启动器组合，结论为“通过，可进入工程实现” |
-| `docs/development/DESIGN_ENGINEERING_IMPLEMENTATION_PLAN_2026_06_17.md` | Stitch 设计落到工程实现与未完成项计划（2026-06-17，阶段 0 已收口，阶段 1/2 已完成主体实现，阶段 3 已完成主体验证）：把 V10/V8/V6/V9-V6 最终设计组合转成工程路线，并记录 Start 首页、四应用矩阵、普通设置中心、启动器主路径语言、维护闭环确认门、验证结果和阶段 4-5 未完成项 |
+| `docs/development/DESIGN_ENGINEERING_IMPLEMENTATION_PLAN_2026_06_17.md` | Stitch 设计落到工程实现与未完成项计划（2026-06-17，2026-06-18 更新：阶段 0-3 已完成）：把 V10/V8/V6/V9-V6 最终设计组合转成工程路线，并记录 Start 首页、四应用矩阵、普通设置中心、启动器主路径语言、维护闭环确认门、真实 Docker upgrade/rollback 验证、默认卸载保留本地数据验证和阶段 4-5 未完成项 |
 | `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md` | 产品发行完成度评估（2026-06-18）：按本地可试用发行、普通用户正式发行、Docker 产品栈、Windows 桌面封装、数据治理、SaaS 和官方远端数据服务分层评分，综合判断当前发行完成度为 55/100，并列出正式发行前硬缺口和下一步门禁 |
+| `docs/release/GITHUB_RELEASES_PLAYBOOK.md` | GitHub Releases 发布手册（2026-06-18）：固定第一版发布渠道、staged repo ZIP + SHA256 发行物、Docker 检测/引导、手动更新、签名预留、发布前门禁、GitHub Release 正文模板和发布后核验步骤 |
 | `docs/development/MODEL_TPS_BENCHMARK_2026_06_14.md` | 模型 TPS 实测（2026-06-14）：对 `LongCat-2.0-Preview`、`deepseek-v4-flash`、`deepseek-v4-pro` 按同题、`max_tokens=1400`、各 3 次做 live 吞吐对比，记录首 token 延迟、总耗时、端到端 TPS 与首 token 后 TPS，并给出本机当前速度排序 |
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估（2026-06-14）：限定 2026 年 3 月后开源/开放权重 MoE 与稀疏激活模型，按 Qwen3.6、Ling/Ring-2.6、Mistral Small 4、Gemma 4、DeepSeek V4、Command A+、Kimi K2.6/2.7、MiMo V2.5、MiniMax M2.7/M3、Nemotron 3 等具体候选拆分主模型/子任务模型和 D0-D4 路由 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
@@ -60,6 +62,7 @@
 | `packages/python-sdk/src/yggdrasil_sdk/langfuse_trace_layered_analysis.py` | Langfuse 文本审查模块：以 Langfuse observation 重建窗口骨架，默认输出 LLM 交互文本摘录、重复窗口文本簇和 Langfuse UI 审查焦点；当前已能补读 `runtime/window-executions` 本地工件，用结构化窗口状态增强重复窗口判定与因果分析，并兼容中文化的任务目标/任务说明/当前焦点标签提取 |
 | `scripts/analyze_llm_work_run.py` | LLM 工作分析脚本包装器：按 task/run/invocation 触发正式分析器，并输出 JSON 或 Markdown 报告 |
 | `scripts/product-compose.mjs` | 产品 Docker Compose 脚本包装器：优先读取未跟踪的 `infra/product.env`，统一调用 `infra/docker-compose.product.yml`，并在 Windows 中文路径下关闭 BuildKit / bake；提供 `product:backup`、`product:restore`、`product:snapshots`、`product:upgrade`、`product:rollback` 维护窗口流程 |
+| `scripts/product-release-smoke.mjs` | 产品发行门禁脚本：串联 product compose config/up/smoke、保护性备份、upgrade、指定快照 rollback 和二次 smoke，作为 GitHub Releases 前的 Docker 产品栈发布检查 |
 | `scripts/analyze_langfuse_real_task_trace.py` | Langfuse 真实任务窗口分析脚本：按 trace 提取 LLM 最终输出、第 6 节结论与逐窗口 snapshot/work tree 历史 |
 | `scripts/analyze_langfuse_real_task_trace_layered.py` | Langfuse 文本审查兼容入口：按 trace 生成 LLM prompt/output 摘录、重复窗口文本簇和 Langfuse UI 审查焦点 |
 | `scripts/analyze_langfuse_real_task_execution_audit.py` | Langfuse 文本审查主入口：按 trace 生成 LLM 交互文本视图，并在内部复用窗口冗余判定与本地状态增强逻辑 |
@@ -153,8 +156,11 @@
 > 2026/6/4 用户采用面 P2 同步：`apps/web/app/release/page.tsx` 与 `components/release-page.tsx` 新增“发布与安全”产品页，把发布模式矩阵、公开演示路径、产品截图、本地数据位置、出机边界、备份/恢复和删除状态集中到用户可见入口；README 与 `docs/USER_GUIDE.md` 已补发布模式矩阵、截图与隐私边界；`docs/demos/LOCAL_FIRST_TASK_DEMO.md` 已固定外部演示脚本。当前只把开发者工作区和本地产品模式标为可用，完整 Docker 产品栈、桌面封装和托管 SaaS 不写成已支持能力。
 > 2026/6/4 产品打包与远端数据计划同步：`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` 已把完整 Docker Compose 产品栈、桌面封装、删除/清理/数据治理、托管 / SaaS、官方远端数据托管、远端备份和远端删除统一纳入计划；`/release`、README、用户指南、开发者指南和开源边界已改为“计划中但当前不可承诺”口径。本地产品模式仍不会自动上传数据。
 > 2026/6/5 产品打包与数据治理预览同步：新增 `infra/docker-compose.product.yml`、`infra/docker/`、`infra/product.env.template`、`corepack pnpm product:*`、Windows 桌面启动器、`docs/specs/data-governance-manifest-v0.1.md`、Core API `/data-governance/*`、Web `/data-governance` 和 `data_governance_operations` 审计表；完整 Docker 产品栈、桌面封装和本地数据治理预览改为“预览可验证”，托管 / SaaS 和官方远端数据服务仍是计划项。
-> 2026/6/6 产品栈维护与远端契约同步：新增 `packages/python-sdk/src/yggdrasil_sdk/provider_config.py`、`tests/api/test_provider_configuration_api.py` 和 `/health.providerStatus`，Web 任务启动面板在 provider key 缺失或 fallback 测试模式下阻止直接启动；`scripts/product-compose.mjs` 现在优先读取未跟踪的 `infra/product.env`，并提供快照列表、升级和回滚维护命令；Windows 桌面封装补齐未签名安装/卸载、托盘控制器、备份、恢复、快照、升级、回滚、更新检查、手动应用更新和快捷方式安装入口；2026/6/17 阶段 2 又补齐更新/升级/回滚/卸载影响预览、手动确认、失败状态记录和卸载默认保留本地数据，阶段 3 已通过 Web build/typecheck、维护脚本解析和旧普通入口文案扫描；新增 `docs/specs/remote-data-service-contract-v0.1.md` 冻结官方远端数据服务上线前边界。
+> 2026/6/6 产品栈维护与远端契约同步：新增 `packages/python-sdk/src/yggdrasil_sdk/provider_config.py`、`tests/api/test_provider_configuration_api.py` 和 `/health.providerStatus`，Web 任务启动面板在 provider key 缺失或 fallback 测试模式下阻止直接启动；`scripts/product-compose.mjs` 现在优先读取未跟踪的 `infra/product.env`，并提供快照列表、升级和回滚维护命令；Windows 桌面封装补齐未签名安装/卸载、托盘控制器、备份、恢复、快照、升级、回滚、更新检查、手动应用更新和快捷方式安装入口；2026/6/17 阶段 2 又补齐更新/升级/回滚/卸载影响预览、手动确认、失败状态记录和卸载默认保留本地数据，2026/6/18 阶段 3 已补做真实安装/默认卸载、删除本地数据确认门、Docker upgrade/rollback、失败恢复状态和 product smoke 配置一致性验证；新增 `docs/specs/remote-data-service-contract-v0.1.md` 冻结官方远端数据服务上线前边界。
 > 2026/6/6 数据治理保护性执行同步：Core API `/data-governance` 新增 `GET /backups` 与 `POST /backup`，`POST /delete` 支持 `backupBeforeDelete` 并返回 `deletionCertificate`；Web `/data-governance` 新增备份快照、创建备份、精确确认 task 硬删除和删除证明展示，asset / node 仍只允许预览。
+> 2026/6/18 产品发行完成度评估同步：新增 `docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md`，当前综合发行完成度判断为 55/100；本地试用发行已达预览可用，Docker 产品栈和 Windows 桌面封装仍是预览，正式签名安装、发布渠道、多版本升级回滚验收、SaaS 和官方远端数据服务仍未完成。
+> 2026/6/18 正式发行包与发布门禁同步：新增 `packaging/distributions/local-preview.json`、`packaging/desktop/windows/Build-Yggdrasil.ReleasePackage.ps1`、`Yggdrasil Build Release Package.cmd` 和 `scripts/product-release-smoke.mjs`；第一版正式发行路径定为 GitHub Releases + staged repo ZIP + SHA256，签名步骤预留但默认 unsigned，Docker 策略为检测/引导，更新仍是手动检查/手动应用；`Yggdrasil.Desktop.ps1` 支持 `start-app -OpenPath`，`Yggdrasil.Install.ps1` 支持 `-AppPackagePath` / `-DefaultAppId` / `-ShortcutName`。
+> 2026/6/18 GitHub Releases 发布手册同步：新增 `docs/release/GITHUB_RELEASES_PLAYBOOK.md`，记录 `corepack pnpm release:package`、GitHub Release 资产和正文模板、unsigned 边界、Docker Desktop 检测/引导说明、发布前 `product:release-smoke` 门禁和发布后核验步骤；本机默认 3000 端口不可绑定时，已用 3300/5500/5501/5502 临时端口跑通完整 release smoke。
 > 2026/6/1 Graduate heartbeat 观测增强：`tmp/run_grad_ml_eval_with_heartbeat.py` 现会在心跳周期内读取活动 sandbox 的 `evaluation.db`，追加输出 task 状态、currentFocus 摘要、snapshot 是否存在、cost 使用进度、invocation 计数与最近一次模型调用状态/错误摘要，便于区分“长调用慢跑”与“真实队列卡死”。
 
 ---
@@ -427,7 +433,7 @@ packages/
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
 │           ├── data_governance.py  # 数据资产 manifest、删除影响预览、task 硬删除执行与审计记录
-│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；compose 现含产品栈 smoke）
+│           ├── ops_runtime/        # 运维运行时包（backup/compose/sandbox/scorecard/live/launcher/shared；compose 现含产品栈 smoke，且 product smoke 与 JS Compose 一样优先读取 infra/product.env）
 │           ├── ops_cli.py          # 运维命令行工具（backup/restore/compose-smoke/product-compose-smoke/launch/pilot-sandbox/pilot-live/pilot-scorecard）
 │           └── support.py          # 通用工具函数（含隔离工作区复制、CJK word_count 估算；sandbox 复制会动态忽略当前配置的 state root/state dir，并默认跳过仓库顶层 tmp，避免持久审计目录与临时输出被递归拷贝进下一轮评测）
 │
@@ -634,6 +640,8 @@ docs/
 │   │                               #   给 code agent 的返工任务文档：针对验收残留问题，强制收口世界级/任务级边界、无损恢复判定和 TaskRuntimeState 唯一入口
 │   ├── PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md
 │   │                               #   产品打包与官方远端数据能力需求差距：Docker 产品栈、桌面封装、删除治理、SaaS、远端托管/备份/删除的计划与缺口
+│   ├── PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md
+│   │                               #   产品发行完成度评估：综合 55/100，分层评估本地试用、正式发行、Docker 产品栈、桌面封装、数据治理、SaaS 和远端数据服务
 │   ├── ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md
 │   │                               #   提示词、启动流程、工作流程重做执行文档：Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
@@ -642,6 +650,8 @@ docs/
 │
 ├── demos/
 │   └── LOCAL_FIRST_TASK_DEMO.md    # 本地首次成功演示脚本：按 Web 路径演示素材导入、模板任务创建、启动和结果查看
+├── release/
+│   └── GITHUB_RELEASES_PLAYBOOK.md # GitHub Releases 发布手册：staged repo ZIP、SHA256、手动更新、Docker 检测/引导、签名预留和发布后核验
 │
 ├── new/                            # 新方案草稿与当前重做输入材料
 │   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
@@ -931,6 +941,8 @@ tests/
 ├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径、workspace sandbox 复制边界）
 ├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
+├── test_product_compose_smoke_config.py # 产品 Compose smoke 配置回归：锁定 infra/product.env 优先于 product.env.template
+├── test_release_packaging_config.py # 正式发行包配置回归：锁定 distribution manifest、OpenPath/应用包安装参数、release smoke 回滚快照合同
 ├── test_subagent_and_worker.py     # Sub-Agent 与 Temporal Worker 集成（含 awaiting-approval/continuing、parent wake 与 work-tree 合并语义）
 ├── test_secret_hygiene.py          # 仓库凭据泄露与文档回归检查
 │
@@ -1060,6 +1072,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、状态诊断、备份恢复和更新回滚 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md` | 产品发行完成度评估：当前综合发行完成度 55/100；本地可试用发行 72/100、普通用户正式发行 48/100、托管 / SaaS 商业发行 18/100，并列出正式发行前硬缺口 |
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估：以 2026 年 3 月后新开源/开放权重 MoE 候选为主，落到具体模型、主/子任务分工、D0-D4 难度、thinking 策略、升级降级和世界树专项评测指标 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
@@ -1117,8 +1130,9 @@ docs/
 | 模块清单格式规格 | `docs/protocols/yggdrasil-module-manifest-v0.1.md` |
 | 某个模块的实现 | `modules/<module-name>/src/<package>/plugin.py` |
 | 基础设施端口配置 | `infra/README.md` 或 `infra/docker-compose.yml` |
-| 完整产品 Docker Compose 预览栈 | `infra/docker-compose.product.yml`、`infra/product.env.template`、`infra/product.env`、`infra/docker/`、`corepack pnpm product:*` |
-| Windows 未签名安装包 / 托盘 / 手动更新器 | `packaging/desktop/windows/` |
+| 完整产品 Docker Compose 预览栈 | `infra/docker-compose.product.yml`、`infra/product.env.template`、`infra/product.env`、`infra/docker/`、`scripts/product-compose.mjs`、`scripts/product-release-smoke.mjs`、`corepack pnpm product:*`、`corepack pnpm product:release-smoke` |
+| Windows staged repo 发行包 / GitHub Releases 预备产物 | `packaging/distributions/local-preview.json`、`packaging/desktop/windows/Build-Yggdrasil.ReleasePackage.ps1`、`packaging/desktop/windows/Yggdrasil Build Release Package.cmd`、`dist/releases/` |
+| Windows 未签名安装包 / 托盘 / 手动更新器 | `packaging/desktop/windows/`、`packaging/desktop/windows/Yggdrasil.Desktop.ps1`、`packaging/desktop/windows/Yggdrasil.Install.ps1`、`packaging/desktop/windows/Yggdrasil.Update.ps1` |
 | 数据治理 manifest / 备份 / 保护性 task 删除 / 审计 | `docs/specs/data-governance-manifest-v0.1.md`、`docs/specs/remote-data-service-contract-v0.1.md`、`packages/python-sdk/src/yggdrasil_sdk/data_governance.py`、`packages/python-sdk/src/yggdrasil_sdk/ops_runtime/backup.py`、`services/core-api/src/yggdrasil_core_api/api/routes/data_governance.py`、`services/core-api/src/yggdrasil_core_api/services/data_governance_service.py`、`apps/web/app/components/data-governance-page.tsx` |
 | Provider key 配置状态与启动阻塞 | `packages/python-sdk/src/yggdrasil_sdk/provider_config.py`、`services/core-api/src/yggdrasil_core_api/services/runtime_service.py`、`apps/web/app/components/task-launch-panel.tsx`、`tests/api/test_provider_configuration_api.py` |
 | 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
@@ -1126,7 +1140,8 @@ docs/
 | UX 重塑外包资料包 | `docs/design-handoff/README.md`、`docs/design-handoff/01-base-user-interface-agent.md`、`docs/design-handoff/02-application-package-experience.md`、`docs/design-handoff/03-settings-debug-configuration.md`、`docs/design-handoff/04-launcher-experience.md` |
 | Stitch 外部设计稿 | Codex 全局 MCP `stitch`（`https://stitch.googleapis.com/mcp`）：本轮设计验收只使用 `Project Yggdrasil Design System`（`projects/6603619266131280055`）；凭据只保存在本机 Codex 配置，不进入仓库 |
 | Web 素材导入与附加任务入口 | `apps/web/app/components/assets-page.tsx` |
-| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`、`docs/specs/remote-data-service-contract-v0.1.md` |
+| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`、`docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md`、`docs/specs/remote-data-service-contract-v0.1.md` |
+| GitHub Releases 发布手册 | `docs/release/GITHUB_RELEASES_PLAYBOOK.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
@@ -1135,6 +1150,7 @@ docs/
 | Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |
 | 端到端冒烟测试 | `scripts/smoke_test.sh` |
 | 项目设计完成度评估 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` |
+| 产品发行完成度评估 | `docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md` |
 | Stitch 设计稿四组验收与最终抓图证据 | `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md`、`docs/development/stitch-design-captures-2026-06-17/post-rework-v10-passline/` |
 | Stitch 设计工程实现计划与阶段 0 收口清单 | `docs/development/DESIGN_ENGINEERING_IMPLEMENTATION_PLAN_2026_06_17.md` |
 | Runtime 并发 / M9 验收调查 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` |
