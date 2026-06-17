@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
-  --bg-0: #f0ebdf;
-  --bg-1: #f8f4ea;
-  --bg-2: #dfe7dd;
+  --bg-0: #f5f3ed;
+  --bg-1: #f8f7f2;
+  --bg-2: #e6ece8;
   --ink-0: #19211d;
   --ink-1: #46524d;
   --ink-2: #6b746f;
@@ -18,9 +18,9 @@
   --warn: #8b6a1d;
   --warn-soft: rgba(139, 106, 29, 0.14);
   --shadow: 0 24px 60px rgba(23, 31, 27, 0.1);
-  --radius-xl: 28px;
-  --radius-lg: 22px;
-  --radius-md: 16px;
+  --radius-xl: 16px;
+  --radius-lg: 12px;
+  --radius-md: 8px;
 }
 
 * {
@@ -35,10 +35,7 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at top left, rgba(14, 106, 90, 0.18), transparent 20%),
-    radial-gradient(circle at top right, rgba(191, 93, 50, 0.14), transparent 18%),
-    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+  background: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 48%, var(--bg-2) 100%);
   color: var(--ink-0);
   font-family: "Aptos", "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
@@ -122,14 +119,27 @@ textarea {
 .sidebar-nav {
   display: flex;
   flex-direction: column;
+  gap: 18px;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+}
+
+.nav-group-title {
+  margin: 0 0 2px;
+  color: rgba(243, 235, 215, 0.62);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .nav-link {
   display: block;
   padding: 14px 16px;
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   color: rgba(243, 235, 215, 0.8);
   transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
@@ -155,6 +165,39 @@ textarea {
   color: rgba(243, 235, 215, 0.68);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.advanced-nav {
+  padding: 12px 14px;
+  border: 1px solid var(--side-line);
+  border-radius: var(--radius-lg);
+  color: rgba(243, 235, 215, 0.78);
+}
+
+.advanced-nav summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.advanced-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.advanced-nav-grid a {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: rgba(243, 235, 215, 0.72);
+  font-size: 13px;
+}
+
+.advanced-nav-grid a:hover,
+.advanced-nav-grid a.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff7e7;
 }
 
 .shell-main {
@@ -196,13 +239,17 @@ textarea {
   max-width: 100%;
   gap: 8px;
   padding: 7px 11px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.65);
   color: var(--ink-1);
   font-size: 12px;
   font-weight: 650;
   overflow-wrap: anywhere;
+}
+
+.nav-link.compact {
+  padding: 11px 14px;
 }
 
 .page-stack {
@@ -260,7 +307,6 @@ textarea {
   border-radius: var(--radius-lg);
   background: var(--card);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
   animation: rise 360ms ease both;
 }
 
@@ -374,6 +420,32 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 18px;
+}
+
+.start-layout,
+.settings-center-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 0.85fr;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.app-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.app-matrix-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.matrix-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .screenshot-list {
@@ -634,7 +706,7 @@ textarea {
 .action-button,
 .ghost-button {
   border: none;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 11px 15px;
   cursor: pointer;
   transition: transform 140ms ease, opacity 140ms ease, background-color 140ms ease;
@@ -750,6 +822,12 @@ textarea {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .app-matrix,
+  .start-layout,
+  .settings-center-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 820px) {
@@ -767,6 +845,9 @@ textarea {
   .settings-grid,
   .launch-detail-grid,
   .release-matrix,
+  .start-layout,
+  .settings-center-grid,
+  .app-matrix,
   .form-grid,
   .record-meta,
   .table-row,

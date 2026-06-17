@@ -2,38 +2,53 @@
 
 import Link from "next/link";
 
-import type { SetupChecklistItem, WorkbenchOverview } from "@yggdrasil/frontend-sdk";
+import type { ApplicationCatalogItem, SetupChecklistItem, WorkbenchOverview } from "@yggdrasil/frontend-sdk";
 
 import { useApiResource } from "../lib/use-api-resource";
-import { ErrorState, LoadingState, PageHeader, StatCard, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+import { TaskLaunchPanel } from "./task-launch-panel";
+import { EmptyState, ErrorState, LoadingState, PageHeader, StatCard, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
 
-function SetupChecklist({ items }: { items: SetupChecklistItem[] }) {
-  if (items.length === 0) {
-    return null;
-  }
-  const blocked = items.filter((item) => item.status === "blocked").length;
-  const warnings = items.filter((item) => item.status === "warning").length;
+type ApplicationsResponse = { activeAppId: string; applications: ApplicationCatalogItem[] };
+
+function UserActionChecklist({ items }: { items: SetupChecklistItem[] }) {
+  const visibleItems = items.length > 0
+    ? items
+    : [
+        {
+          id: "materials",
+          label: "添加材料",
+          status: "warning" as const,
+          detail: "先导入资料，或直接在任务目标里写清背景。",
+        },
+        {
+          id: "approval",
+          label: "启动前确认",
+          status: "ready" as const,
+          detail: "创建草稿后再决定是否立即启动。",
+        },
+      ];
+  const blocked = visibleItems.filter((item) => item.status === "blocked").length;
+
   return (
-    <Surface>
+    <Surface className="start-checklist">
       <div className="record-head">
         <div>
-          <p className="section-kicker">First Run</p>
-          <h3 className="section-title">首次任务启动检查</h3>
-          <p className="section-copy">先确认依赖、模型 key、状态目录和工作区路径。全部阻塞项清掉后，再进入任务模板创建第一任务。</p>
+          <p className="section-kicker">准备情况</p>
+          <h3 className="section-title">需要先处理什么</h3>
+          <p className="section-copy">这里只显示会影响首次任务的事项。维护细节放在帮助与诊断里。</p>
         </div>
-        <StatusBadge value={blocked > 0 ? "blocked" : warnings > 0 ? "warning" : "ready"} />
+        <StatusBadge value={blocked > 0 ? "blocked" : "ready"} />
       </div>
       <div className="setup-grid">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <article className="setup-item" key={item.id}>
             <div className="record-head">
               <div>
-                <h4 className="record-title">{item.label}</h4>
-                <p className="meta-copy">{item.detail}</p>
+                <h4 className="record-title">{checklistLabel(item)}</h4>
+                <p className="meta-copy">{checklistDetail(item)}</p>
               </div>
               <StatusBadge value={item.status} />
             </div>
-            {item.remediation ? <p className="meta-copy mono">{item.remediation}</p> : null}
           </article>
         ))}
       </div>
@@ -41,266 +56,177 @@ function SetupChecklist({ items }: { items: SetupChecklistItem[] }) {
   );
 }
 
+function checklistLabel(item: SetupChecklistItem): string {
+  const labels: Record<string, string> = {
+    "core-api": "本地服务",
+    database: "本地数据",
+    redis: "后台协调",
+    "worker-queue": "任务执行器",
+    "model-provider": "AI 服务",
+    "workspace-path": "工作区",
+    "state-root": "本地存储",
+  };
+  return labels[item.id] ?? item.label;
+}
+
+function checklistDetail(item: SetupChecklistItem): string {
+  if (item.status === "ready") {
+    if (["core-api", "database", "redis", "workspace-path", "state-root"].includes(item.id)) {
+      return "已准备好。";
+    }
+    if (item.id === "model-provider") {
+      return "AI 服务已连接。";
+    }
+  }
+  if (item.id === "worker-queue") {
+    return "如需执行任务，请从桌面启动器或帮助与诊断确认后台执行器。";
+  }
+  if (item.id === "model-provider") {
+    return "请在设置里连接 AI 服务后再启动任务。";
+  }
+  return item.status === "blocked" ? "需要先处理这个问题。" : item.detail;
+}
+
+function providerSummary(status: WorkbenchOverview["health"]["providerStatus"]): string {
+  if (!status) {
+    return "启动任务前需要确认 AI 服务连接。";
+  }
+  if (status.status === "ready") {
+    return "AI 服务已连接，可以创建并启动任务。";
+  }
+  if (status.status === "warning") {
+    return "AI 服务连接需要确认，建议先创建草稿。";
+  }
+  return "请先在设置里连接 AI 服务。";
+}
+
 export function OverviewPage() {
-  const { data, error, isLoading } = useApiResource<WorkbenchOverview>("/workbench/overview");
+  const overview = useApiResource<WorkbenchOverview>("/workbench/overview");
+  const applications = useApiResource<ApplicationsResponse>("/applications");
 
-  if (isLoading) {
-    return <LoadingState title="正在装配工作台总览" />;
+  if (overview.isLoading || applications.isLoading) {
+    return <LoadingState title="正在准备开始页" />;
   }
 
-  if (error || !data) {
-    return <ErrorState detail={error ?? "总览数据不可用。"} />;
+  if (overview.error) {
+    return <ErrorState title="本地服务未就绪" detail={overview.error} />;
   }
 
-  const setupItems = data.health.setupChecklist ?? [];
+  if (!overview.data) {
+    return <ErrorState title="本地服务未就绪" detail="暂时无法读取开始页状态。请打开帮助与诊断查看本地产品状态。" />;
+  }
+
+  const setupItems = overview.data.health.setupChecklist ?? [];
+  const appItems = applications.data?.applications ?? [];
+  const recentDrafts = overview.data.recentTasks.filter((task) => task.status === "draft").slice(0, 3);
+  const recentTasks = overview.data.recentTasks.slice(0, 4);
+  const providerStatus = overview.data.health.providerStatus;
+  const providerValue = providerStatus?.status === "ready" ? "已连接" : providerStatus?.status === "warning" ? "需确认" : "未连接";
+  const blockedCount = setupItems.filter((item) => item.status === "blocked").length;
 
   return (
     <div>
       <PageHeader
-        eyebrow="总览"
-        title="从这里启动第一任务"
-        summary={
-          <>
-            打开本地产品后，先确认启动检查，再选择应用模板创建任务。内部运行指标仍在下方，用于排查和复盘。
-          </>
-        }
+        eyebrow="开始"
+        title="启动第一任务"
+        summary={<>添加材料，选择一个应用模板，确认预算和目标后再启动。所有数据默认留在本机。</>}
         actions={
           <>
-            <Link className="action-button" href="/tasks">
-              新建任务
+            <Link className="action-button" href="/assets">
+              添加材料
             </Link>
             <Link className="ghost-button" href="/applications">
               选择应用
             </Link>
-            <Link className="ghost-button" href="/assets">
-              导入素材
-            </Link>
-            <Link className="ghost-button" href="/release">
-              发布与安全
+            <Link className="ghost-button" href="/settings">
+              打开设置
             </Link>
           </>
         }
       />
 
-      <SetupChecklist items={setupItems} />
-
       <section className="stat-grid">
-        <StatCard label="任务" value={data.cards.tasks} copy={`当前累计任务 ${data.cards.tasks} 个，待处理 ${data.taskStatusCounts.queued ?? 0} 个。`} />
-        <StatCard label="记忆" value={data.cards.nodes} copy={`已沉淀记忆节点 ${data.cards.nodes} 个，检索请求 ${data.cards.retrievals} 次。`} />
-        <StatCard label="协作" value={data.cards.pullRequests} copy={`分支 ${data.cards.branches} 条，待审协作提交 ${data.pullRequestStatusCounts.open ?? 0} 个。`} />
-        <StatCard label="模型调用" value={data.cards.modelInvocations} copy={`备用响应 ${data.cards.llmFallbacks} 次，累计成本 ${data.cards.llmCostUsed.toFixed(4)} USD。`} />
-        <StatCard label="运行信号" value={data.cards.observabilityErrors} copy={`最近记录 ${data.observability.totalSpans} 个运行区间，错误 ${data.cards.observabilityErrors} 个。`} />
-        <StatCard label="共享空间" value={data.cards.sharedSpaces} copy={`挂载 ${data.cards.spaceMounts} 条，访问规则 ${data.cards.permissionTuples} 条。`} />
-        <StatCard label="可恢复任务" value={data.cards.pausedTasks} copy={`暂停中 ${data.cards.pausedTasks} 个，等待安全停止 ${data.taskStatusCounts["pause-requested"] ?? 0} 个，可恢复快照 ${data.cards.restorableSnapshots} 个。`} />
+        <StatCard label="AI 服务" value={providerValue} copy={providerSummary(providerStatus)} />
+        <StatCard label="需要处理" value={blockedCount} copy={blockedCount > 0 ? "先处理阻塞项，再启动任务。" : "当前没有阻塞首次任务的事项。"} />
+        <StatCard label="任务草稿" value={overview.data.taskStatusCounts.draft ?? 0} copy="可以先保存草稿，再启动执行。" />
+        <StatCard label="本地数据" value="保留" copy="任务材料、结果和备份默认保存在本机。" />
       </section>
 
-      <div className="content-grid">
+      <div className="start-layout">
         <div className="section-stack">
-          <Surface>
-            <p className="section-kicker">System Status</p>
-            <h3 className="section-title">系统状态</h3>
-            <p className="section-copy">数据库、缓存、模块、事件队列与最近运行状态都在这里汇总；需要深入排查时再查看原始字段。</p>
-            <div className="kv-grid">
-              <div className="kv-item">
-                <p className="meta-label">数据库</p>
-                <p className="meta-copy mono">{JSON.stringify(data.health.database ?? {})}</p>
-              </div>
-              <div className="kv-item">
-                <p className="meta-label">Redis</p>
-                <p className="meta-copy mono">{JSON.stringify(data.health.redis ?? {})}</p>
-              </div>
-              <div className="kv-item">
-                <p className="meta-label">模块状态</p>
-                <div className="pill-row">
-                  <span className="inline-chip">active {data.moduleSummary.active}</span>
-                  <span className="inline-chip">degraded {data.moduleSummary.degraded}</span>
-                  <span className="inline-chip">disabled {data.moduleSummary.disabled}</span>
-                </div>
-              </div>
-              <div className="kv-item">
-                <p className="meta-label">待发布事件</p>
-                <div className="pill-row">
-                  {Object.entries(data.outboxStatusCounts).map(([status, count]) => (
-                    <span className="inline-chip" key={status}>
-                      {status} {count}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Surface>
+          {applications.error ? <ErrorState title="应用清单不可用" detail={applications.error} /> : null}
+          {appItems.length > 0 ? (
+            <TaskLaunchPanel applications={appItems} title="创建任务草稿" />
+          ) : (
+            <EmptyState title="没有可启动应用" detail="应用清单暂不可用，无法创建首次任务。" />
+          )}
 
           <Surface>
-            <p className="section-kicker">Collaboration</p>
-            <h3 className="section-title">共享空间与恢复</h3>
-            <div className="kv-grid">
-              <div className="kv-item">
-                <p className="meta-label">共享空间</p>
-                <p className="meta-copy">{data.cards.sharedSpaces}</p>
+            <div className="record-head">
+              <div>
+                <p className="section-kicker">草稿</p>
+                <h3 className="section-title">待确认任务</h3>
+                <p className="section-copy">草稿不会自动执行。确认目标、材料和预算后再启动。</p>
               </div>
-              <div className="kv-item">
-                <p className="meta-label">空间挂载</p>
-                <p className="meta-copy">{data.cards.spaceMounts}</p>
-              </div>
-              <div className="kv-item">
-                <p className="meta-label">访问规则</p>
-                <p className="meta-copy">{data.cards.permissionTuples}</p>
-              </div>
-              <div className="kv-item">
-                <p className="meta-label">可恢复快照</p>
-                <p className="meta-copy">{data.cards.restorableSnapshots}</p>
-              </div>
+              <Link className="ghost-button" href="/tasks">查看全部</Link>
             </div>
-            <div className="pill-row">
-              <span className="inline-chip">暂停中 {data.cards.pausedTasks}</span>
-              <span className="inline-chip">等待安全停止 {data.taskStatusCounts["pause-requested"] ?? 0}</span>
-              <span className="inline-chip">共享空间 {data.cards.sharedSpaces}</span>
-              <span className="inline-chip">挂载 {data.cards.spaceMounts}</span>
+            {recentDrafts.length === 0 ? (
+              <EmptyState title="还没有任务草稿" detail="从上方模板创建草稿后，会在这里继续确认。" />
+            ) : (
+              <div className="record-list">
+                {recentDrafts.map((task) => (
+                  <article className="record-card" key={task.id}>
+                    <div className="record-head">
+                      <div>
+                        <Link className="record-link" href={`/tasks/${encodeURIComponent(task.id)}`}>
+                          <h4 className="record-title">{task.title}</h4>
+                        </Link>
+                        <p className="meta-copy">{task.goal}</p>
+                      </div>
+                      <StatusBadge value={task.status} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Surface>
+        </div>
+
+        <div className="section-stack">
+          <UserActionChecklist items={setupItems} />
+
+          <Surface>
+            <p className="section-kicker">隐私</p>
+            <h3 className="section-title">本地优先</h3>
+            <p className="section-copy">材料、任务状态、运行结果和备份默认保存在本机。只有启动真实 AI 服务时，任务目标和相关上下文才会发送给所选服务。</p>
+            <div className="field-actions">
+              <Link className="ghost-button" href="/settings">查看数据与隐私</Link>
+              <Link className="ghost-button" href="/data-governance">备份与删除</Link>
             </div>
           </Surface>
 
           <Surface>
             <p className="section-kicker">最近任务</p>
-            <h3 className="section-title">最近任务</h3>
-            <div className="record-list">
-              {data.recentTasks.map((task) => (
-                <article className="record-card" key={task.id}>
-                  <div className="record-head">
-                    <div>
-                      <Link className="record-link" href={`/tasks/${encodeURIComponent(task.id)}`}>
-                        <h4 className="record-title">{task.title}</h4>
-                      </Link>
-                      <p className="meta-copy">{task.goal}</p>
-                    </div>
-                    <StatusBadge value={task.status} />
-                  </div>
-                  <div className="record-meta">
-                    <div className="kv-item">
-                      <p className="meta-label">Focus</p>
-                      <p className="meta-copy">{String(task.currentFocus ?? "-")}</p>
-                    </div>
-                    <div className="kv-item">
-                      <p className="meta-label">Updated</p>
-                      <p className="meta-copy">{formatTimestamp(task.updatedAt ?? task.createdAt)}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </Surface>
-        </div>
-
-        <div className="section-stack">
-          <Surface>
-            <p className="section-kicker">Regression</p>
-            <h3 className="section-title">评测与回归</h3>
-            <div className="record-list">
-              {data.recentEvaluationRuns.length === 0 ? (
-                <div className="empty-state">
-                  <h4 className="subsection-title">还没有评测运行</h4>
-                  <p className="empty-copy">进入评测页即可触发 M4-M6 回归 suite，并把结果回写到正式记录里。</p>
-                </div>
-              ) : (
-                data.recentEvaluationRuns.map((run) => {
-                  const metrics = (run.metrics ?? {}) as Record<string, unknown>;
-                  return (
-                    <article className="record-card" key={run.id}>
-                      <div className="record-head">
-                        <div>
-                          <h4 className="record-title">{run.suiteId}</h4>
-                          <p className="meta-copy">subject {run.subjectRef}</p>
-                        </div>
-                        <StatusBadge value={run.status} />
-                      </div>
-                      <div className="pill-row">
-                        <span className="inline-chip">passRate {String(metrics.passRate ?? "-")}</span>
-                        <span className="inline-chip">cases {String(metrics.caseCount ?? "-")}</span>
-                        <span className="inline-chip">duration {String(metrics.totalDurationMs ?? "-")} ms</span>
-                      </div>
-                    </article>
-                  );
-                })
-              )}
-            </div>
-          </Surface>
-
-          <Surface>
-            <p className="section-kicker">Model Gateway</p>
-            <h3 className="section-title">最近模型调用</h3>
-            <div className="record-list">
-              {data.recentModelInvocations.length === 0 ? (
-                <div className="empty-state">
-                  <h4 className="subsection-title">还没有模型调用记录</h4>
-                  <p className="empty-copy">主执行链会在 M8 中把真实 LLM 调用、fallback 与成本全部写入这里。</p>
-                </div>
-              ) : (
-                data.recentModelInvocations.map((invocation) => (
-                  <article className="record-card" key={invocation.id}>
+            <h3 className="section-title">继续处理</h3>
+            {recentTasks.length === 0 ? (
+              <EmptyState title="还没有任务" detail="创建第一任务后，会在这里继续跟进。" />
+            ) : (
+              <div className="record-list">
+                {recentTasks.map((task) => (
+                  <article className="record-card" key={task.id}>
                     <div className="record-head">
                       <div>
-                        <h4 className="record-title">{invocation.resolvedModel}</h4>
-                        <p className="meta-copy">task {String(invocation.taskId ?? "-")}</p>
+                        <Link className="record-link" href={`/tasks/${encodeURIComponent(task.id)}`}>
+                          <h4 className="record-title">{task.title}</h4>
+                        </Link>
+                        <p className="meta-copy">{formatTimestamp(task.updatedAt ?? task.createdAt)}</p>
                       </div>
-                      <StatusBadge value={invocation.status} />
-                    </div>
-                    <div className="pill-row">
-                      <span className="inline-chip">provider {String(invocation.resolvedProvider ?? invocation.requestedProvider ?? "-")}</span>
-                      <span className="inline-chip">input {invocation.inputTokensUsed}</span>
-                      <span className="inline-chip">output {invocation.outputTokensUsed}</span>
-                      <span className="inline-chip">cost {invocation.costUsed.toFixed(4)} USD</span>
+                      <StatusBadge value={task.status} />
                     </div>
                   </article>
-                ))
-              )}
-            </div>
-          </Surface>
-
-          <Surface>
-            <p className="section-kicker">Observability</p>
-            <h3 className="section-title">最近信号</h3>
-            <div className="record-list">
-              {data.observability.serviceSummaries.map((summary) => (
-                <article className="record-card" key={summary.serviceName}>
-                  <div className="record-head">
-                    <div>
-                      <h4 className="record-title">{summary.serviceName}</h4>
-                      <p className="meta-copy">last seen {formatTimestamp(summary.lastSeenAt)}</p>
-                    </div>
-                    <StatusBadge value={summary.errorCount > 0 ? "degraded" : "healthy"} />
-                  </div>
-                  <div className="pill-row">
-                    <span className="inline-chip">spans {summary.spanCount}</span>
-                    <span className="inline-chip">errors {summary.errorCount}</span>
-                    <span className="inline-chip">avg {summary.avgDurationMs} ms</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </Surface>
-
-          <Surface>
-            <p className="section-kicker">Collaboration</p>
-            <h3 className="section-title">最近 PR</h3>
-            <div className="record-list">
-              {data.recentPullRequests.map((pullRequest) => (
-                <article className="record-card" key={pullRequest.id}>
-                  <div className="record-head">
-                    <div>
-                      <Link className="record-link" href="/collaboration">
-                        <h4 className="record-title">{pullRequest.title}</h4>
-                      </Link>
-                      <p className="meta-copy">{pullRequest.summary}</p>
-                    </div>
-                    <StatusBadge value={pullRequest.status} />
-                  </div>
-                  <div className="pill-row">
-                    <span className="inline-chip">source {pullRequest.sourceBranchId}</span>
-                    <span className="inline-chip">target {pullRequest.targetBranchId}</span>
-                    <span className="inline-chip">created {formatTimestamp(pullRequest.createdAt)}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </Surface>
         </div>
       </div>

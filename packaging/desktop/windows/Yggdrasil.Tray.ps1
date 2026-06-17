@@ -87,20 +87,22 @@ $NotifyIcon.Icon = [System.Drawing.SystemIcons]::Application
 $NotifyIcon.Visible = $true
 
 $Menu = New-Object System.Windows.Forms.ContextMenuStrip
-[void](New-TrayItem -Menu $Menu -Text "Start and Open" -Action { Start-DesktopAction -Action "start" })
-[void](New-TrayItem -Menu $Menu -Text "Open Web" -Action { Start-DesktopAction -Action "open" })
-[void](New-TrayItem -Menu $Menu -Text "Status" -Action { Start-DesktopAction -Action "status" -Visible })
-[void](New-TrayItem -Menu $Menu -Text "Logs" -Action { Start-DesktopAction -Action "logs" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Start Yggdrasil" -Action { Start-DesktopAction -Action "start" })
+[void](New-TrayItem -Menu $Menu -Text "Open Start" -Action { Start-DesktopAction -Action "open" })
+[void](New-TrayItem -Menu $Menu -Text "Open Apps" -Action { Start-DesktopAction -Action "open-apps" })
+[void](New-TrayItem -Menu $Menu -Text "Open Settings" -Action { Start-DesktopAction -Action "open-settings" })
+[void](New-TrayItem -Menu $Menu -Text "Health and Diagnostics" -Action { Start-DesktopAction -Action "status" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Diagnostic Logs" -Action { Start-DesktopAction -Action "logs" -Visible })
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-[void](New-TrayItem -Menu $Menu -Text "Backup" -Action { Start-DesktopAction -Action "backup" -Visible })
-[void](New-TrayItem -Menu $Menu -Text "Snapshots" -Action { Start-DesktopAction -Action "snapshots" -Visible })
-[void](New-TrayItem -Menu $Menu -Text "Restore Latest" -Action { Start-DesktopAction -Action "restore" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Back Up Local Data" -Action { Start-DesktopAction -Action "backup" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "View Backups" -Action { Start-DesktopAction -Action "snapshots" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Restore Latest Backup" -Action { Start-DesktopAction -Action "restore" -Visible })
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-[void](New-TrayItem -Menu $Menu -Text "Check Updates" -Action { Start-UpdateAction -Action "check" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Check for Updates" -Action { Start-UpdateAction -Action "check" -Visible })
 [void](New-TrayItem -Menu $Menu -Text "Apply Update" -Action { Start-UpdateAction -Action "apply" -Visible })
-[void](New-TrayItem -Menu $Menu -Text "Rollback" -Action { Start-DesktopAction -Action "rollback" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Restore Previous Version" -Action { Start-DesktopAction -Action "rollback" -Visible })
 [void]$Menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-[void](New-TrayItem -Menu $Menu -Text "Stop Product" -Action { Start-DesktopAction -Action "stop" -Visible })
+[void](New-TrayItem -Menu $Menu -Text "Stop Yggdrasil" -Action { Start-DesktopAction -Action "stop" -Visible })
 [void](New-TrayItem -Menu $Menu -Text "Exit Tray" -Action {
     $NotifyIcon.Visible = $false
     [System.Windows.Forms.Application]::Exit()
@@ -108,7 +110,7 @@ $Menu = New-Object System.Windows.Forms.ContextMenuStrip
 
 $NotifyIcon.ContextMenuStrip = $Menu
 $NotifyIcon.Add_DoubleClick({ Start-DesktopAction -Action "open" })
-$NotifyIcon.ShowBalloonTip(3000, "Project Yggdrasil", "Tray controller is running.", [System.Windows.Forms.ToolTipIcon]::Info)
+$NotifyIcon.ShowBalloonTip(3000, "Project Yggdrasil", "Yggdrasil is available from the tray.", [System.Windows.Forms.ToolTipIcon]::Info)
 
 if ($StartProduct) {
     Start-DesktopAction -Action "start"

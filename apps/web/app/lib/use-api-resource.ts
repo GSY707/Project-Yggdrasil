@@ -2,6 +2,20 @@
 
 import { startTransition, useEffect, useRef, useState } from "react";
 
+async function responseErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown; message?: unknown };
+    const detail = typeof payload.detail === "string" ? payload.detail : typeof payload.message === "string" ? payload.message : null;
+    if (detail) {
+      return detail;
+    }
+  } catch {
+    // Fall back to the response text below.
+  }
+  return text || `Request failed with status ${response.status}.`;
+}
+
 export function useApiResource<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +45,7 @@ export function useApiResource<T>(path: string | null) {
       try {
         const response = await fetch(`/api/core${path}`, { cache: "no-store" });
         if (!response.ok) {
-          throw new Error(await response.text());
+          throw new Error(await responseErrorMessage(response));
         }
         const payload = (await response.json()) as T;
         if (!cancelled) {
@@ -75,7 +89,7 @@ export async function postApiJson<T>(path: string, body?: unknown): Promise<T> {
     body: JSON.stringify(body ?? {}),
   });
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new Error(await responseErrorMessage(response));
   }
   return (await response.json()) as T;
 }

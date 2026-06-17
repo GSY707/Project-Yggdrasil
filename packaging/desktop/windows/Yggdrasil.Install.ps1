@@ -2,14 +2,18 @@ param(
     [ValidateSet("install", "uninstall")]
     [string]$Action = "install",
     [string]$RepoRootPath = "",
-    [switch]$StartTray
+    [switch]$StartTray,
+    [switch]$DeleteLocalData,
+    [switch]$ConfirmDeleteLocalData
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallRoot = Join-Path $env:LOCALAPPDATA "ProjectYggdrasil\Desktop"
+$LocalAppDataRoot = Join-Path $env:LOCALAPPDATA "ProjectYggdrasil"
 $StartMenuRoot = Join-Path ([Environment]::GetFolderPath("Programs")) "Project Yggdrasil"
 $StartupRoot = [Environment]::GetFolderPath("Startup")
+$UninstallStatePath = Join-Path $LocalAppDataRoot "uninstall-state.json"
 
 function Resolve-InstallRepoRoot {
     if (-not [string]::IsNullOrWhiteSpace($RepoRootPath)) {
@@ -38,6 +42,95 @@ function Test-UnderPath {
     $ResolvedPath = [System.IO.Path]::GetFullPath($Path)
     $ResolvedParent = [System.IO.Path]::GetFullPath($Parent)
     return $ResolvedPath.StartsWith($ResolvedParent, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Write-UninstallState {
+    param([hashtable]$State)
+    $StateRoot = Split-Path -Parent $UninstallStatePath
+    if (-not (Test-Path $StateRoot)) {
+        New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
+    }
+    $State.checkedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $State | ConvertTo-Json -Depth 8 | Set-Content -Path $UninstallStatePath -Encoding UTF8
+}
+
+function Request-DesktopConfirmation {
+    param(
+        [string]$Prompt,
+        [string]$Expected
+    )
+    if ([Console]::IsInputRedirected) {
+        throw "Confirmation required. Re-run this action in a visible terminal and type '$Expected'."
+    }
+    $Answer = Read-Host $Prompt
+    if ($Answer -ne $Expected) {
+        throw "Action cancelled. Expected confirmation text '$Expected'."
+    }
+}
+
+function Get-PathSummary {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        return @{
+            path = $Path
+            exists = $false
+            itemCount = 0
+            bytes = 0
+        }
+    }
+    $Items = @(Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue)
+    $Bytes = 0
+    foreach ($Item in $Items) {
+        if (-not $Item.PSIsContainer) {
+            $Bytes += $Item.Length
+        }
+    }
+    return @{
+        path = $Path
+        exists = $true
+        itemCount = $Items.Count
+        bytes = $Bytes
+    }
+}
+
+function Get-UninstallImpactPreview {
+    $StateRoot = Join-Path $RepoRoot ".yggdrasil"
+    $BackupRoot = Join-Path $RepoRoot ".yggdrasil-backups"
+    $ProductEnv = Join-Path $RepoRoot "infra\product.env"
+    return @{
+        action = "uninstall"
+        installRoot = $InstallRoot
+        repoRoot = $RepoRoot
+        shortcuts = @(
+            (Join-Path $StartMenuRoot "Yggdrasil Tray.lnk"),
+            (Join-Path $StartMenuRoot "Yggdrasil Desktop.lnk"),
+            (Join-Path $StartMenuRoot "Yggdrasil Update.lnk"),
+            (Join-Path $StartupRoot "Yggdrasil Tray.lnk")
+        )
+        defaultKeepsLocalData = $true
+        retainedByDefault = @(
+            (Get-PathSummary -Path $StateRoot),
+            (Get-PathSummary -Path $BackupRoot),
+            (Get-PathSummary -Path $ProductEnv)
+        )
+        deletedWhenDeleteLocalDataIsConfirmed = @(
+            (Get-PathSummary -Path $StateRoot),
+            (Get-PathSummary -Path $BackupRoot)
+        )
+        retainedEvenWhenDeletingLocalData = @($ProductEnv)
+    }
+}
+
+function Remove-LocalData {
+    $Targets = @(
+        (Join-Path $RepoRoot ".yggdrasil"),
+        (Join-Path $RepoRoot ".yggdrasil-backups")
+    )
+    foreach ($Target in $Targets) {
+        if ((Test-Path $Target) -and (Test-UnderPath -Path $Target -Parent $RepoRoot)) {
+            Remove-Item -LiteralPath $Target -Recurse -Force
+        }
+    }
 }
 
 function New-Shortcut {
@@ -82,6 +175,18 @@ function Install-YggdrasilDesktop {
 
 function Uninstall-YggdrasilDesktop {
     $LocalAppData = Join-Path $env:LOCALAPPDATA "ProjectYggdrasil"
+    $Preview = Get-UninstallImpactPreview
+    $State = @{
+        status = "uninstall-preview"
+        impactPreview = $Preview
+        deleteLocalDataRequested = [bool]$DeleteLocalData
+    }
+    Write-UninstallState -State $State
+    Write-Host ($State | ConvertTo-Json -Depth 8)
+    if ($DeleteLocalData -and -not $ConfirmDeleteLocalData) {
+        Request-DesktopConfirmation -Prompt "Type DELETE LOCAL DATA to remove local state and backups after uninstalling" -Expected "DELETE LOCAL DATA"
+    }
+    try {
     if (Test-Path $InstallRoot) {
         & (Join-Path $InstallRoot "Yggdrasil.Desktop.ps1") uninstall-shortcuts
     }
@@ -104,7 +209,31 @@ function Uninstall-YggdrasilDesktop {
             Remove-Item -LiteralPath $StartMenuRoot -Force
         }
     }
-    Write-Host "Uninstalled Project Yggdrasil desktop preview."
+        if ($DeleteLocalData) {
+            Remove-LocalData
+        }
+        Write-UninstallState -State @{
+            status = "uninstall-succeeded"
+            impactPreview = $Preview
+            localDataDeleted = [bool]$DeleteLocalData
+        }
+        if ($DeleteLocalData) {
+            Write-Host "Uninstalled Project Yggdrasil desktop preview and deleted confirmed local data."
+        }
+        else {
+            Write-Host "Uninstalled Project Yggdrasil desktop preview. Local data was kept."
+        }
+    }
+    catch {
+        Write-UninstallState -State @{
+            status = "uninstall-failed"
+            impactPreview = $Preview
+            localDataDeleteRequested = [bool]$DeleteLocalData
+            error = $_.Exception.Message
+            recoveryActions = @("Re-run uninstall after closing tray windows.", "If local data was not requested for deletion, it remains in the repository data folders.", "Open the install folder and inspect uninstall-state.json for the failed step.")
+        }
+        throw
+    }
 }
 
 switch ($Action) {

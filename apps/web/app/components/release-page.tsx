@@ -22,9 +22,9 @@ const releaseModes = [
   {
     mode: "本地产品模式",
     status: "available",
-    install: "uv sync + corepack pnpm install + 至少一个 provider key",
-    launch: "corepack pnpm yggdrasil:up",
-    update: "停止本地服务，拉取更新后重新安装依赖并执行 yggdrasil:up",
+    install: "使用本地启动器并完成 AI 服务连接",
+    launch: "从桌面或托盘打开 Yggdrasil",
+    update: "手动检查更新，确认后再应用",
     data: ".yggdrasil、.yggdrasil/product-logs、.yggdrasil-backups",
     backup: "正式支持本地运行时备份与恢复",
     boundary: "当前推荐给试用用户；不提供 uptime 承诺，问题按自托管本地环境处理。",
@@ -43,7 +43,7 @@ const releaseModes = [
     mode: "桌面封装",
     status: "preview",
     install: "packaging/desktop/windows/Yggdrasil Installer.cmd",
-    launch: "双击 Yggdrasil Tray.cmd，或从托盘 Start and Open",
+    launch: "双击 Yggdrasil Tray.cmd，或从托盘 Start Yggdrasil",
     update: "Yggdrasil Update.cmd 检查；Yggdrasil Apply Update.cmd 仅 fast-forward 手动应用",
     data: "复用产品 compose volume；不引入远端同步",
     backup: "Yggdrasil.Desktop.ps1 backup / restore",
@@ -96,8 +96,8 @@ const demoSteps = [
 
 const storageItems = [
   {
-    title: "密钥",
-    detail: "真实 provider key 只应放在 .env 或用户级环境变量；工作台不展示 key 明文，也不应把 key 写入仓库。",
+    title: "AI 服务连接",
+    detail: "连接凭据只保存在本机环境中；工作台不展示明文，也不应把它写入仓库。",
   },
   {
     title: "数据库",
@@ -122,7 +122,7 @@ const storageItems = [
 ];
 
 const outboundItems = [
-  "启用真实 LLM provider 时，任务目标、导入素材摘要、检索上下文、Prompt 和模型响应会发送给对应 provider。",
+  "启用真实 AI 服务时，任务目标、导入素材摘要、检索上下文、提示内容和模型响应会发送给对应服务。",
   "Langfuse 或 OpenTelemetry endpoint 指向远端时，trace、generation metadata、错误摘要和部分运行属性会写入远端观测系统。",
   "uv、pnpm、Docker、Git 等安装和更新命令会访问各自的软件源或代码托管服务。",
   "托管 / SaaS 和官方远端数据服务已加入计划；当前本地产品模式仍不会自动把数据上传到 Project Yggdrasil 官方服务。",

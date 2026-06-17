@@ -125,24 +125,24 @@ function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplat
 function explainLaunchError(rawError: string, stage: "create" | "start"): string {
   const lower = rawError.toLowerCase();
   if (lower.includes("failed to fetch") || lower.includes("econnrefused") || lower.includes("connection refused")) {
-    return "Core API 不可访问。请确认 `uv run yggdrasil-core-api` 正在运行，或使用 `corepack pnpm yggdrasil:up` 启动本地产品模式。";
+    return "本地服务未启动或暂时不可用。请打开帮助与诊断查看产品状态，然后重试。";
   }
   if (lower.includes("database") || lower.includes("sqlalchemy") || lower.includes("psycopg")) {
-    return "数据库不可用。请启动本地依赖并执行迁移：`corepack pnpm infra:up`，然后 `uv run alembic upgrade head`。";
+    return "本地数据服务暂时不可用。请打开帮助与诊断检查本地产品状态。";
   }
   if (lower.includes("redis") || lower.includes("coordination") || lower.includes("queue")) {
-    return "运行队列不可用。请确认 Redis 已启动，并启动 worker：`uv run yggdrasil-worker --serve`。";
+    return "任务队列暂时不可用。请打开帮助与诊断检查后台服务。";
   }
   if (lower.includes("provider") || lower.includes("api key") || lower.includes("no configured")) {
-    return "模型供应商未配置。请在 `.env` 设置至少一个 provider key，例如 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`。";
+    return "AI 服务还没有连接。请打开设置完成 AI 服务连接后再启动任务。";
   }
   if (lower.includes("application") || lower.includes("app")) {
     return "没有可用应用或应用未正确装配。请先在应用页面激活应用，再重新启动任务。";
   }
   if (stage === "start") {
-    return `任务已创建但启动失败：${rawError}。若任务长时间停在 queued，请确认 worker 正在运行。`;
+    return "任务已创建但暂时没有启动成功。请打开任务详情或帮助与诊断查看状态。";
   }
-  return rawError;
+  return "任务暂时无法创建。请检查材料、应用和设置后重试。";
 }
 
 function ProviderReadiness({ error, isLoading, status }: { error?: string | null; isLoading?: boolean; status?: ProviderConfigurationStatus }) {
@@ -151,9 +151,9 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
       <div className="launch-template">
         <div className="record-head">
           <div>
-            <p className="meta-label">模型供应商</p>
-            <h4 className="record-title">正在检查 provider key</h4>
-            <p className="meta-copy">启动动作会在配置状态确认后开放。</p>
+          <p className="meta-label">AI 服务</p>
+          <h4 className="record-title">正在检查连接状态</h4>
+          <p className="meta-copy">启动动作会在配置状态确认后开放。</p>
           </div>
           <StatusBadge value="pending" />
         </div>
@@ -165,9 +165,9 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
       <div className="launch-template">
         <div className="record-head">
           <div>
-            <p className="meta-label">模型供应商</p>
-            <h4 className="record-title">Provider 状态不可用</h4>
-            <p className="meta-copy">{error}</p>
+          <p className="meta-label">AI 服务</p>
+          <h4 className="record-title">连接状态不可用</h4>
+          <p className="meta-copy">请打开帮助与诊断查看本地产品状态。</p>
           </div>
           <StatusBadge value="blocked" />
         </div>
@@ -178,16 +178,21 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
     return null;
   }
   const configuredLabels = status.configuredProviders.map((provider) => provider.label);
-  const required = status.requiredAnyOf.slice(0, 5).join(" / ");
+  const statusCopy =
+    status.status === "ready"
+      ? "AI 服务已连接，可以启动任务。"
+      : status.status === "warning"
+        ? "AI 服务连接需要确认，建议先创建草稿。"
+        : "请在设置里连接 AI 服务后再启动任务。";
   return (
     <div className="launch-template">
       <div className="record-head">
         <div>
-          <p className="meta-label">模型供应商</p>
+          <p className="meta-label">AI 服务</p>
           <h4 className="record-title">
-            {status.status === "ready" ? "Provider key 已就绪" : status.status === "warning" ? "当前为 fallback 测试模式" : "启动前必须配置 provider key"}
+            {status.status === "ready" ? "AI 服务已连接" : status.status === "warning" ? "连接需要确认" : "启动前需要连接 AI 服务"}
           </h4>
-          <p className="meta-copy">{status.detail}</p>
+          <p className="meta-copy">{statusCopy}</p>
         </div>
         <StatusBadge value={status.status} />
       </div>
@@ -200,7 +205,7 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
           ))}
         </div>
       ) : (
-        <p className="meta-copy mono">需要设置：{required}</p>
+        <p className="meta-copy">请在设置里完成连接，然后回到这里启动任务。</p>
       )}
       {status.remediation ? <p className="meta-copy">{status.remediation}</p> : null}
     </div>
@@ -329,7 +334,7 @@ export function TaskLaunchPanel({
         <div>
           <p className="section-kicker">新任务</p>
           <h3 className="section-title">{title}</h3>
-          <p className="section-copy">选择应用模板后创建任务。创建完成后可以立刻启动并进入任务详情页。</p>
+          <p className="section-copy">选择应用模板后先保存草稿，也可以在确认目标、材料和预算后立即启动。</p>
         </div>
         {selectedApp ? <StatusBadge value={selectedApp.configBinding.active ? "active" : "available"} /> : null}
       </div>
@@ -400,7 +405,7 @@ export function TaskLaunchPanel({
                 </div>
                 <div className="pill-row">
                   <span className="inline-chip">素材 {attachment.assetId}</span>
-                  {attachment.summaryNodeId ? <span className="inline-chip">摘要节点 {attachment.summaryNodeId}</span> : null}
+                {attachment.summaryNodeId ? <span className="inline-chip">已生成摘要</span> : null}
                   {attachment.segmentCount ? <span className="inline-chip">切段 {attachment.segmentCount}</span> : null}
                 </div>
               </article>
@@ -423,8 +428,8 @@ export function TaskLaunchPanel({
       {selectedApp ? (
         <div className="pill-row">
           <span className="inline-chip">应用 {selectedApp.application.displayName}</span>
-          <span className="inline-chip">模板类型 {selectedTemplate?.taskType ?? "general"}</span>
-          <span className="inline-chip">能力 {selectedApp.application.capabilityModuleIds.length}</span>
+          <span className="inline-chip">模板 {selectedTemplate?.title ?? "默认"}</span>
+          <span className="inline-chip">启动前确认</span>
         </div>
       ) : null}
 

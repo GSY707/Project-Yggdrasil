@@ -202,24 +202,22 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
 
       <div className="content-grid tight">
         <Surface>
-          <p className="section-kicker">应用身份</p>
-          <h3 className="section-title">应用摘要</h3>
+          <p className="section-kicker">应用</p>
+          <h3 className="section-title">用途与状态</h3>
           <div className="record-list">
             <article className="record-card">
               <div className="record-head">
                 <div>
                   <h4 className="record-title">{manifest.displayName}</h4>
-                  <p className="meta-copy">{manifest.appId}</p>
+                  <p className="meta-copy">{manifest.description ?? dashboard.hero?.summary ?? "从这个应用启动任务。"}</p>
                 </div>
                 <StatusBadge value={binding.active ? "active" : manifest.defaultLoad ? "default" : "inactive"} />
               </div>
               <div className="pill-row">
                 <span className="inline-chip">版本 {manifest.version}</span>
-                <span className="inline-chip">负责人 {manifest.owner ?? "-"}</span>
-                <span className="inline-chip">Prompt {manifest.defaultPromptProfileId ?? "-"}</span>
-                <span className="inline-chip">种子模板 {manifest.defaultSeedTemplateId ?? "-"}</span>
-                <span className="inline-chip">记忆 {manifest.memoryNamespace ?? manifest.appId}</span>
-                <span className="inline-chip">出厂记忆 {manifest.memoryAssetFiles.length}</span>
+                <span className="inline-chip">模板 {dashboard.taskTemplates?.length ?? 0}</span>
+                <span className="inline-chip">默认设置 {fields.length}</span>
+                <span className="inline-chip">本地记忆 {manifest.memoryAssetFiles.length}</span>
               </div>
             </article>
           </div>
@@ -228,22 +226,23 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
               {binding.active ? "当前激活" : isSaving ? "处理中" : "激活应用"}
             </button>
             <Link className="ghost-button" href={`/tasks?appId=${encodeURIComponent(manifest.appId)}`}>从模板新建任务</Link>
-            <Link className="ghost-button" href={`/prompting?appId=${encodeURIComponent(manifest.appId)}`}>查看高级 Prompt</Link>
+            <Link className="ghost-button" href="/settings">打开设置中心</Link>
           </div>
         </Surface>
 
         <TaskLaunchPanel applications={[launchItem]} compact defaultAppId={manifest.appId} title="从这个应用启动任务" />
 
         <Surface>
-          <p className="section-kicker">模块</p>
-          <h3 className="section-title">装配模块</h3>
+          <p className="section-kicker">高级详情</p>
+          <h3 className="section-title">维护者装配信息</h3>
+          <p className="section-copy">这些信息用于排查应用包装配，不影响普通任务启动路径。</p>
           <div className="record-list">
             {[...manifest.capabilityModuleIds, ...manifest.sceneModuleIds].map((moduleId) => (
               <article className="record-card" key={moduleId}>
                 <div className="record-head">
                   <div>
                     <h4 className="record-title">{moduleId}</h4>
-                      <p className="meta-copy">应用装配依赖</p>
+                      <p className="meta-copy">维护者装配项</p>
                   </div>
                 </div>
               </article>
@@ -252,9 +251,9 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
         </Surface>
 
         <Surface>
-          <p className="section-kicker">配置</p>
+          <p className="section-kicker">设置</p>
           <h3 className="section-title">用户级重要设置</h3>
-          <p className="meta-copy">这里写入基座侧 importantConfig，会覆盖应用包 defaults.json。常用字段使用可验证控件，原始 JSON 放在高级模式。</p>
+          <p className="meta-copy">常用字段使用可验证控件。维护者原始配置只在高级模式展开。</p>
           <div className="settings-grid">
             {fields.map((field) => (
               <div className="form-field" key={field.key}>
@@ -302,32 +301,30 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
             ))}
           </div>
           <button className="ghost-button advanced-toggle" onClick={() => setAdvancedConfigOpen((value) => !value)} type="button">
-            {advancedConfigOpen ? "收起高级 JSON" : "高级 JSON"}
+            {advancedConfigOpen ? "收起维护者配置" : "维护者配置"}
           </button>
           {advancedConfigOpen ? (
             <div className="form-field">
-              <label className="meta-label" htmlFor="application-config">高级配置 JSON</label>
+              <label className="meta-label" htmlFor="application-config">维护者配置</label>
               <textarea className="field-input field-textarea" id="application-config" onChange={(event) => setConfigDraft(event.target.value)} rows={12} value={configDraft} />
             </div>
           ) : null}
           <div className="field-actions">
             <button className="action-button" disabled={isSaving} onClick={() => void handleSaveConfig()} type="button">
-              {isSaving ? "保存中" : "保存重要配置"}
+              {isSaving ? "保存中" : "保存设置"}
             </button>
           </div>
-          <pre className="meta-copy mono">{JSON.stringify(detail.data.effectiveConfig, null, 2)}</pre>
         </Surface>
 
         <Surface>
-          <p className="section-kicker">记忆</p>
-          <h3 className="section-title">应用出厂记忆</h3>
-          <p className="meta-copy">运行时记忆按命名空间隔离，出厂记忆放在应用包内，二者共同组成混合记忆方案。</p>
+          <p className="section-kicker">知识</p>
+          <h3 className="section-title">随应用提供的材料</h3>
+          <p className="meta-copy">这些是应用自带的参考材料，普通任务会按应用配置使用。</p>
           <div className="pill-row">
-            <span className="inline-chip">命名空间 {manifest.memoryNamespace ?? manifest.appId}</span>
-            <span className="inline-chip">出厂文件 {manifest.memoryAssetFiles.length}</span>
+            <span className="inline-chip">参考材料 {manifest.memoryAssetFiles.length}</span>
           </div>
           {manifest.memoryAssetFiles.length === 0 ? (
-            <EmptyState title="没有声明应用记忆资产" detail="这个应用包尚未提供 memory/ 下的静态记忆文件。" />
+            <EmptyState title="没有随应用提供的材料" detail="这个应用仍可使用用户导入的材料启动任务。" />
           ) : (
             <div className="record-list">
               {manifest.memoryAssetFiles.map((filePath) => (
@@ -335,7 +332,7 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
                   <div className="record-head">
                     <div>
                       <h4 className="record-title">{filePath}</h4>
-                      <p className="meta-copy">应用出厂记忆</p>
+                      <p className="meta-copy">应用参考材料</p>
                     </div>
                   </div>
                 </article>
@@ -360,10 +357,10 @@ export function ApplicationDetailPage({ appId }: { appId: string }) {
         </Surface>
 
         <Surface>
-          <p className="section-kicker">应用面板</p>
-          <h3 className="section-title">应用元数据</h3>
+          <p className="section-kicker">快捷入口</p>
+          <h3 className="section-title">相关操作</h3>
           {quickActions.length === 0 ? (
-            <EmptyState title="没有快捷动作" detail="该应用仅提供了最小元数据。" />
+            <EmptyState title="没有快捷动作" detail="可以直接从上方任务面板启动。" />
           ) : (
             <div className="record-list">
               {quickActions.map((action, index) => (

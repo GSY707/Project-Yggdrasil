@@ -33,8 +33,7 @@ async function forwardRequest(request: NextRequest, context: RouteContext) {
   } catch (error) {
     return NextResponse.json(
       {
-        detail: `Unable to reach core API at ${targetUrl.toString()}.`,
-        error: error instanceof Error ? error.message : String(error),
+        detail: "本地服务未启动或暂时不可用。请打开帮助与诊断查看产品状态。",
       },
       { status: 502 },
     );
