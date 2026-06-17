@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Project Yggdrasil Launcher</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary-fixed-dim": "#4edea3",
+                      "primary-container": "#064e3b",
+                      "tertiary-fixed": "#68fcbf",
+                      "surface": "#0c1322",
+                      "secondary": "#4edea3",
+                      "primary": "#95d3ba",
+                      "on-primary": "#003829",
+                      "surface-container": "#191f2f",
+                      "on-error": "#690005",
+                      "surface-dim": "#0c1322",
+                      "on-secondary-fixed": "#002113",
+                      "surface-tint": "#95d3ba",
+                      "surface-bright": "#323949",
+                      "on-background": "#dce2f7",
+                      "primary-fixed-dim": "#95d3ba",
+                      "inverse-primary": "#2b6954",
+                      "primary-fixed": "#b0f0d6",
+                      "outline-variant": "#404944",
+                      "on-surface": "#dce2f7",
+                      "on-tertiary-fixed": "#002114",
+                      "on-tertiary-container": "#23ca90",
+                      "on-primary-fixed-variant": "#0b513d",
+                      "on-error-container": "#ffdad6",
+                      "on-surface-variant": "#bfc9c3",
+                      "on-primary-fixed": "#002117",
+                      "secondary-fixed": "#6ffbbe",
+                      "surface-container-high": "#232a3a",
+                      "surface-container-lowest": "#070e1d",
+                      "on-tertiary": "#003825",
+                      "surface-variant": "#2e3545",
+                      "tertiary-fixed-dim": "#45dfa4",
+                      "on-secondary-fixed-variant": "#005236",
+                      "inverse-on-surface": "#293040",
+                      "tertiary-container": "#004f35",
+                      "error-container": "#93000a",
+                      "surface-container-low": "#141b2b",
+                      "background": "#0c1322",
+                      "error": "#ffb4ab",
+                      "secondary-container": "#00a572",
+                      "surface-container-highest": "#2e3545",
+                      "on-primary-container": "#80bea6",
+                      "on-tertiary-fixed-variant": "#005137",
+                      "tertiary": "#45dfa4",
+                      "on-secondary-container": "#00311f",
+                      "on-secondary": "#003824",
+                      "inverse-surface": "#dce2f7",
+                      "outline": "#89938d"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "margin-safe": "32px",
+                      "stack-gap-lg": "32px",
+                      "stack-gap-md": "16px",
+                      "unit": "4px",
+                      "stack-gap-sm": "8px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Geist"
+                      ],
+                      "display-lg-mobile": [
+                              "Geist"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "label-code": [
+                              "JetBrains Mono"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Geist"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "display-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-code": [
+                              "13px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "1.3",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            background-color: #070e1d; /* Fallback */
+            background-image: radial-gradient(circle at 50% 0%, #141b2b 0%, #070e1d 100%);
+            min-height: 100vh;
+        }
+        /* Custom scrollbar for dense data */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e3545;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404944;
+        }
+        
+        .biolume-glow {
+            box-shadow: 0 0 15px -3px rgba(149, 211, 186, 0.4);
+        }
+        
+        .glass-panel {
+            background: rgba(12, 19, 34, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-left: 1px solid rgba(255, 255, 255, 0.02);
+        }
+    </style>
+</head>
+<body class="text-on-surface font-body-md flex items-center justify-center p-8 overflow-hidden">
+<!-- Desktop Background Setup -->
+<div class="fixed inset-0 z-[-1] opacity-30" data-alt="A dark, abstract visualization of neural networks and glowing circuitry, blending organic root-like structures with precise digital light patterns. The palette is deep slate and obsidian with bioluminescent emerald and cyan glows." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDtgAcFgvcudZXG7EgZ0ACMmhYcj12pAcDub30-mlT349JA1fAy0PtJ6e4Y0mOsVI757e3q8ThgyVCyBAW-taYQ8Iuo4qfEd1Z_Mnm507F1FQB9xlOCbkflzPSLpuKNLijyP5VkjyIGS5FbIDAONoUuB9JNBMw3MupvjwbpYktYAEMbxjQufocQhRxwCIemcBjhsx3nEJHWeND_qudsUNNYEbEPTkJb3IQmygcNq3sjs05KQfexNRPGCj_sMrQDyoR5Rm36Z8xMCc8'); background-size: cover; background-position: center;"></div>
+<!-- Main Workspace Container -->
+<div class="relative flex gap-8 w-full max-w-container-max h-[870px]">
+<!-- Main Application Window -->
+<main class="flex-1 flex flex-col bg-surface rounded-xl shadow-2xl border border-outline-variant overflow-hidden flex flex-col glass-panel relative z-10">
+<!-- Window Header -->
+<header class="h-14 border-b border-outline-variant flex items-center justify-between px-6 bg-surface-container-low shrink-0 cursor-move">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">eco</span>
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Project Yggdrasil Launcher</h1>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">minimize</span></button>
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">crop_square</span></button>
+<button class="hover:text-error transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-gutter flex flex-col gap-stack-gap-lg">
+<!-- Status Summary Section -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-stack-gap-md">
+<!-- Ready Status -->
+<div class="bg-surface-container p-4 rounded-lg border-t border-outline-variant flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center border border-secondary/30">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">System Status</p>
+<p class="font-body-md text-body-md font-semibold text-secondary">Ready</p>
+</div>
+</div>
+<!-- Update Available Status -->
+<div class="bg-surface-container p-4 rounded-lg border-t border-outline-variant flex items-center gap-4 relative overflow-hidden group cursor-pointer">
+<div class="absolute inset-0 bg-yellow-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30">
+<span class="material-symbols-outlined text-yellow-500">update</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Maintenance</p>
+<p class="font-body-md text-body-md font-semibold text-yellow-500">Update available</p>
+</div>
+</div>
+<!-- Backup Status -->
+<div class="bg-surface-container p-4 rounded-lg border-t border-outline-variant flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+<span class="material-symbols-outlined text-blue-400">cloud_done</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Data Safety</p>
+<p class="font-body-md text-body-md font-semibold text-blue-400">Backup complete</p>
+</div>
+</div>
+</section>
+<!-- Applications Section (Bento Grid) -->
+<section class="flex flex-col gap-stack-gap-md">
+<h2 class="font-headline-md text-headline-md font-semibold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">apps</span>
+                        Applications
+                    </h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap-md">
+<!-- App 1: Deep Research -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-6 rounded-lg border-t border-outline-variant flex flex-col gap-4 group">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-lg bg-surface flex items-center justify-center shadow-lg border border-outline-variant/50 group-hover:biolume-glow transition-all">
+<span class="material-symbols-outlined text-primary text-2xl">travel_explore</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant font-label-code text-label-code rounded">Idle</span>
+</div>
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface">Deep Research</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Gather and synthesize complex information across vast knowledge domains.</p>
+</div>
+<button class="mt-auto self-start px-6 py-2 bg-secondary text-on-secondary font-body-sm text-body-sm font-semibold rounded hover:bg-secondary-fixed transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span> Launch
+                            </button>
+</div>
+<!-- App 2: Graduate Writing -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-6 rounded-lg border-t border-outline-variant flex flex-col gap-4 group">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-lg bg-surface flex items-center justify-center shadow-lg border border-outline-variant/50 group-hover:biolume-glow transition-all">
+<span class="material-symbols-outlined text-primary text-2xl">edit_document</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant font-label-code text-label-code rounded">Idle</span>
+</div>
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface">Graduate Writing</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Draft, refine, and structure long-form academic and professional content.</p>
+</div>
+<button class="mt-auto self-start px-6 py-2 bg-secondary text-on-secondary font-body-sm text-body-sm font-semibold rounded hover:bg-secondary-fixed transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span> Launch
+                            </button>
+</div>
+<!-- App 3: Coding Assistant -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-6 rounded-lg border-t border-outline-variant flex flex-col gap-4 group">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-lg bg-surface flex items-center justify-center shadow-lg border border-outline-variant/50 group-hover:biolume-glow transition-all">
+<span class="material-symbols-outlined text-primary text-2xl">code_blocks</span>
+</div>
+<span class="px-2 py-1 bg-primary-container text-on-primary-container font-label-code text-label-code rounded flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span> Active
+                                </span>
+</div>
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface">Coding Assistant</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Develop, debug, and optimize software architecture seamlessly.</p>
+</div>
+<button class="mt-auto self-start px-6 py-2 border border-outline text-on-surface font-body-sm text-body-sm font-semibold rounded hover:bg-surface-container-highest transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">open_in_new</span> Open Window
+                            </button>
+</div>
+<!-- App 4: Knowledge Base -->
+<div class="bg-surface-container hover:bg-surface-container-high transition-colors p-6 rounded-lg border-t border-outline-variant flex flex-col gap-4 group">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-lg bg-surface flex items-center justify-center shadow-lg border border-outline-variant/50 group-hover:biolume-glow transition-all">
+<span class="material-symbols-outlined text-primary text-2xl">library_books</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest text-on-surface-variant font-label-code text-label-code rounded">Idle</span>
+</div>
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface">Knowledge Base</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Manage and query your personal library of saved insights and documents.</p>
+</div>
+<button class="mt-auto self-start px-6 py-2 bg-secondary text-on-secondary font-body-sm text-body-sm font-semibold rounded hover:bg-secondary-fixed transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span> Launch
+                            </button>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-stack-gap-lg">
+<!-- Recent Tasks Section -->
+<section class="lg:col-span-2 flex flex-col gap-stack-gap-md">
+<h2 class="font-headline-md text-headline-md font-semibold flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">history</span>
+                            Recent Tasks
+                        </h2>
+<div class="bg-surface-container rounded-lg border-t border-outline-variant overflow-hidden">
+<ul class="divide-y divide-outline-variant/50">
+<li class="p-4 hover:bg-surface-container-high transition-colors flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">check</span>
+<span class="font-body-sm text-body-sm text-on-surface">Research index completed</span>
+</div>
+<span class="font-label-code text-label-code text-on-surface-variant">10 mins ago</span>
+</li>
+<li class="p-4 hover:bg-surface-container-high transition-colors flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">check</span>
+<span class="font-body-sm text-body-sm text-on-surface">Writing outline updated</span>
+</div>
+<span class="font-label-code text-label-code text-on-surface-variant">2 hours ago</span>
+</li>
+<li class="p-4 hover:bg-surface-container-high transition-colors flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">check</span>
+<span class="font-body-sm text-body-sm text-on-surface">Knowledge base refreshed</span>
+</div>
+<span class="font-label-code text-label-code text-on-surface-variant">Yesterday</span>
+</li>
+</ul>
+</div>
+</section>
+<!-- Quick Actions Section -->
+<section class="flex flex-col gap-stack-gap-md">
+<h2 class="font-headline-md text-headline-md font-semibold flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">bolt</span>
+                            Quick Actions
+                        </h2>
+<div class="flex flex-col gap-2">
+<button class="w-full p-4 bg-surface-container hover:bg-surface-container-high border-t border-outline-variant rounded-lg flex items-center gap-3 transition-colors text-left group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">cloud_upload</span>
+<span class="font-body-sm text-body-sm text-on-surface flex-1">Create Backup</span>
+<span class="material-symbols-outlined text-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</button>
+<button class="w-full p-4 bg-surface-container hover:bg-surface-container-high border-t border-outline-variant rounded-lg flex items-center gap-3 transition-colors text-left group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">medical_services</span>
+<span class="font-body-sm text-body-sm text-on-surface flex-1">Run Diagnostics</span>
+<span class="material-symbols-outlined text-sm text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</button>
+<button class="w-full p-4 bg-surface-container hover:bg-surface-container-high border-t border-outline-variant rounded-lg flex items-center gap-3 transition-colors text-left group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-yellow-500 transition-colors">update</span>
+<span class="font-body-sm text-body-sm text-on-surface flex-1">Check for Updates</span>
+<span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+</button>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- System Tray Menu (Floating next to app) -->
+<aside class="w-64 bg-surface-container-low rounded-xl shadow-2xl border border-outline-variant flex flex-col overflow-hidden glass-panel shrink-0 h-fit self-end mb-8 relative z-20">
+<div class="p-4 border-b border-outline-variant flex items-center gap-3 bg-surface-container-highest">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">eco</span>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Project Yggdrasil</p>
+<p class="font-label-code text-[11px] text-on-surface-variant">Running quietly</p>
+</div>
+</div>
+<ul class="flex flex-col py-2">
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">open_in_new</span>
+                        Open Project Yggdrasil
+                    </button>
+</li>
+<li class="my-1 border-t border-outline-variant/50"></li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">pause_circle</span>
+                        Pause Background Work
+                    </button>
+</li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3 opacity-50 cursor-not-allowed">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">play_circle</span>
+                        Resume Background Work
+                    </button>
+</li>
+<li class="my-1 border-t border-outline-variant/50"></li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">cloud_upload</span>
+                        Create Backup
+                    </button>
+</li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3 justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">update</span>
+                            Check for Updates
+                        </div>
+<span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+</button>
+</li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">medical_services</span>
+                        Run Diagnostics
+                    </button>
+</li>
+<li class="my-1 border-t border-outline-variant/50"></li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">settings</span>
+                        Settings
+                    </button>
+</li>
+<li>
+<button class="w-full px-4 py-2 text-left font-body-sm text-body-sm text-error hover:bg-surface-container-high transition-colors flex items-center gap-3 mt-1">
+<span class="material-symbols-outlined text-sm">power_settings_new</span>
+                        Quit
+                    </button>
+</li>
+</ul>
+</aside>
+</div>
+<!-- Overlays & Modals (Absolute positioned relative to viewport) -->
+<!-- Update Available Modal -->
+<div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="updateModal">
+<div class="bg-surface-container-high w-full max-w-md rounded-xl shadow-2xl border border-outline-variant p-6 flex flex-col gap-6">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0 border border-yellow-500/30">
+<span class="material-symbols-outlined text-yellow-500 text-2xl">update</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface">Update Available</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">A new version of Project Yggdrasil is ready to install. This update includes performance improvements and new features for your applications.</p>
+</div>
+</div>
+<div class="flex justify-end gap-3 mt-4">
+<button class="px-4 py-2 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-variant rounded transition-colors" onclick="document.getElementById('updateModal').classList.add('hidden')">Remind Me Later</button>
+<button class="px-4 py-2 bg-secondary text-on-secondary font-body-sm text-body-sm font-semibold rounded hover:bg-secondary-fixed transition-colors">Open Updater</button>
+</div>
+</div>
+</div>
+<!-- Quit Confirmation Modal -->
+<div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="quitModal">
+<div class="bg-surface-container-high w-full max-w-md rounded-xl shadow-2xl border border-outline-variant p-6 flex flex-col gap-6">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-full bg-error/20 flex items-center justify-center shrink-0 border border-error/30">
+<span class="material-symbols-outlined text-error text-2xl">power_settings_new</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[20px] font-semibold text-on-surface">Quit Project Yggdrasil?</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">Background work will be paused and your applications will close. Are you sure you want to quit?</p>
+</div>
+</div>
+<div class="flex justify-end gap-3 mt-4">
+<button class="px-4 py-2 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-variant rounded transition-colors" onclick="document.getElementById('quitModal').classList.add('hidden')">Cancel</button>
+<button class="px-4 py-2 bg-error text-on-error font-body-sm text-body-sm font-semibold rounded hover:bg-error-container transition-colors">Confirm Quit</button>
+</div>
+</div>
+</div>
+<!-- Toast Notification (Backup Complete) -->
+<div class="fixed bottom-safe right-safe z-50 transform transition-all duration-300 translate-y-0 opacity-100">
+<div class="bg-surface-container-highest shadow-lg border border-outline-variant rounded-lg p-4 flex items-center gap-3 min-w-[300px]">
+<div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30 shrink-0">
+<span class="material-symbols-outlined text-blue-400 text-sm">cloud_done</span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Backup complete</p>
+<p class="font-label-code text-[11px] text-on-surface-variant mt-0.5">Just now</p>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+</div>
+<script>
+        // Simple script to toggle modals for demonstration
+        // In a real app, these would be bound to specific actions
+        setTimeout(() => {
+            // document.getElementById('updateModal').classList.remove('hidden');
+        }, 1000);
+    </script>
+</body></html>

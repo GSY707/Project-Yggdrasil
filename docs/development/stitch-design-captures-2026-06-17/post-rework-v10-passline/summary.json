@@ -1,0 +1,33 @@
+{
+  "screenCount": 5,
+  "screenshotCount": 5,
+  "htmlCount": 5,
+  "countsByGroup": {
+    "application-package": {
+      "screens": 1,
+      "screenshots": 1,
+      "html": 1
+    },
+    "home": {
+      "screens": 1,
+      "screenshots": 1,
+      "html": 1
+    },
+    "launcher": {
+      "screens": 2,
+      "screenshots": 2,
+      "html": 2
+    },
+    "settings": {
+      "screens": 1,
+      "screenshots": 1,
+      "html": 1
+    }
+  },
+  "contactSheets": [
+    "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\contact-sheets\\application-package.png",
+    "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\contact-sheets\\home.png",
+    "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\contact-sheets\\launcher.png",
+    "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\contact-sheets\\settings.png"
+  ]
+}

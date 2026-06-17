@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Project Yggdrasil Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Geist:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary-fixed-dim": "#4edea3",
+                        "outline-variant": "#404944",
+                        "surface-tint": "#95d3ba",
+                        "on-tertiary-container": "#23ca90",
+                        "inverse-primary": "#2b6954",
+                        "secondary-fixed": "#6ffbbe",
+                        "error-container": "#93000a",
+                        "surface-container-lowest": "#070e1d",
+                        "on-secondary-container": "#00311f",
+                        "on-primary": "#003829",
+                        "surface-bright": "#323949",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed": "#002117",
+                        "surface-variant": "#2e3545",
+                        "on-primary-container": "#80bea6",
+                        "secondary": "#4edea3",
+                        "surface-container-highest": "#2e3545",
+                        "on-tertiary": "#003825",
+                        "background": "#0c1322",
+                        "on-secondary": "#003824",
+                        "primary": "#95d3ba",
+                        "on-error-container": "#ffdad6",
+                        "on-error": "#690005",
+                        "tertiary-container": "#004f35",
+                        "on-secondary-fixed-variant": "#005236",
+                        "inverse-surface": "#dce2f7",
+                        "tertiary": "#45dfa4",
+                        "primary-container": "#064e3b",
+                        "error": "#ffb4ab",
+                        "surface": "#0c1322",
+                        "surface-container-low": "#141b2b",
+                        "tertiary-fixed": "#68fcbf",
+                        "secondary-container": "#00a572",
+                        "on-surface-variant": "#bfc9c3",
+                        "surface-container": "#191f2f",
+                        "on-primary-fixed-variant": "#0b513d",
+                        "on-background": "#dce2f7",
+                        "inverse-on-surface": "#293040",
+                        "on-tertiary-fixed": "#002114",
+                        "outline": "#89938d",
+                        "tertiary-fixed-dim": "#45dfa4",
+                        "surface-container-high": "#232a3a",
+                        "on-tertiary-fixed-variant": "#005137",
+                        "primary-fixed": "#b0f0d6",
+                        "primary-fixed-dim": "#95d3ba",
+                        "surface-dim": "#0c1322",
+                        "on-surface": "#dce2f7"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.125rem",
+                        lg: "0.25rem",
+                        xl: "0.5rem",
+                        full: "0.75rem"
+                    },
+                    spacing: {
+                        "margin-safe": "32px",
+                        "unit": "4px",
+                        "stack-gap-md": "16px",
+                        "stack-gap-sm": "8px",
+                        "stack-gap-lg": "32px",
+                        "gutter": "24px",
+                        "container-max": "1440px"
+                    },
+                    fontFamily: {
+                        "body-sm": ["Inter"],
+                        "label-code": ["JetBrains Mono"],
+                        "display-lg": ["Geist"],
+                        "body-lg": ["Inter"],
+                        "display-lg-mobile": ["Geist"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Geist"]
+                    },
+                    fontSize: {
+                        "body-sm": ["14px", { lineHeight: "1.5", fontWeight: "400" }],
+                        "label-code": ["13px", { lineHeight: "1.4", letterSpacing: "0.02em", fontWeight: "500" }],
+                        "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "body-lg": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
+                        "display-lg-mobile": ["32px", { lineHeight: "1.2", fontWeight: "700" }],
+                        "body-md": ["16px", { lineHeight: "1.5", fontWeight: "400" }],
+                        "headline-md": ["24px", { lineHeight: "1.3", fontWeight: "600" }]
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(46, 53, 69, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .ai-glow {
+            box-shadow: 0 0 15px -3px rgba(78, 222, 163, 0.4);
+        }
+        /* Custom scrollbar for dark mode */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0c1322;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e3545;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404944;
+        }
+        
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #4edea3;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #00a572;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen w-screen overflow-hidden flex font-body-md antialiased" style="width: 1440px; height: 960px; margin: 0 auto; position: relative;">
+<!-- Background Decoration -->
+<div class="absolute inset-0 pointer-events-none overflow-hidden z-0">
+<div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-secondary opacity-5 blur-[120px]"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-primary opacity-5 blur-[100px]"></div>
+</div>
+<!-- Side Navigation -->
+<nav class="w-64 bg-surface-container-low border-r border-outline-variant h-full flex flex-col py-6 px-4 space-y-stack-gap-md z-10">
+<!-- Header -->
+<div class="mb-8 px-2 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">eco</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-on-surface m-0 leading-none">Yggdrasil</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant m-0 mt-1">Project Settings</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 space-y-2">
+<!-- Active Item -->
+<a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-lg font-bold border-l-4 border-secondary transition-all" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-body-md text-body-md">General</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">neurology</span>
+<span class="font-body-md text-body-md">AI Service</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">payments</span>
+<span class="font-body-md text-body-md">Spending</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">hard_drive</span>
+<span class="font-body-md text-body-md">Storage</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">tune</span>
+<span class="font-body-md text-body-md">App Defaults</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">shield_person</span>
+<span class="font-body-md text-body-md">Data &amp; Privacy</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">visibility</span>
+<span class="font-body-md text-body-md">Preview Scope</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 h-full flex flex-col z-10 bg-surface">
+<!-- Top Bar -->
+<header class="h-20 border-b border-outline-variant flex items-center justify-between px-gutter">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface m-0">General Settings</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant m-0">Manage core preferences and system defaults.</p>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-surface-container-high hover:bg-surface-variant text-on-surface px-4 py-2 rounded-lg font-body-sm text-body-sm transition-colors border border-outline-variant">
+                    Discard Changes
+                </button>
+<button class="bg-secondary text-on-secondary-container px-6 py-2 rounded-lg font-body-sm text-body-sm font-medium hover:bg-secondary-fixed transition-colors shadow-[0_0_15px_-3px_rgba(78,222,163,0.3)]">
+                    Save Changes
+                </button>
+</div>
+</header>
+<!-- Canvas -->
+<div class="flex-1 p-gutter overflow-y-auto">
+<div class="max-w-5xl mx-auto h-full">
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 h-full auto-rows-fr">
+<!-- Panel 1: Language & Region -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-secondary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">language</span>
+                                Language &amp; Region
+                            </h3>
+<span class="font-label-code text-label-code text-secondary bg-secondary/10 px-2 py-1 rounded">Saved</span>
+</div>
+<div class="space-y-5 flex-1">
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface-variant mb-2">Language</label>
+<div class="bg-surface-container-low rounded-lg p-1 flex">
+<button class="flex-1 py-2 text-center rounded-md bg-surface-variant text-on-surface font-body-sm text-body-sm shadow-sm transition-all border border-outline-variant">English US</button>
+<button class="flex-1 py-2 text-center rounded-md text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all">English UK</button>
+</div>
+</div>
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface-variant mb-2">Time Format</label>
+<div class="bg-surface-container-low rounded-lg p-1 flex">
+<button class="flex-1 py-2 text-center rounded-md bg-surface-variant text-on-surface font-body-sm text-body-sm shadow-sm transition-all border border-outline-variant">Local Auto</button>
+<button class="flex-1 py-2 text-center rounded-md text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all">24-Hour</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Panel 2: AI Service -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative group">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-secondary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">psychology</span>
+                                AI Service
+                            </h3>
+</div>
+<div class="flex-1 flex flex-col justify-center items-center text-center space-y-4">
+<div class="w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/30 relative">
+<span class="material-symbols-outlined text-3xl text-secondary">neurology</span>
+<div class="absolute top-0 right-0 w-4 h-4 bg-secondary rounded-full border-2 border-surface ai-glow animate-pulse"></div>
+</div>
+<div>
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Service Connected</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Operating normally</p>
+</div>
+<div class="w-full mt-4">
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 text-on-surface font-body-sm text-body-sm appearance-none focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary transition-colors cursor-pointer">
+<option>Response quality: Balanced</option>
+<option>Response quality: Speed</option>
+<option>Response quality: Deep Analysis</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-on-surface-variant">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Panel 3: Spending Guardrails -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative group">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-error/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">account_balance_wallet</span>
+                                Spending Guardrails
+                            </h3>
+<span class="font-label-code text-label-code text-error bg-error-container/20 px-2 py-1 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                                Needs attention
+                            </span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<div class="mb-4 flex justify-between items-end">
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Monthly spending limit</p>
+<p class="font-headline-md text-headline-md text-on-surface mt-1">$45.00 <span class="text-on-surface-variant text-body-sm">/ $50.00</span></p>
+</div>
+<p class="font-body-sm text-body-sm text-error">90% used</p>
+</div>
+<div class="relative w-full h-2 bg-surface-container-low rounded-full overflow-hidden mb-6">
+<div class="absolute top-0 left-0 h-full bg-error rounded-full" style="width: 90%;"></div>
+</div>
+<input aria-label="Adjust monthly limit" class="w-full accent-secondary cursor-pointer" max="100" min="10" type="range" value="50"/>
+<div class="flex justify-between mt-2 font-label-code text-label-code text-on-surface-variant">
+<span>$10</span>
+<span>$100+</span>
+</div>
+</div>
+</div>
+<!-- Panel 4: Storage & Backup -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative group lg:col-span-2">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-secondary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">cloud_done</span>
+                                Storage &amp; Backup
+                            </h3>
+</div>
+<div class="flex-1 flex items-center justify-between gap-8 bg-surface-container-low rounded-lg p-6 border border-outline-variant/50">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-2xl">folder_special</span>
+</div>
+<div>
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Local folder selected</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Last backup: Today, 09:41 AM</p>
+<div class="flex items-center gap-2 mt-3">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="font-label-code text-label-code text-on-surface-variant">Sync active</span>
+</div>
+</div>
+</div>
+<button class="bg-surface hover:bg-surface-variant text-primary border border-primary/30 px-6 py-4 rounded-lg font-body-md text-body-md font-medium transition-all flex items-center gap-3 group/btn">
+<span class="material-symbols-outlined group-hover/btn:scale-110 transition-transform">backup</span>
+                                Create Quick Backup
+                            </button>
+</div>
+</div>
+<!-- Panel 5: App Defaults -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative group">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-secondary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">app_registration</span>
+                                App Defaults
+                            </h3>
+</div>
+<div class="flex-1 space-y-4">
+<label class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer border border-transparent hover:border-outline-variant/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">travel_explore</span>
+<span class="font-body-md text-body-md text-on-surface">Web search access</span>
+</div>
+<input checked="" class="w-5 h-5 rounded border-outline-variant text-secondary bg-surface focus:ring-secondary focus:ring-offset-surface cursor-pointer" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer border border-transparent hover:border-outline-variant/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">description</span>
+<span class="font-body-md text-body-md text-on-surface">Local file reading</span>
+</div>
+<input checked="" class="w-5 h-5 rounded border-outline-variant text-secondary bg-surface focus:ring-secondary focus:ring-offset-surface cursor-pointer" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer border border-transparent hover:border-outline-variant/30 opacity-60">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+<span class="font-body-md text-body-md text-on-surface">Desktop notifications</span>
+</div>
+<input class="w-5 h-5 rounded border-outline-variant text-secondary bg-surface focus:ring-secondary focus:ring-offset-surface cursor-pointer" type="checkbox"/>
+</label>
+</div>
+</div>
+<!-- Panel 6: Data & Privacy -->
+<div class="glass-panel rounded-xl p-6 flex flex-col border-t border-t-white/10 relative group">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-secondary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-body-lg text-body-lg text-on-surface font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">security</span>
+                                Data &amp; Privacy
+                            </h3>
+<span class="font-label-code text-label-code text-on-surface-variant bg-surface-container-low px-2 py-1 rounded border border-outline-variant">Limited preview</span>
+</div>
+<div class="flex-1 flex flex-col">
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6 leading-relaxed">
+                                We prioritize your privacy. Diagnostic data helps us improve stability and performance without compromising personal information.
+                            </p>
+<div class="mt-auto bg-surface-container-low rounded-lg p-4 border border-outline-variant/50">
+<div class="flex items-center justify-between mb-1">
+<span class="font-body-md text-body-md text-on-surface font-medium">Share anonymous crash reports</span>
+<!-- Custom Toggle -->
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 border-surface-variant appearance-none cursor-pointer z-10 transition-all duration-300" id="toggle1" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-surface-variant cursor-pointer transition-colors duration-300" for="toggle1"></label>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px] pr-12">Only sends technical details when an unexpected shutdown occurs.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

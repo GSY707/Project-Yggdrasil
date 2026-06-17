@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Start - Project Yggdrasil</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#004f35",
+                        "surface-variant": "#2e3545",
+                        "on-primary-container": "#80bea6",
+                        "primary": "#95d3ba",
+                        "inverse-on-surface": "#293040",
+                        "surface": "#0c1322",
+                        "on-error-container": "#ffdad6",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#0c1322",
+                        "surface-container-highest": "#2e3545",
+                        "surface-bright": "#323949",
+                        "on-primary-fixed-variant": "#0b513d",
+                        "surface-container-low": "#141b2b",
+                        "on-tertiary": "#003825",
+                        "on-secondary": "#003824",
+                        "secondary": "#4edea3",
+                        "on-surface": "#dce2f7",
+                        "secondary-fixed-dim": "#4edea3",
+                        "outline-variant": "#404944",
+                        "primary-fixed-dim": "#95d3ba",
+                        "inverse-primary": "#2b6954",
+                        "surface-container-lowest": "#070e1d",
+                        "outline": "#89938d",
+                        "on-secondary-fixed-variant": "#005236",
+                        "error-container": "#93000a",
+                        "on-error": "#690005",
+                        "secondary-container": "#00a572",
+                        "on-secondary-fixed": "#002113",
+                        "on-primary-fixed": "#002117",
+                        "on-tertiary-fixed-variant": "#005137",
+                        "on-surface-variant": "#bfc9c3",
+                        "on-background": "#dce2f7",
+                        "surface-container": "#191f2f",
+                        "primary-fixed": "#b0f0d6",
+                        "primary-container": "#064e3b",
+                        "on-tertiary-fixed": "#002114",
+                        "surface-tint": "#95d3ba",
+                        "surface-container-high": "#232a3a",
+                        "on-secondary-container": "#00311f",
+                        "secondary-fixed": "#6ffbbe",
+                        "inverse-surface": "#dce2f7",
+                        "on-tertiary-container": "#23ca90",
+                        "on-primary": "#003829",
+                        "tertiary": "#45dfa4",
+                        "background": "#0c1322",
+                        "tertiary-fixed": "#68fcbf",
+                        "tertiary-fixed-dim": "#45dfa4"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "margin-safe": "32px",
+                        "unit": "4px",
+                        "stack-gap-sm": "8px",
+                        "stack-gap-lg": "32px",
+                        "gutter": "24px",
+                        "stack-gap-md": "16px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["Geist"],
+                        "body-sm": ["Inter"],
+                        "display-lg-mobile": ["Geist"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Geist"],
+                        "label-code": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "label-code": ["13px", { "lineHeight": "1.4", "letterSpacing": "0.02em", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .glass-panel {
+                @apply bg-surface-container border border-white/10 backdrop-blur-md rounded-xl;
+            }
+            .biolume-glow {
+                box-shadow: 0 0 15px -3px theme('colors.secondary');
+            }
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex selection:bg-secondary/30 selection:text-secondary">
+<!-- TopNavBar (Mobile Only) -->
+<nav class="md:hidden bg-surface-container-lowest border-b border-white/10 backdrop-blur-md flex justify-between items-center w-full px-margin-safe h-16 fixed top-0 z-50">
+<div class="font-display-lg-mobile text-display-lg-mobile text-secondary tracking-tight">Project Yggdrasil</div>
+<div class="flex gap-stack-gap-md">
+<button class="text-on-surface hover:text-secondary transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface hover:text-secondary transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</nav>
+<!-- SideNavBar (Desktop) -->
+<nav class="hidden md:flex fixed left-0 top-0 h-full w-64 bg-surface-container border-r border-white/5 flex-col pt-20 z-40">
+<div class="px-gutter mb-stack-gap-lg">
+<h1 class="font-display-lg text-display-lg text-secondary">Project Yggdrasil</h1>
+</div>
+<div class="flex-1 overflow-y-auto flex flex-col gap-unit">
+<!-- Active Tab -->
+<a class="text-secondary font-bold flex items-center gap-stack-gap-md py-3 px-4 border-l-4 border-secondary bg-secondary/5" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-body-md text-body-md">Start</span>
+</a>
+<!-- Inactive Tabs -->
+<a class="text-on-surface-variant flex items-center gap-stack-gap-md py-3 px-4 hover:bg-white/5 hover:text-on-surface transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="font-body-md text-body-md">Tasks</span>
+</a>
+<a class="text-on-surface-variant flex items-center gap-stack-gap-md py-3 px-4 hover:bg-white/5 hover:text-on-surface transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="apps">apps</span>
+<span class="font-body-md text-body-md">Applications</span>
+</a>
+<a class="text-on-surface-variant flex items-center gap-stack-gap-md py-3 px-4 hover:bg-white/5 hover:text-on-surface transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md">Materials</span>
+</a>
+<a class="text-on-surface-variant flex items-center gap-stack-gap-md py-3 px-4 hover:bg-white/5 hover:text-on-surface transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+<span class="font-body-md text-body-md">Data &amp; Privacy</span>
+</a>
+<a class="text-on-surface-variant flex items-center gap-stack-gap-md py-3 px-4 hover:bg-white/5 hover:text-on-surface transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 md:ml-64 pt-20 md:pt-margin-safe px-margin-safe pb-margin-safe max-w-container-max mx-auto w-full">
+<header class="mb-stack-gap-lg">
+<h2 class="font-display-lg text-display-lg text-on-surface">Start</h2>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-gutter">
+<!-- 1. Start Task Panel (High Prominence) -->
+<div class="glass-panel col-span-1 md:col-span-8 lg:col-span-8 p-stack-gap-lg flex flex-col justify-between min-h-[320px] biolume-glow relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-secondary/10 to-transparent opacity-50 z-0"></div>
+<div class="relative z-10 flex flex-col h-full justify-between">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-stack-gap-sm">Ready to begin?</h3>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-lg">Initiate the core process to synthesize current operational variables.</p>
+</div>
+<div class="mt-stack-gap-lg">
+<button class="bg-[#10b981] hover:bg-opacity-90 text-on-primary font-body-md text-body-md px-6 py-3 rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center gap-2 shadow-[0_0_15px_-3px_#10b981]">
+<span class="material-symbols-outlined" data-icon="play_arrow">play_arrow</span>
+                            Start first task
+                        </button>
+</div>
+</div>
+</div>
+<!-- 2. Materials Panel -->
+<div class="glass-panel col-span-1 md:col-span-4 lg:col-span-4 p-stack-gap-md flex flex-col justify-center items-center text-center min-h-[320px] border-dashed border-2 border-white/20 hover:border-secondary/50 transition-colors">
+<span class="material-symbols-outlined text-4xl text-on-surface-variant mb-stack-gap-sm" data-icon="note_add">note_add</span>
+<p class="font-body-md text-body-md text-on-surface-variant mb-stack-gap-md">No materials added yet</p>
+<button class="bg-surface-bright hover:bg-white/10 text-on-surface font-body-sm text-body-sm px-4 py-2 rounded-xl transition-colors border border-white/10">
+                    Add files
+                </button>
+</div>
+<!-- 3. Task Draft Panel -->
+<div class="glass-panel col-span-1 md:col-span-4 lg:col-span-6 p-stack-gap-md relative">
+<div class="flex items-center gap-stack-gap-sm mb-stack-gap-md">
+<span class="material-symbols-outlined text-secondary" data-icon="edit_document">edit_document</span>
+<h4 class="font-body-md text-body-md font-semibold text-on-surface">Current Draft</h4>
+</div>
+<div class="bg-surface-container-low p-stack-gap-sm rounded-lg border border-white/5">
+<p class="font-body-lg text-body-lg text-on-surface">Analyze synthetic material sustainability</p>
+</div>
+</div>
+<!-- 4. Local Only Panel -->
+<div class="glass-panel col-span-1 md:col-span-4 lg:col-span-6 p-stack-gap-md flex items-center gap-stack-gap-md bg-surface-container-high">
+<div class="bg-tertiary-container/30 p-3 rounded-xl">
+<span class="material-symbols-outlined text-tertiary" data-icon="lock">lock</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">Files stay on this computer unless you approve sharing.</p>
+</div>
+<!-- 5. Help & Suggestions Panel -->
+<div class="glass-panel col-span-1 md:col-span-4 lg:col-span-4 p-stack-gap-md">
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-stack-gap-md flex items-center gap-stack-gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="lightbulb">lightbulb</span>
+                    Help &amp; Suggestions
+                </h4>
+<div class="flex flex-col gap-unit">
+<button class="text-left w-full p-2 rounded-lg hover:bg-white/5 font-body-sm text-body-sm text-secondary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="arrow_right">arrow_right</span> What can I research?
+                    </button>
+<button class="text-left w-full p-2 rounded-lg hover:bg-white/5 font-body-sm text-body-sm text-secondary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="arrow_right">arrow_right</span> How do I add files?
+                    </button>
+<button class="text-left w-full p-2 rounded-lg hover:bg-white/5 font-body-sm text-body-sm text-secondary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="arrow_right">arrow_right</span> Set up a new goal
+                    </button>
+</div>
+</div>
+<!-- 6. Budget & Time Panel -->
+<div class="glass-panel col-span-1 md:col-span-4 lg:col-span-4 p-stack-gap-md flex flex-col justify-between">
+<div>
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-stack-gap-md flex items-center gap-stack-gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="schedule">schedule</span>
+                        Constraints
+                    </h4>
+<div class="space-y-stack-gap-sm mb-stack-gap-md">
+<div class="flex justify-between items-center border-b border-white/5 pb-2">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Spending cap</span>
+<span class="font-label-code text-label-code text-on-surface">Not set</span>
+</div>
+<div class="flex justify-between items-center pb-2">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Estimated time</span>
+<span class="font-label-code text-label-code text-on-surface">--:--</span>
+</div>
+</div>
+</div>
+<button class="w-full bg-surface-bright hover:bg-white/10 text-on-surface font-body-sm text-body-sm px-4 py-2 rounded-xl transition-colors border border-white/10 flex justify-center items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings_applications">settings_applications</span>
+                    Start task
+                </button>
+</div>
+<!-- 7. Review Needed Panel -->
+<div class="glass-panel col-span-1 md:col-span-8 lg:col-span-4 p-stack-gap-md border-error/30 bg-error-container/10">
+<div class="flex items-start gap-stack-gap-md">
+<div class="bg-error-container/50 p-2 rounded-xl mt-1">
+<span class="material-symbols-outlined text-error" data-icon="warning">warning</span>
+</div>
+<div>
+<h4 class="font-body-md text-body-md font-semibold text-error mb-1">Review Needed</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-stack-gap-md">Approve file sharing</p>
+<button class="bg-error/20 hover:bg-error/30 text-error font-body-sm text-body-sm px-4 py-2 rounded-xl transition-colors border border-error/30">
+                            Review Now
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) - Using exact JSON values for labels/icons but styled for bottom nav -->
+<nav class="md:hidden fixed bottom-0 w-full bg-surface-container border-t border-white/5 backdrop-blur-md flex justify-around items-center px-2 py-3 z-50">
+<a class="flex flex-col items-center gap-1 text-secondary" href="#">
+<span class="material-symbols-outlined" data-icon="home" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-body-sm">Start</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="text-[10px] font-body-sm">Tasks</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="apps">apps</span>
+<span class="text-[10px] font-body-sm">Applications</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="text-[10px] font-body-sm">Materials</span>
+</a>
+</nav>
+</body></html>

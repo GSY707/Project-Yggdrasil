@@ -1,0 +1,52 @@
+[
+  {
+    "group": "home",
+    "version": "V10",
+    "title": "V10 Home: No Gateway Label - PASS",
+    "screenId": "1d381085f787499aaf7e77d686f5f898",
+    "htmlUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2MwYjA3NmJjOGI4ZTRiZjViZTk1MjJhZjBmYzc1YmEzEgsSBxCt4qCW3x0YAZIBIwoKcHJvamVjdF9pZBIVQhM2NjAzNjE5MjY2MTMxMjgwMDU1&filename=&opi=96797242",
+    "screenshotUrl": "https://lh3.googleusercontent.com/aida/AP1WRLsryktaN5WtFcMaJnmBesujK1wP_Weqbnl0i9G6IVK0KP5bYNVoOsNSXqdNeJLBouN5_KCU98hGFBSpsza9LfKoOL_yvTB3PEUmMrtr70BRn-0G3r3QxWCpdoUhpGjpyixrj5JIMdJBQFq4mq3vMz1IMQOOHLV2U07RYbsUL_oOPqbctZ20FFaVcY9ll_u5Nm_MW7K3R6_idFFMAwskQMgKDdzyH28MtAWtRqJhz5NxtKsLb91rYgyJ5g",
+    "htmlPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\html\\01-home-1d381085f787499aaf7e77d686f5f898.html",
+    "screenshotPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\screenshots\\01-home-1d381085f787499aaf7e77d686f5f898.png"
+  },
+  {
+    "group": "application-package",
+    "version": "V8",
+    "title": "V8 Application Packages: Dark Four Column Matrix - PASS",
+    "screenId": "00913576626343079aea3fbd05f4879c",
+    "htmlUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzJlNTJiNjVlN2Y5ZDQxNmU5ZmU4ZGJhMGJiNWZjZGZmEgsSBxCt4qCW3x0YAZIBIwoKcHJvamVjdF9pZBIVQhM2NjAzNjE5MjY2MTMxMjgwMDU1&filename=&opi=96797242",
+    "screenshotUrl": "https://lh3.googleusercontent.com/aida/AP1WRLs00GbFNiWHsT7BxNfbLhg3WuCr85dcxHLWbYOiBJkzGs-V7TI55OOm4qinpEalmajBfjpRtBIz5iTxYig-8-Y_shcH9-Yt18OnRHeF3TkjYGSUm0ITfoHrbueeuGafDpcirFvQ3IlBVx-wOIS6Gzh9sAV5_fnGyVLUW5EjzbpRlTHKiqIFJHYjXL3bZebMvWa0HfjgvYW5cw1phbaUTzNzAeHub7AAvMHascTW_CF_u5xRVyOJfdM5UTE",
+    "htmlPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\html\\02-application-package-00913576626343079aea3fbd05f4879c.html",
+    "screenshotPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\screenshots\\02-application-package-00913576626343079aea3fbd05f4879c.png"
+  },
+  {
+    "group": "settings",
+    "version": "V6",
+    "title": "V6 Settings Center: Clean User Language - PASS",
+    "screenId": "c600b347a57f4516a777c934bc0e7c19",
+    "htmlUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sXzcxMzdjMmQ3MDYyMzQwN2FhMTEzYjZhYWE3OTRiZDBmEgsSBxCt4qCW3x0YAZIBIwoKcHJvamVjdF9pZBIVQhM2NjAzNjE5MjY2MTMxMjgwMDU1&filename=&opi=96797242",
+    "screenshotUrl": "https://lh3.googleusercontent.com/aida/AP1WRLteoeGQsDfYn5pbXqcBQu7p9Ioa7buxMvwkKTmGmSrNKt_MqB3LKahjv2XCgovQtALnQAl_AB-Vkeg-ks2koLwfIwZt2ouCLMdYoBFp75Myz3ZfhKNKIotMswlcIYLmy1yGSu5YvGxmpyrWihqkC9ruBFDv6kaVEAmXG6yq9eBDqrEJPR0Ub6OCWdKWCY2OR8T0OLf337y8p8t_KrSS-wfRBu9456I84zOlxn3gYxInrxkI0TvYcWcP9Q4",
+    "htmlPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\html\\03-settings-c600b347a57f4516a777c934bc0e7c19.html",
+    "screenshotPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\screenshots\\03-settings-c600b347a57f4516a777c934bc0e7c19.png"
+  },
+  {
+    "group": "launcher",
+    "version": "V9",
+    "title": "V9 Launcher Setup: No OS Branding - PASS",
+    "screenId": "ddbd09ed1cf7449782acb76d3506ce5b",
+    "htmlUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2MyMzcwNDhjZDFhOTQwMDA5YWRlN2YwYTZjMDA2MDk3EgsSBxCt4qCW3x0YAZIBIwoKcHJvamVjdF9pZBIVQhM2NjAzNjE5MjY2MTMxMjgwMDU1&filename=&opi=96797242",
+    "screenshotUrl": "https://lh3.googleusercontent.com/aida/AP1WRLt1Pmjwh6sA3DIY6oLvYLdEV-oe7gu89_1vUjlQSXJknhxfGtZ_lTN3g43ZoHN0UoOJdVJlFmaRpj6eV4VvRQRZHYjZQdjhaqFeE6ho5SBiIw9iVD_it1jeJDAvOFKFti_AEt-aEl6SDG9c8Nw58KX-KSt_IGPKGpwt4HTkDnMhntQG-ZRB0iYFY1_K9hRdf7PLxJO0WvqZ6HT6Cf0sKMMOCfmDRl7E41w0ITldrb9A_MRDzMgpfdMwcmg",
+    "htmlPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\html\\04-launcher-ddbd09ed1cf7449782acb76d3506ce5b.html",
+    "screenshotPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\screenshots\\04-launcher-ddbd09ed1cf7449782acb76d3506ce5b.png"
+  },
+  {
+    "group": "launcher",
+    "version": "V6",
+    "title": "V6 Launcher Daily Use: Clean Main Window and Tray - PASS",
+    "screenId": "38c3277b844541ffabd47c580abde105",
+    "htmlUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ7Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpaCiVodG1sX2FiOGMxYzgxNGM2MTRmZDBhNjk4MjNlY2NhMzNlODc4EgsSBxCt4qCW3x0YAZIBIwoKcHJvamVjdF9pZBIVQhM2NjAzNjE5MjY2MTMxMjgwMDU1&filename=&opi=96797242",
+    "screenshotUrl": "https://lh3.googleusercontent.com/aida/AP1WRLu83WVcq1loFEoOR844KsiBmSwj4Jz2efQM_o7asqAUXYBqBGp1hnDXA6sk55LATgsdi3Fo_zNMc_PWqpZaxyzBeGEgHSW_MmUZ7aZXh8lt7iT2wHCKlKesHh9XdLsPBHHPsSzDcxZL3KYSapBnAnE3eFdOPV2GxoCoGYh-4mMBrhbdFbex_em0tFPKS7StMarciAN923ao3FPRpcZ22jRlvojbK-yf9yLNkt4CDxhraGDikCQkLnFgQw",
+    "htmlPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\html\\05-launcher-38c3277b844541ffabd47c580abde105.html",
+    "screenshotPath": "docs\\development\\stitch-design-captures-2026-06-17\\post-rework-v10-passline\\screenshots\\05-launcher-38c3277b844541ffabd47c580abde105.png"
+  }
+]

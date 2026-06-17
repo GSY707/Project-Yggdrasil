@@ -4,9 +4,13 @@
 | `docs/design-handoff/03-settings-debug-configuration.md` | 设置/调试/配置界面 brief：把 provider、模型预算、工作区、数据隐私、应用配置、Prompt、MCP、评测、观测和运行时调试拆成普通设置、高级设置和维护者调试三层 |
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：面向外包团队定义安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、Docker/provider 检查、状态诊断、备份恢复、更新回滚和错误状态的用户体验要求 |
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`docs/new/`、v0.2 运行时/工作树规格、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
+| `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md` | Stitch 设计稿四组页面验收报告（2026-06-17）：仅从 `Project Yggdrasil Design System` 验收主页、应用包、设置、启动器四组；Gemini 3.1 Pro 按第 3 节合格线连续返工至 V10；仓库只保留最终通过候选证据包，最终采用 V10 主页、V8 应用包、V6 设置、V9/V6 启动器组合，结论为“通过，可进入工程实现” |
 | `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/MODEL_TPS_BENCHMARK_2026_06_14.md` | 模型 TPS 实测（2026-06-14）：对 `LongCat-2.0-Preview`、`deepseek-v4-flash`、`deepseek-v4-pro` 按同题、`max_tokens=1400`、各 3 次做 live 吞吐对比，记录首 token 延迟、总耗时、端到端 TPS 与首 token 后 TPS，并给出本机当前速度排序 |
+| `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估（2026-06-14）：限定 2026 年 3 月后开源/开放权重 MoE 与稀疏激活模型，按 Qwen3.6、Ling/Ring-2.6、Mistral Small 4、Gemma 4、DeepSeek V4、Command A+、Kimi K2.6/2.7、MiMo V2.5、MiniMax M2.7/M3、Nemotron 3 等具体候选拆分主模型/子任务模型和 D0-D4 路由 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
+| `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发与稳定性、状态机恢复链、M9 控制面与验收链调查基线（2026-06-11）：确认 M9 control-plane 当前通过、M9 acceptance 断在 pause/resume 后续状态收口与预算失败，并列出 worker 队列、任务锁、snapshot 恢复、skip 测试和发布门禁的修复顺序 |
 | `docs/development/INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md` | 安装、启动器与应用包随包发行评估（2026-06-06）：梳理当前开发工作区、本地产品、Docker 产品栈与 Windows 桌面封装路径，判断普通用户需要产品启动器，并定义“基座产品栈 + 应用包 + 直达应用快捷方式”的可行发行改造 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
@@ -604,8 +608,14 @@ docs/
 │   ├── 03-settings-debug-configuration.md # 普通设置、高级设置和维护者调试三层配置界面 brief
 │   └── 04-launcher-experience.md     # 启动器安装向导、桌面主窗口、托盘菜单、应用包快捷方式、诊断和维护体验 brief
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
+│   ├── MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md
+│   │                               #   世界树 Agent MoE 模型分层与任务难度评估：聚焦 2026-03+ 新开源/开放权重 MoE，按具体模型、主/子任务和 D0-D4 路由规划选型
 │   ├── DESIGN_COMPLETION_EVALUATION_2026_06_05.md
 │   │                               #   设计完成度评估：按当前设计文档和实现证据，给出工程设计、外部用户采用度、产品发行、数据治理、协作、模块和评测等完成度评分
+│   ├── STITCH_DESIGN_ACCEPTANCE_2026_06_17.md
+│   │                               #   Stitch 设计稿四组页面验收报告：记录主页、应用包、设置、启动器首次验收缺口、V2/V3 返工复验和 V4-V10 合格线返工；仓库只保留最终 V10 通过候选证据
+│   ├── stitch-design-captures-2026-06-17/
+│   │                               #   Stitch 抓取证据包：只保留 Project Yggdrasil Design System 的最终通过候选 post-rework-v10-passline/，不包含 API key；失败轮次只在验收报告中保留文字判定
 │   ├── WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md
 │   │                               #   世界树 Agent 当前工作逻辑 vs 目标工作逻辑：聚焦父节点强编排、有限线性 continuation 轨迹以及上下文在推进/失败/恢复/交付中的变化
 │   ├── TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md
@@ -1042,7 +1052,9 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、状态诊断、备份恢复和更新回滚 |
 | `docs/development/USER_ADOPTION_SURFACE_AUDIT_2026_06_03.md` | 用户采用度审计：面向外部用户使用意愿，盘点 UI/前端/设置/安装/打包/用户文档现状，并把下一步收口到 Web-first 首次成功路径、设置校验、任务创建启动和本地产品启动器 |
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
+| `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估：以 2026 年 3 月后新开源/开放权重 MoE 候选为主，落到具体模型、主/子任务分工、D0-D4 难度、thinking 策略、升级降级和世界树专项评测指标 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
+| `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议：定义数据资产 manifest、备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计记录和 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约：定义官方远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
@@ -1104,6 +1116,7 @@ docs/
 | 本地产品一键启动 | `corepack pnpm yggdrasil:up` / `packages/python-sdk/src/yggdrasil_sdk/ops_runtime/launcher.py` |
 | Web 首次任务创建入口 | `apps/web/app/components/task-launch-panel.tsx` 与应用 `web/dashboard.json` 的 `taskTemplates[]` |
 | UX 重塑外包资料包 | `docs/design-handoff/README.md`、`docs/design-handoff/01-base-user-interface-agent.md`、`docs/design-handoff/02-application-package-experience.md`、`docs/design-handoff/03-settings-debug-configuration.md`、`docs/design-handoff/04-launcher-experience.md` |
+| Stitch 外部设计稿 | Codex 全局 MCP `stitch`（`https://stitch.googleapis.com/mcp`）：本轮设计验收只使用 `Project Yggdrasil Design System`（`projects/6603619266131280055`）；凭据只保存在本机 Codex 配置，不进入仓库 |
 | Web 素材导入与附加任务入口 | `apps/web/app/components/assets-page.tsx` |
 | 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`、`docs/specs/remote-data-service-contract-v0.1.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
@@ -1114,3 +1127,6 @@ docs/
 | Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |
 | 端到端冒烟测试 | `scripts/smoke_test.sh` |
 | 项目设计完成度评估 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` |
+| Stitch 设计稿四组验收与最终抓图证据 | `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md`、`docs/development/stitch-design-captures-2026-06-17/post-rework-v10-passline/` |
+| Runtime 并发 / M9 验收调查 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` |
+| 2026-03+ MoE 模型路由与任务难度评估 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` |
