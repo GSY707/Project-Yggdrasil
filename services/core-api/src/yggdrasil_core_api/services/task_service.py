@@ -11,8 +11,8 @@ class TaskServiceMixin:
     def start_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
         return queue_runtime_task_execution(task_id, dict(payload or {}))
 
-    def request_task_pause(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
-        return request_runtime_task_pause(task_id, dict(payload or {}))
+    def pause_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return pause_runtime_task_execution(task_id, dict(payload or {}))
 
     def resume_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
         request = dict(payload or {})
@@ -24,6 +24,15 @@ class TaskServiceMixin:
         request["command"] = "retry"
         request.setdefault("reason", "manual-retry")
         return queue_runtime_task_execution(task_id, request)
+
+    def cancel_task(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return cancel_runtime_task_execution(task_id, dict(payload or {}))
+
+    def save_current_task_snapshot(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return save_current_runtime_task_snapshot(task_id, dict(payload or {}))
+
+    def create_task_branch(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+        return create_runtime_task_branch_from_snapshot(task_id, dict(payload or {}))
 
     def approve_task_completion(self, task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
         return approve_runtime_task_completion(task_id, dict(payload or {}))
@@ -41,6 +50,11 @@ class TaskServiceMixin:
                 raise KeyError(task_id)
             runs = task_repository.list_agent_runs(task_id)
             snapshots = task_repository.list_snapshots(task_id)
+            active_resume_attempt = (
+                task_repository.get_resume_attempt(task.active_resume_attempt_id)
+                if task.active_resume_attempt_id is not None
+                else task_repository.get_active_resume_attempt(task_id)
+            )
             decisions = runtime_repository.list_model_route_decisions(task_id=task_id)
             invocations = runtime_repository.list_model_invocations(task_id=task_id, limit=50)
             mailbox_messages = runtime_repository.list_mailbox_messages(task_id=task_id, limit=50)
@@ -50,7 +64,7 @@ class TaskServiceMixin:
             "task": task.model_dump(by_alias=True, mode="json"),
             "agentRuns": [run.model_dump(by_alias=True, mode="json") for run in runs],
             "snapshots": [snapshot.model_dump(by_alias=True, mode="json") for snapshot in snapshots],
-            "runtimeControl": self._task_runtime_control_summary(task, snapshots, runs),
+            "runtimeControl": self._task_runtime_control_summary(task, snapshots, runs, active_resume_attempt),
             "routeDecisions": [decision.model_dump(by_alias=True, mode="json") for decision in decisions],
             "modelInvocations": [invocation.model_dump(by_alias=True, mode="json") for invocation in invocations],
             "mailboxState": mailbox_state,

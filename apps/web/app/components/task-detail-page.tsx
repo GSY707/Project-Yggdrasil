@@ -47,7 +47,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
   const { data, error, isLoading, reload } = useApiResource<TaskDetailResponse>(`/tasks/${encodeURIComponent(taskId)}`);
   const [controlError, setControlError] = useState<string | null>(null);
   const [controlMessage, setControlMessage] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<"pause" | "safe-stop" | "resume" | "retry" | "top-up" | "approve" | "revise" | null>(null);
+  const [activeAction, setActiveAction] = useState<"pause" | "safe-stop" | "resume" | "retry" | "top-up" | "approve" | "revise" | "cancel" | "save-snapshot" | "branch" | null>(null);
   const [budgetTopUp, setBudgetTopUp] = useState<{ tokenDelta: string; costDelta: string }>({ tokenDelta: "", costDelta: "" });
 
   if (isLoading) {
@@ -59,13 +59,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
   }
 
   const taskDetail = data;
+  const latestUserSavedSnapshot = taskDetail.snapshots.find(
+    (snapshot) => snapshot.retentionClass === "user-saved" && snapshot.status === "restorable",
+  );
 
   async function submitPauseRequest() {
     setActiveAction("pause");
     setControlError(null);
     setControlMessage(null);
     try {
-      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/pause-request`, {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/pause`, {
         reason: "operator-requested-pause",
         waitForSafeStop: true,
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
@@ -84,7 +87,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
     setControlError(null);
     setControlMessage(null);
     try {
-      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/pause-request`, {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/pause`, {
         reason: "operator-safe-stop",
         pauseMode: "safe-stop",
         waitForSafeStop: true,
@@ -105,10 +108,67 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
     setControlMessage(null);
     try {
       const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
-        resumeToken: taskDetail.runtimeControl.recommendedResumeToken ?? undefined,
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
       });
       setControlMessage(`恢复任务已进入执行队列，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitCancelRequest() {
+    setActiveAction("cancel");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/cancel`, {
+        reason: "operator-cancelled",
+      });
+      setControlMessage(`任务已取消，当前状态 ${String(response.task.status ?? response.status)}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitSaveSnapshot() {
+    setActiveAction("save-snapshot");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/snapshots/save-current`, {
+        label: `manual-save-${new Date().toISOString()}`,
+      });
+      const snapshot = response.snapshot as { id?: string } | undefined;
+      setControlMessage(`已保存用户快照 ${String(snapshot?.id ?? "")}。`);
+      reload();
+    } catch (actionError) {
+      setControlError(actionError instanceof Error ? actionError.message : String(actionError));
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function submitBranchFromSavedSnapshot() {
+    if (!latestUserSavedSnapshot) {
+      setControlError("没有可用于创建分支的 user-saved snapshot。");
+      return;
+    }
+    setActiveAction("branch");
+    setControlError(null);
+    setControlMessage(null);
+    try {
+      const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/branches`, {
+        snapshotId: latestUserSavedSnapshot.id,
+        label: latestUserSavedSnapshot.savedLabel ?? "user-saved branch",
+      });
+      const childTask = response.childTask as { id?: string } | undefined;
+      setControlMessage(`已从用户快照创建子任务 ${String(childTask?.id ?? "")}。`);
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -202,7 +262,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
       if (taskDetail.runtimeControl.canResume) {
         const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
-          resumeToken: taskDetail.runtimeControl.recommendedResumeToken ?? undefined,
           resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
           budgetState: nextBudgetState,
         });
@@ -248,6 +307,21 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             {taskDetail.runtimeControl.canResume ? (
               <button className="action-button" disabled={activeAction !== null} onClick={() => void submitResumeRequest()} type="button">
                 {activeAction === "resume" ? "正在恢复" : "从快照恢复"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canSaveSnapshot ? (
+              <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitSaveSnapshot()} type="button">
+                {activeAction === "save-snapshot" ? "正在保存" : "保存快照"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canBranch ? (
+              <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitBranchFromSavedSnapshot()} type="button">
+                {activeAction === "branch" ? "正在创建分支" : "从保存快照分支"}
+              </button>
+            ) : null}
+            {taskDetail.runtimeControl.canCancel ? (
+              <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitCancelRequest()} type="button">
+                {activeAction === "cancel" ? "正在取消" : "取消任务"}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canRequestRevision ? (
@@ -310,7 +384,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             <p className="meta-copy">{taskDetail.runtimeControl.resumeStatus}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Pause Requested</p>
+            <p className="meta-label">Pause Intent</p>
             <p className="meta-copy">{String(taskDetail.runtimeControl.pauseRequested)}</p>
           </div>
           <div className="kv-item">
@@ -322,12 +396,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             <p className="meta-copy">{formatTimestamp(taskDetail.runtimeControl.lastSafeStopAt ?? null)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Recommended Resume Token</p>
-            <p className="meta-copy mono">{String(taskDetail.runtimeControl.recommendedResumeToken ?? "-")}</p>
+            <p className="meta-label">Active Attempt</p>
+            <p className="meta-copy mono">{String(taskDetail.runtimeControl.activeResumeAttemptId ?? "-")}</p>
           </div>
           <div className="kv-item">
             <p className="meta-label">Recommended Resume Message</p>
             <p className="meta-copy">{String(taskDetail.runtimeControl.recommendedResumeMessage ?? "-")}</p>
+          </div>
+          <div className="kv-item">
+            <p className="meta-label">Resume Blocker</p>
+            <p className="meta-copy">{String(taskDetail.runtimeControl.blocker?.message ?? taskDetail.runtimeControl.resumeBlockedReason ?? "-")}</p>
           </div>
         </div>
         <div className="pill-row">
@@ -337,6 +415,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           <span className="inline-chip">canResume {String(taskDetail.runtimeControl.canResume)}</span>
           <span className="inline-chip">canPause {String(taskDetail.runtimeControl.canRequestPause)}</span>
           <span className="inline-chip">canRetry {String(taskDetail.runtimeControl.canRetry ?? false)}</span>
+          <span className="inline-chip">canCancel {String(taskDetail.runtimeControl.canCancel ?? false)}</span>
+          <span className="inline-chip">canSave {String(taskDetail.runtimeControl.canSaveSnapshot ?? false)}</span>
+          <span className="inline-chip">canBranch {String(taskDetail.runtimeControl.canBranch ?? false)}</span>
           <span className="inline-chip">canTopUp {String(taskDetail.runtimeControl.canTopUp ?? false)}</span>
           <span className="inline-chip">canApprove {String(taskDetail.runtimeControl.canApprove)}</span>
           <span className="inline-chip">canRevise {String(taskDetail.runtimeControl.canRequestRevision)}</span>
@@ -445,7 +526,12 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                 <div className="pill-row">
                   <span className="inline-chip">created {formatTimestamp(snapshot.createdAt)}</span>
                   <span className="inline-chip">consumed {formatTimestamp(snapshot.consumedAt)}</span>
-                  <span className="inline-chip">resumeToken {String(snapshot.resumeToken ?? "-")}</span>
+                  <span className="inline-chip">retention {String(snapshot.retentionClass ?? "-")}</span>
+                  <span className="inline-chip">expires {formatTimestamp(snapshot.expiresAt ?? null)}</span>
+                  <span className="inline-chip">label {String(snapshot.savedLabel ?? "-")}</span>
+                  {snapshot.blockerCode || snapshot.blockerMessage ? (
+                    <span className="inline-chip">blocker {String(snapshot.blockerCode ?? snapshot.blockerMessage)}</span>
+                  ) : null}
                 </div>
               </article>
             ))}

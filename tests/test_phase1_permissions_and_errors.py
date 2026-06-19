@@ -238,7 +238,8 @@ def test_resume_with_invalid_snapshot_returns_error() -> None:
             }
         )
 
-    # Attempt to resume with an invalid token
+    # Public resume tokens are no longer accepted by the durable resume API; a
+    # missing active snapshot may be rejected before the payload is inspected.
     response = runtime_client.post(
         "/runtime/tasks/task_invalid_resume/resume",
         json={
@@ -247,13 +248,9 @@ def test_resume_with_invalid_snapshot_returns_error() -> None:
         },
     )
 
-    # Should return an error (not 202 success)
-    # The exact status code depends on implementation, but it should indicate failure
-    # Typically 400 (bad request) or 404 (not found) or 422 (validation error)
-    assert response.status_code in [400, 404, 409, 422, 500]
-    # Response should contain error information
+    assert response.status_code in [400, 409, 422]
     response_data = response.json()
-    assert "error" in str(response_data).lower() or "detail" in str(response_data).lower()
+    assert any(keyword in str(response_data).lower() for keyword in ["token", "snapshot"])
 
 
 def test_resume_with_missing_snapshot_returns_error() -> None:
@@ -281,22 +278,17 @@ def test_resume_with_missing_snapshot_returns_error() -> None:
             }
         )
 
-    # Attempt to resume without any snapshot
+    # Attempt to resume without an active restorable snapshot.
     response = runtime_client.post(
         "/runtime/tasks/task_no_snapshot/resume",
-        json={
-            "resumeToken": "fake-token",
-            "nextObjective": "This should fail",
-        },
+        json={"nextObjective": "This should fail"},
     )
 
-    # Should return an error
-    assert response.status_code in [400, 404, 409, 422, 500]
+    assert response.status_code in [400, 404, 409, 422]
     response_data = response.json()
-    # Should mention snapshot or token issue
     assert any(
         keyword in str(response_data).lower()
-        for keyword in ["snapshot", "token", "not found", "invalid", "error"]
+        for keyword in ["snapshot", "paused", "not found", "invalid", "error"]
     )
 
 
@@ -333,7 +325,7 @@ def test_redis_unavailable_pause_returns_error() -> None:
     # For now, we test that the endpoint exists and responds
 
     response = runtime_client.post(
-        "/runtime/tasks/task_redis_test/pause-request",
+        "/runtime/tasks/task_redis_test/pause",
         json={"reason": "test-redis-error"},
     )
 

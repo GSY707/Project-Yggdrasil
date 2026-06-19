@@ -1,13 +1,14 @@
 # 数据规格索引
 
 - 文档状态：Candidate
-- 更新时间：2026-05-23
+- 更新时间：2026-06-18
 - 目标：模块开发者只看规格即可实现模块，不需要查其他模块代码。
 - 关联文档：
   - [PRD v0.1](../PRD-v0.1.md)
   - [协议索引](../protocols/README.md)
   - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md)
   - [工作树协议 v0.2](work-tree-protocol-v0.2.md)
+  - [任务暂停、恢复与继续契约 v0.1](task-pause-resume-continuation-contract-v0.1.md)
 
 ## 1. 使用原则
 
@@ -23,6 +24,7 @@
 
 - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md) - 冻结 Boot Prompt、启动、待机、运行、上下文窗口、多 Agent 与结束批准语义。
 - [工作树协议 v0.2](work-tree-protocol-v0.2.md) - 冻结工作树作为动态工作记忆和执行栈的节点 schema、状态机、Working Node 标签、摘要上浮和冲突语义。
+- [任务暂停、恢复与继续契约 v0.1](task-pause-resume-continuation-contract-v0.1.md) - 冻结 Pause、Safe-Stop、Durable Snapshot、Resume、Continue、Retry、Cancel、snapshot 保留、手动保存/分支与 tool-call 暂停等价性；隔天和长期继续以该契约为准。
 - [世界构建、初次苏醒与任务启动协议 v0.1](world-build-awakening-task-start-protocol-v0.1.md) - 重新划分“先建世界 / 再醒来 / 再开始工作”的世界级与任务级边界，强调建世界与初次苏醒不得接触具体工作信息，并引入“起始状态”作为任务起点。
 - [应用包接口总规范 v0.1](application-package-interface-v0.1.md) - 定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面与控制面 API 接口，明确应用包可携带 memory/ 静态记忆资产，供外部团队直接按契约实现应用包。
 - [官方远端数据服务契约 v0.1](remote-data-service-contract-v0.1.md) - 冻结官方远端数据服务上线前的账号、工作区、同步、远端备份、远端删除证明和本地优先边界；当前为计划契约，不代表服务已发布。
@@ -42,11 +44,12 @@
 
 1. 先读通用数据约定。
 2. 若参与提示词、启动流程或工作流程重做，先读 Agent 运行时协议 v0.2。
-3. 再读世界构建、初次苏醒与任务启动协议 v0.1，确认“世界级学习”和“任务级读取工作状态”的边界。
-4. 再读工作树协议 v0.2，确认 runtime 如何维护当前工作节点、动态下潜、摘要上浮和结束批准。
-5. 再读你所属模块的主领域规格。
-6. 然后读协议文档，确认 manifest、hook、事件的接入方式。
-7. 最后按需要回读 v0.1 领域数据规格，处理旧数据迁移。
+3. 若参与 pause/resume/continue、worker queue 或长期恢复，先读任务暂停、恢复与继续契约 v0.1。
+4. 再读世界构建、初次苏醒与任务启动协议 v0.1，确认“世界级学习”和“任务级读取工作状态”的边界。
+5. 再读工作树协议 v0.2，确认 runtime 如何维护当前工作节点、动态下潜、摘要上浮和结束批准。
+6. 再读你所属模块的主领域规格。
+7. 然后读协议文档，确认 manifest、hook、事件的接入方式。
+8. 最后按需要回读 v0.1 领域数据规格，处理旧数据迁移。
 
 ## 4. 模块开发最低合规要求
 
@@ -65,6 +68,7 @@ v0.2 已冻结以下重做边界：
 - Boot Prompt 四段：物理接口、根指针、行为宪法、程序计数器恢复。
 - RootMountPackage v0.2：语义根指针、索引地图、当前工作节点、邮箱和侧信道占位。
 - WorkTreeProtocol v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack 栈式上下文、摘要上浮、等待批准完成。
+- Pause/Resume/Continue：长期可靠恢复以 Durable Snapshot、ResumeAttempt 和持久 WorkItem 为核心；不得依赖 Redis TTL 或静默 fallback start。
 - 启动模式：cold-standby、hot-resume、work-node-active、approval-review。
 - 运行模式：以当前工作树节点为权威指针，`currentFocus` 只作为 UI 摘要。
 - 邮箱：使用独立 `mailbox` 表作为主存储，outbox/event 只承载投递和审计。
@@ -85,5 +89,5 @@ v0.2 已冻结以下重做边界：
 
 - 第一版虽然只运行单项目，但所有关键对象都必须携带 projectId。
 - 第一版必须预留 spaceId 与 branchId，不能把它们留给第二版再补。
-- 第一版必须预留 TaskSnapshot 与 paused 状态。
+- 第一版必须把 TaskSnapshot、paused、resume-blocked、Durable Snapshot manifest 与持久 ResumeAttempt 作为正式恢复契约，而不是仅预留字段。
 - 第一版 package 的最小正式粒度是项目级。

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class ExternalRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["url", "file", "object-storage", "package-entry", "citation"]
+    type: Literal["url", "file", "state-file", "object-storage", "package-entry", "citation"]
     locator: str
     checksum: str | None = None
 class ActorRef(BaseModel):
@@ -535,20 +535,34 @@ class TaskSnapshotSummary(BaseModel):
     id: str
     app_id: str = Field(alias="appId")
     task_id: str = Field(alias="taskId")
-    agent_run_id: str = Field(alias="agentRunId")
+    agent_run_id: str | None = Field(default=None, alias="agentRunId")
     project_id: str = Field(alias="projectId")
     branch_id: str = Field(alias="branchId")
-    snapshot_type: Literal["pause", "restart", "checkpoint"] = Field(alias="snapshotType")
-    status: Literal["created", "flushed", "restorable", "consumed", "superseded"]
-    resume_token: str = Field(alias="resumeToken")
+    snapshot_type: Literal["pause", "pre-start", "budget-exhausted", "crash-recovery", "audit", "legacy-restart", "restart", "checkpoint"] = Field(alias="snapshotType")
+    status: Literal["created", "committing", "flushed", "restorable", "leased", "consumed", "superseded", "blocked", "invalid", "archived"]
+    retention_class: Literal["active-paused", "latest-auto", "user-saved", "cancel-audit"] = Field(default="active-paused", alias="retentionClass")
+    schema_version: str = Field(default="task-snapshot.v1", alias="schemaVersion")
+    runtime_contract_version: str = Field(default="task-pause-resume-continuation-contract-v0.1", alias="runtimeContractVersion")
+    storage_manifest_ref: ExternalRef | None = Field(default=None, alias="storageManifestRef")
+    manifest_checksum: str | None = Field(default=None, alias="manifestChecksum")
+    resume_token_hash: str | None = Field(default=None, alias="resumeTokenHash")
+    resume_token: str | None = Field(default=None, alias="resumeToken", exclude=True)
     context_ref: ExternalRef = Field(alias="contextRef")
     root_mount_ref: ExternalRef = Field(alias="rootMountRef")
     pending_writes: list[EntityRef] = Field(default_factory=list, alias="pendingWrites")
     pending_actions: list[dict[str, Any]] = Field(default_factory=list, alias="pendingActions")
     resume_message: str | None = Field(default=None, alias="resumeMessage")
     safe_stop_reason: str = Field(alias="safeStopReason")
+    blocker_code: str | None = Field(default=None, alias="blockerCode")
+    blocker_message: str | None = Field(default=None, alias="blockerMessage")
+    saved_label: str | None = Field(default=None, alias="savedLabel")
+    saved_by_user_id: str | None = Field(default=None, alias="savedByUserId")
+    expires_at: datetime | None = Field(default=None, alias="expiresAt")
     created_at: datetime = Field(alias="createdAt")
+    verified_at: datetime | None = Field(default=None, alias="verifiedAt")
+    leased_until: datetime | None = Field(default=None, alias="leasedUntil")
     consumed_at: datetime | None = Field(default=None, alias="consumedAt")
+    superseded_by_snapshot_id: str | None = Field(default=None, alias="supersededBySnapshotId")
     safe_to_pause: bool = Field(default=True, alias="safeToPause")
     current_node_id: str | None = Field(default=None, alias="currentNodeId")
     working_node_annotation: str | None = Field(default=None, alias="workingNodeAnnotation")

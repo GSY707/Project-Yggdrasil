@@ -459,7 +459,7 @@ def _run_task_sequence(
                 "reason": f"{task_key.lower()}-safe-stop",
                 "resumeMessage": pause_resume_message,
             }
-            pause_response = client.post(f"/runtime/tasks/{task['id']}/pause-request", json=pause_payload)
+            pause_response = client.post(f"/runtime/tasks/{task['id']}/pause", json=pause_payload)
             if pause_response.status_code != 202:
                 raise RuntimeError(f"{task_key} pause request failed: {pause_response.text}")
             first_attempts = _drain_worker_attempts(run_worker_once)
@@ -471,14 +471,12 @@ def _run_task_sequence(
             if first_status == "shutdown-checkpoint":
                 snapshot = {
                     "id": first_result.get("snapshotId"),
-                    "resumeToken": first_result.get("resumeToken"),
                 }
             if first_status not in {"paused", "shutdown-checkpoint"}:
                 raise RuntimeError(f"{task_key} did not pause cleanly: {json.dumps(first, ensure_ascii=False)}")
             resume_response = client.post(
                 f"/runtime/tasks/{task['id']}/resume",
                 json={
-                    "resumeToken": snapshot.get("resumeToken"),
                     "resumeMessage": pause_resume_message,
                     "nextObjective": resume_objective,
                 },

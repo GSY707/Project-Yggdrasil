@@ -152,7 +152,7 @@ def _run_main_agent_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     if started.status_code != 202:
         raise RuntimeError(f"runtime start failed: {started.text}")
     pause_request = client.post(
-        f"/runtime/tasks/{task['id']}/pause-request",
+        f"/runtime/tasks/{task['id']}/pause",
         json={
             "reason": "evaluation-manual-pause",
             "resumeMessage": "resume the evaluation run",
@@ -163,11 +163,9 @@ def _run_main_agent_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     first = run_worker_once("agent-runtime")
     if first.get("result", {}).get("status") != "paused":
         raise RuntimeError(f"runtime pause step failed: {json.dumps(first, ensure_ascii=False)}")
-    resume_token = first["result"]["snapshot"]["resumeToken"]
     resumed = client.post(
         f"/runtime/tasks/{task['id']}/resume",
         json={
-            "resumeToken": resume_token,
             "nextObjective": "finish the evaluation flow",
         },
     )

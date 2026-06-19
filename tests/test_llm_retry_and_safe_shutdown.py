@@ -13,6 +13,7 @@ import urllib.request as urllib_request
 
 import pytest
 
+from yggdrasil_sdk.llm_runtime import artifacts as llm_runtime_artifacts
 from yggdrasil_sdk.llm_runtime import core as llm_runtime_core
 
 
@@ -264,7 +265,7 @@ def test_execute_resumed_tool_calls_inserts_assistant_tool_bridge_message(monkey
             "result": {"status": "ok", "path": arguments.get("path")},
         }
 
-    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_artifacts, "execute_registered_tool", _fake_execute_registered_tool)
 
     conversation_messages = [{"role": "user", "content": "resume pending tools"}]
     tool_executions: list[dict[str, Any]] = []
@@ -307,7 +308,7 @@ def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_a
             "result": {"status": "ok", "path": arguments.get("path")},
         }
 
-    monkeypatch.setattr(llm_runtime_core, "execute_registered_tool", _fake_execute_registered_tool)
+    monkeypatch.setattr(llm_runtime_artifacts, "execute_registered_tool", _fake_execute_registered_tool)
 
     conversation_messages = [{"role": "user", "content": "resume pending tools"}]
     tool_executions: list[dict[str, Any]] = []
@@ -349,6 +350,187 @@ def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_a
     assert conversation_messages[1]["reasoning_content"] == "先恢复上轮 thinking，再执行 pending tool calls。"
     assert conversation_messages[1]["tool_calls"][0]["id"] == "call_resume_note_index"
     assert conversation_messages[2]["tool_call_id"] == "call_resume_note_index"
+
+
+def test_pending_tool_calls_snapshot_rejects_partial_streaming_tool_call() -> None:
+    from yggdrasil_sdk.runtime_kernel.snapshot import save_pending_tool_calls_snapshot
+
+    snapshot = save_pending_tool_calls_snapshot(
+        "task_partial_streaming_tool_call",
+        agent_run_id="run_partial_streaming_tool_call",
+        pending_tool_calls=[
+            {
+                "id": "call_partial",
+                "name": "mcp.read.read_file",
+                "argumentsText": '{"path": "README.md"',
+            }
+        ],
+        conversation_messages=[{"role": "user", "content": "read the file"}],
+        assistant_message=None,
+        invocation_id="inv_partial_streaming_tool_call",
+        round_index=0,
+        usage_totals={"inputTokens": 10, "outputTokens": 2, "totalTokens": 12},
+        accumulated_cost=0.0,
+        round_summaries=[],
+        round_modes=[],
+        current_context_state=[],
+    )
+
+    assert snapshot["persisted"] is False
+    assert snapshot["status"] == "blocked"
+    assert snapshot["safeToPause"] is False
+    assert snapshot["blockerCode"] == "pending-tool-calls-incomplete"
+    assert any("partial-arguments" in blocker for blocker in snapshot["blockers"])
+
+
+def test_pending_tool_calls_snapshot_is_durable_state_file() -> None:
+    from yggdrasil_sdk import TaskRepository, get_persistence_runtime
+    from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
+    from yggdrasil_sdk.runtime_kernel.snapshot import save_pending_tool_calls_snapshot
+    from yggdrasil_sdk.runtime_kernel.snapshot_store import read_snapshot_entry, verify_snapshot_manifest
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task = task_repository.create_task(
+            {
+                "id": "task_pending_tool_durable_snapshot",
+                "title": "pending tool durable snapshot",
+                "goal": "persist pending tool-call checkpoint durably",
+                "status": "running",
+            }
+        )
+        run = task_repository.create_agent_run(
+            task.id,
+            {
+                "id": "run_pending_tool_durable_snapshot",
+                "status": "running",
+                "selectedModel": "test-model",
+                "selectedProvider": "test-provider",
+            },
+        )
+
+    snapshot = save_pending_tool_calls_snapshot(
+        task.id,
+        agent_run_id=run.id,
+        pending_tool_calls=[
+            {
+                "id": "call_readme",
+                "name": "mcp.read.read_file",
+                "arguments": {"path": "README.md"},
+            }
+        ],
+        conversation_messages=[{"role": "user", "content": "read README"}],
+        assistant_message={
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_readme",
+                    "type": "function",
+                    "function": {"name": "mcp.read.read_file", "arguments": '{"path": "README.md"}'},
+                }
+            ],
+        },
+        invocation_id="inv_pending_tool_durable_snapshot",
+        round_index=0,
+        usage_totals={"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
+        accumulated_cost=0.0,
+        round_summaries=[],
+        round_modes=[],
+        current_context_state=[{"id": "ctx", "content": "resume context"}],
+        request_state={"currentObjective": "read README", "protectedItems": [{"kind": "node", "id": "ctx"}]},
+    )
+
+    assert snapshot["persisted"] is True
+    assert "resumeToken" not in snapshot
+    assert snapshot["retentionClass"] == "active-paused"
+    assert snapshot["storageManifestRef"]["type"] == "state-file"
+    assert snapshot["contextRef"]["type"] == "state-file"
+    assert snapshot["rootMountRef"]["type"] == "state-file"
+
+    manifest = verify_snapshot_manifest(snapshot["storageManifestRef"], snapshot["manifestChecksum"])
+    pending_actions = read_snapshot_entry(manifest, "pendingActions", default=[])
+    assert pending_actions[0]["kind"] == "pending-tool-calls"
+    assert pending_actions[0]["toolCalls"][0]["arguments"] == {"path": "README.md"}
+
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        persisted_task = task_repository.get_task(task.id)
+        persisted_snapshot = task_repository.get_snapshot(snapshot["id"])
+        assert persisted_task is not None
+        assert persisted_snapshot is not None
+        assert persisted_task.status == "paused"
+        assert persisted_task.active_snapshot_id == snapshot["id"]
+        assert persisted_snapshot.storage_manifest_ref is not None
+        assert persisted_snapshot.manifest_checksum == snapshot["manifestChecksum"]
+
+
+def test_resumed_pending_tool_call_digest_matches_uninterrupted_after_tool_result(monkeypatch) -> None:
+    from yggdrasil_sdk import llm_runtime
+    from yggdrasil_sdk.runtime_kernel.snapshot_store import canonical_request_digest
+
+    tool_calls = [
+        {
+            "id": "call_resume_readme",
+            "name": "mcp.read.read_file",
+            "arguments": {"path": "README.md"},
+            "argumentsText": '{"path": "README.md"}',
+        }
+    ]
+    assistant_message = llm_runtime._assistant_tool_round_message(
+        {"outputText": "", "reasoningContent": "Need file evidence."},
+        llm_runtime._assistant_tool_calls_payload(tool_calls, 0),
+    )
+
+    def _fake_execute_registered_tool(name, arguments, **kwargs):
+        return {
+            "tool": {"name": name},
+            "arguments": arguments,
+            "result": {"status": "ok", "path": arguments["path"], "content": "hello"},
+        }
+
+    monkeypatch.setattr(llm_runtime_artifacts, "execute_registered_tool", _fake_execute_registered_tool)
+
+    uninterrupted_messages = [{"role": "user", "content": "read README"}, assistant_message]
+    tool_result = _fake_execute_registered_tool("mcp.read.read_file", {"path": "README.md"})
+    uninterrupted_messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": "call_resume_readme",
+            "name": "mcp.read.read_file",
+            "content": llm_runtime.tool_result_to_message_content(
+                {
+                    "tool": {"name": "mcp.read.read_file"},
+                    "arguments": {"path": "README.md"},
+                    "result": tool_result["result"],
+                    "success": True,
+                    "toolCallId": "call_resume_readme",
+                    "durationMs": 0,
+                }
+            ),
+        }
+    )
+
+    resumed_messages = [{"role": "user", "content": "read README"}]
+    tool_executions: list[dict[str, Any]] = []
+    llm_runtime._execute_resumed_tool_calls(
+        tool_calls=tool_calls,
+        conversation_messages=resumed_messages,
+        tool_executions=tool_executions,
+        assistant_message=assistant_message,
+        task=object(),
+        run=object(),
+        root_mount={},
+        current_context=[],
+    )
+
+    assert len(tool_executions) == 1
+    assert resumed_messages == uninterrupted_messages
+    assert canonical_request_digest({"conversationMessages": resumed_messages}) == canonical_request_digest(
+        {"conversationMessages": uninterrupted_messages}
+    )
 
 
 def test_execute_tool_with_isolation_retries_timeout_then_succeeds(monkeypatch) -> None:

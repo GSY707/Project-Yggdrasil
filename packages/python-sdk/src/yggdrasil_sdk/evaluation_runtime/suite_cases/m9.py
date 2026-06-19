@@ -270,7 +270,7 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
             branch_id=shared_setup["branchId"],
             space_id=shared_setup["spaceId"],
             title="Mounted Recovery Branch",
-            content="挂载记忆树中的恢复分支要求 safe-stop 保留 snapshot、protectedItems 与 resume token。",
+            content="挂载记忆树中的恢复分支要求 safe-stop 保留 durable snapshot manifest、protectedItems 与恢复现场。",
         )
         task = task_repository.create_task(
             {
@@ -282,7 +282,7 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
                 "currentFocus": "m9-pause-resume-acceptance",
                 "resumeMessage": "恢复后继续完成跨空间恢复总结。",
                 "budgetState": {
-                    "tokenBudgetTotal": 1400,
+                    "tokenBudgetTotal": 20000,
                     "costBudgetTotal": 5.0,
                 },
             }
@@ -294,12 +294,12 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
     def _fake_invoke_model(**_kwargs):
         output_text = (
             "## 结果\n"
-            "已保留 mounted memory tree、protectedItems、snapshot token，并在恢复后完成最终写入。\n\n"
+            "已保留 mounted memory tree、protectedItems、durable snapshot manifest，并在恢复后完成最终写入。\n\n"
             "## 证据\n"
             "- safe-stop snapshot 已创建并可恢复。\n"
             "- 恢复态继续使用 mounted shared space 与 followup actions。\n\n"
             "## 风险\n"
-            "- 若恢复 token 失效，任务需要重新进入 safe-stop。\n\n"
+            "- 若恢复现场失效，任务需要重新进入 safe-stop。\n\n"
             "## 已知问题\n"
             "- 当前验收使用固定响应，重点验证 pause/resume 链而非开放式写作质量。"
         )
@@ -339,7 +339,95 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
         }
 
     yggdrasil_model_providers.invoke_model = _fake_invoke_model
+
+    def _root_only_takeover_protocol() -> dict[str, Any]:
+        return {
+            "id": f"takeover_{task.id}",
+            "version": "0.1.0",
+            "taskId": task.id,
+            "taskType": "generic",
+            "runType": "main",
+            "currentPhase": "deliver",
+            "status": "prepared",
+            "objective": question,
+            "objectiveSummary": question,
+            "ambiguities": [],
+            "constraints": [],
+            "plan": [],
+            "workTree": {
+                "version": "0.1.0",
+                "rootObjective": question,
+                "status": "active",
+                "currentNodeId": "root",
+                "nodes": [
+                    {
+                        "id": "root",
+                        "title": "M9 pause resume root",
+                        "phase": "delivery",
+                        "status": "in-progress",
+                        "planStepIds": [],
+                        "constraintIds": [],
+                        "dependsOn": [],
+                        "expectedEvidence": ["durable pause/resume evidence"],
+                        "recoveryAnchor": "resume:root",
+                    }
+                ],
+                "recoveryAnchor": "resume:root",
+                "entropyBudgetRemaining": 3,
+            },
+            "deliverySections": [],
+            "verificationItems": [],
+            "metrics": {
+                "planQualityScore0_100": 90.0,
+                "reworkCount": 0,
+                "reworkRate": 0.0,
+                "clarificationNeeded": False,
+                "planConfirmationNeeded": False,
+                "planConfirmed": True,
+                "deliveryCompletenessScore0_100": 0.0,
+                "verificationPassRate": 0.0,
+            },
+            "appliedModules": ["task-takeover"],
+            "hookTrace": [],
+        }
+
     try:
+        pause_context_state = [
+            {
+                "id": "ctx_resume_keep",
+                "title": "Safe Stop Plan",
+                "content": "safe-stop 必须保留 protectedItems、durable snapshot manifest、mounted summary 与恢复后的 followup actions。",
+                "importance": 0.98,
+            },
+            {
+                "id": "ctx_resume_noise",
+                "title": "Noise",
+                "content": "低价值草稿应在恢复后继续压缩。",
+                "importance": 0.1,
+            },
+        ]
+        protected_items = [{"kind": "node", "id": "ctx_resume_keep"}]
+        root_mount_preview = {
+            "taskId": task.id,
+            "spaceId": shared_setup["spaceId"],
+            "branchId": shared_setup["branchId"],
+            "startupMode": "paused-pre-start",
+            "accessibleMounts": [
+                {
+                    "spaceId": shared_setup["spaceId"],
+                    "branchId": shared_setup["branchId"],
+                    "label": "m9 shared recovery mount",
+                }
+            ],
+            "mountedNodeRefs": [
+                {
+                    "kind": "node",
+                    "id": shared_setup["anchorNodeId"],
+                    "spaceId": shared_setup["spaceId"],
+                    "branchId": shared_setup["branchId"],
+                }
+            ],
+        }
         started = client.post(
             f"/runtime/tasks/{task.id}/start",
             json={
@@ -349,37 +437,36 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
                 "planConfirmed": True,
                 "confirmPlan": True,
                 "takeoverAutoConfirm": True,
+                "takeoverProtocol": _root_only_takeover_protocol(),
                 "responseRequirements": "输出 Markdown，并在同一响应中包含这四段：## 结果、## 证据、## 风险、## 已知问题。",
-                "currentContext": [
-                    {
-                        "id": "ctx_resume_keep",
-                        "title": "Safe Stop Plan",
-                        "content": "safe-stop 必须保留 protectedItems、snapshot token、mounted summary 与恢复后的 followup actions。",
-                        "importance": 0.98,
-                    },
-                    {
-                        "id": "ctx_resume_noise",
-                        "title": "Noise",
-                        "content": "低价值草稿应在恢复后继续压缩。",
-                        "importance": 0.1,
-                    },
-                ],
-                "protectedItems": [{"kind": "node", "id": "ctx_resume_keep"}],
+                "currentContext": pause_context_state,
+                "protectedItems": protected_items,
                 "activeCapabilities": ["shared-memory"],
             },
         )
         if started.status_code != 202:
             raise RuntimeError(f"m9 pause-resume start failed: {started.text}")
         paused = client.post(
-            f"/runtime/tasks/{task.id}/pause-request",
+            f"/runtime/tasks/{task.id}/pause",
             json={
                 "reason": "m9-acceptance-safe-stop",
                 "resumeMessage": "恢复后继续完成挂载记忆树总结。",
+                "currentFocus": "执行挂载记忆树任务的 safe-stop 验收",
+                "currentObjective": question,
+                "currentContextState": pause_context_state,
+                "protectedItems": protected_items,
+                "rootMountPreview": root_mount_preview,
+                "takeoverProtocol": _root_only_takeover_protocol(),
+                "responseRequirements": "输出 Markdown，并在同一响应中包含这四段：## 结果、## 证据、## 风险、## 已知问题。",
             },
         )
         if paused.status_code != 202:
             raise RuntimeError(f"m9 pause request failed: {paused.text}")
-        first = run_worker_once("agent-runtime")
+        pause_payload = paused.json()
+        if pause_payload.get("status") == "paused" and pause_payload.get("snapshot"):
+            first = {"status": "processed", "result": pause_payload}
+        else:
+            first = run_worker_once("agent-runtime")
         if first.get("result", {}).get("status") != "paused":
             raise RuntimeError(f"m9 pause step failed: {json.dumps(first, ensure_ascii=False)}")
         snapshot = first["result"]["snapshot"]
@@ -390,12 +477,12 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
         resumed = client.post(
             f"/runtime/tasks/{task.id}/resume",
             json={
-                "resumeToken": snapshot["resumeToken"],
                 "nextObjective": "恢复后完成跨空间恢复说明并写入最终执行记录。",
                 "takeoverPlanConfirmed": True,
                 "planConfirmed": True,
                 "confirmPlan": True,
                 "takeoverAutoConfirm": True,
+                "takeoverProtocol": _root_only_takeover_protocol(),
                 "responseRequirements": "输出 Markdown，并在同一响应中包含这四段：## 结果、## 证据、## 风险、## 已知问题。",
             },
         )
@@ -481,10 +568,11 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
         raise RuntimeError(f"m9 pause-resume answer coverage is too low: {combined_score}")
     if persisted_task is None or persisted_task.status != "completed":
         raise RuntimeError("m9 pause-resume task did not reach completed status")
-    if len(execution_notes) < 2:
-        raise RuntimeError("m9 pause-resume did not persist both pre-pause and post-resume execution notes")
-    if not snapshots or snapshots[0].status != "consumed":
-        raise RuntimeError("m9 pause-resume snapshot was not consumed on resume")
+    required_execution_notes = 1 if snapshot.get("snapshotType") == "pre-start" else 2
+    if len(execution_notes) < required_execution_notes:
+        raise RuntimeError("m9 pause-resume did not persist the expected execution notes")
+    if not any(record.id == snapshot["id"] and record.status == "consumed" for record in snapshots):
+        raise RuntimeError("m9 pause-resume source snapshot was not consumed on resume")
 
     return {
         "question": question,
@@ -506,7 +594,7 @@ def _run_m9_pause_resume_memory_tree_case(case: dict[str, Any] | None = None) ->
             "shared-memory.mount-root",
             "pause-resume.prepare",
             "pause-resume.rehydrate",
-            "runtime-kernel.pause-request",
+            "runtime-kernel.pause",
             "runtime-kernel.resume",
         ],
         "liveScenario": {

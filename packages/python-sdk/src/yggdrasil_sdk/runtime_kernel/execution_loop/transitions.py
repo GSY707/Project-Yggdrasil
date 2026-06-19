@@ -108,7 +108,7 @@ def _finalize_execution_transition(
 				"runtimeMetrics": request.get("runtimeMetrics"),
 				"selectedModel": run.selected_model,
 				"selectedProvider": run.selected_provider,
-				"safeStopReason": request.get("safeStopReason") or "pause-requested",
+				"safeStopReason": request.get("safeStopReason") or "manual-pause",
 			},
 		)
 		pause_snapshot_summary: TaskSnapshotSummary = pause_state["snapshot"]
@@ -156,7 +156,7 @@ def _finalize_execution_transition(
 				"snapshotId": pause_snapshot["id"],
 				"flushedWrites": pause_state["flushedWrites"],
 				"pendingExternalActions": pause_snapshot_summary.pending_actions,
-				"resumeToken": pause_snapshot["resumeToken"],
+				"retentionClass": pause_snapshot.get("retentionClass"),
 			},
 		)
 		paused_event = _persist_runtime_event(
@@ -449,10 +449,16 @@ def _finalize_execution_transition(
 					"activity": "core.agent.main.execute",
 					"taskId": task_id,
 					"command": "start",
+					"intent": "continuation",
 					"requestedAt": utc_now().isoformat(),
 					"payload": continuation_payload,
 				}
-				queue_depth = coordinator.enqueue_job(AGENT_RUNTIME_QUEUE, queued_work_item)
+				queued_record = task_repository.create_work_item(AGENT_RUNTIME_QUEUE, queued_work_item)
+				queued_work_item = queued_record.model_dump(by_alias=True, mode="json")
+				queue_depth = coordinator.enqueue_job(
+					AGENT_RUNTIME_QUEUE,
+					{"workItemId": queued_record.id, "queue": AGENT_RUNTIME_QUEUE, "activity": queued_record.activity},
+				)
 				continuation_locator = f"agent-runtime/tasks/{task.id}/continuations/{run.id}"
 				_cache_package_entry(
 					coordinator,

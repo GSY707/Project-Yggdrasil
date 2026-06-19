@@ -1439,7 +1439,7 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
     if started.status_code != 202:
         raise RuntimeError(f"g4 runtime recovery start failed: {started.text}")
     pause_request = client.post(
-        f"/runtime/tasks/{task['id']}/pause-request",
+        f"/runtime/tasks/{task['id']}/pause",
         json={
             "reason": "g4-evaluation-pause",
             "resumeMessage": str(case_payload.get("resumeMessage") or "continue the recovery validation"),
@@ -1450,11 +1450,9 @@ def _run_g4_scene_runtime_recovery_case(case: dict[str, Any] | None = None) -> d
     first = run_worker_once("agent-runtime")
     if (first.get("result") or {}).get("status") != "paused":
         raise RuntimeError(f"g4 runtime recovery pause step failed: {json.dumps(first, ensure_ascii=False)}")
-    resume_token = ((first.get("result") or {}).get("snapshot") or {}).get("resumeToken")
     resumed = client.post(
         f"/runtime/tasks/{task['id']}/resume",
         json={
-            "resumeToken": resume_token,
             "nextObjective": str(case_payload.get("resumeObjective") or "finish the G4 recovery flow"),
         },
     )
@@ -1664,7 +1662,6 @@ def _g4_recover_live_budget_pause_or_failure(
         resumed = client.post(
             f"/runtime/tasks/{task_id}/resume",
             json={
-                "resumeToken": snapshot.resume_token,
                 "budgetState": _g4_budget_state_with_top_up(task_record.budget, case_payload),
                 "resumeMessage": str(
                     case_payload.get("budgetResumeMessage")

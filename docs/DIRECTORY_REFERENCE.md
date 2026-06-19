@@ -14,6 +14,7 @@
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估（2026-06-14）：限定 2026 年 3 月后开源/开放权重 MoE 与稀疏激活模型，按 Qwen3.6、Ling/Ring-2.6、Mistral Small 4、Gemma 4、DeepSeek V4、Command A+、Kimi K2.6/2.7、MiMo V2.5、MiniMax M2.7/M3、Nemotron 3 等具体候选拆分主模型/子任务模型和 D0-D4 路由 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发与稳定性、状态机恢复链、M9 控制面与验收链调查基线（2026-06-11）：确认 M9 control-plane 当前通过、M9 acceptance 断在 pause/resume 后续状态收口与预算失败，并列出 worker 队列、任务锁、snapshot 恢复、skip 测试和发布门禁的修复顺序 |
+| `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止、暂停、继续与恢复能力调查（2026-06-18，2026-06-19 同步新实现）：当前公开入口已切为 `/pause`、`/resume`、`/cancel`、`/snapshots/save-current`、`/branches`，恢复主链改为 Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked` 和 Cancel audit 30 天 |
 | `docs/development/INSTALL_LAUNCHER_AND_APP_PACKAGE_DISTRIBUTION_2026_06_06.md` | 安装、启动器与应用包随包发行评估（2026-06-06）：梳理当前开发工作区、本地产品、Docker 产品栈与 Windows 桌面封装路径，判断普通用户需要产品启动器，并定义“基座产品栈 + 应用包 + 直达应用快捷方式”的可行发行改造 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
@@ -34,6 +35,7 @@
 | `docs/development/TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md` | 给 code agent 的返工任务文档（2026-05-26）：针对验收发现的残留问题，强制收口“世界级不见任务、只有真实现场才无损恢复、TaskRuntimeState 成为唯一任务态入口”；本轮已落下一条关键修复：仅 `lossless-restore` 允许 `resume-node` |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：继续向新三阶段口径收口，补上“初次苏醒形成起始状态、任务级单独读取工作状态、工具/知识索引优先”的关键约束，同时保留 Boot Prompt、RootMountPackage、上下文窗口和结束批准的正式结构 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：继续向任务级工作状态口径收口，明确工作树是在任务开始并读取工作状态后挂载到 `[ID: 003 我要干什么]` 语义根下的动态执行栈与工作记忆 |
+| `docs/specs/task-pause-resume-continuation-contract-v0.1.md` | 任务暂停、恢复与继续契约 v0.1（2026-06-18）：正式定义 Start、Pause、Queued Pause、Safe-Stop、Durable Snapshot、Resume、Continue、Retry、Cancel、Shutdown、长期恢复、ResumeAttempt、持久 WorkItem、snapshot 保留策略、手动保存/分支、tool-call 暂停等价性、API 语义和验收门禁 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把“先建世界 / 再醒来 / 再开始工作”拆成世界级与任务级两层，强调建世界与初次苏醒不得接触具体工作信息，并进一步冻结“工具/知识索引优先、能力/知识到工具的关联召回、起始状态、无损恢复和分层诊断”规则 |
 | `docs/specs/application-package-interface-v0.1.md` | 应用包接口总规范 v0.1：统一定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面、dashboard 任务模板、示例任务、预期产物和控制面 API，供别的团队按正式契约开发应用包 |
 | `docs/specs/graduate-researcher-app-v0.1.md` | Graduate Researcher 应用包定义 v0.1：定义“研究生”应用的目标、预算语义、计划-步骤-动作三层模型与 tool-rich 默认工具包 |
@@ -142,7 +144,7 @@
 > 2026/5/31 Graduate 200k 上下文与外网重试修复：`evaluation/suites/g4-graduate-ml-longcat2.json`、`evaluation/suites/g4-graduate-ml-deepseek-v4.json` 的 `effectiveContextWindow` 已提升到 `200000`（并同步 case id/title/matrixKey）；`packages/python-sdk/src/yggdrasil_sdk/mcp_servers/web_server.py` 与 `paper_server.py` 已新增 429/5xx 短退避重试与失败降级路径，降低 live 研究场景下外网瞬时限流造成的工具回合中断概率；对应回归新增 `tests/test_mcp_web_paper_retry.py`。
 > 2026/5/31 Graduate 深度研究流水线升级：`applications/graduate-researcher/prompt-profiles/main-agent.yaml`、`applications/graduate-researcher/scenes/generic-default.yaml`、`applications/graduate-researcher/few-shots/ml-learning-cycle.v1.yaml` 已新增“n轮初步探索+n轮专项探索+n轮实验研究+n轮结果思考+1-2轮论文撰写”的强制阶段合同，并要求初步探索后只选一个核心创新点作为主攻；`evaluation/suites/g4-graduate-ml-longcat2.json` 与 `evaluation/suites/g4-graduate-ml-deepseek-v4.json` 已同步该阶段合同、轮次账本要求，并将 `maxToolRounds` 从 32 提升到 64、`maxWindowCycles` 从 24 提升到 36。
 > 2026/5/31 任务可恢复性控制面补强：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_control.py` 新增失败任务 `retry` 控制动作，允许在保留任务态的前提下手动重试并接受预算更新；`services/agent-runtime/src/yggdrasil_agent_runtime/app.py` 与 `services/core-api/src/yggdrasil_core_api/api/routes/tasks.py` 已新增 `/runtime/tasks/{taskId}/retry`、`/tasks/{taskId}/retry` 路由；`services/core-api/src/yggdrasil_core_api/services/runtime_service.py` 的 `runtimeControl` 摘要新增 `canRetry/canTopUp` 能力标记；`apps/web/app/components/task-detail-page.tsx` 已补 `Safe-Stop`、`失败后重试`、`追加预算并续跑` 三个操作入口。
-> 2026/6/1 预算门禁续跑语义修复：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`（及并行拆分文件 `execution_loop_part_b.py`）已将“模型调用后预算超限”从 `failed` 改为 `paused + restorable snapshot`，并回填 `safeStopReason=budget-exhausted`、`resumeMessage` 与 `resumeToken`，使任务可在同一 work-tree 现场追加预算后无损续跑；对应回归已更新 `tests/runtime/test_runtime_budget_and_audit.py`。
+> 2026/6/1 预算门禁续跑语义修复：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`（及并行拆分文件 `execution_loop_part_b.py`）已将“模型调用后预算超限”从 `failed` 改为 `paused + restorable snapshot`，并回填 `safeStopReason=budget-exhausted` 与 `resumeMessage`；当前恢复入口已切到 durable snapshot + resume attempt，不再向 API/UI 暴露恢复 token；对应回归已更新 `tests/runtime/test_runtime_budget_and_audit.py`。
 > 2026/6/1 LongCat 200k 路由修复：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py` 与 `execution_loop_part_b.py` 不再把 `effectiveContextWindow` 作为模型候选硬过滤条件（仅显式 `requiredContextWindow` 才触发硬过滤），避免 LongCat `contextWindow=128000` 在 Graduate `effectiveContextWindow=200000` case 中被预筛阶段提前失败；`tests/runtime/test_runtime_budget_and_audit.py` 新增回归 `test_runtime_effective_context_window_does_not_hard_filter_candidates` 锁定该行为。
 > 2026/6/1 LongCat/DeepSeek live 续验同步：Graduate LongCat2 已在最新 run `evalrun_d4d430f12291457c8c58` 正式通过，证明 200k case 不再卡死在候选预筛阶段；同时 `adapters/model-providers/src/yggdrasil_model_providers/gateway.py` 已为 `deepseek_direct` 增加 SSL/传输异常识别、provider 额外重试，以及重试时切换 `stream=false + Connection: close` 的稳态路径；`tests/test_deepseek_gateway.py` 新增 `test_deepseek_ssl_eof_retry_switches_to_non_stream`。最新 DeepSeek live 复跑已不再出现 `SSL: UNEXPECTED_EOF_WHILE_READING` 早死，失败点前移为预算后检暂停（`paused + restorable snapshot`）。
 > 2026/6/1 nightly 状态机回归修复：`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_transitions.py` 已补回旧主循环的正式收口语义，非根节点在完成后继续按“先 sibling、再 parent”推进，根节点 synthesis 在 formal footer 或 leaf 全部终态时重新进入 `awaiting-approval`，避免 continuation helper 把已完成窗口误留在 `continuing`/`queued`；对应 nightly 失败子集位于 `tests/runtime/test_runtime_budget_and_audit.py`、`tests/runtime/test_runtime_restart_and_resume.py`、`tests/runtime/test_runtime_pause_regressions.py` 与 `tests/test_m9_acceptance.py`。
@@ -287,7 +289,7 @@ apps/
     ├── public/demo/                # README、用户指南和 /release 使用的产品截图
     ├── package.json                # 前端包配置
     ├── next.config.ts              # Next.js 配置
-    └── tsconfig.json               # TypeScript 配置（继承根配置）
+    └── tsconfig.json               # TypeScript 配置（继承根配置；`*.tsbuildinfo` 为本地 typecheck 增量缓存，已由根 `.gitignore` 忽略）
 ```
 
 **关键说明：**
@@ -397,7 +399,7 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、durable snapshot store、安全关闭、任务接管；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
 │       ├── llm_runtime/            # LLM 调用封装包（core/artifacts/invoke 三层；包入口保留原 `yggdrasil_sdk.llm_runtime` 导入面）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -443,16 +445,17 @@ packages/
 │
 └── frontend-sdk/                   # 前端专用 SDK
     ├── package.json
-    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment、setupChecklist 与 DataGovernance 契约
+    └── src/                        # React Hooks、API 客户端、前端类型；`types.ts` 现已补齐 TaskDetailResponse、ApplicationDashboard、taskTemplates/settingsSchema/exampleTasks/expectedOutputs、AssetIngestResponse、TaskLaunchAttachment、setupChecklist、DataGovernance 与 durable task runtime control 契约
 ```
 
 **关键说明：**
-- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
+- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、durable snapshot store、resume attempt、控制面与任务接管。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
 - `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
-- `runtime_kernel/execution_loop.py` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，非根子节点完成/失败会先回父节点，由父节点通过 `work-node-enter` / `work-node-create` 显式编排后续路径，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。`task-takeover` 模块现已把 `delivery.result / evidence / pending / incomplete` 全部升级为正式门禁；若首次输出缺少 `pending` 或 `incomplete`，runtime 会先在同一节点排一轮纠偏续跑，要求直接补齐正式交付；若纠偏后仍未过 gate，才会收敛成 `delivery-gate-blocked`。
-- `runtime_kernel/execution_loop/worker.py` 对恢复态 snapshot 额外做完整性校验；若 `pendingAction.checksum` 失配，会先把 snapshot 标记为 `created` 并持久化 `snapshot-corrupted:*` blocker，再拒绝恢复；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
+- `runtime_kernel/execution_loop/` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，非根子节点完成/失败会先回父节点，由父节点通过 `work-node-enter` / `work-node-create` 显式编排后续路径，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。`task-takeover` 模块现已把 `delivery.result / evidence / pending / incomplete` 全部升级为正式门禁；若首次输出缺少 `pending` 或 `incomplete`，runtime 会先在同一节点排一轮纠偏续跑，要求直接补齐正式交付；若纠偏后仍未过 gate，才会收敛成 `delivery-gate-blocked`。
+- `runtime_kernel/snapshot_store.py` 是 durable snapshot payload 权威存储入口，写入 `.yggdrasil/state/snapshots/{projectId}/{taskId}/{snapshotId}/manifest.json` 与 blobs；`runtime_kernel/snapshot.py` 负责 active-paused/latest-auto snapshot 物化，并在 pending tool-call safe-stop 上拒绝半截 arguments、只为完整 tool-call 写 durable checkpoint；`runtime_kernel/execution_control.py` 负责 `/pause`、`/resume`、`/cancel`、保存 snapshot 与从 user-saved snapshot 创建分支。
+- `runtime_kernel/execution_loop/worker.py` 对恢复态 snapshot 做 manifest/checksum/rehydrate 校验；失败进入 `resume-blocked` 并保留 blocker，不再 fallback start；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
 - `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法，并显式给出 `work-node-create` / `work-node-enter` 标签契约（父节点强编排下由父节点决定进入已有 child、创建新 child 或汇总交付）；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
 - `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
@@ -493,7 +496,7 @@ modules/
 │
 ├── # ── 任务能力模块 ─────────────────────────────────────
 ├── pause-resume/                   # 任务暂停/恢复与快照管理
-│   └── src/pause_resume/
+│   └── src/yggdrasil_pause_resume/
 │
 ├── task-takeover/                  # Gate 2 任务接管协议（目标解析、约束、计划、验证、交付）
 │   └── src/yggdrasil_task_takeover/
@@ -682,13 +685,14 @@ docs/
 │   ├── README.md                   # 规格索引
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
+│   ├── task-pause-resume-continuation-contract-v0.1.md # 任务暂停、恢复与继续契约：长期 Durable Snapshot、ResumeAttempt、持久 WorkItem、手动保存/分支、tool-call 等价性与不得 fallback start
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
 │   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面、场景任务模板与控制面 API
 │   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义与计划-步骤-动作三层模型
 │   ├── graduate-researcher-test-standard-v0.1.md # Graduate Researcher 测试标准：机器学习研究生场景的行为验收口径
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
-│   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、worker activity 与工具数据规格
+│   ├── runtime-domain-data-spec-v0.1.md     # 运行时、work tree、TaskSnapshot/ResumeAttempt、worker activity 与工具数据规格
 │   ├── work-tree-protocol-v0.1.md           # Gate 3 工作树正式协议：执行节点、恢复锚点与完成态同步
 │   └── asset-packaging-evaluation-data-spec-v0.1.md # 资产打包与评测数据规格
 │
@@ -901,6 +905,7 @@ migrations/
 - `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
 - `migrations/versions/a91c2e7d4f33_memory_tree_worktree_audit_fields.py`：为 nodes / retrieval_requests / model_invocations / assets / prompt_compile_artifacts 补 work tree 审计字段，支撑“记忆树即全部记忆”的 snapshot、rehydrate 与多模态/关系发现闭环。
 - `migrations/versions/0f7c6e2a8d91_data_governance_operations.py`：新增 `data_governance_operations` 审计表，支撑删除 dry-run、task 硬删除和阻塞记录。
+- `migrations/versions/9c0a7d6e5f21_durable_task_resume_chain.py`：合并当前 migration heads，并新增 `task_resume_attempts`、`runtime_work_items`、`task_branches`，扩展 `task_snapshots` durable manifest/retention/blocker 字段和 `tasks` resume 控制字段；迁移时把旧 raw resume token 哈希到 `resume_token_hash`，并把历史待暂停状态折叠为 `running + pending_control_intent=pause`。
 
 ---
 
@@ -929,17 +934,18 @@ tests/
 │   ├── test_runtime_core_and_memory.py
 │   │                               # 运行时核心挂载、上下文裁剪、记忆树物化与 memory-write 标签回归
 │   ├── test_runtime_restart_and_resume.py
-│   │                               # 窗口重启与 pause/resume 主闭环回归
+│   │                               # 窗口重启、retry 持久 work item 与 durable resume-blocked 回归
 │   ├── test_runtime_budget_and_audit.py
 │   │                               # 预算硬约束、审计级别与 response 指标回归
 │   └── test_runtime_pause_regressions.py
-│                                   # pause 请求竞态回归、多轮 pause/resume 污染防护与 runtime metrics 计数回归
+│                                   # queued pause durable snapshot、resume attempt 幂等与 runtime metrics 计数回归
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
 ├── test_mcp_bridge.py              # MCP 协议桥接回归
 ├── test_support.py                 # 通用支持函数回归（含 CJK word_count 口径、workspace sandbox 复制边界）
 ├── test_deepseek_gateway.py        # DeepSeek V4 / thinking / 文档化 LLM 配置回归
+├── test_llm_retry_and_safe_shutdown.py # LLM retry、工具调用隔离、安全关闭与 pending tool-call 暂停恢复等价性回归；锁住半截 streaming tool-call 不生成 restorable snapshot、完整 pending call 写 durable manifest、恢复后下一次模型请求 digest 与无暂停路径一致
 ├── test_memory_pipeline_api.py     # 记忆流水线 API 回归
 ├── test_product_compose_smoke_config.py # 产品 Compose smoke 配置回归：锁定 infra/product.env 优先于 product.env.template
 ├── test_release_packaging_config.py # 正式发行包配置回归：锁定 distribution manifest、OpenPath/应用包安装参数、release smoke 回滚快照合同
@@ -969,7 +975,7 @@ tests/
 │                                   #   M9：multimodal-memory + relation-discovery 专项测试（含资产/边的 work tree 溯源）
 ├── test_m9_memory_organizer.py     # M9：memory-organizer 专项测试
 ├── test_m9_training_lab.py         # M9：training-lab 专项测试
-└── test_m9_acceptance.py           # M9：端到端验收测试 + 控制面 API 回归
+└── test_m9_acceptance.py           # M9：端到端验收测试 + 控制面 API 回归；pause/resume acceptance 不再跳过
 ```
 
 **pytest 标记说明：**
@@ -1076,10 +1082,12 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估：以 2026 年 3 月后新开源/开放权重 MoE 候选为主，落到具体模型、主/子任务分工、D0-D4 难度、thinking 策略、升级降级和世界树专项评测指标 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
+| `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止/继续能力调查：记录 API/UI/runtime/module/test 能力基线；2026-06-19 已同步 `/pause`、Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked`、Cancel audit 与手动保存/分支的新实现口径 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议：定义数据资产 manifest、备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计记录和 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约：定义官方远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
+| `docs/specs/task-pause-resume-continuation-contract-v0.1.md` | 任务暂停、恢复与继续契约 v0.1：冻结“隔天/长期继续”为硬能力，定义 Durable Snapshot、ResumeAttempt、持久 WorkItem、resume-blocked、Queued Pause、Cancel、snapshot retention、手动保存分支、tool-call 暂停等价性和不得 fallback start 的恢复合同 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并明确代码只做边界与警戒 |
 | `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、父节点强编排、有限线性 continuation 轨迹和 Working Node 标签 |
@@ -1154,4 +1162,8 @@ docs/
 | Stitch 设计稿四组验收与最终抓图证据 | `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md`、`docs/development/stitch-design-captures-2026-06-17/post-rework-v10-passline/` |
 | Stitch 设计工程实现计划与阶段 0 收口清单 | `docs/development/DESIGN_ENGINEERING_IMPLEMENTATION_PLAN_2026_06_17.md` |
 | Runtime 并发 / M9 验收调查 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` |
+| 任务停止 / 继续 / 恢复正式契约 | `docs/specs/task-pause-resume-continuation-contract-v0.1.md` |
+| 任务停止 / 继续 / 恢复实现主入口 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_control.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot_store.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`services/worker/src/yggdrasil_worker/registry.py`、`services/core-api/src/yggdrasil_core_api/api/routes/tasks.py`、`apps/web/app/components/task-detail-page.tsx` |
+| Tool-call 暂停等价性门禁 | `tests/test_llm_retry_and_safe_shutdown.py` |
+| 任务停止 / 继续 / 恢复现状调查 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` |
 | 2026-03+ MoE 模型路由与任务难度评估 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` |

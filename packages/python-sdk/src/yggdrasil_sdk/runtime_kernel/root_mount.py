@@ -476,8 +476,8 @@ def build_root_mount_package(task_id: str, payload: dict[str, Any] | None = None
                 )
                 
                 snapshot_rec = None
-                if request.get("resumeToken") is not None:
-                    snapshot_rec = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
+                if request.get("snapshotId") is not None:
+                    snapshot_rec = task_repository.get_snapshot(str(request["snapshotId"]))
                 elif task_record.active_snapshot_id:
                     snapshot_rec = task_repository.get_snapshot(task_record.active_snapshot_id)
                 
@@ -656,8 +656,8 @@ def build_task_runtime_state(
                 restart_message = request.get("restartMessage") or task_record.restart_message
                 
                 snapshot_rec = None
-                if request.get("resumeToken") is not None:
-                    snapshot_rec = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
+                if request.get("snapshotId") is not None:
+                    snapshot_rec = task_repository.get_snapshot(str(request["snapshotId"]))
                 elif task_record.active_snapshot_id:
                     snapshot_rec = task_repository.get_snapshot(task_record.active_snapshot_id)
                 

@@ -701,6 +701,7 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
             "sourceBranchId": child_branch.id,
             "targetBranchId": target_branch.id,
             "command": "start",
+            "intent": "subagent",
             "requestedAt": utc_now().isoformat(),
             "payload": {
                 **request,
@@ -712,7 +713,12 @@ def launch_subagent_task(parent_task_id: str, payload: dict[str, Any] | None = N
                 "readonlyContextCached": readonly_cached,
             },
         }
-        queue_depth = coordinator.enqueue_job(AGENT_RUNTIME_QUEUE, work_item)
+        queued_record = task_repository.create_work_item(AGENT_RUNTIME_QUEUE, work_item)
+        work_item = queued_record.model_dump(by_alias=True, mode="json")
+        queue_depth = coordinator.enqueue_job(
+            AGENT_RUNTIME_QUEUE,
+            {"workItemId": queued_record.id, "queue": AGENT_RUNTIME_QUEUE, "activity": queued_record.activity},
+        )
 
     return {
         "status": "queued",

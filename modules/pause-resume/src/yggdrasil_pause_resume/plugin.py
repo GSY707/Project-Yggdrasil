@@ -6,6 +6,7 @@ from typing import Any
 from yggdrasil_sdk.hooks import HookNames
 from yggdrasil_sdk.module import BaseModulePlugin, HookRegistration
 from yggdrasil_sdk.runtime_kernel import load_package_entry
+from yggdrasil_sdk.runtime_kernel.snapshot_store import read_state_file_ref
 from yggdrasil_sdk.runtime_kernel.takeover import restore_takeover_work_tree_pointer
 from yggdrasil_sdk.support import new_id, normalize_excerpt
 
@@ -29,6 +30,15 @@ def _restored_request_state(snapshot_pending_actions: list[dict[str, Any]]) -> d
     if isinstance(merged.get("takeoverProtocol"), dict):
         merged["takeoverProtocol"] = restore_takeover_work_tree_pointer(dict(merged["takeoverProtocol"]))
     return merged
+
+
+def _load_snapshot_ref(ref: dict[str, Any] | None, default: Any) -> Any:
+    if ref is None:
+        return default
+    ref_type = str(ref.get("type") or "")
+    if ref_type == "state-file":
+        return read_state_file_ref(ref, default=default)
+    return load_package_entry(str(ref.get("locator") or "")) if ref.get("locator") is not None else default
 
 
 class PauseResumeModule(BaseModulePlugin):
@@ -98,11 +108,11 @@ class PauseResumeModule(BaseModulePlugin):
         root_mounts = payload.get("rootMounts") if isinstance(payload.get("rootMounts"), dict) else {}
         context_ref = task_snapshot.get("contextRef") if isinstance(task_snapshot.get("contextRef"), dict) else None
         root_mount_ref = task_snapshot.get("rootMountRef") if isinstance(task_snapshot.get("rootMountRef"), dict) else None
-        restored_context = load_package_entry(str(context_ref.get("locator"))) if context_ref is not None else []
+        restored_context = _load_snapshot_ref(context_ref, [])
         if not isinstance(restored_context, list):
             restored_context = []
         restored_root_mount = dict(root_mounts)
-        snapshot_root_mount = load_package_entry(str(root_mount_ref.get("locator"))) if root_mount_ref is not None else None
+        snapshot_root_mount = _load_snapshot_ref(root_mount_ref, None)
         if isinstance(snapshot_root_mount, dict):
             restored_root_mount.update(snapshot_root_mount)
         max_context_items = 12
@@ -116,7 +126,6 @@ class PauseResumeModule(BaseModulePlugin):
             {
                 "kind": "resume-checkpoint",
                 "snapshotId": task_snapshot.get("id"),
-                "resumeToken": task_snapshot.get("resumeToken"),
                 "safeStopReason": task_snapshot.get("safeStopReason"),
             }
         ]

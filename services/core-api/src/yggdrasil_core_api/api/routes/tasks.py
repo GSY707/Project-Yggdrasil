@@ -62,16 +62,18 @@ def start_task(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.post("/{task_id}/pause-request", status_code=status.HTTP_202_ACCEPTED)
-def request_task_pause(
+@router.post("/{task_id}/pause", status_code=status.HTTP_202_ACCEPTED)
+def pause_task(
     task_id: str,
     payload: dict[str, Any] | None = Body(default=None),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, object]:
     try:
-        return service.request_task_pause(task_id, payload)
+        return service.pause_task(task_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.post("/{task_id}/resume", status_code=status.HTTP_202_ACCEPTED)
@@ -96,6 +98,48 @@ def retry_task(
 ) -> dict[str, object]:
     try:
         return service.retry_task(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{task_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
+def cancel_task(
+    task_id: str,
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.cancel_task(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{task_id}/snapshots/save-current", status_code=status.HTTP_201_CREATED)
+def save_current_task_snapshot(
+    task_id: str,
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.save_current_task_snapshot(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{task_id}/branches", status_code=status.HTTP_201_CREATED)
+def create_task_branch(
+    task_id: str,
+    payload: dict[str, Any] | None = Body(default=None),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    try:
+        return service.create_task_branch(task_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:

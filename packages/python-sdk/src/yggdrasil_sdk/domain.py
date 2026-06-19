@@ -272,7 +272,20 @@ class TaskRecord(BaseModel):
     branch_id: str = Field(alias="branchId")
     title: str
     goal: str
-    status: Literal["draft", "queued", "running", "pause-requested", "paused", "restart-requested", "restarting", "awaiting-approval", "completed", "failed", "cancelled"]
+    status: Literal[
+        "draft",
+        "queued",
+        "running",
+        "paused",
+        "resume-blocked",
+        "restart-requested",
+        "restarting",
+        "cancelling",
+        "awaiting-approval",
+        "completed",
+        "failed",
+        "cancelled",
+    ]
     current_focus: str | None = Field(default=None, alias="currentFocus")
     current_objective: str | None = Field(default=None, alias="currentObjective")
     resume_message: str | None = Field(default=None, alias="resumeMessage")
@@ -280,6 +293,9 @@ class TaskRecord(BaseModel):
     owner_profile_id: str = Field(alias="ownerProfileId")
     execution_root_node_id: str | None = Field(default=None, alias="executionRootNodeId")
     active_snapshot_id: str | None = Field(default=None, alias="activeSnapshotId")
+    active_resume_attempt_id: str | None = Field(default=None, alias="activeResumeAttemptId")
+    resume_blocked_reason: str | None = Field(default=None, alias="resumeBlockedReason")
+    pending_control_intent: str | None = Field(default=None, alias="pendingControlIntent")
     window_index: int = Field(default=1, alias="windowIndex")
     restart_count: int = Field(default=0, alias="restartCount")
     cumulative_window_span_tokens: int = Field(default=0, alias="cumulativeWindowSpanTokens")
@@ -316,6 +332,54 @@ class AgentRunRecord(BaseModel):
     cost_used: float = Field(alias="costUsed")
     started_at: datetime = Field(alias="startedAt")
     ended_at: datetime | None = Field(default=None, alias="endedAt")
+
+
+class TaskResumeAttemptRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    task_id: str = Field(alias="taskId")
+    snapshot_id: str = Field(alias="snapshotId")
+    requested_by: dict[str, Any] = Field(default_factory=dict, alias="requestedBy")
+    status: Literal["queued", "leased", "restoring", "running", "blocked", "cancelled", "completed"]
+    lease_owner: str | None = Field(default=None, alias="leaseOwner")
+    lease_until: datetime | None = Field(default=None, alias="leaseUntil")
+    blocker_code: str | None = Field(default=None, alias="blockerCode")
+    blocker_message: str | None = Field(default=None, alias="blockerMessage")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class RuntimeWorkItemRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    queue: str
+    task_id: str | None = Field(default=None, alias="taskId")
+    activity: str
+    intent: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["queued", "leased", "completed", "failed", "cancelled", "reclaimable"]
+    lease_owner: str | None = Field(default=None, alias="leaseOwner")
+    lease_until: datetime | None = Field(default=None, alias="leaseUntil")
+    attempt: int = 1
+    last_error: str | None = Field(default=None, alias="lastError")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+
+
+class TaskBranchRecord(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    parent_task_id: str = Field(alias="parentTaskId")
+    child_task_id: str = Field(alias="childTaskId")
+    source_snapshot_id: str = Field(alias="sourceSnapshotId")
+    source_snapshot_checksum: str = Field(alias="sourceSnapshotChecksum")
+    label: str | None = None
+    created_by_user_id: str = Field(alias="createdByUserId")
+    created_at: datetime = Field(alias="createdAt")
 
 
 class ModelInvocationRecord(BaseModel):

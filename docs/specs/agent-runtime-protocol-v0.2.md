@@ -338,11 +338,17 @@ CompiledPrompt:
 
 ### 6.2 hot-resume
 
+hot-resume 的暂停、快照、恢复、继续、重试与取消语义以 [任务暂停、恢复与继续契约 v0.1](task-pause-resume-continuation-contract-v0.1.md) 为准。特别是：
+
+1. paused snapshot 必须是 Durable Snapshot，不能只引用 Redis TTL package。
+2. Resume 必须经过 durable resume attempt、manifest 校验和 rehydrate；失败时不得 fallback start。
+3. Continue 是运行时内部推进，不消费 pause snapshot。
+
 恢复优先级：
 
 1. pending tool calls checkpoint
-2. restart snapshot
-3. paused task snapshot
+2. pending durable resume attempt
+3. paused task Durable Snapshot
 4. unfinished work tree node
 5. task resume message
 6. cold standby

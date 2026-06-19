@@ -331,7 +331,7 @@ def test_g4_wait_for_target_worker_result_allows_budget_recovery_callback() -> N
             {
                 "status": "processed",
                 "payload": {"taskId": "task_target", "payload": {}},
-                "result": {"status": "paused", "snapshot": {"resumeToken": "resume-1"}},
+                "result": {"status": "paused", "snapshot": {"retentionClass": "active-paused"}},
             },
             {
                 "status": "processed",
@@ -393,7 +393,7 @@ def test_g4_recover_live_budget_pause_resumes_with_topped_up_budget(monkeypatch:
 
         def get_snapshot(self, snapshot_id: str):
             assert snapshot_id == "snap_1"
-            return SimpleNamespace(status="restorable", resume_token="resume_1")
+            return SimpleNamespace(status="restorable")
 
     class _FakeScope:
         def __enter__(self) -> object:
@@ -428,7 +428,7 @@ def test_g4_recover_live_budget_pause_resumes_with_topped_up_budget(monkeypatch:
     assert len(posted) == 1
     assert posted[0][0] == "/runtime/tasks/task_target/resume"
     payload = posted[0][1]
-    assert payload["resumeToken"] == "resume_1"
+    assert "resumeToken" not in payload
     assert payload["budgetState"]["tokenBudgetUsed"] == 950
     assert payload["budgetState"]["costBudgetUsed"] == 5.4
     assert payload["budgetState"]["tokenBudgetTotal"] > 1000

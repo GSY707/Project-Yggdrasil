@@ -270,6 +270,9 @@ def _task_record(model: TaskORM) -> TaskRecord:
         ownerProfileId=model.owner_profile_id,
         executionRootNodeId=model.execution_root_node_id,
         activeSnapshotId=model.active_snapshot_id,
+        activeResumeAttemptId=model.active_resume_attempt_id,
+        resumeBlockedReason=model.resume_blocked_reason,
+        pendingControlIntent=model.pending_control_intent,
         windowIndex=model.window_index,
         restartCount=model.restart_count,
         cumulativeWindowSpanTokens=model.cumulative_window_span_tokens,
@@ -317,15 +320,29 @@ def _task_snapshot_record(model: TaskSnapshotORM) -> TaskSnapshotSummary:
         branchId=model.branch_id,
         snapshotType=model.snapshot_type,
         status=model.status,
-        resumeToken=model.resume_token,
+        retentionClass=model.retention_class,
+        schemaVersion=model.schema_version,
+        runtimeContractVersion=model.runtime_contract_version,
+        storageManifestRef=_external_ref(model.storage_manifest_ref) if model.storage_manifest_ref else None,
+        manifestChecksum=model.manifest_checksum,
+        resumeTokenHash=model.resume_token_hash,
+        resumeToken=None,
         contextRef=_external_ref(model.context_ref),
         rootMountRef=_external_ref(model.root_mount_ref),
         pendingWrites=_entity_refs(model.pending_writes or []),
         pendingActions=list(model.pending_actions or []),
         resumeMessage=model.resume_message,
         safeStopReason=model.safe_stop_reason,
+        blockerCode=model.blocker_code,
+        blockerMessage=model.blocker_message,
+        savedLabel=model.saved_label,
+        savedByUserId=model.saved_by_user_id,
+        expiresAt=model.expires_at,
         createdAt=model.created_at,
+        verifiedAt=model.verified_at,
+        leasedUntil=model.leased_until,
         consumedAt=model.consumed_at,
+        supersededBySnapshotId=model.superseded_by_snapshot_id,
         safeToPause=model.safe_to_pause,
         currentNodeId=model.current_node_id,
         workingNodeAnnotation=model.working_node_annotation,
@@ -333,6 +350,51 @@ def _task_snapshot_record(model: TaskSnapshotORM) -> TaskSnapshotSummary:
         topFrameId=model.top_frame_id,
         stackDigest=model.stack_digest,
         blockers=list(model.blockers or []),
+    )
+
+def _task_resume_attempt_record(model: TaskResumeAttemptORM) -> TaskResumeAttemptRecord:
+    return TaskResumeAttemptRecord(
+        id=model.id,
+        taskId=model.task_id,
+        snapshotId=model.snapshot_id,
+        requestedBy=dict(model.requested_by or {}),
+        status=model.status,
+        leaseOwner=model.lease_owner,
+        leaseUntil=model.lease_until,
+        blockerCode=model.blocker_code,
+        blockerMessage=model.blocker_message,
+        createdAt=model.created_at,
+        updatedAt=model.updated_at,
+    )
+
+def _runtime_work_item_record(model: RuntimeWorkItemORM) -> RuntimeWorkItemRecord:
+    return RuntimeWorkItemRecord(
+        id=model.id,
+        queue=model.queue,
+        taskId=model.task_id,
+        activity=model.activity,
+        intent=model.intent,
+        payload=dict(model.payload or {}),
+        status=model.status,
+        leaseOwner=model.lease_owner,
+        leaseUntil=model.lease_until,
+        attempt=model.attempt,
+        lastError=model.last_error,
+        createdAt=model.created_at,
+        updatedAt=model.updated_at,
+        completedAt=model.completed_at,
+    )
+
+def _task_branch_record(model: TaskBranchORM) -> TaskBranchRecord:
+    return TaskBranchRecord(
+        id=model.id,
+        parentTaskId=model.parent_task_id,
+        childTaskId=model.child_task_id,
+        sourceSnapshotId=model.source_snapshot_id,
+        sourceSnapshotChecksum=model.source_snapshot_checksum,
+        label=model.label,
+        createdByUserId=model.created_by_user_id,
+        createdAt=model.created_at,
     )
 
 def _route_decision_record(model: ModelRouteDecisionORM) -> ModelRouteDecision:

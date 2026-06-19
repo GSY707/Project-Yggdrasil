@@ -130,7 +130,11 @@ export interface SnapshotRecord {
   id: string;
   appId: string;
   status: string;
-  resumeToken?: string | null;
+  retentionClass?: string | null;
+  blockerCode?: string | null;
+  blockerMessage?: string | null;
+  savedLabel?: string | null;
+  expiresAt?: string | null;
   resumeMessage?: string | null;
   createdAt: string;
   consumedAt?: string | null;
@@ -543,20 +547,29 @@ export interface PullRequestRecord {
 export interface TaskRuntimeControlSummary {
   pauseRequested: boolean;
   activeSnapshotId?: string | null;
+  activeResumeAttemptId?: string | null;
+  pendingControlIntent?: string | null;
+  resumeBlockedReason?: string | null;
   lastSafeStopAt?: string | null;
   snapshotCount: number;
   restorableSnapshotCount: number;
   consumedSnapshotCount: number;
+  snapshotRetentionCounts?: Record<string, number>;
   resumeStatus: string;
   canResume: boolean;
   canRequestPause: boolean;
+  canCancel?: boolean;
+  canSaveSnapshot?: boolean;
+  canBranch?: boolean;
   canRetry?: boolean;
   canTopUp?: boolean;
   canApprove: boolean;
   canRequestRevision: boolean;
-  recommendedResumeToken?: string | null;
   recommendedResumeMessage?: string | null;
   recommendedRevisionNodeId?: string | null;
+  resumeAttempt?: Record<string, unknown> | null;
+  blocker?: { code?: string | null; message?: string | null } | null;
+  activeSnapshot?: SnapshotRecord | null;
   latestSnapshot?: SnapshotRecord | null;
   latestRestorableSnapshot?: SnapshotRecord | null;
 }

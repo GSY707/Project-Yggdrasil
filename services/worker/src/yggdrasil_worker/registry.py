@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import timedelta
 from time import perf_counter
 import signal
 from typing import Any
 
-from yggdrasil_sdk import get_persistence_runtime, observe_span, record_log, record_metric, sync_module_catalog_snapshot
+from yggdrasil_sdk import (
+    TaskRepository,
+    WorkspaceBootstrapRepository,
+    get_persistence_runtime,
+    observe_span,
+    record_log,
+    record_metric,
+    sync_module_catalog_snapshot,
+)
 from yggdrasil_sdk.catalog import load_in_process_plugin
 from yggdrasil_sdk.collaboration_runtime import execute_subagent_work_item
 from yggdrasil_sdk.contracts import WorkerActivityDescriptor
@@ -162,7 +171,11 @@ def enqueue_work_item(queue: str, payload: dict[str, Any]) -> dict[str, object]:
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
     try:
-        queue_depth = coordinator.enqueue_job(queue, payload)
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            work_item = TaskRepository(session).create_work_item(queue, payload)
+        wake_payload = {"workItemId": work_item.id, "queue": queue, "activity": work_item.activity}
+        queue_depth = coordinator.enqueue_job(queue, wake_payload)
     except Exception as exc:
         return {
             "status": "error",
@@ -175,6 +188,7 @@ def enqueue_work_item(queue: str, payload: dict[str, Any]) -> dict[str, object]:
         "queue": queue,
         "queueDepth": queue_depth,
         "payload": payload,
+        "workItem": work_item.model_dump(by_alias=True, mode="json"),
     }
 
 
@@ -182,7 +196,17 @@ def pop_work_item(queue: str, timeout_seconds: int = 1) -> dict[str, object]:
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
     try:
-        payload = coordinator.pop_job(queue, timeout_seconds=timeout_seconds)
+        owner = f"worker-{os.getpid()}-{utc_now().isoformat()}"
+        lease_until = utc_now() + timedelta(seconds=max(int(os.environ.get("YGGDRASIL_WORKER_LEASE_SECONDS") or 120), 30))
+        work_item = None
+        with runtime.session_scope() as session:
+            WorkspaceBootstrapRepository(session).ensure_default_workspace()
+            work_item = TaskRepository(session).claim_work_item(queue, owner=owner, lease_until=lease_until)
+        if work_item is None and timeout_seconds:
+            coordinator.pop_job(queue, timeout_seconds=timeout_seconds)
+            with runtime.session_scope() as session:
+                WorkspaceBootstrapRepository(session).ensure_default_workspace()
+                work_item = TaskRepository(session).claim_work_item(queue, owner=owner, lease_until=lease_until)
     except Exception as exc:
         return {
             "status": "error",
@@ -190,10 +214,16 @@ def pop_work_item(queue: str, timeout_seconds: int = 1) -> dict[str, object]:
             "detail": str(exc),
             "payload": None,
         }
+    payload = None
+    if work_item is not None:
+        payload = dict(work_item.payload or {})
+        payload["workItemId"] = work_item.id
+        payload["attempt"] = work_item.attempt
     return {
         "status": "received" if payload is not None else "empty",
         "queue": queue,
         "payload": payload,
+        "workItem": work_item.model_dump(by_alias=True, mode="json") if work_item is not None else None,
     }
 
 
@@ -241,6 +271,18 @@ def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) 
             result.setdefault("durationMs", duration_ms)
             if activity_descriptor is not None and duration_ms > activity_descriptor.timeout_ms:
                 result["timeoutExceeded"] = True
+        work_item_id = str(payload.get("workItemId") or "")
+        if isinstance(result, dict) and result.get("status") == "locked" and work_item_id:
+            with get_persistence_runtime().session_scope() as session:
+                WorkspaceBootstrapRepository(session).ensure_default_workspace()
+                TaskRepository(session).release_work_item_for_reclaim(work_item_id, last_error="task-lock-miss")
+            return {
+                "status": "requeued",
+                "queue": queue,
+                "payload": payload,
+                "result": result,
+                "reason": "task-lock-miss",
+            }
         if (
             isinstance(result, dict)
             and result.get("status") == "failed"
@@ -249,14 +291,16 @@ def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) 
             and activity_descriptor.retryable
             and attempt <= _max_retry_attempts()
         ):
-            retry_payload = {
-                **payload,
-                "attempt": attempt + 1,
-                "lastFailure": str(result.get("detail") or result.get("status") or "failed"),
-                "lastDurationMs": duration_ms,
-                "retriedAt": utc_now().isoformat(),
-            }
-            retry = enqueue_work_item(queue, retry_payload)
+            if work_item_id:
+                with get_persistence_runtime().session_scope() as session:
+                    WorkspaceBootstrapRepository(session).ensure_default_workspace()
+                    retry_record = TaskRepository(session).release_work_item_for_reclaim(
+                        work_item_id,
+                        last_error=str(result.get("detail") or result.get("status") or "failed"),
+                    )
+                retry = {"status": "reclaimable", "workItem": retry_record.model_dump(by_alias=True, mode="json")}
+            else:
+                retry = enqueue_work_item(queue, {**payload, "attempt": attempt + 1})
             record_metric(
                 "worker",
                 "work-item.requeued",
@@ -272,6 +316,15 @@ def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) 
                 "retry": retry,
             }
         worker_status = "processed" if result.get("status") not in {"error"} else "error"
+        if work_item_id:
+            with get_persistence_runtime().session_scope() as session:
+                WorkspaceBootstrapRepository(session).ensure_default_workspace()
+                TaskRepository(session).update_work_item(
+                    work_item_id,
+                    status="failed" if worker_status == "error" or result.get("status") == "failed" else "completed",
+                    last_error=str(result.get("detail") or "") if result.get("status") in {"failed", "error"} else None,
+                    completed_at=utc_now(),
+                )
         record_metric(
             "worker",
             "work-item.processed",

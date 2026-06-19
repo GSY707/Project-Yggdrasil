@@ -200,7 +200,8 @@ def test_core_api_exposes_task_control_actions() -> None:
     assert start_response.status_code == 202
     start_payload = start_response.json()
     assert start_payload["status"] == "queued"
-    assert start_payload["workItem"]["command"] == "start"
+    assert start_payload["workItem"]["intent"] == "start"
+    assert start_payload["workItem"]["payload"]["command"] == "start"
     assert start_payload["task"]["status"] == "queued"
 
     runtime = get_persistence_runtime()
@@ -218,7 +219,7 @@ def test_core_api_exposes_task_control_actions() -> None:
         )
 
     pause_response = client.post(
-        "/tasks/task_api_pause_control/pause-request",
+        "/tasks/task_api_pause_control/pause",
         json={
             "reason": "manual-safe-stop-request",
             "resumeMessage": "等待 safe-stop 后恢复。",
@@ -226,8 +227,10 @@ def test_core_api_exposes_task_control_actions() -> None:
     )
     assert pause_response.status_code == 202
     pause_payload = pause_response.json()
-    assert pause_payload["status"] == "pause-requested"
-    assert pause_payload["task"]["status"] == "pause-requested"
+    assert pause_payload["status"] == "draining"
+    assert pause_payload["task"]["status"] == "running"
+    assert pause_payload["task"]["pauseRequested"] is True
+    assert pause_payload["task"]["pendingControlIntent"] == "pause"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -260,7 +263,6 @@ def test_core_api_exposes_task_control_actions() -> None:
                 branchId=paused_task.branch_id,
                 snapshotType="pause",
                 status="restorable",
-                resumeToken="resume_api_resume_control",
                 contextRef={"type": "package-entry", "locator": f"runtime/tasks/{paused_task.id}/snapshots/context"},
                 rootMountRef={"type": "package-entry", "locator": f"runtime/tasks/{paused_task.id}/snapshots/root-mount"},
                 pendingWrites=[],
@@ -284,15 +286,43 @@ def test_core_api_exposes_task_control_actions() -> None:
     resume_response = client.post(
         "/tasks/task_api_resume_control/resume",
         json={
-            "resumeToken": "resume_api_resume_control",
             "resumeMessage": "从 safe-stop 继续。",
         },
     )
     assert resume_response.status_code == 202
     resume_payload = resume_response.json()
-    assert resume_payload["status"] == "queued"
-    assert resume_payload["workItem"]["command"] == "resume"
-    assert resume_payload["task"]["status"] == "queued"
+    assert resume_payload["status"] == "resume-queued"
+    assert resume_payload["resumeAttempt"]["snapshotId"] == "snapshot_api_resume_control"
+    assert resume_payload["workItem"]["intent"] == "resume"
+    assert resume_payload["task"]["status"] == "paused"
+    assert resume_payload["task"]["activeSnapshotId"] == "snapshot_api_resume_control"
+
+    duplicate_resume = client.post("/tasks/task_api_resume_control/resume", json={})
+    assert duplicate_resume.status_code == 202
+    assert duplicate_resume.json()["resumeAttempt"]["id"] == resume_payload["resumeAttempt"]["id"]
+
+    saved_response = client.post(
+        "/tasks/task_api_resume_control/snapshots/save-current",
+        json={"label": "manual-save-for-branch"},
+    )
+    assert saved_response.status_code == 201
+    saved_snapshot = saved_response.json()["snapshot"]
+    assert saved_snapshot["retentionClass"] == "user-saved"
+
+    branch_response = client.post(
+        "/tasks/task_api_resume_control/branches",
+        json={"snapshotId": saved_snapshot["id"], "label": "child-from-saved"},
+    )
+    assert branch_response.status_code == 201
+    assert branch_response.json()["sourceSnapshot"]["id"] == saved_snapshot["id"]
+    assert branch_response.json()["childTask"]["status"] == "paused"
+
+    cancel_response = client.post("/tasks/task_api_resume_control/cancel", json={"reason": "control-plane-cancel"})
+    assert cancel_response.status_code == 202
+    cancel_payload = cancel_response.json()
+    assert cancel_payload["task"]["status"] == "cancelled"
+    assert cancel_payload["auditSnapshot"]["retentionClass"] == "cancel-audit"
+    assert cancel_payload["auditSnapshot"]["expiresAt"]
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -335,7 +365,8 @@ def test_core_api_exposes_task_control_actions() -> None:
     assert retry_response.status_code == 202
     retry_payload = retry_response.json()
     assert retry_payload["status"] == "queued"
-    assert retry_payload["workItem"]["command"] == "retry"
+    assert retry_payload["workItem"]["intent"] == "retry"
+    assert retry_payload["workItem"]["payload"]["command"] == "retry"
     assert retry_payload["task"]["status"] == "queued"
 
     retry_task_detail = client.get("/tasks/task_api_retry_control")
@@ -383,9 +414,9 @@ def test_core_api_exposes_awaiting_approval_controls() -> None:
     revision_payload = revision_response.json()
     assert revision_payload["status"] == "queued"
     assert revision_payload["task"]["status"] == "queued"
-    assert revision_payload["workItem"]["command"] == "start"
-    assert revision_payload["workItem"]["payload"]["currentNodeId"] == "child-2"
-    assert revision_payload["workItem"]["payload"]["topFrameId"] == "frame-child-2"
+    assert revision_payload["workItem"]["intent"] == "revision"
+    assert revision_payload["workItem"]["payload"]["payload"]["currentNodeId"] == "child-2"
+    assert revision_payload["workItem"]["payload"]["payload"]["topFrameId"] == "frame-child-2"
     assert revision_payload["takeoverProtocol"]["workTree"]["currentNodeId"] == "child-2"
     assert revision_payload["takeoverProtocol"]["workTree"]["status"] == "active"
 

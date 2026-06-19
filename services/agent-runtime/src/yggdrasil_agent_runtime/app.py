@@ -5,7 +5,7 @@ from fastapi import Body, FastAPI, HTTPException, Query, status
 from yggdrasil_sdk import instrument_fastapi_app
 from yggdrasil_sdk.persistence.coordination import RedisCoordinator
 
-from .runtime import approve_task_completion, build_root_mount_package, load_package_entry, prepare_pause_snapshot, queue_main_agent_execution, request_task_revision, request_task_pause, retry_task_execution
+from .runtime import approve_task_completion, build_root_mount_package, cancel_task_execution, create_task_branch_from_snapshot, load_package_entry, pause_task_execution, prepare_pause_snapshot, queue_main_agent_execution, request_task_revision, retry_task_execution, save_current_task_snapshot
 from yggdrasil_sdk import get_persistence_runtime
 
 
@@ -59,12 +59,14 @@ def start_task(task_id: str, payload: dict[str, Any] | None = Body(default=None)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@app.post("/runtime/tasks/{task_id}/pause-request", status_code=status.HTTP_202_ACCEPTED)
+@app.post("/runtime/tasks/{task_id}/pause", status_code=status.HTTP_202_ACCEPTED)
 def pause_task(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
     try:
-        return request_task_pause(task_id, payload)
+        return pause_task_execution(task_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @app.post("/runtime/tasks/{task_id}/resume", status_code=status.HTTP_202_ACCEPTED)
@@ -83,6 +85,36 @@ def resume_task(task_id: str, payload: dict[str, Any] | None = Body(default=None
 def retry_task(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
     try:
         return retry_task_execution(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@app.post("/runtime/tasks/{task_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
+def cancel_task(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    try:
+        return cancel_task_execution(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@app.post("/runtime/tasks/{task_id}/snapshots/save-current", status_code=status.HTTP_201_CREATED)
+def save_current_snapshot(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    try:
+        return save_current_task_snapshot(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@app.post("/runtime/tasks/{task_id}/branches", status_code=status.HTTP_201_CREATED)
+def create_task_branch(task_id: str, payload: dict[str, Any] | None = Body(default=None)) -> dict[str, object]:
+    try:
+        return create_task_branch_from_snapshot(task_id, payload)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:

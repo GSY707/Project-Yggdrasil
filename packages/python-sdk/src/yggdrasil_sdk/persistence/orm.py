@@ -269,6 +269,9 @@ class TaskORM(Base):
     owner_profile_id: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     execution_root_node_id: Mapped[str | None] = mapped_column(sa.ForeignKey("nodes.id", ondelete="SET NULL"), nullable=True)
     active_snapshot_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    active_resume_attempt_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    resume_blocked_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    pending_control_intent: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     window_index: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=1)
     restart_count: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
     cumulative_window_span_tokens: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0)
@@ -317,20 +320,34 @@ class TaskSnapshotORM(Base):
     id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
     app_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
-    agent_run_id: Mapped[str] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_run_id: Mapped[str | None] = mapped_column(sa.ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=True, index=True)
     project_id: Mapped[str] = mapped_column(sa.ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     branch_id: Mapped[str] = mapped_column(sa.ForeignKey("memory_branches.id", ondelete="CASCADE"), nullable=False, index=True)
     snapshot_type: Mapped[str] = mapped_column(sa.String(32), nullable=False)
     status: Mapped[str] = mapped_column(sa.String(32), nullable=False)
-    resume_token: Mapped[str] = mapped_column(sa.String(255), nullable=False, unique=True)
+    retention_class: Mapped[str] = mapped_column(sa.String(32), nullable=False, default="active-paused")
+    schema_version: Mapped[str] = mapped_column(sa.String(64), nullable=False, default="task-snapshot.v1")
+    runtime_contract_version: Mapped[str] = mapped_column(sa.String(128), nullable=False, default="task-pause-resume-continuation-contract-v0.1")
+    storage_manifest_ref: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    manifest_checksum: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    resume_token_hash: Mapped[str | None] = mapped_column(sa.String(128), nullable=True, index=True)
+    resume_token: Mapped[str | None] = mapped_column(sa.String(255), nullable=True, unique=True)
     context_ref: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
     root_mount_ref: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
     pending_writes: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
     pending_actions: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
     resume_message: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     safe_stop_reason: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    blocker_code: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    blocker_message: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    saved_label: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    saved_by_user_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    expires_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
     created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    verified_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    leased_until: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
     consumed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    superseded_by_snapshot_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
     safe_to_pause: Mapped[bool] = mapped_column(sa.Boolean(), nullable=False, default=True)
     current_node_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
     working_node_annotation: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
@@ -338,6 +355,66 @@ class TaskSnapshotORM(Base):
     top_frame_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
     stack_digest: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     blockers: Mapped[list] = mapped_column(JSON_TYPE, nullable=False, default=list)
+
+
+class TaskResumeAttemptORM(Base):
+    __tablename__ = "task_resume_attempts"
+    __table_args__ = (
+        sa.Index("ix_task_resume_attempts_task_status_created", "task_id", "status", "created_at"),
+        sa.Index("ix_task_resume_attempts_snapshot", "snapshot_id"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    snapshot_id: Mapped[str] = mapped_column(sa.ForeignKey("task_snapshots.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    lease_until: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    blocker_code: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    blocker_message: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+
+class RuntimeWorkItemORM(Base):
+    __tablename__ = "runtime_work_items"
+    __table_args__ = (
+        sa.Index("ix_runtime_work_items_queue_status_created", "queue", "status", "created_at"),
+        sa.Index("ix_runtime_work_items_task_status", "task_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    queue: Mapped[str] = mapped_column(sa.String(128), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    activity: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    intent: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(sa.String(32), nullable=False, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    lease_until: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    attempt: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=1)
+    last_error: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+
+
+class TaskBranchORM(Base):
+    __tablename__ = "task_branches"
+    __table_args__ = (
+        sa.Index("ix_task_branches_parent_created", "parent_task_id", "created_at"),
+        sa.Index("ix_task_branches_child", "child_task_id"),
+    )
+
+    id: Mapped[str] = mapped_column(sa.String(128), primary_key=True)
+    parent_task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    child_task_id: Mapped[str] = mapped_column(sa.ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_snapshot_id: Mapped[str] = mapped_column(sa.ForeignKey("task_snapshots.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_snapshot_checksum: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    label: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
 
 
 class ModelRouteDecisionORM(Base):

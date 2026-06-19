@@ -9,7 +9,9 @@
 - `services/agent-runtime/src/yggdrasil_agent_runtime/runtime.py`
 - `services/worker/src/yggdrasil_worker/registry.py`
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/__init__.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop.py`
+- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/__init__.py`
+- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
+- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/snapshot.py`
 
 ## Entry Points
@@ -35,7 +37,7 @@
 
 ## Common Change Scenarios
 
-- 修改暂停恢复：先看 `snapshot.py` + `execution_loop.py`。
+- 修改暂停恢复：先看 `docs/specs/task-pause-resume-continuation-contract-v0.1.md`，再看 `snapshot.py`、`execution_loop/worker.py` 与 `execution_loop/transitions.py`。
 - 修改工作项分发：先看 `worker/registry.py` 的 `dispatch_work_item`。
 - 修改 shutdown 行为：先看 `shutdown_control`。
 
@@ -45,6 +47,8 @@
 - `tests/test_subagent_and_worker.py`
 - `tests/test_task_takeover.py`
 - `tests/test_llm_retry_and_safe_shutdown.py`
+- `tests/runtime/test_runtime_pause_regressions.py`
+- `tests/runtime/test_runtime_restart_and_resume.py`
 
 ## Risks
 
@@ -55,3 +59,5 @@
 
 - `docs/architecture/data-flow.md`
 - `docs/development/large-file-inventory.md`
+- `docs/specs/task-pause-resume-continuation-contract-v0.1.md`
+- `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md`

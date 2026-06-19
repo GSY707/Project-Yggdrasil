@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from ._common import *  # noqa: F403,F401
 from .root_mount import *  # noqa: F403,F401
+from .snapshot_store import commit_snapshot_manifest
 from ..contracts import WorkContextStack
 
 _logger = logging.getLogger(__name__)
@@ -30,6 +31,40 @@ def _verify_snapshot_integrity(pending_action: dict[str, Any]) -> tuple[bool, st
     if actual != expected:
         return False, f"checksum-mismatch: expected={expected}, actual={actual}"
     return True, None
+
+
+def _normalize_complete_pending_tool_calls(tool_calls: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    normalized: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    for index, call in enumerate(tool_calls):
+        if not isinstance(call, dict):
+            blockers.append(f"tool-call-{index}:not-object")
+            continue
+        tool_name = str(call.get("name") or "").strip()
+        if not tool_name:
+            blockers.append(f"tool-call-{index}:missing-name")
+            continue
+        normalized_call = dict(call)
+        arguments = normalized_call.get("arguments")
+        if isinstance(arguments, dict):
+            normalized_call["arguments"] = dict(arguments)
+            normalized.append(normalized_call)
+            continue
+        arguments_text = normalized_call.get("argumentsText")
+        if isinstance(arguments_text, str) and arguments_text.strip():
+            try:
+                parsed_arguments = json.loads(arguments_text)
+            except json.JSONDecodeError:
+                blockers.append(f"tool-call-{index}:partial-arguments")
+                continue
+            if isinstance(parsed_arguments, dict):
+                normalized_call["arguments"] = parsed_arguments
+                normalized.append(normalized_call)
+                continue
+        blockers.append(f"tool-call-{index}:missing-arguments")
+    if not normalized:
+        blockers.append("no-complete-tool-calls")
+    return normalized, blockers
 
 
 def _int_metric(value: Any, default: int = 0) -> int:
@@ -426,7 +461,8 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     app_id = str(request.get("appId") or DEFAULT_APP_ID)
     project_id = str(request.get("projectId", DEFAULT_PROJECT_ID))
     branch_id = str(request.get("branchId", DEFAULT_BRANCH_ID))
-    agent_run_id = str(request.get("agentRunId", new_id("run", task_id, stable=True)))
+    raw_agent_run_id = request.get("agentRunId")
+    agent_run_id = str(raw_agent_run_id) if raw_agent_run_id is not None else None
     pending_writes = _normalize_entity_refs(request.get("pendingWrites"), "node")
     pending_actions = request.get("pendingActions") if isinstance(request.get("pendingActions"), list) else []
     active_tool_calls = request.get("activeToolCalls") if isinstance(request.get("activeToolCalls"), list) else []
@@ -436,7 +472,7 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         request,
         request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {},
     )
-    pointer_state = _runtime_pointer_state(task_id, agent_run_id, runtime_request_state)
+    pointer_state = _runtime_pointer_state(task_id, agent_run_id or "", runtime_request_state)
     blockers: list[str] = []
 
     try:
@@ -455,7 +491,7 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
     if current_response_state not in {"completed", "idle", "drained"}:
         blockers.append("response-not-finished")
 
-    snapshot_id = str(request.get("snapshotId") or new_id("snap", task_id, agent_run_id))
+    snapshot_id = str(request.get("snapshotId") or new_id("snap", task_id, agent_run_id or "no-run"))
     root_mount = request.get("rootMountPreview") if isinstance(request.get("rootMountPreview"), dict) else build_root_mount_package(
         task_id,
         {
@@ -513,6 +549,52 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
             module_summaries.append(str(result["summary"]))
 
     safe_to_pause = not blockers
+    snapshot_type = str(request.get("snapshotType") or "pause")
+    retention_class = str(request.get("retentionClass") or "active-paused")
+    resume_token = new_id("resume", task_id, agent_run_id or snapshot_id)
+    snapshot_pending_actions = [
+        action
+        for action in [
+            *pending_actions,
+            *(snapshot_delta.get("pendingActions") or []),
+            *(
+                [{"kind": "runtime-request-state", "requestState": runtime_request_state}]
+                if runtime_request_state
+                and not any(
+                    isinstance(action, dict) and action.get("kind") == "runtime-request-state"
+                    for action in [*pending_actions, *(snapshot_delta.get("pendingActions") or [])]
+                )
+                else []
+            ),
+        ]
+        if isinstance(action, dict)
+    ]
+    durable_snapshot = commit_snapshot_manifest(
+        project_id=project_id,
+        task_id=task_id,
+        snapshot_id=snapshot_id,
+        retention_class=retention_class,
+        snapshot_type=snapshot_type,
+        root_mount=root_mount,
+        current_context=current_context_state,
+        request_state=runtime_request_state,
+        pending_actions=snapshot_pending_actions,
+        pending_writes=[reference.model_dump(mode="json") for reference in pending_writes],
+        tool_state={
+            "activeToolCalls": [str(tool_call) for tool_call in active_tool_calls],
+            "currentResponseState": current_response_state,
+        },
+        budget_state=request.get("budgetState") if isinstance(request.get("budgetState"), dict) else {},
+        routing_state={
+            "selectedModel": request.get("selectedModel"),
+            "selectedProvider": request.get("selectedProvider"),
+        },
+        metadata={
+            "safeToPause": safe_to_pause,
+            "blockers": blockers,
+            "moduleSummaries": module_summaries,
+        },
+    )
 
     snapshot = TaskSnapshotSummary(
         id=snapshot_id,
@@ -521,29 +603,17 @@ def _build_pause_snapshot_state(task_id: str, payload: dict[str, Any] | None = N
         agentRunId=agent_run_id,
         projectId=project_id,
         branchId=branch_id,
-        snapshotType="pause",
+        snapshotType=snapshot_type,
         status="restorable" if safe_to_pause else "created",
-        resumeToken=str(request.get("resumeToken") or new_id("resume", task_id, agent_run_id)),
-        contextRef=ExternalRef(type="package-entry", locator=context_locator),
-        rootMountRef=ExternalRef(type="package-entry", locator=root_mount_locator),
+        retentionClass=retention_class,
+        storageManifestRef=durable_snapshot["manifestRef"],
+        manifestChecksum=durable_snapshot["manifestChecksum"],
+        resumeTokenHash=sha256(resume_token.encode("utf-8")).hexdigest(),
+        resumeToken=resume_token,
+        contextRef=durable_snapshot["entryRefs"]["currentContext"],
+        rootMountRef=durable_snapshot["entryRefs"]["rootMount"],
         pendingWrites=pending_writes,
-        pendingActions=[
-            action
-            for action in [
-                *pending_actions,
-                *(snapshot_delta.get("pendingActions") or []),
-                *(
-                    [{"kind": "runtime-request-state", "requestState": runtime_request_state}]
-                    if runtime_request_state
-                    and not any(
-                        isinstance(action, dict) and action.get("kind") == "runtime-request-state"
-                        for action in [*pending_actions, *(snapshot_delta.get("pendingActions") or [])]
-                    )
-                    else []
-                ),
-            ]
-            if isinstance(action, dict)
-        ],
+        pendingActions=snapshot_pending_actions,
         resumeMessage=(
             str(snapshot_delta.get("resumeMessage"))
             if snapshot_delta.get("resumeMessage") is not None
@@ -715,7 +785,7 @@ def prepare_pause_snapshot(task_id: str, payload: dict[str, Any] | None = None) 
             task_repository = TaskRepository(session)
             task = task_repository.get_task(task_id)
             if task is not None:
-                if task_repository.get_agent_run(snapshot.agent_run_id) is None:
+                if snapshot.agent_run_id is not None and task_repository.get_agent_run(snapshot.agent_run_id) is None:
                     task_repository.create_agent_run(
                         task_id,
                         {
@@ -781,10 +851,26 @@ def save_pending_tool_calls_snapshot(
     coordinator = RedisCoordinator(runtime.settings)
     snapshot_id = new_id("snap", task_id, agent_run_id)
     resume_token = new_id("resume", task_id, agent_run_id)
+    normalized_pending_tool_calls, tool_call_blockers = _normalize_complete_pending_tool_calls(pending_tool_calls)
+    if tool_call_blockers:
+        return {
+            "id": snapshot_id,
+            "taskId": task_id,
+            "agentRunId": agent_run_id,
+            "snapshotType": "checkpoint",
+            "status": "blocked",
+            "retentionClass": "active-paused",
+            "safeToPause": False,
+            "persisted": False,
+            "blockers": tool_call_blockers,
+            "blockerCode": "pending-tool-calls-incomplete",
+            "blockerMessage": "; ".join(tool_call_blockers),
+        }
 
     resolved_app_id = str(app_id or DEFAULT_APP_ID)
     resolved_project_id = str(project_id or DEFAULT_PROJECT_ID)
     resolved_branch_id = str(branch_id or DEFAULT_BRANCH_ID)
+    request_state_payload = dict(request_state or {}) if isinstance(request_state, dict) else {}
 
     root_mount = root_mount_preview if isinstance(root_mount_preview, dict) else build_root_mount_package(
         task_id,
@@ -806,7 +892,7 @@ def save_pending_tool_calls_snapshot(
         "kind": "pending-tool-calls",
         "invocationId": invocation_id,
         "roundIndex": round_index,
-        "toolCalls": pending_tool_calls,
+        "toolCalls": normalized_pending_tool_calls,
         "conversationMessages": conversation_messages,
         "usageTotals": usage_totals,
         "accumulatedCost": accumulated_cost,
@@ -815,12 +901,39 @@ def save_pending_tool_calls_snapshot(
     }
     if isinstance(assistant_message, dict):
         pending_action["assistantMessage"] = assistant_message
-    if isinstance(request_state, dict) and request_state:
-        pending_action["requestState"] = request_state
+    if request_state_payload:
+        pending_action["requestState"] = request_state_payload
     pending_action["checksum"] = _compute_snapshot_checksum(pending_action)
-    pointer_state = _runtime_pointer_state(task_id, agent_run_id, request_state if isinstance(request_state, dict) else {})
+    durable_snapshot = commit_snapshot_manifest(
+        project_id=resolved_project_id,
+        task_id=task_id,
+        snapshot_id=snapshot_id,
+        retention_class="active-paused",
+        snapshot_type="checkpoint",
+        root_mount=root_mount,
+        current_context=current_context_state,
+        request_state=request_state_payload,
+        pending_actions=[pending_action],
+        pending_writes=[],
+        tool_state={
+            "pendingToolCalls": normalized_pending_tool_calls,
+            "conversationMessages": conversation_messages,
+            "assistantMessage": assistant_message if isinstance(assistant_message, dict) else None,
+            "roundIndex": round_index,
+        },
+        budget_state={
+            "usageTotals": usage_totals,
+            "accumulatedCost": accumulated_cost,
+        },
+        routing_state={},
+        metadata={
+            "invocationId": invocation_id,
+            "safeStopReason": "safe-shutdown-pending-tool-calls",
+        },
+    )
+    pointer_state = _runtime_pointer_state(task_id, agent_run_id, request_state_payload)
     resume_message = (
-        f"Resume task {task_id}: execute {len(pending_tool_calls)} pending tool call(s) "
+        f"Resume task {task_id}: execute {len(normalized_pending_tool_calls)} pending tool call(s) "
         f"from round {round_index}, then continue agent loop."
     )
     snapshot = TaskSnapshotSummary(
@@ -832,9 +945,13 @@ def save_pending_tool_calls_snapshot(
         branchId=resolved_branch_id,
         snapshotType="checkpoint",
         status="restorable",
+        retentionClass="active-paused",
+        storageManifestRef=durable_snapshot["manifestRef"],
+        manifestChecksum=durable_snapshot["manifestChecksum"],
+        resumeTokenHash=sha256(resume_token.encode("utf-8")).hexdigest(),
         resumeToken=resume_token,
-        contextRef=ExternalRef(type="package-entry", locator=context_locator),
-        rootMountRef=ExternalRef(type="package-entry", locator=root_mount_locator),
+        contextRef=durable_snapshot["entryRefs"]["currentContext"],
+        rootMountRef=durable_snapshot["entryRefs"]["rootMount"],
         pendingWrites=[],
         pendingActions=[pending_action],
         resumeMessage=normalize_excerpt(resume_message, 240),

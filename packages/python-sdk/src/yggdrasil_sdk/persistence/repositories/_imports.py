@@ -55,7 +55,10 @@ from ...domain import (
     SourceAnnotationRecord,
     SpaceRecord,
     SpaceMountRecord,
+    RuntimeWorkItemRecord,
+    TaskBranchRecord,
     TaskRecord,
+    TaskResumeAttemptRecord,
     TreePlanRecord,
 )
 from ...support import new_id, utc_now
@@ -104,7 +107,10 @@ from ..orm import (
     SourceAnnotationORM,
     SpaceORM,
     SpaceMountORM,
+    RuntimeWorkItemORM,
+    TaskBranchORM,
     TaskORM,
+    TaskResumeAttemptORM,
     TaskSnapshotORM,
     TreePlanORM,
 )

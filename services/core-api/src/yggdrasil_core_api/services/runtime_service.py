@@ -153,9 +153,17 @@ class RuntimeServiceMixin:
             "statusCounts": status_counts,
         }
 
-    def _task_runtime_control_summary(self, task, snapshots: list[Any], runs: list[Any]) -> dict[str, object]:
+    def _task_runtime_control_summary(self, task, snapshots: list[Any], runs: list[Any], active_resume_attempt: Any | None = None) -> dict[str, object]:
         latest_snapshot = snapshots[0] if snapshots else None
-        latest_restorable_snapshot = next((snapshot for snapshot in snapshots if snapshot.status == "restorable"), None)
+        active_snapshot = next((snapshot for snapshot in snapshots if snapshot.id == task.active_snapshot_id), None)
+        latest_restorable_snapshot = next(
+            (
+                snapshot
+                for snapshot in snapshots
+                if snapshot.status == "restorable" and snapshot.retention_class != "cancel-audit"
+            ),
+            None,
+        )
         latest_run = runs[0] if runs else None
         latest_takeover_protocol = (
             load_persisted_task_takeover_protocol(task.id, latest_run.id)
@@ -164,35 +172,71 @@ class RuntimeServiceMixin:
         )
         restorable_count = len([snapshot for snapshot in snapshots if snapshot.status == "restorable"])
         consumed_count = len([snapshot for snapshot in snapshots if snapshot.status == "consumed"])
+        retention_counts: dict[str, int] = {}
+        for snapshot in snapshots:
+            retention_counts[snapshot.retention_class] = retention_counts.get(snapshot.retention_class, 0) + 1
 
-        if task.status == "paused" and latest_restorable_snapshot is not None:
+        if task.status == "resume-blocked":
+            resume_status = "blocked"
+        elif active_resume_attempt is not None and active_resume_attempt.status in {"queued", "leased", "restoring", "running"}:
+            resume_status = active_resume_attempt.status
+        elif (
+            task.status == "paused"
+            and active_snapshot is not None
+            and active_snapshot.status == "restorable"
+            and active_snapshot.retention_class == "active-paused"
+        ):
             resume_status = "ready"
-        elif task.status == "pause-requested":
+        elif task.pending_control_intent == "pause" or task.pause_requested:
             resume_status = "awaiting-safe-stop"
         elif latest_restorable_snapshot is not None:
             resume_status = "snapshot-present"
         else:
             resume_status = "unavailable"
+        can_resume = bool(
+            task.status == "paused"
+            and active_snapshot is not None
+            and active_snapshot.status == "restorable"
+            and active_snapshot.retention_class == "active-paused"
+            and (active_resume_attempt is None or active_resume_attempt.status not in {"queued", "leased", "restoring", "running"})
+        )
 
         return {
             "pauseRequested": bool(task.pause_requested),
             "activeSnapshotId": task.active_snapshot_id,
+            "activeResumeAttemptId": task.active_resume_attempt_id,
+            "pendingControlIntent": task.pending_control_intent,
+            "resumeBlockedReason": task.resume_blocked_reason,
             "lastSafeStopAt": task.last_safe_stop_at,
             "snapshotCount": len(snapshots),
             "restorableSnapshotCount": restorable_count,
             "consumedSnapshotCount": consumed_count,
+            "snapshotRetentionCounts": retention_counts,
             "resumeStatus": resume_status,
-            "canResume": bool(task.status == "paused" and latest_restorable_snapshot is not None),
-            "canRequestPause": bool(task.status in {"queued", "running", "pause-requested"}),
+            "canResume": can_resume,
+            "canRequestPause": bool(task.status in {"queued", "running"} and task.pending_control_intent != "pause"),
+            "canCancel": bool(task.status not in {"completed", "cancelled"}),
+            "canSaveSnapshot": bool(active_snapshot is not None and active_snapshot.retention_class == "active-paused"),
+            "canBranch": bool(any(snapshot.retention_class == "user-saved" and snapshot.status == "restorable" for snapshot in snapshots)),
             "canRetry": bool(task.status == "failed"),
             "canTopUp": bool(task.status in {"paused", "failed"}),
             "canApprove": bool(task.status == "awaiting-approval"),
             "canRequestRevision": bool(task.status == "awaiting-approval"),
-            "recommendedResumeToken": latest_restorable_snapshot.resume_token if latest_restorable_snapshot is not None else None,
             "recommendedResumeMessage": (
-                latest_restorable_snapshot.resume_message
+                active_snapshot.resume_message
+                if active_snapshot is not None
+                else latest_restorable_snapshot.resume_message
                 if latest_restorable_snapshot is not None
                 else task.resume_message
+            ),
+            "resumeAttempt": active_resume_attempt.model_dump(by_alias=True, mode="json") if active_resume_attempt is not None else None,
+            "blocker": (
+                {
+                    "code": active_snapshot.blocker_code,
+                    "message": active_snapshot.blocker_message or task.resume_blocked_reason,
+                }
+                if active_snapshot is not None and (active_snapshot.blocker_code or active_snapshot.blocker_message or task.resume_blocked_reason)
+                else None
             ),
             "recommendedRevisionNodeId": (
                 latest_takeover_protocol.work_tree.current_node_id
@@ -200,6 +244,7 @@ class RuntimeServiceMixin:
                 else None
             ),
             "latestSnapshot": latest_snapshot.model_dump(by_alias=True, mode="json") if latest_snapshot is not None else None,
+            "activeSnapshot": active_snapshot.model_dump(by_alias=True, mode="json") if active_snapshot is not None else None,
             "latestRestorableSnapshot": (
                 latest_restorable_snapshot.model_dump(by_alias=True, mode="json")
                 if latest_restorable_snapshot is not None

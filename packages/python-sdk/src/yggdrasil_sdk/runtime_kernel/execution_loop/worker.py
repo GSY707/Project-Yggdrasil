@@ -1,5 +1,6 @@
 from .state import *  # noqa: F401,F403
 from .transitions import _finalize_execution_transition
+from datetime import timedelta
 from ..root_mount import (
     _elapsed_ms,
     _enforce_budget,
@@ -10,6 +11,58 @@ from ..root_mount import (
     build_task_runtime_state,
 )
 from ..snapshot import _verify_snapshot_integrity
+from ..snapshot_store import read_snapshot_entry, read_state_file_ref, verify_snapshot_manifest
+
+
+def _load_snapshot_context(snapshot: TaskSnapshotSummary | None) -> list[dict[str, Any]]:
+    if snapshot is None:
+        return []
+    if snapshot.storage_manifest_ref is not None:
+        manifest = verify_snapshot_manifest(snapshot.storage_manifest_ref, snapshot.manifest_checksum)
+        payload = read_snapshot_entry(manifest, "currentContext", default=[])
+    elif snapshot.context_ref.type == "state-file":
+        payload = read_state_file_ref(snapshot.context_ref, default=[])
+    else:
+        payload = load_package_entry(snapshot.context_ref.locator)
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    return []
+
+
+def _block_resume_attempt(
+    *,
+    task_repository: TaskRepository,
+    task_id: str,
+    snapshot: TaskSnapshotSummary | None,
+    attempt_id: str | None,
+    code: str,
+    message: str,
+) -> dict[str, object]:
+    if snapshot is not None:
+        task_repository.update_snapshot(
+            snapshot.id,
+            status="blocked",
+            blocker_code=code,
+            blocker_message=message,
+            blockers=[f"{code}:{message}"],
+        )
+    if attempt_id:
+        task_repository.update_resume_attempt(
+            attempt_id,
+            status="blocked",
+            blocker_code=code,
+            blocker_message=message,
+        )
+    task_repository.update_task(
+        task_id,
+        {
+            "status": "resume-blocked",
+            "pauseRequested": False,
+            "pendingControlIntent": None,
+            "resumeBlockedReason": f"{code}: {message}",
+        },
+    )
+    return {"status": "blocked", "taskId": task_id, "blockerCode": code, "detail": message, "retryable": False}
 def _mailbox_context_item(message: dict[str, Any]) -> dict[str, Any]:
     subject = normalize_excerpt(str(message.get("subject") or message.get("messageKind") or "Mailbox message"), 160)
     body = normalize_excerpt(str(message.get("body") or message.get("summary") or subject or ""), 320)
@@ -341,10 +394,16 @@ def _queue_takeover_failure_continuation(
         "activity": "core.agent.main.execute",
         "taskId": task.id,
         "command": "start",
+        "intent": "continuation",
         "requestedAt": utc_now().isoformat(),
         "payload": continuation_payload,
     }
-    queue_depth = coordinator.enqueue_job(AGENT_RUNTIME_QUEUE, queued_work_item)
+    queued_record = task_repository.create_work_item(AGENT_RUNTIME_QUEUE, queued_work_item)
+    queued_work_item = queued_record.model_dump(by_alias=True, mode="json")
+    queue_depth = coordinator.enqueue_job(
+        AGENT_RUNTIME_QUEUE,
+        {"workItemId": queued_record.id, "queue": AGENT_RUNTIME_QUEUE, "activity": queued_record.activity},
+    )
     continuation_locator = f"agent-runtime/tasks/{task.id}/continuations/{run.id}/{continuation_suffix}"
     _cache_package_entry(
         coordinator,
@@ -446,14 +505,69 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 space_id=task.space_id,
             )
 
-            command = str(work_item.get("command") or request.get("command") or "start")
+            command = str(work_item.get("intent") or work_item.get("command") or request.get("command") or "start")
+            resume_attempt_id = str(work_item.get("resumeAttemptId") or request.get("resumeAttemptId") or task.active_resume_attempt_id or "").strip() or None
             snapshot = None
-            if request.get("resumeToken") is not None:
-                snapshot = task_repository.get_snapshot_by_resume_token(str(request["resumeToken"]))
-            # Lossless restore fallback
-            if command == "resume" and (snapshot is None or snapshot.status != "restorable"):
-                command = "start"
-                snapshot = None
+            if command == "resume":
+                if request.get("resumeToken") is not None:
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=None,
+                        attempt_id=resume_attempt_id,
+                        code="resume-token-rejected",
+                        message="Public resume tokens are no longer accepted.",
+                    )
+                snapshot_id = str(work_item.get("snapshotId") or request.get("snapshotId") or task.active_snapshot_id or "").strip()
+                snapshot = task_repository.get_snapshot(snapshot_id) if snapshot_id else None
+                if snapshot is None:
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=None,
+                        attempt_id=resume_attempt_id,
+                        code="snapshot-missing",
+                        message=f"Active resume snapshot {snapshot_id or '<none>'} was not found.",
+                    )
+                if snapshot.status not in {"restorable", "leased"}:
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=snapshot,
+                        attempt_id=resume_attempt_id,
+                        code="snapshot-not-restorable",
+                        message=f"Snapshot {snapshot.id} is {snapshot.status}, not restorable.",
+                    )
+                if snapshot.retention_class == "cancel-audit":
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=snapshot,
+                        attempt_id=resume_attempt_id,
+                        code="cancel-audit-not-resumable",
+                        message=f"Snapshot {snapshot.id} is retained only for cancel audit.",
+                    )
+                try:
+                    if snapshot.storage_manifest_ref is not None:
+                        verify_snapshot_manifest(snapshot.storage_manifest_ref, snapshot.manifest_checksum)
+                except Exception as exc:  # noqa: BLE001
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=snapshot,
+                        attempt_id=resume_attempt_id,
+                        code="manifest-invalid",
+                        message=str(exc),
+                    )
+                lease_until = utc_now() + timedelta(seconds=120)
+                task_repository.update_snapshot(snapshot.id, status="leased", leased_until=lease_until)
+                if resume_attempt_id:
+                    task_repository.update_resume_attempt(
+                        resume_attempt_id,
+                        status="restoring",
+                        lease_owner=lock_owner,
+                        lease_until=lease_until,
+                    )
             if snapshot is not None and command == "resume":
                 for pending_action in snapshot.pending_actions or []:
                     if not isinstance(pending_action, dict):
@@ -463,14 +577,13 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     if pending_action.get("kind") == "pending-tool-calls" or pending_action.get("checksum") is not None:
                         integrity_ok, integrity_error = _verify_snapshot_integrity(pending_action)
                         if not integrity_ok:
-                            task_repository.update_snapshot(
-                                snapshot.id,
-                                status="created",
-                                blockers=[f"snapshot-corrupted:{integrity_error or 'unknown'}"],
-                            )
-                            session.commit()
-                            raise ValueError(
-                                f"Task {task_id} snapshot integrity check failed and resume was rejected: {integrity_error}"
+                            return _block_resume_attempt(
+                                task_repository=task_repository,
+                                task_id=task_id,
+                                snapshot=snapshot,
+                                attempt_id=resume_attempt_id,
+                                code="snapshot-corrupted",
+                                message=integrity_error or "unknown",
                             )
                     request_state = pending_action.get("requestState") if isinstance(pending_action.get("requestState"), dict) else {}
                     for key, value in request_state.items():
@@ -564,24 +677,14 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     }
                     runtime_timings["resumeRehydrateMs"] = _elapsed_ms(rehydration_started_at)
                 except Exception as e:
-                    _logger.warning("Resume rehydrate failed, falling back to start and reloading task state: %s", e)
-                    command = "start"
-                    snapshot = None
-                    root_mount = build_root_mount_package(
-                        task_id,
-                        {
-                            "projectId": task.project_id,
-                            "branchId": task.branch_id,
-                            "spaceId": task.space_id,
-                            "taskObjective": request.get("taskObjective") or task.current_objective or task.goal,
-                            "currentObjective": request.get("currentObjective") or task.current_objective,
-                            "currentFocus": request.get("currentFocus") or task.current_focus,
-                            "resumeMessage": request.get("resumeMessage") or task.resume_message,
-                            "restartMessage": request.get("restartMessage") or task.restart_message,
-                            "responseRequirements": request.get("responseRequirements"),
-                            "budgetState": request.get("budgetState") or task.budget.model_dump(by_alias=True),
-                            "activeCapabilities": request.get("activeCapabilities") if isinstance(request.get("activeCapabilities"), list) else None,
-                        },
+                    _logger.warning("Resume rehydrate failed and will be blocked (task_id=%s, snapshot_id=%s): %s", task_id, snapshot.id, e)
+                    return _block_resume_attempt(
+                        task_repository=task_repository,
+                        task_id=task_id,
+                        snapshot=snapshot,
+                        attempt_id=resume_attempt_id,
+                        code="rehydrate-failed",
+                        message=str(e),
                     )
 
             current_context = _hydrate_mailbox_runtime_state(
@@ -903,8 +1006,10 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
 
             resume_event_payload = None
             if snapshot is not None and command == "resume":
-                resumed_snapshot = task_repository.update_snapshot(snapshot.id, status="consumed", consumed_at=utc_now())
-                task = task_repository.update_task(task_id, {"activeSnapshotId": None, "restartMessage": None})
+                leased_snapshot = task_repository.update_snapshot(snapshot.id, status="leased", leased_until=utc_now() + timedelta(seconds=120))
+                if resume_attempt_id:
+                    task_repository.update_resume_attempt(resume_attempt_id, status="running", lease_owner=lock_owner, lease_until=utc_now() + timedelta(seconds=120))
+                task = task_repository.update_task(task_id, {"restartMessage": None, "pendingControlIntent": "resume"})
                 resumed_locator = (
                     f"agent-runtime/tasks/{task.id}/restart/{run.id}"
                     if resume_path == "restart-snapshot"
@@ -938,7 +1043,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         locator=resumed_locator,
                     )
                 resume_event_payload = {
-                    "snapshot": resumed_snapshot.model_dump(by_alias=True, mode="json"),
+                    "snapshot": leased_snapshot.model_dump(by_alias=True, mode="json"),
                     "outboxRecord": resume_event.model_dump(by_alias=True, mode="json"),
                     "resumePath": resume_path,
                 }
@@ -1184,7 +1289,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "status": "shutdown-checkpoint",
                     "taskId": task_id,
                     "snapshotId": snap_result.get("id"),
-                    "resumeToken": snap_result.get("resumeToken"),
                     "persisted": snap_result.get("persisted"),
                     "pendingToolCallCount": len(_shutdown_exc.pending_tool_calls),
                 }
@@ -1447,8 +1551,8 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         "snapshotId": pause_snapshot["id"],
                         "flushedWrites": pause_state["flushedWrites"],
                         "pendingExternalActions": pause_snapshot_summary.pending_actions,
-                        "resumeToken": pause_snapshot["resumeToken"],
                         "budgetOverrun": budget_overrun,
+                        "retentionClass": pause_snapshot.get("retentionClass"),
                     },
                 )
                 paused_event = _persist_runtime_event(
@@ -1682,7 +1786,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if fresh_task is not None:
                 task = fresh_task
 
-            return _finalize_execution_transition(
+            transition_result = _finalize_execution_transition(
                 session=session,
                 coordinator=coordinator,
                 task_repository=task_repository,
@@ -1712,6 +1816,22 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 current_context=effective_context,
                 assistant_work_tree_transition=assistant_work_tree_transition,
             )
+            if snapshot is not None and command == "resume":
+                consumed_snapshot = task_repository.update_snapshot(snapshot.id, status="consumed", consumed_at=utc_now())
+                if resume_attempt_id:
+                    task_repository.update_resume_attempt(resume_attempt_id, status="completed")
+                task_repository.update_task(
+                    task_id,
+                    {
+                        "activeSnapshotId": None,
+                        "activeResumeAttemptId": None,
+                        "pendingControlIntent": None,
+                        "resumeBlockedReason": None,
+                    },
+                )
+                if isinstance(transition_result, dict):
+                    transition_result["consumedSnapshot"] = consumed_snapshot.model_dump(by_alias=True, mode="json")
+            return transition_result
     except Exception as exc:
         try:
             with runtime.session_scope() as session:
@@ -1723,6 +1843,38 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         task_id,
                         statuses={"initializing", "mounting", "running", "completed", "failed"},
                     )
+                    resume_snapshot = locals().get("snapshot")
+                    resume_attempt = locals().get("resume_attempt_id")
+                    if locals().get("command") == "resume" and resume_snapshot is not None:
+                        try:
+                            task_repository.update_snapshot(resume_snapshot.id, status="restorable")
+                        except Exception:  # noqa: BLE001
+                            pass
+                        if resume_attempt:
+                            try:
+                                task_repository.update_resume_attempt(resume_attempt, status="queued", blocker_code=None, blocker_message=None)
+                            except Exception:  # noqa: BLE001
+                                pass
+                        task_repository.update_task(
+                            task_id,
+                            {
+                                "status": "paused",
+                                "pauseRequested": False,
+                                "pendingControlIntent": "resume",
+                                "currentFocus": f"resume-failed-before-progress: {exc}",
+                            },
+                        )
+                        if latest_run is not None:
+                            task_repository.update_agent_run(latest_run.id, {"status": "failed"})
+                        return {
+                            "status": "failed",
+                            "taskId": task_id,
+                            "detail": str(exc),
+                            "retryable": True,
+                            "snapshotId": resume_snapshot.id,
+                            "resumeAttemptId": resume_attempt,
+                            "runtimeTimings": {**runtime_timings, "totalMs": _elapsed_ms(work_started_at)},
+                        }
                     if latest_run is None and "budget exceeded before the next execution step" not in str(exc):
                         runtime_metrics = request.get("runtimeMetrics") if isinstance(request.get("runtimeMetrics"), dict) else {}
                         latest_run = task_repository.create_agent_run(

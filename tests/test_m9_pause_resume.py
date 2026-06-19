@@ -21,6 +21,9 @@ def test_pause_resume_module_adds_resume_digest_and_rehydrates_context() -> None
         },
     )
     assert snapshot["safeToPause"] is True
+    assert "resumeToken" not in snapshot
+    assert snapshot["contextRef"]["type"] == "state-file"
+    assert snapshot["storageManifestRef"]["type"] == "state-file"
     assert any(action["kind"] == "resume-digest" for action in snapshot["pendingActions"])
     assert any("Prepared safe-stop" in summary for summary in snapshot["moduleSummaries"])
 

@@ -73,7 +73,7 @@ Manifest 由 `packages/python-sdk/src/yggdrasil_sdk/data_governance.py` 生成�
 
 当前硬删除规则：
 
-- `queued`、`running`、`pause-requested`、`restarting` 状态的任务会被阻塞。
+- `queued`、`running`、`restarting` 状态的任务会被阻塞；运行中暂停等待以 `pendingControlIntent=pause` 表达，仍按 `running` 阻塞删除。
 - 删除顺序显式覆盖 `outbox_records`、`prompt_compile_artifacts`、`model_invocations`、`model_route_decisions`、`mailbox_messages`、`side_channel_events`、`task_snapshots`、`agent_runs`、`tasks`。
 - SQLite 和 PostgreSQL 都不能只依赖数据库 cascade；运行时子表必须显式删除。
 - 文件删除只允许落在 `YGGDRASIL_STATE_ROOT` 下且已确认存在的普通文件。

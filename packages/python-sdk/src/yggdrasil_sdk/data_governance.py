@@ -33,7 +33,7 @@ DATA_ASSET_MANIFEST: list[dict[str, object]] = [
     {
         "id": "tasks",
         "label": "Tasks",
-        "locations": ["database:tasks", "database:agent_runs", "database:task_snapshots"],
+        "locations": ["database:tasks", "database:agent_runs", "database:task_snapshots", "state:snapshots"],
         "deletePolicy": "task-scope-hard-delete-supported",
         "sensitivity": "task-content",
     },
@@ -96,7 +96,7 @@ DATA_ASSET_MANIFEST: list[dict[str, object]] = [
 ]
 
 
-RUNNING_TASK_STATUSES = {"queued", "running", "pause-requested", "restarting"}
+RUNNING_TASK_STATUSES = {"queued", "running", "restarting", "cancelling"}
 
 
 def data_asset_manifest(*, workspace_root: Path | None = None) -> dict[str, object]:
@@ -155,7 +155,7 @@ def _table_entry(table: str, count: int, object_ids: list[str], *, action: str) 
 
 
 def _locator_from_ref(ref: Any) -> str | None:
-    if not isinstance(ref, dict) or str(ref.get("type") or "") != "file":
+    if not isinstance(ref, dict) or str(ref.get("type") or "") not in {"file", "state-file"}:
         return None
     locator = str(ref.get("locator") or "").strip()
     return locator or None
@@ -202,6 +202,7 @@ def _scan_state_files(
         state_root / "state" / "llm",
         state_root / "state" / "prompt",
         state_root / "state" / "runtime",
+        state_root / "state" / "snapshots",
         state_root / "state" / "analysis" / "llm-work",
     ]
     for scan_root in scan_roots:

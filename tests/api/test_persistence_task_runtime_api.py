@@ -615,7 +615,6 @@ def test_core_api_task_detail_exposes_runtime_control_summary() -> None:
                 branchId=task.branch_id,
                 snapshotType="pause",
                 status="restorable",
-                resumeToken=new_id("resume", task.id, run.id, stable=False),
                 contextRef={"type": "package-entry", "locator": f"runtime/tasks/{task.id}/snapshots/context"},
                 rootMountRef={"type": "package-entry", "locator": f"runtime/tasks/{task.id}/snapshots/root-mount"},
                 pendingWrites=[],
@@ -642,9 +641,12 @@ def test_core_api_task_detail_exposes_runtime_control_summary() -> None:
     runtime_control = task_response.json()["runtimeControl"]
     assert runtime_control["resumeStatus"] == "ready"
     assert runtime_control["canResume"] is True
+    assert runtime_control["canSaveSnapshot"] is True
+    assert runtime_control["canCancel"] is True
     assert runtime_control["activeSnapshotId"] == "snapshot_api_resume"
-    assert runtime_control["recommendedResumeToken"]
+    assert "recommendedResumeToken" not in runtime_control
     assert runtime_control["latestRestorableSnapshot"]["safeStopReason"] == "manual-safe-stop"
+    assert runtime_control["activeSnapshot"]["retentionClass"] == "active-paused"
     assert runtime_control["latestRestorableSnapshot"]["appId"] == DEFAULT_APP_ID
 
 
