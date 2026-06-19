@@ -395,6 +395,9 @@ packages/
 │       ├── persistence/
 │       │   ├── models.py           # SQLAlchemy ORM 模型
 │       │   ├── repositories/       # 仓储实现子包（task/memory/evaluation 等）
+│       │   │   ├── _records.py     # 通用 ORM -> domain/contract record mapper；保持在 G2 大文件门禁内
+│       │   │   ├── _prompt_records.py # Prompt profile / seed template / compile artifact record mapper
+│       │   │   └── _common.py      # 仓储共享导入聚合，导出通用与 prompt record mapper
 │       │   ├── migrations.py       # 迁移工具函数
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │

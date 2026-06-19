@@ -464,7 +464,7 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
 
     first = run_worker_once("agent-runtime")
     assert first["result"]["status"] == "continuing"
-    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert first["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
 
     second = run_worker_once("agent-runtime")

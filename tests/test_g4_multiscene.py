@@ -965,7 +965,7 @@ def test_g4_live_provider_matrix_case_overflow_fails_without_restart_handoff() -
     result = processed["result"]
     assert result["status"] == "continuing"
     assert result["runtimeMetrics"]["restartCount"] == 0
-    assert result["queuedWorkItem"]["command"] == "start"
+    assert result["queuedWorkItem"]["payload"]["command"] == "start"
     assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
     assert "failure bubbling semantics" in str(result.get("detail") or "")
 def test_g4_restart_stability_report_supports_tiered_thresholds() -> None:

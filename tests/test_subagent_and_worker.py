@@ -24,7 +24,14 @@ DEBUG_PLAN_SKIP = pytest.mark.skip(reason="Moved to debug plan 2026-06-08: subag
 
 
 def _run_git(repo_path: Path, *args: str) -> str:
-    completed = subprocess.run(["git", "-C", str(repo_path), *args], capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        ["git", "-C", str(repo_path), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or "unknown git error"
         raise RuntimeError(detail)
@@ -279,9 +286,9 @@ def test_subagent_launch_binds_work_tree_and_emits_budget_artifact(monkeypatch, 
     assert launched["subagentBudgetDecision"]["workTreeNodeId"] == "wt-node-subagent-child"
     assert launched["subagentBudgetDecision"]["allocatedBudget"]["tokenBudgetTotal"] == 2400
     assert launched["subagentBudgetDecision"]["allocatedBudget"]["costBudgetTotal"] == 1.25
-    assert launched["workItem"]["payload"]["workTreeNodeId"] == "wt-node-subagent-child"
-    assert launched["workItem"]["payload"]["currentNodeId"] == "wt-node-subagent-child"
-    assert launched["workItem"]["payload"]["memoryRetrievalState"]["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["workItem"]["payload"]["payload"]["workTreeNodeId"] == "wt-node-subagent-child"
+    assert launched["workItem"]["payload"]["payload"]["currentNodeId"] == "wt-node-subagent-child"
+    assert launched["workItem"]["payload"]["payload"]["memoryRetrievalState"]["workTreeNodeId"] == "wt-node-subagent-child"
 
     processed = _run_worker_until_result(
         lambda result: bool(result.get("pullRequest")) or str(result.get("status") or "") in {"awaiting-approval", "continuing"}

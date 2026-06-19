@@ -376,7 +376,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
     assert first["status"] == "processed"
     assert first["result"]["status"] == "continuing"
 
-    queued = first["result"]["queuedWorkItem"]["payload"]
+    queued = first["result"]["queuedWorkItem"]["payload"]["payload"]
     assert queued["currentNodeId"] == "root"
     assert queued["allowToolExecution"] is False
     assert queued["temperature"] == 0.15

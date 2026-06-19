@@ -759,8 +759,8 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
     assert first["result"]["windowExecutionArtifact"]["record"]["topFramePrefixCacheKey"]
     assert first["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
-    assert first["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
-    assert first["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
+    assert first["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
+    assert first["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     assert first["result"]["workContextStackRef"] is not None
 
     second = run_worker_once("agent-runtime")
@@ -768,8 +768,8 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
     assert second["result"]["status"] == "continuing"
     assert second["result"]["task"]["status"] == "queued"
     assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "enter-existing-child"
-    assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "child-2"
-    assert second["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
+    assert second["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "child-2"
+    assert second["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["topFrameId"] == "frame-child-2"
 
     third = run_worker_once("agent-runtime")
     assert third["status"] == "processed"
@@ -777,11 +777,11 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
     assert third["result"]["task"]["status"] == "queued"
     assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
     assert third["result"]["windowExecutionArtifact"]["record"]["workTreeDebug"]["childBubble0_1"] == 1
-    assert third["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
-    assert third["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
+    assert third["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
+    assert third["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     root_frame = next(
         frame
-        for frame in third["result"]["queuedWorkItem"]["payload"]["workContextStack"]["frames"]
+        for frame in third["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["frames"]
         if frame["nodeId"] == "root"
     )
     assert [item["childNodeId"] for item in root_frame["childCompletionSummaries"]] == ["child-1", "child-2"]
@@ -893,7 +893,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "enter-child"
     assert first["result"]["assistantText"] == "先下潜处理细节。"
     assert first["result"]["workContextStackRef"] is not None
-    child_node_id = first["result"]["queuedWorkItem"]["payload"]["currentNodeId"]
+    child_node_id = first["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"]
     assert child_node_id != "root"
     root_node = next(node for node in first["result"]["takeoverProtocol"]["workTree"]["nodes"] if node["id"] == "root")
     assert child_node_id in root_node["childNodeIds"]
@@ -902,7 +902,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
     assert second["status"] == "processed"
     assert second["result"]["status"] == "continuing"
     assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
-    assert second["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
+    assert second["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
 
     third = run_worker_once("agent-runtime")
     assert third["status"] == "processed"
@@ -1011,7 +1011,7 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
     assert processed["result"]["status"] == "continuing"
     assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
 
-    queued_payload = processed["result"]["queuedWorkItem"]["payload"]
+    queued_payload = processed["result"]["queuedWorkItem"]["payload"]["payload"]
     assert queued_payload["currentNodeId"] == "root"
     assert queued_payload["allowToolExecution"] is False
     assert queued_payload["temperature"] == 0.1
@@ -1065,8 +1065,8 @@ def test_runtime_provider_exception_leaf_failure_returns_parent_for_reorchestrat
     assert processed["result"]["status"] == "continuing"
     assert processed["result"]["task"]["status"] == "queued"
     assert processed["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent-after-failure"
-    assert processed["result"]["queuedWorkItem"]["payload"]["currentNodeId"] == "root"
-    assert processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
+    assert processed["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
+    assert processed["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["topFrameId"] == "frame-root"
     failed_child = next(
         node
         for node in processed["result"]["takeoverProtocol"]["workTree"]["nodes"]
@@ -1076,7 +1076,7 @@ def test_runtime_provider_exception_leaf_failure_returns_parent_for_reorchestrat
     assert "Model provider failed after 4 attempts" in str(failed_child["failureSummary"])
     root_frame = next(
         frame
-        for frame in processed["result"]["queuedWorkItem"]["payload"]["workContextStack"]["frames"]
+        for frame in processed["result"]["queuedWorkItem"]["payload"]["payload"]["workContextStack"]["frames"]
         if frame["nodeId"] == "root"
     )
     assert root_frame["childCompletionSummaries"][0]["childNodeId"] == "child-1"
