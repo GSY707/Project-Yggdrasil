@@ -140,7 +140,7 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、快照、安全关闭、任务接管、工作树图 ready-set reducer；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
 │       ├── llm_runtime/            # LLM 调用封装包（core/artifacts/invoke 三层；包入口保留原 `yggdrasil_sdk.llm_runtime` 导入面）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -190,7 +190,8 @@ packages/
 ```
 
 **关键说明：**
-- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照与任务接管。
+- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、快照、任务接管与工作树图调度纯函数。
+- `runtime_kernel/work_tree_graph.py` 是工作树图 / Fork 并行 PR1 的纯函数 reducer：只读取 `WorkTreeProtocol`、active fork run 视图、graphState 和 policy，输出 direct child ready/blocked set、pending 信息流摘要、可用 Fork 槽位与候选 batch；它明确不复用 subagent task/branch，也不切 task-global `currentNodeId`。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
 - `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。

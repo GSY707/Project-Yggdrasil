@@ -12,6 +12,12 @@
 | `docs/release/GITHUB_RELEASES_PLAYBOOK.md` | GitHub Releases 发布手册（2026-06-18）：固定第一版发布渠道、staged repo ZIP + SHA256 发行物、Docker 检测/引导、手动更新、签名预留、发布前门禁、GitHub Release 正文模板和发布后核验步骤 |
 | `docs/development/MODEL_TPS_BENCHMARK_2026_06_14.md` | 模型 TPS 实测（2026-06-14）：对 `LongCat-2.0-Preview`、`deepseek-v4-flash`、`deepseek-v4-pro` 按同题、`max_tokens=1400`、各 3 次做 live 吞吐对比，记录首 token 延迟、总耗时、端到端 TPS 与首 token 后 TPS，并给出本机当前速度排序 |
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估（2026-06-14）：限定 2026 年 3 月后开源/开放权重 MoE 与稀疏激活模型，按 Qwen3.6、Ling/Ring-2.6、Mistral Small 4、Gemma 4、DeepSeek V4、Command A+、Kimi K2.6/2.7、MiMo V2.5、MiniMax M2.7/M3、Nemotron 3 等具体候选拆分主模型/子任务模型和 D0-D4 路由 |
+| `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md` | 多 Agent 自分裂与工作树图调度设计盘点（2026-06-20）：梳理现有 Sub-Agent / Fork / 联邦 Agent、工作树 `dependsOn` / `relationIds` / `priority`、知识继承、模型路由、预算资源和并发冲突文档，并给出下一步应补的图关系、局部 ready-set 调度、Fork、自分裂、知识继承、冲突合同、控制面和评测规格 |
+| `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` | 工作树图与 Fork 并行协议 v0.1（2026-06-21）：正式冻结父节点局部 ready-set、控制流边 / 信息流边分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层图边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前最小合同和第一版风险检测点 |
+| `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` | 工作树图与 Fork 并行测试任务设计（2026-06-21）：定义 T0-T7 仿真任务、R1-R4 真实/仿真真实任务、递归 Fork 与 `maxForks` 同时活跃上限、语义正确性/加速收益/质量指标、Batch 1-5 后续实现依赖和需要用户拍板的 D1-D7 决策 |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划（2026-06-21，PR1 进展已同步）：按纯函数图调度、AgentRun Fork 字段、Fork batch planner、worker Fork 运行视图、结果合并和 runtime harness 拆分 PR；当前已落地 graph reducer 与 T0/T2/T3/T4/T7 测试，Batch 2-6 仍未完成 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行 PR1 纯函数 reducer：复用 `WorkTreeProtocol` / `WorkTreeNode`，计算 direct child ready/blocked、延迟信息流 pending 摘要、`maxForks` 活跃槽位和可启动 Fork candidates；不创建 subagent task/branch，不触碰 worker 或数据库迁移 |
+| `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 ready-set / Fork 并行 PR1 回归：覆盖 T0 diamond ready-set、T2 延迟信息流、T3 自动 batch 候选、T4 parent replan gate、T7 递归 Fork active limit |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发与稳定性、状态机恢复链、M9 控制面与验收链调查基线（2026-06-11）：确认 M9 control-plane 当前通过、M9 acceptance 断在 pause/resume 后续状态收口与预算失败，并列出 worker 队列、任务锁、snapshot 恢复、skip 测试和发布门禁的修复顺序 |
 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止、暂停、继续与恢复能力调查（2026-06-18，2026-06-19 同步新实现）：当前公开入口已切为 `/pause`、`/resume`、`/cancel`、`/snapshots/save-current`、`/branches`，恢复主链改为 Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked` 和 Cancel audit 30 天 |
@@ -402,7 +408,7 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、durable snapshot store、安全关闭、任务接管；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、durable snapshot store、安全关闭、任务接管、工作树图 ready-set reducer；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
 │       ├── llm_runtime/            # LLM 调用封装包（core/artifacts/invoke 三层；包入口保留原 `yggdrasil_sdk.llm_runtime` 导入面）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -452,7 +458,8 @@ packages/
 ```
 
 **关键说明：**
-- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、durable snapshot store、resume attempt、控制面与任务接管。
+- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、durable snapshot store、resume attempt、控制面、任务接管与工作树图调度纯函数。
+- `runtime_kernel/work_tree_graph.py` 是工作树图 / Fork 并行 PR1 的纯函数 reducer：只读取 `WorkTreeProtocol`、active fork run 视图、graphState 和 policy，输出 direct child ready/blocked set、pending 信息流摘要、可用 Fork 槽位与候选 batch；它明确不复用 subagent task/branch，也不切 task-global `currentNodeId`。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
 - `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
@@ -504,7 +511,7 @@ modules/
 ├── task-takeover/                  # Gate 2 任务接管协议（目标解析、约束、计划、验证、交付）
 │   └── src/yggdrasil_task_takeover/
 │
-├── subagent-runtime/               # Sub-Agent 独立分支执行框架
+├── subagent-runtime/               # Sub-Agent prompt profile 注册模块；执行闭环在 collaboration_runtime、worker 与 subagent-pr
 │   └── src/subagent_runtime/
 │
 ├── subagent-pr/                    # Sub-Agent PR 提交与协作
@@ -626,6 +633,12 @@ docs/
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
 │   ├── MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md
 │   │                               #   世界树 Agent MoE 模型分层与任务难度评估：聚焦 2026-03+ 新开源/开放权重 MoE，按具体模型、主/子任务和 D0-D4 路由规划选型
+│   ├── MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md
+│   │                               #   多 Agent 自分裂与工作树图调度设计盘点：梳理现有协议/实现地基，给出图关系、局部 ready-set 调度、Fork、知识继承、资源路由、冲突合同、控制面与评测的下一步设计清单
+│   ├── WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md
+│   │                               #   工作树图与 Fork 并行测试任务设计：定义仿真任务、真实任务、验收指标、后续批次依赖和用户决策项
+│   ├── WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md
+│   │                               #   工作树图与 Fork 并行实现计划：按 graph reducer、AgentRun 字段、Fork planner、worker 运行视图、结果合并和 runtime harness 拆分实现 PR
 │   ├── DESIGN_COMPLETION_EVALUATION_2026_06_05.md
 │   │                               #   设计完成度评估：按当前设计文档和实现证据，给出工程设计、外部用户采用度、产品发行、数据治理、协作、模块和评测等完成度评分
 │   ├── STITCH_DESIGN_ACCEPTANCE_2026_06_17.md
@@ -688,6 +701,7 @@ docs/
 │   ├── README.md                   # 规格索引
 │   ├── agent-runtime-protocol-v0.2.md       # Agent 运行时协议 v0.2：Boot Prompt、启动、待机、栈式运行、独立 mailbox、Fork 动态预算、结束批准与单路径运行
 │   ├── work-tree-protocol-v0.2.md           # 工作树协议 v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack push/pop、摘要上浮与状态机
+│   ├── work-tree-graph-fork-parallel-protocol-v0.1.md # 工作树图与 Fork 并行协议：父节点局部 ready-set、边传递、父上下文缓存继承、child 焦点、延迟信息流索引、递归 Fork 与 maxForks 同时活跃上限
 │   ├── task-pause-resume-continuation-contract-v0.1.md # 任务暂停、恢复与继续契约：长期 Durable Snapshot、ResumeAttempt、持久 WorkItem、手动保存/分支、tool-call 等价性与不得 fallback start
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
 │   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面、场景任务模板与控制面 API
@@ -940,8 +954,10 @@ tests/
 │   │                               # 窗口重启、retry 持久 work item 与 durable resume-blocked 回归
 │   ├── test_runtime_budget_and_audit.py
 │   │                               # 预算硬约束、审计级别与 response 指标回归
-│   └── test_runtime_pause_regressions.py
-│                                   # queued pause durable snapshot、resume attempt 幂等与 runtime metrics 计数回归
+│   ├── test_runtime_pause_regressions.py
+│   │                               # queued pause durable snapshot、resume attempt 幂等与 runtime metrics 计数回归
+│   └── test_work_tree_graph_scheduler.py
+│                                   # 工作树图 ready-set / Fork 并行 PR1 回归：diamond、延迟信息流、自动 batch、父节点重排门禁与 maxForks 活跃上限
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
@@ -1083,6 +1099,12 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
 | `docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md` | 产品发行完成度评估：当前综合发行完成度 55/100；本地可试用发行 72/100、普通用户正式发行 48/100、托管 / SaaS 商业发行 18/100，并列出正式发行前硬缺口 |
 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` | 世界树 Agent MoE 模型分层与任务难度评估：以 2026 年 3 月后新开源/开放权重 MoE 候选为主，落到具体模型、主/子任务分工、D0-D4 难度、thinking 策略、升级降级和世界树专项评测指标 |
+| `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md` | 多 Agent 自分裂与工作树图调度设计盘点：梳理 Sub-Agent / Fork / 联邦 Agent、工作树图字段、知识继承、模型路由、预算资源和冲突处理现状，明确下一批应补的正式规格与非目标 |
+| `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` | 工作树图与 Fork 并行协议：冻结父节点局部 ready-set、`dependsOn` / `relationIds` 分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前合同和第一版验收场景 |
+| `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` | 工作树图与 Fork 并行测试任务设计：定义 T0-T7 仿真任务、R1-R4 真实/仿真真实任务、递归 Fork 与 `maxForks` 同时活跃上限、指标、Batch 1-5 实现依赖和 D1-D7 用户决策项 |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划：把协议落到 graph reducer、AgentRun Fork 字段、Fork planner、worker 运行视图、结果合并、runtime harness 和 PR 切分；当前已记录 PR1 reducer/测试进展与 Batch 2-6 未完成项 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行 reducer：计算 direct child ready/blocked、延迟 pending 信息流、active fork count、available slots 和启动候选；PR1 阶段不触碰 worker/DB/subagent |
+| `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 / Fork 并行 PR1 默认 CI 回归：锁住 T0/T2/T3/T4/T7 语义 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止/继续能力调查：记录 API/UI/runtime/module/test 能力基线；2026-06-19 已同步 `/pause`、Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked`、Cancel audit 与手动保存/分支的新实现口径 |
@@ -1130,6 +1152,7 @@ docs/
 | 我想找… | 去哪里找 |
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
+| 工作树图 ready-set / Fork 并行纯函数调度 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
@@ -1170,3 +1193,8 @@ docs/
 | Tool-call 暂停等价性门禁 | `tests/test_llm_retry_and_safe_shutdown.py` |
 | 任务停止 / 继续 / 恢复现状调查 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` |
 | 2026-03+ MoE 模型路由与任务难度评估 | `docs/development/MOE_MODEL_ROUTING_ASSESSMENT_2026_06_14.md` |
+| 多 Agent 自分裂与工作树图调度设计 | `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md`、`docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` |
+| 工作树图 ready-set / Fork 并行正式协议 | `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` |
+| 工作树图 / Fork 并行测试任务与后续批次决策 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` |
+| 工作树图 / Fork 并行实现计划与 PR 切分 | `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` |
+| 工作树图 / Fork 并行 PR1 reducer 与默认测试 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |

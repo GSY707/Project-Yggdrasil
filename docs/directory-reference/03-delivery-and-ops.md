@@ -307,8 +307,10 @@ tests/
 │   │                               # 窗口重启与 pause/resume 主闭环回归
 │   ├── test_runtime_budget_and_audit.py
 │   │                               # 预算硬约束、审计级别与 response 指标回归
-│   └── test_runtime_pause_regressions.py
-│                                   # pause 请求竞态回归、多轮 pause/resume 污染防护与 runtime metrics 计数回归
+│   ├── test_runtime_pause_regressions.py
+│   │                               # pause 请求竞态回归、多轮 pause/resume 污染防护与 runtime metrics 计数回归
+│   └── test_work_tree_graph_scheduler.py
+│                                   # 工作树图 ready-set / Fork 并行 PR1 回归：diamond、延迟信息流、自动 batch、父节点重排门禁与 maxForks 活跃上限
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成

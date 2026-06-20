@@ -1,13 +1,14 @@
 # 数据规格索引
 
 - 文档状态：Candidate
-- 更新时间：2026-06-18
+- 更新时间：2026-06-21
 - 目标：模块开发者只看规格即可实现模块，不需要查其他模块代码。
 - 关联文档：
   - [PRD v0.1](../PRD-v0.1.md)
   - [协议索引](../protocols/README.md)
   - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md)
   - [工作树协议 v0.2](work-tree-protocol-v0.2.md)
+  - [工作树图与 Fork 并行协议 v0.1](work-tree-graph-fork-parallel-protocol-v0.1.md)
   - [任务暂停、恢复与继续契约 v0.1](task-pause-resume-continuation-contract-v0.1.md)
 
 ## 1. 使用原则
@@ -24,6 +25,7 @@
 
 - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md) - 冻结 Boot Prompt、启动、待机、运行、上下文窗口、多 Agent 与结束批准语义。
 - [工作树协议 v0.2](work-tree-protocol-v0.2.md) - 冻结工作树作为动态工作记忆和执行栈的节点 schema、状态机、Working Node 标签、摘要上浮和冲突语义。
+- [工作树图与 Fork 并行协议 v0.1](work-tree-graph-fork-parallel-protocol-v0.1.md) - 冻结父节点局部 ready-set、`dependsOn` / `relationIds` 分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层图边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前最小合同。
 - [任务暂停、恢复与继续契约 v0.1](task-pause-resume-continuation-contract-v0.1.md) - 冻结 Pause、Safe-Stop、Durable Snapshot、Resume、Continue、Retry、Cancel、snapshot 保留、手动保存/分支与 tool-call 暂停等价性；隔天和长期继续以该契约为准。
 - [世界构建、初次苏醒与任务启动协议 v0.1](world-build-awakening-task-start-protocol-v0.1.md) - 重新划分“先建世界 / 再醒来 / 再开始工作”的世界级与任务级边界，强调建世界与初次苏醒不得接触具体工作信息，并引入“起始状态”作为任务起点。
 - [应用包接口总规范 v0.1](application-package-interface-v0.1.md) - 定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面与控制面 API 接口，明确应用包可携带 memory/ 静态记忆资产，供外部团队直接按契约实现应用包。
@@ -47,9 +49,10 @@
 3. 若参与 pause/resume/continue、worker queue 或长期恢复，先读任务暂停、恢复与继续契约 v0.1。
 4. 再读世界构建、初次苏醒与任务启动协议 v0.1，确认“世界级学习”和“任务级读取工作状态”的边界。
 5. 再读工作树协议 v0.2，确认 runtime 如何维护当前工作节点、动态下潜、摘要上浮和结束批准。
-6. 再读你所属模块的主领域规格。
-7. 然后读协议文档，确认 manifest、hook、事件的接入方式。
-8. 最后按需要回读 v0.1 领域数据规格，处理旧数据迁移。
+6. 若参与工作树图调度、ready-set 或 Fork 并行，继续读工作树图与 Fork 并行协议 v0.1。
+7. 再读你所属模块的主领域规格。
+8. 然后读协议文档，确认 manifest、hook、事件的接入方式。
+9. 最后按需要回读 v0.1 领域数据规格，处理旧数据迁移。
 
 ## 4. 模块开发最低合规要求
 
@@ -68,6 +71,7 @@ v0.2 已冻结以下重做边界：
 - Boot Prompt 四段：物理接口、根指针、行为宪法、程序计数器恢复。
 - RootMountPackage v0.2：语义根指针、索引地图、当前工作节点、邮箱和侧信道占位。
 - WorkTreeProtocol v0.2：动态工作记忆、执行栈、Working Node 标签、WorkContextStack 栈式上下文、摘要上浮、等待批准完成。
+- WorkTree Graph / Fork Parallel v0.1：父节点局部 ready-set、控制流边与信息流边分工、Fork 直接继承父 Agent 上下文缓存并叠加 child 执行焦点，信息流延迟传递使用摘要、归类和原文引用，`maxForks` 表示同一任务 / fork tree 的同时活跃 Fork run 上限。
 - Pause/Resume/Continue：长期可靠恢复以 Durable Snapshot、ResumeAttempt 和持久 WorkItem 为核心；不得依赖 Redis TTL 或静默 fallback start。
 - 启动模式：cold-standby、hot-resume、work-node-active、approval-review。
 - 运行模式：以当前工作树节点为权威指针，`currentFocus` 只作为 UI 摘要。
