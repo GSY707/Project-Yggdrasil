@@ -157,6 +157,10 @@ evaluation/
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + LongCat 2）
     ├── g4-graduate-ml-deepseek-v4.json
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + DeepSeek V4）
+    ├── work-tree-fork-runtime-harness.json
+                                    #   工作树图 Fork Batch 6 deterministic runtime harness（执行两轮 worker harness pytest 并写入 evaluation metrics）
+    ├── work-tree-fork-runtime-live-candidate.json
+                                    #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；未开启时记录 blocked/non-pass）
     ├── g4-real-task-window-parity.json
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
@@ -184,6 +188,8 @@ evaluation/
 | `eval:g4:graduate-ml:deepseek-v4` | `suites/g4-graduate-ml-deepseek-v4.json` |
 | `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
+| `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
+| `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
 
 ---
 
@@ -276,6 +282,7 @@ migrations/
 - `migrations/versions/b6c1d7e92f44_align_json_columns_with_jsonb.py`：把后续几次 migration 中遗漏为 PostgreSQL `JSON` 的列补齐为 `JSONB`，消除 `alembic check` 的类型漂移。
 - `migrations/versions/a91c2e7d4f33_memory_tree_worktree_audit_fields.py`：为 nodes / retrieval_requests / model_invocations / assets / prompt_compile_artifacts 补 work tree 审计字段，支撑“记忆树即全部记忆”的 snapshot、rehydrate 与多模态/关系发现闭环。
 - `migrations/versions/0f7c6e2a8d91_data_governance_operations.py`：新增 `data_governance_operations` 审计表，支撑删除 dry-run、task 硬删除和阻塞记录。
+- `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`：为 `agent_runs` 增加 Fork tree 根、深度、assigned work-tree node、父上下文锚点和 sibling fork group 字段，支撑 Fork run 审计、恢复和活跃计数。
 
 ---
 
@@ -309,8 +316,13 @@ tests/
 │   │                               # 预算硬约束、审计级别与 response 指标回归
 │   ├── test_runtime_pause_regressions.py
 │   │                               # pause 请求竞态回归、多轮 pause/resume 污染防护与 runtime metrics 计数回归
-│   └── test_work_tree_graph_scheduler.py
-│                                   # 工作树图 ready-set / Fork 并行 PR1 回归：diamond、延迟信息流、自动 batch、父节点重排门禁与 maxForks 活跃上限
+│   ├── test_work_tree_graph_scheduler.py
+│   │                               # 工作树图 ready-set / Fork 并行 PR1 回归：diamond、延迟信息流、自动 batch、父节点重排门禁与 maxForks 活跃上限
+│   ├── test_fork_launch_planner.py
+│   │                               # Fork launch planner / worker run view 回归：maxForks 槽位、parent context anchor、forkGroupId、assigned child、work item envelope 与 child-local worker view
+│   ├── test_fork_merge_and_auto_batch.py
+│   └── test_work_tree_graph_fork_runtime_harness.py
+│                                   # Fork result merge / auto batch 回归：result envelope、parent replan gate、pending summary-only、mixed outcome、下一批 DB work item 与真实 worker enqueue
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成

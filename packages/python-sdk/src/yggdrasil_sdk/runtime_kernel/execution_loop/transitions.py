@@ -2,7 +2,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from .state import *  # noqa: F401,F403
+from .state import (
+    AGENT_RUNTIME_QUEUE,
+    TaskSnapshotSummary,
+    TaskTakeoverProtocol,
+    WorkContextStack,
+    _build_pause_snapshot_state,
+    _build_window_execution_record,
+    _cache_package_entry,
+    _persist_runtime_event,
+    _persist_window_execution_artifact,
+    advance_takeover_after_delivery,
+    build_takeover_continuation_request,
+    normalize_excerpt,
+    perf_counter,
+    persist_stack_snapshot,
+    persist_task_takeover_protocol,
+    switch_current_work_node,
+    sync_takeover_runtime_state,
+    utc_now,
+)
+from ..fork_runtime import ForkResultEnvelope, merge_fork_result_and_plan_next_batch
 from ..root_mount import _elapsed_ms
 
 
@@ -44,6 +64,52 @@ def _persist_work_context_stack_ref(
 	except Exception:
 		return None
 	return persist_stack_snapshot(stack_model, task_id=task_id, run_id=run_id).model_dump(mode="json")
+
+
+def _fork_result_envelope_from_request(
+	request: dict[str, Any],
+	llm_result: dict[str, Any],
+	evidence_refs: list[dict[str, Any]],
+) -> ForkResultEnvelope:
+	raw_envelope = request.get("forkResultEnvelope") if isinstance(request.get("forkResultEnvelope"), dict) else {}
+	assigned_node_id = str(
+		raw_envelope.get("assignedWorkTreeNodeId")
+		or request.get("assignedWorkTreeNodeId")
+		or request.get("workTreeNodeId")
+		or request.get("currentNodeId")
+		or ""
+	).strip()
+	if not assigned_node_id:
+		raise ValueError("Fork result merge requires assignedWorkTreeNodeId.")
+	proposed_dependency_changes = (
+		raw_envelope.get("proposedDependencyChanges")
+		if isinstance(raw_envelope.get("proposedDependencyChanges"), list)
+		else []
+	)
+	proposed_relation_changes = (
+		raw_envelope.get("proposedRelationChanges")
+		if isinstance(raw_envelope.get("proposedRelationChanges"), list)
+		else []
+	)
+	plan_impact = str(raw_envelope.get("planImpact") or request.get("planImpact") or "none")
+	if proposed_dependency_changes or proposed_relation_changes:
+		plan_impact = "requires-parent-replan"
+	return ForkResultEnvelope.model_validate(
+		{
+			"assignedWorkTreeNodeId": assigned_node_id,
+			"status": str(raw_envelope.get("status") or "completed"),
+			"summary": normalize_excerpt(
+				str(raw_envelope.get("summary") or llm_result.get("assistantText") or "Fork completed."),
+				240,
+			),
+			"evidenceRefs": raw_envelope.get("evidenceRefs") or evidence_refs,
+			"failureSummary": raw_envelope.get("failureSummary"),
+			"planImpact": plan_impact,
+			"proposedDependencyChanges": proposed_dependency_changes,
+			"proposedRelationChanges": proposed_relation_changes,
+			"pendingInformationItems": raw_envelope.get("pendingInformationItems") or [],
+		}
+	)
 
 
 def _finalize_execution_transition(
@@ -222,6 +288,7 @@ def _finalize_execution_transition(
 		}
 
 	complete_transition_started_at = perf_counter()
+	is_fork_run = str(request.get("runType") or "").strip().lower() == "fork"
 	result_status = "completed"
 	task_status = "completed"
 	transition_outcome = "completed"
@@ -229,6 +296,8 @@ def _finalize_execution_transition(
 	queue_depth = None
 	continuation_event = None
 	work_context_stack_ref = None
+	fork_merge_result = None
+	fork_queued_work_items: list[dict[str, Any]] = []
 	evidence_refs = [
 		{"kind": "node", "id": created_node.id},
 		*[
@@ -531,13 +600,61 @@ def _finalize_execution_transition(
 		task_status = "failed"
 		transition_outcome = "delivery-gate-blocked"
 
+	if is_fork_run and result_status == "completed":
+		fork_merge_context = request.get("forkMergeContext") if isinstance(request.get("forkMergeContext"), dict) else {}
+		work_tree_snapshot = (
+			fork_merge_context.get("workTreeSnapshot")
+			if isinstance(fork_merge_context.get("workTreeSnapshot"), dict)
+			else None
+		)
+		parent_node_id = str(fork_merge_context.get("parentNodeId") or "").strip()
+		if work_tree_snapshot is not None and parent_node_id:
+			fork_merge_result = merge_fork_result_and_plan_next_batch(
+				task_repository=task_repository,
+				task_id=task_id,
+				parent_run_id=str(request.get("parentRunId") or run.parent_run_id or run.id),
+				parent_node_id=parent_node_id,
+				work_tree=work_tree_snapshot,
+				result_envelope=_fork_result_envelope_from_request(request, llm_result, evidence_refs),
+				policy=(
+					fork_merge_context.get("policy")
+					if isinstance(fork_merge_context.get("policy"), dict)
+					else None
+				),
+				fork_run_id=run.id,
+				fork_root_run_id=str(request.get("forkRootRunId") or run.fork_root_run_id or ""),
+				fork_depth=int(request.get("forkDepth") or run.fork_depth or 1),
+				auto_launch=bool(fork_merge_context.get("autoLaunchNextBatch", True)),
+			)
+			if fork_merge_result.next_batch is not None:
+				for queued_fork in fork_merge_result.next_batch.queued_forks:
+					work_item = queued_fork.work_item
+					queue_depth = coordinator.enqueue_job(
+						AGENT_RUNTIME_QUEUE,
+						{
+							"workItemId": work_item.id,
+							"queue": AGENT_RUNTIME_QUEUE,
+							"activity": work_item.activity,
+						},
+					)
+					fork_queued_work_items.append(work_item.model_dump(by_alias=True, mode="json"))
+			request["forkMergeResult"] = fork_merge_result.model_dump(by_alias=True, mode="json")
+			root_mount["forkMergeResult"] = request["forkMergeResult"]
+			transition_outcome = (
+				"fork-parent-replan-required"
+				if fork_merge_result.parent_replan_required
+				else "fork-result-merged"
+			)
+
+	if is_fork_run:
+		task_status = task.status
 	task = task_repository.update_task(
 		task_id,
 		{
 			"status": task_status,
-			"pauseRequested": False,
-			"activeSnapshotId": None,
-			"currentFocus": request.get("nextFocus") or (transition_state or {}).get("currentFocus") or request.get("currentFocus") or ("awaiting-approval" if task_status == "awaiting-approval" else "completed"),
+			"pauseRequested": task.pause_requested if is_fork_run else False,
+			"activeSnapshotId": task.active_snapshot_id if is_fork_run else None,
+			"currentFocus": task.current_focus if is_fork_run else request.get("nextFocus") or (transition_state or {}).get("currentFocus") or request.get("currentFocus") or ("awaiting-approval" if task_status == "awaiting-approval" else "completed"),
 		},
 	)
 	run_status = "completed"
@@ -555,6 +672,8 @@ def _finalize_execution_transition(
 		"deliveryGateBlocked": bool(delivery_gate_blocked_final),
 		"blockedHardGates": blocked_hard_gates_final,
 		"continuationQueued": continuation_event is not None,
+		"forkResultMerged": fork_merge_result is not None,
+		"forkNextBatchQueued": len(fork_queued_work_items),
 		"queueDepth": queue_depth,
 	}
 	window_execution_artifact = _persist_window_execution_artifact(
@@ -625,6 +744,12 @@ def _finalize_execution_transition(
 		"windowExecutionArtifact": window_execution_artifact,
 		"workContextStackRef": work_context_stack_ref,
 		"queuedWorkItem": queued_work_item,
+		"forkMergeResult": (
+			fork_merge_result.model_dump(by_alias=True, mode="json")
+			if fork_merge_result is not None
+			else None
+		),
+		"forkQueuedWorkItems": fork_queued_work_items,
 		"queueDepth": queue_depth,
 		"executionStateAudit": execution_state_audit,
 		"runtimeMetricsArtifact": runtime_metrics_artifact,

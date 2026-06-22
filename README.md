@@ -218,6 +218,8 @@ corepack pnpm eval:g4:provider-matrix
 corepack pnpm eval:g4:provider-matrix:longform
 corepack pnpm eval:g4:real-task-unrelated:dual-live
 corepack pnpm eval:g4:work-tree-debug
+corepack pnpm eval:work-tree:fork-runtime-harness
+corepack pnpm eval:work-tree:fork-runtime-live
 ```
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-2.0-Preview`，并保留 `longcat/LongCat-Flash-Lite` 作为对照 case；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
@@ -227,6 +229,8 @@ corepack pnpm eval:g4:work-tree-debug
 `corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
 
 `corepack pnpm eval:g4:graduate-ml:longcat2` 与 `corepack pnpm eval:g4:graduate-ml:deepseek-v4` 是 Graduate Researcher 应用的机器学习研究生 live 入口，重点检查 tool-rich 学习过程、预算、证据、阶段汇报和人工评审占位。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 live provider matrix，`corepack pnpm eval:g4:real-task-unrelated:dual-live` 用与本项目无关的 incident RCA 题面对照 LongCat 与 DeepSeek，`corepack pnpm eval:g4:work-tree-debug` 是显式工作树调试 harness。
+
+`corepack pnpm eval:work-tree:fork-runtime-harness` 是工作树图 Fork Batch 6 deterministic runtime harness，会通过真实 worker 消费 fork work item 并验证 AgentRun、prompt artifact、workTreeSnapshot 和 pending summary-only 信息流。`corepack pnpm eval:work-tree:fork-runtime-live` 是 nightly/live 候选入口；必须先设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 并配置 provider key，否则会记录为 blocked 而不是误报通过。
 
 历史窗口 stress 与真实任务 parity suite 文件仍保留在 `evaluation/suites/` 作为专项资产，但当前根 `package.json` 不再暴露对应 `pnpm` 脚本。若恢复这些入口，必须同时更新 `package.json`、README 和 `docs/DIRECTORY_REFERENCE.md`。
 

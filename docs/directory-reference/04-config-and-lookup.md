@@ -61,6 +61,8 @@ docs/
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
 | 工作树图 ready-set / Fork 并行纯函数调度 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
+| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
+| AgentRun Fork 元数据持久化与活跃 Fork 计数 | `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`、`packages/python-sdk/src/yggdrasil_sdk/domain.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`、`migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`tests/api/test_persistence_task_runtime_api.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |

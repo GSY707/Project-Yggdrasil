@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 import pytest
 
@@ -13,13 +11,11 @@ from yggdrasil_sdk import (
     TaskRepository,
     TaskSnapshotSummary,
     get_persistence_runtime,
-    new_id,
-    run_evaluation_suite,
     utc_now,
 )
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
 from yggdrasil_sdk.persistence.repositories import RuntimeRepository, WorkspaceBootstrapRepository
-from yggdrasil_sdk.support import ensure_state_subdir, relative_workspace_path, resolve_workspace_root, write_json
+from yggdrasil_sdk.support import ensure_state_subdir, write_json
 
 
 def _seed_prompt_profile_version(prompt_repository: PromptAssetRepository, *, version_id: str, prompt_profile_id: str) -> None:
@@ -55,6 +51,249 @@ def _seed_seed_template_version(prompt_repository: PromptAssetRepository, *, ver
 
 client = TestClient(app)
 pytestmark = pytest.mark.slow
+
+
+def test_repository_persists_fork_agent_run_fields_and_active_count() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task_repository.create_task(
+            {
+                "id": "task_fork_run_fields",
+                "title": "Fork run 字段持久化测试",
+                "goal": "验证 fork run 可以审计和恢复。",
+                "status": "queued",
+            }
+        )
+        parent = task_repository.create_agent_run(
+            "task_fork_run_fields",
+            {
+                "id": "run_fork_parent",
+                "runType": "main",
+                "status": "running",
+            },
+        )
+        fork = task_repository.create_agent_run(
+            "task_fork_run_fields",
+            {
+                "id": "run_fork_child_a",
+                "parentRunId": parent.id,
+                "runType": "fork",
+                "status": "running",
+                "forkRootRunId": parent.id,
+                "forkDepth": 1,
+                "assignedWorkTreeNodeId": "wt-child-a",
+                "parentContextAnchor": "ctx-anchor-parent-1",
+                "forkGroupId": "fork-group-1",
+                "selectedModel": "LongCat-2.0-Preview",
+                "selectedProvider": "longcat",
+            },
+        )
+
+        assert fork.run_type == "fork"
+        assert fork.parent_run_id == parent.id
+        assert fork.fork_root_run_id == parent.id
+        assert fork.fork_depth == 1
+        assert fork.assigned_work_tree_node_id == "wt-child-a"
+        assert fork.parent_context_anchor == "ctx-anchor-parent-1"
+        assert fork.fork_group_id == "fork-group-1"
+        assert task_repository.count_active_fork_runs("task_fork_run_fields", fork_root_run_id=parent.id) == 1
+
+        completed = task_repository.update_agent_run(fork.id, {"status": "completed"})
+        assert completed.status == "completed"
+        assert task_repository.count_active_fork_runs("task_fork_run_fields", fork_root_run_id=parent.id) == 0
+
+        listed = {run.id: run for run in task_repository.list_agent_runs("task_fork_run_fields")}
+        assert listed[fork.id].assigned_work_tree_node_id == "wt-child-a"
+        assert listed[fork.id].parent_context_anchor == "ctx-anchor-parent-1"
+
+
+def test_repository_rejects_incomplete_fork_agent_run_fields() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task_repository.create_task(
+            {
+                "id": "task_fork_required_fields",
+                "title": "Fork run 必填字段测试",
+                "goal": "验证 fork run 不允许缺少恢复所需字段。",
+                "status": "queued",
+            }
+        )
+        parent = task_repository.create_agent_run(
+            "task_fork_required_fields",
+            {
+                "id": "run_fork_required_parent",
+                "runType": "main",
+                "status": "running",
+            },
+        )
+
+        with pytest.raises(ValueError, match="runType=fork requires assignedWorkTreeNodeId"):
+            task_repository.create_agent_run(
+                "task_fork_required_fields",
+                {
+                    "id": "run_fork_missing_node",
+                    "parentRunId": parent.id,
+                    "runType": "fork",
+                    "status": "running",
+                    "forkRootRunId": parent.id,
+                    "forkDepth": 1,
+                    "parentContextAnchor": "ctx-required",
+                    "forkGroupId": "fork-required",
+                },
+            )
+
+        with pytest.raises(ValueError, match="runType=fork requires forkDepth >= 1"):
+            task_repository.create_agent_run(
+                "task_fork_required_fields",
+                {
+                    "id": "run_fork_depth_zero",
+                    "parentRunId": parent.id,
+                    "runType": "fork",
+                    "status": "running",
+                    "forkRootRunId": parent.id,
+                    "forkDepth": 0,
+                    "assignedWorkTreeNodeId": "wt-required-child",
+                    "parentContextAnchor": "ctx-required",
+                    "forkGroupId": "fork-required",
+                },
+            )
+
+
+def test_repository_rejects_clearing_required_fork_agent_run_fields() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task_repository.create_task(
+            {
+                "id": "task_fork_required_update",
+                "title": "Fork run 必填字段更新测试",
+                "goal": "验证 fork run 不允许在更新时清空恢复字段。",
+                "status": "queued",
+            }
+        )
+        parent = task_repository.create_agent_run(
+            "task_fork_required_update",
+            {
+                "id": "run_fork_required_update_parent",
+                "runType": "main",
+                "status": "running",
+            },
+        )
+        fork = task_repository.create_agent_run(
+            "task_fork_required_update",
+            {
+                "id": "run_fork_required_update_child",
+                "parentRunId": parent.id,
+                "runType": "fork",
+                "status": "running",
+                "forkRootRunId": parent.id,
+                "forkDepth": 1,
+                "assignedWorkTreeNodeId": "wt-required-update-child",
+                "parentContextAnchor": "ctx-required-update",
+                "forkGroupId": "fork-required-update",
+            },
+        )
+
+        with pytest.raises(ValueError, match="runType=fork requires parentContextAnchor"):
+            task_repository.update_agent_run(fork.id, {"parentContextAnchor": None})
+        with pytest.raises(ValueError, match="runType=fork requires forkDepth >= 1"):
+            task_repository.update_agent_run(fork.id, {"forkDepth": 0})
+
+
+def test_core_api_returns_fork_agent_run_fields() -> None:
+    created_task = client.post(
+        "/tasks",
+        json={
+            "id": "task_api_fork_run_fields",
+            "title": "Fork run API 字段测试",
+            "goal": "验证 fork run 字段会从 API 返回。",
+            "status": "queued",
+        },
+    )
+    assert created_task.status_code == 201
+
+    parent_response = client.post(
+        "/tasks/task_api_fork_run_fields/runs",
+        json={
+            "id": "run_api_fork_parent",
+            "runType": "main",
+            "status": "running",
+        },
+    )
+    assert parent_response.status_code == 201
+
+    fork_response = client.post(
+        "/tasks/task_api_fork_run_fields/runs",
+        json={
+            "id": "run_api_fork_child",
+            "parentRunId": "run_api_fork_parent",
+            "runType": "fork",
+            "status": "waiting-tool",
+            "forkRootRunId": "run_api_fork_parent",
+            "forkDepth": 2,
+            "assignedWorkTreeNodeId": "wt-api-child",
+            "parentContextAnchor": "ctx-api-anchor",
+            "forkGroupId": "fork-api-group",
+        },
+    )
+    assert fork_response.status_code == 201
+    fork_payload = fork_response.json()["run"]
+    assert fork_payload["runType"] == "fork"
+    assert fork_payload["forkRootRunId"] == "run_api_fork_parent"
+    assert fork_payload["forkDepth"] == 2
+    assert fork_payload["assignedWorkTreeNodeId"] == "wt-api-child"
+    assert fork_payload["parentContextAnchor"] == "ctx-api-anchor"
+    assert fork_payload["forkGroupId"] == "fork-api-group"
+
+    task_response = client.get("/tasks/task_api_fork_run_fields")
+    assert task_response.status_code == 200
+    runs = {run["id"]: run for run in task_response.json()["agentRuns"]}
+    assert runs["run_api_fork_child"]["runType"] == "fork"
+    assert runs["run_api_fork_child"]["assignedWorkTreeNodeId"] == "wt-api-child"
+
+
+def test_core_api_rejects_incomplete_fork_agent_run_fields() -> None:
+    created_task = client.post(
+        "/tasks",
+        json={
+            "id": "task_api_fork_required_fields",
+            "title": "Fork run API 必填字段测试",
+            "goal": "验证 API 不允许创建缺字段 fork run。",
+            "status": "queued",
+        },
+    )
+    assert created_task.status_code == 201
+
+    parent_response = client.post(
+        "/tasks/task_api_fork_required_fields/runs",
+        json={
+            "id": "run_api_fork_required_parent",
+            "runType": "main",
+            "status": "running",
+        },
+    )
+    assert parent_response.status_code == 201
+
+    fork_response = client.post(
+        "/tasks/task_api_fork_required_fields/runs",
+        json={
+            "id": "run_api_fork_required_missing_group",
+            "parentRunId": "run_api_fork_required_parent",
+            "runType": "fork",
+            "status": "running",
+            "forkRootRunId": "run_api_fork_required_parent",
+            "forkDepth": 1,
+            "assignedWorkTreeNodeId": "wt-api-required-child",
+            "parentContextAnchor": "ctx-api-required",
+        },
+    )
+    assert fork_response.status_code == 409
+    assert "runType=fork requires forkGroupId" in fork_response.json()["detail"]
 
 
 def _seed_llm_work_runtime_case(*, task_id: str, run_id: str, invocation_id: str) -> None:

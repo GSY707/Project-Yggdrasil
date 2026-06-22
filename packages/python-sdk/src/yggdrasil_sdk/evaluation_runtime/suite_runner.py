@@ -1,12 +1,37 @@
-from ._common import *  # noqa: F403,F401
-from .bootstrap import *  # noqa: F403,F401
-from .scorer import *  # noqa: F403,F401
+from time import perf_counter
+from pathlib import Path
+from typing import Any
 
-from .suite_cases import *  # noqa: F403,F401
-
-from .suite_cases_g2 import *  # noqa: F403,F401
-from .suite_cases_g4 import *  # noqa: F403,F401
-from .suite_cases_g4 import (  # noqa: F401
+from ..contracts import ExternalRef
+from ..observability import observe_span, record_log, record_metric
+from ..observability_exporters import flush_observability_exporters
+from ..persistence import EvaluationRepository
+from ..support import new_id, resolve_state_dir, utc_now, write_json
+from .bootstrap import (
+    _prepare_suite_run,
+    get_evaluation_suite_definition,
+    isolated_runtime_environment,
+    local_evaluation_runtime_environment,
+)
+from .scorer import _aggregate_case_metrics
+from .suite_cases.m9 import (
+    _run_m9_control_plane_resource_surface_case,
+    _run_m9_pause_resume_memory_tree_case,
+    _run_m9_prompt_control_plane_case,
+    _run_m9_shared_multimodal_reasoning_case,
+    _run_subagent_pr_case,
+)
+from .suite_cases.runtime import (
+    _run_fork_runtime_harness_case,
+    _run_fork_runtime_live_candidate_case,
+    _run_live_llm_task_case,
+    _run_live_llm_tool_case,
+    _run_main_agent_case,
+    _run_memory_import_case,
+    _run_memory_strategy_compare_case,
+)
+from .suite_cases_g2 import _run_g2_complex_file_split_regression_case
+from .suite_cases_g4 import (
     _run_g4_live_provider_matrix_case,
     _run_g4_scene_prompt_contract_case,
     _run_g4_scene_resume_contract_case,
@@ -31,6 +56,8 @@ SCENARIO_HANDLERS: dict[str, Any] = {
     "g4.scene_runtime_recovery": _run_g4_scene_runtime_recovery_case,
     "g4.scene_switch_isolation": _run_g4_scene_switch_isolation_case,
     "g4.live_provider_matrix": _run_g4_live_provider_matrix_case,
+    "runtime.fork_harness": _run_fork_runtime_harness_case,
+    "runtime.fork_harness_live_candidate": _run_fork_runtime_live_candidate_case,
 }
 
 def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> dict[str, Any]:
@@ -73,7 +100,8 @@ def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> d
                         allow_paid_models=bool(case.get("allowPaidModels", False)),
                     ):
                         detail = handler(case)
-                    case_status = "passed"
+                    detail_status = str(detail.get("status") or "") if isinstance(detail, dict) else ""
+                    case_status = detail_status if detail_status in {"blocked", "skipped"} else "passed"
                 except Exception as exc:
                     detail = {"error": str(exc), "errorType": exc.__class__.__name__}
                     case_status = "failed"

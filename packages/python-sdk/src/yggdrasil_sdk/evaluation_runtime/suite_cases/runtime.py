@@ -1,6 +1,20 @@
-from .._common import *  # noqa: F403,F401
-from ..bootstrap import *  # noqa: F403,F401
-from ..scorer import *  # noqa: F403,F401
+import json
+import os
+import subprocess
+from typing import Any
+
+from ...persistence import get_persistence_runtime
+from ...persistence.constants import DEFAULT_BRANCH_ID
+from ...persistence.repositories import PromptAssetRepository, RuntimeRepository, TaskRepository
+from ...support import new_id, normalize_excerpt, resolve_workspace_root
+from ..bootstrap import _read_external_ref_json, _seed_runtime_task, _seed_tool_case_memory
+from ..scorer import (
+    _build_memory_tree_context,
+    _generate_strategy_answer,
+    _read_text_fixture,
+    _score_strategy,
+    _select_flat_fragments,
+)
 
 def _run_memory_import_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient
@@ -444,5 +458,63 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "requestPayload": request_payload,
         "responsePayload": response_payload,
     }
+
+
+def _run_fork_runtime_harness_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    case_payload = dict(case or {})
+    command_text = str(
+        case_payload.get("expectedTestCommand")
+        or "uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py -q --basetemp=tmp/pytest-fork-runtime-harness"
+    )
+    completed = subprocess.run(
+        command_text.split(),
+        cwd=resolve_workspace_root(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "fork runtime deterministic harness failed: "
+            + normalize_excerpt((completed.stdout or "") + "\n" + (completed.stderr or ""), 800)
+        )
+    return {
+        "harnessMode": "deterministic",
+        "command": command_text,
+        "exitCode": completed.returncode,
+        "stdoutPreview": normalize_excerpt(completed.stdout or "", 500),
+        "validatedContracts": [
+            "fork-agent-run-metadata",
+            "fork-work-item-completion",
+            "prompt-artifact-runType-fork",
+            "workTreeSnapshot-inheritance",
+            "pending-summary-only-flow",
+            "no-child-task-or-task-branch",
+        ],
+    }
+
+
+def _run_fork_runtime_live_candidate_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    case_payload = dict(case or {})
+    if os.environ.get("YGGDRASIL_FORK_RUNTIME_LIVE") != "1":
+        return {
+            "harnessMode": "live-candidate",
+            "status": "blocked",
+            "blockerCode": "live-provider-not-enabled",
+            "detail": "Set YGGDRASIL_FORK_RUNTIME_LIVE=1 and configure provider credentials before running this nightly candidate.",
+            "requiredPrecondition": case_payload.get("expectedPrecondition"),
+        }
+    return _run_live_llm_task_case(
+        {
+            **case_payload,
+            "requireLive": True,
+            "currentFocus": case_payload.get("currentFocus") or "work-tree fork runtime live candidate",
+            "currentObjective": case_payload.get("currentObjective")
+            or "Exercise a longer live runtime task after deterministic fork harness stability.",
+            "allowFallback": False,
+            "allowToolExecution": False,
+            "auditLevel": case_payload.get("auditLevel") or "strict",
+        }
+    )
 
 __all__ = [name for name in globals() if not name.startswith("__")]

@@ -1,0 +1,35 @@
+{
+  "id": "evalsuite_work_tree_fork_runtime_harness",
+  "name": "Work-Tree Fork Runtime Harness",
+  "domain": "generic",
+  "suiteRole": "runtime-debug-harness",
+  "suiteRoleNote": "Batch 6 deterministic entry for validating fork AgentRun metadata, deterministic prompt artifacts, work item execution, work tree snapshot inheritance, and pending summary flow. Live provider evidence is split into evalsuite_work_tree_fork_runtime_live_candidate.",
+  "subjectKind": "workflow",
+  "subjectRef": "work-tree:fork-runtime-harness",
+  "metricRefs": [
+    "pass-rate",
+    "fork-active-limit",
+    "prompt-artifact-coverage",
+    "work-tree-snapshot-continuity"
+  ],
+  "cases": [
+    {
+      "id": "evalcase_work_tree_fork_runtime_harness_deterministic",
+      "title": "Deterministic Fork Runtime Harness",
+      "scenario": "runtime.fork_harness",
+      "taskType": "coding",
+      "taskTitle": "Work-Tree Fork Runtime Harness",
+      "taskGoal": "Run a two-node fork chain through runtime work items with deterministic model output and verify AgentRun metadata, prompt artifacts, work tree snapshot inheritance, and pending summary flow.",
+      "requireLive": false,
+      "allowToolExecution": false,
+      "tags": [
+        "work-tree",
+        "fork",
+        "runtime-harness",
+        "batch-6",
+        "deterministic"
+      ],
+      "expectedTestCommand": "uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py -q --basetemp=tmp/pytest-fork-runtime-harness"
+    }
+  ]
+}

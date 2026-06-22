@@ -429,15 +429,189 @@ pendingInformationRetention = summary-category-ref-only
 
 当前仍未完成：
 
-1. Batch 2：AgentRun Fork 持久字段、迁移和 repository 查询。
-2. Batch 3：Fork batch launch planner 与 runtime work item 排队。
-3. Batch 4：worker Fork run view 与 prompt artifact。
-4. Batch 5：Fork 结果合并、第 n+1 批调度和 pending 信息流落点。
-5. Batch 6：runtime debug harness、slow/nightly 真实链路验证。
+1. Batch 6：deterministic runtime debug harness 已完成；slow/nightly live provider 真实链路证据仍待单独跑。
 
 本轮验证命令：
 
 ```powershell
 uv run pytest tests/runtime/test_work_tree_graph_scheduler.py -q --basetemp=tmp/pytest-work-tree-graph
 uv run python -m compileall packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py tests/runtime/test_work_tree_graph_scheduler.py
+```
+
+## 11. Batch 2 实施进展（2026-06-21）
+
+已完成 AgentRun Fork 字段与 repository 接线：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`
+   - `agent_runs` 新增 `fork_root_run_id`、`fork_depth`、`assigned_work_tree_node_id`、`parent_context_anchor`、`fork_group_id`。
+2. `packages/python-sdk/src/yggdrasil_sdk/domain.py`
+   - `AgentRunRecord.runType` 正式允许 `fork`。
+   - `AgentRunRecord` 暴露 `forkRootRunId`、`forkDepth`、`assignedWorkTreeNodeId`、`parentContextAnchor`、`forkGroupId`。
+3. `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`
+   - `_agent_run_record()` 已映射 5 个 Fork 字段。
+4. `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`
+   - `create_agent_run()` 接收并持久化 5 个 Fork 字段。
+   - `update_agent_run()` 可更新 5 个 Fork 字段。
+   - 新增 `count_active_fork_runs(task_id, fork_root_run_id=None)`，只统计 `initializing` / `mounting` / `running` / `waiting-tool` 的 `runType=fork`。
+5. `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`
+   - 为 `agent_runs` 增加 Fork 字段与 `fork_root_run_id`、`assigned_work_tree_node_id`、`fork_group_id` 索引。
+6. `tests/api/test_persistence_task_runtime_api.py`
+   - 新增 repository 与 Core API 回归，验证 Fork 字段创建、读取、更新与 active count 释放。
+
+当前仍未完成：
+
+1. Batch 6：deterministic runtime harness 已完成；slow/nightly live provider 真实链路已补入口并在未开启 live 开关时记录为 blocked。
+2. `runType=fork` 的必填字段策略已收紧为 repository 硬校验。
+
+本轮验证命令：
+
+```powershell
+uv run pytest tests/api/test_persistence_task_runtime_api.py -q -k "fork_agent_run_fields" --basetemp=tmp/pytest-fork-run-fields
+uv run pytest tests/runtime/test_work_tree_graph_scheduler.py -q --basetemp=tmp/pytest-work-tree-graph
+uv run alembic heads
+```
+
+## 12. Batch 3 实施进展（2026-06-21）
+
+已完成 Fork batch launch planner 的第一版 runtime helper：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`
+   - 新增 `queue_fork_batch()`。
+   - 输入 `WorkTreeReadySetResult`、policy、parent run、task repository。
+   - 复用 `plan_fork_batch()`，只为可用槽位创建 Fork。
+   - 每个 launch candidate 创建一个 `runType=fork` 的 `AgentRun`，状态为 `initializing`。
+   - 每个 launch candidate 创建一个 `RuntimeWorkItem`：
+     - `activity = core.agent.main.execute`
+     - `intent = fork`
+     - 顶层 payload 与嵌套 `payload` 都带 `runType=fork`、`parentRunId`、`forkRootRunId`、`forkDepth`、`assignedWorkTreeNodeId`、`parentContextAnchor`、`forkGroupId`、`activeForkCount`、`availableForkSlots`。
+   - 同一批 sibling Fork 使用同一个 `parentContextAnchor` 和 `forkGroupId`。
+   - 明确不走 `core.agent.subagent.execute`。
+2. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/__init__.py`
+   - 导出 `queue_fork_batch()`。
+3. `tests/runtime/test_fork_launch_planner.py`
+   - 覆盖已有 1 个 active Fork、`maxForks=3` 时只排队 2 个新 Fork，第 3 个 ready child 留在 waiting candidates。
+   - 验证 work item 走 main activity + fork intent，不走 subagent activity。
+
+当前仍未完成：
+
+1. Batch 6 deterministic runtime harness 已实现；slow/nightly live provider 真实链路尚未跑证据。
+2. `queue_fork_batch()` 直接调用时仍只创建 DB work item；真实 fork 完成路径已在 `transitions.py` 中对自动下一批执行 Redis enqueue。
+
+本轮验证命令：
+
+```powershell
+uv run pytest tests/runtime/test_fork_launch_planner.py -q --basetemp=tmp/pytest-fork-launch
+```
+
+## 13. Batch 4 实施进展（2026-06-21）
+
+已完成 worker Fork run view 的第一版接线：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
+   - 识别 `runType=fork`。
+   - 从 `assignedWorkTreeNodeId` / `workTreeNodeId` / `currentNodeId` 派生 run-local child 指针。
+   - 为 fork 请求补齐 `assignedWorkTreeNodeId`、`workTreeNodeId`、`currentNodeId`、`topFrameId`、`workingNodeAnnotation` 和 `memoryRetrievalState.workTreeNodeId`。
+   - 若 `queue_fork_batch()` 已预创建 fork AgentRun，worker 会更新该 run，而不是再次创建同 id run。
+   - fork 不再自动生成 root takeover protocol，也不通过 takeover preview 覆盖 child 指针。
+2. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`
+   - fork 完成时只完成自身 AgentRun 和窗口写入，不把 task-global `status` / `currentFocus` / snapshot 指针推进为主线完成态。
+3. `tests/runtime/test_fork_launch_planner.py`
+   - 新增 worker 消费 fork work item 回归，锁住 child 视图、父上下文锚点、预创建 fork run 复用，以及父任务焦点不被 fork 覆盖。
+
+当前仍未完成：
+
+1. Batch 6 deterministic runtime harness 已实现；slow/nightly live provider 真实链路和长任务证据仍未完成。
+
+本轮验证命令：
+
+```powershell
+uv run pytest tests/runtime/test_fork_launch_planner.py -q --basetemp=tmp/pytest-fork-launch
+uv run pytest tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields" --basetemp=tmp/pytest-fork-batches
+```
+
+## 14. Batch 5 实施进展（2026-06-21）
+
+已完成 Fork result merge 与 auto next batch 的第一版 helper 合同：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`
+   - 新增 `ForkResultEnvelope`。
+   - 新增 `ForkMergeAndBatchResult`。
+   - 新增 `merge_fork_result_and_plan_next_batch()`。
+   - Fork 完成时可把 `assignedWorkTreeNodeId` 对应 child 写成 `completed` / `failed`，同步 `executionSummary`、`failureSummary`、`producedEvidenceRefs` 和 `assignedAgentRunId`。
+   - `planImpact=none` 且 ready-set 允许时，复用 `queue_fork_batch()` 创建第 n+1 批 DB work item。
+   - `requires-parent-replan` 或 pending 信息触发 parent replan 时，不自动排下一批。
+   - `pendingInformationItems` 使用结构化 Pydantic 合同，`extra=forbid`，防止把大段原文塞进 parent pending 信息。
+2. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/__init__.py`
+   - 导出 `ForkResultEnvelope`、`ForkMergeAndBatchResult`、`ForkRuntimeBatchResult`、`QueuedForkRun` 和 `merge_fork_result_and_plan_next_batch()`。
+3. `tests/runtime/test_fork_merge_and_auto_batch.py`
+   - 覆盖 T3：`planImpact=none` 后自动创建下一批 fork DB work item。
+   - 覆盖 T4/T6：`requires-parent-replan` 禁止自动启动，pending 信息拒绝额外 raw content。
+   - 覆盖 T5：mixed outcome 后失败依赖链保持 blocked，只启动仍满足条件的 ready child。
+4. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
+   - 清理 ruff 暴露的既有 `F601` 重复字典键，保留原 payload 语义。
+
+2026-06-22 继续完成 Batch 5 后半：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`
+   - `queue_fork_batch()` 新增可选 `work_tree`、`parent_node_id`、`auto_launch_next_batch`，把 `forkMergeContext` 写入 fork work item payload。
+   - 自动下一批会继承合并后的 `workTreeSnapshot`，保证第 n+1 批完成时仍能继续 merge。
+2. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`
+   - fork 完成时若 payload 明确带 `forkMergeContext.workTreeSnapshot` 和 `parentNodeId`，会构造 `ForkResultEnvelope` 并调用 `merge_fork_result_and_plan_next_batch()`。
+   - `forkMergeResult` 写入 request/rootMount/window artifact 返回结果。
+   - 下一批 DB work item 创建后会立即 `coordinator.enqueue_job()`，进入真实 worker 队列。
+   - 没有 merge context 的 fork 保持 Batch 4 行为，不猜测父图。
+3. `tests/runtime/test_fork_merge_and_auto_batch.py`
+   - 新增真实 worker 回归：fork work item 完成后合并 child 结果，生成下一批 fork work item，并把下一批 work item 入队。
+
+2026-06-22 继续完成 Batch 6 deterministic harness，并清理 Ruff `F403/F405`：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`
+   - 移除 `from ._imports import *`，改为显式导入本文件实际使用的 ORM / domain / contract 名称。
+2. `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`
+   - 移除 `from ._common import *`，改为显式导入 TaskRepository 实际使用的常量、ORM、record mapper、`sa`、`Session`、`utc_now` 等名称。
+3. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`
+   - 移除 `from .state import *`，改为显式导入 transition 完成态所需的 pause/window/takeover/fork enqueue 依赖。
+4. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
+   - 移除 `from .state import *`，改为显式导入 worker 主循环所需的 runtime repository、takeover、snapshot、metrics、memory write、model route 和 fork 相关依赖。
+5. `tests/runtime/test_work_tree_graph_fork_runtime_harness.py`
+   - 新增 Batch 6 deterministic runtime harness。
+   - 使用 fake LLM，但 fake 内部真实写入 `model_invocations` 与 `prompt_compile_artifacts`，避免只测 reducer。
+   - 连续跑两轮 `run_worker_once("agent-runtime")`：第一轮完成 `child-a` 并自动排 `child-b`；第二轮消费 `child-b`，验证 pending summary-only 信息被传入。
+   - 验证 fork AgentRun 元数据、work item completed 状态、prompt artifact `runType=fork`、继承后的 `workTreeSnapshot`、父任务 `currentFocus` 不被 fork 覆盖，以及不创建 child task / task branch。
+6. `evaluation/suites/work-tree-fork-runtime-harness.json`
+   - 新增 Batch 6 deterministic evaluation suite：`runtime.fork_harness` 会执行 harness pytest，并把通过的合同写入 evaluation metrics。
+7. `evaluation/suites/work-tree-fork-runtime-live-candidate.json`
+   - 新增 nightly/live candidate suite：`runtime.fork_harness_live_candidate` 必须显式设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 才会走 live provider，否则记录为 `blocked` 且 suite metrics 为 non-pass。
+8. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py`
+   - 新增 `runtime.fork_harness` 与 `runtime.fork_harness_live_candidate` handler。
+9. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py`
+   - 支持 handler 返回 `status=blocked/skipped` 时把 case 记为 non-pass，避免 live blocker 被误读成 passed。
+10. `package.json`
+   - 新增 `eval:work-tree:fork-runtime-harness` 与 `eval:work-tree:fork-runtime-live`。
+11. `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`
+   - 收紧 `runType=fork` repository 硬校验：创建 fork run 必须提供 `parentRunId`、`forkRootRunId`、`forkDepth >= 1`、`assignedWorkTreeNodeId`、`parentContextAnchor`、`forkGroupId`；更新时不允许清空这些恢复字段或把 depth 降到 0。
+12. `tests/api/test_persistence_task_runtime_api.py`
+   - 新增 repository/API 回归，验证缺少 fork 必填字段或更新清空必填字段会失败。
+
+当前仍未完成：
+
+1. slow/nightly live provider 真实链路和长任务收益证据仍未跑通；本轮已执行 `corepack pnpm eval:work-tree:fork-runtime-live`，结果正确记录为 `blocked`，阻塞原因是未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1`。
+
+本轮验证命令：
+
+```powershell
+uv run pytest tests/runtime/test_fork_merge_and_auto_batch.py -q --basetemp=tmp/pytest-fork-merge
+uv run pytest tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields" --basetemp=tmp/pytest-fork-batches-3
+uv run ruff check packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py tests/runtime/test_fork_merge_and_auto_batch.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/__init__.py
+uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py -q --basetemp=tmp/pytest-fork-runtime-harness
+uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_runtime_harness or fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields" --basetemp=tmp/pytest-fork-batch6-regression
+uv run ruff check --select F403,F405 packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py
+uv run ruff check tests/runtime/test_work_tree_graph_fork_runtime_harness.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py
+uv run python -m json.tool evaluation/suites/work-tree-fork-runtime-harness.json
+uv run python -m json.tool evaluation/suites/work-tree-fork-runtime-live-candidate.json
+uv run pytest tests/api/test_persistence_task_runtime_api.py -q -k "fork_agent_run_fields or incomplete_fork_agent_run_fields or clearing_required_fork_agent_run_fields" --basetemp=tmp/pytest-fork-run-required
+corepack pnpm run eval:work-tree:fork-runtime-harness
+corepack pnpm run eval:work-tree:fork-runtime-live
+uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_runtime_harness or fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields or incomplete_fork_agent_run_fields or clearing_required_fork_agent_run_fields" --basetemp=tmp/pytest-fork-batch6-required-regression
+uv run ruff check packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/api/test_persistence_task_runtime_api.py
 ```

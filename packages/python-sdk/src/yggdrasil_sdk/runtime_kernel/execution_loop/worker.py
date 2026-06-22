@@ -1,6 +1,75 @@
-from .state import *  # noqa: F401,F403
-from .transitions import _finalize_execution_transition
 from datetime import timedelta
+from typing import Any
+
+from .state import (
+    AGENT_RUNTIME_QUEUE,
+    HookNames,
+    MemoryRepository,
+    NodeRepository,
+    RedisCoordinator,
+    RuntimeRepository,
+    SafeShutdownInterrupt,
+    TaskRepository,
+    TaskSnapshotSummary,
+    TaskTakeoverProtocol,
+    WorkContextStack,
+    WorkspaceBootstrapRepository,
+    _append_context_length_observation,
+    _apply_assistant_memory_write_tags,
+    _apply_parsed_assistant_work_tree_actions,
+    _assistant_text_summary,
+    _build_execution_write_payload,
+    _build_pause_snapshot_state,
+    _build_restart_request_state,
+    _build_runtime_metrics_snapshot,
+    _build_window_execution_record,
+    _cache_package_entry,
+    _call_module_hook,
+    _coerce_takeover_protocol,
+    _context_item_from_retrieved_node,
+    _dedupe_memory_records,
+    _enforce_consumed_budget,
+    _extract_assistant_work_tree_actions,
+    _int_metric,
+    _logger,
+    _materialize_runtime_context_items,
+    _max_uncompressed_tail_before_decompress,
+    _memory_retrieval_token_budget,
+    _model_invocation_output_labels,
+    _persist_runtime_event,
+    _persist_runtime_metrics_artifact,
+    _persist_window_execution_artifact,
+    _record_pruning_events,
+    _runtime_metrics,
+    _should_trim_retrieved_context,
+    _trim_context_items_to_token_budget,
+    _updated_budget_state,
+    _window_restart_trigger,
+    _work_tree_focus_label,
+    _work_tree_node_id_from_request,
+    build_model_route_decision,
+    build_takeover_continuation_request,
+    build_task_takeover_protocol,
+    call_module_hook,
+    collect_hook_results,
+    fail_current_work_node,
+    finalize_task_takeover_protocol,
+    get_persistence_runtime,
+    invoke_runtime_completion,
+    load_package_entry,
+    load_runtime_candidate_models,
+    new_id,
+    normalize_excerpt,
+    perf_counter,
+    persist_stack_snapshot,
+    persist_task_takeover_protocol,
+    save_pending_tool_calls_snapshot,
+    summarize_task_takeover_protocol,
+    sync_takeover_runtime_state,
+    utc_now,
+    validate_memory_write,
+)
+from .transitions import _finalize_execution_transition
 from ..root_mount import (
     _elapsed_ms,
     _enforce_budget,
@@ -595,6 +664,26 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             protected_items = request.get("protectedItems") if isinstance(request.get("protectedItems"), list) else []
             task_type = _infer_task_type(task, request)
             run_type = str(request.get("runType") or "main")
+            if run_type == "fork":
+                assigned_node_id = str(
+                    request.get("assignedWorkTreeNodeId")
+                    or request.get("workTreeNodeId")
+                    or request.get("currentNodeId")
+                    or ""
+                ).strip()
+                if assigned_node_id:
+                    request.setdefault("assignedWorkTreeNodeId", assigned_node_id)
+                    request.setdefault("workTreeNodeId", assigned_node_id)
+                    request.setdefault("currentNodeId", assigned_node_id)
+                    request.setdefault("topFrameId", assigned_node_id)
+                    request.setdefault("workingNodeAnnotation", f"<Working_Node: {assigned_node_id}>")
+                    memory_retrieval_state = (
+                        dict(request.get("memoryRetrievalState"))
+                        if isinstance(request.get("memoryRetrievalState"), dict)
+                        else {}
+                    )
+                    memory_retrieval_state.setdefault("workTreeNodeId", assigned_node_id)
+                    request["memoryRetrievalState"] = memory_retrieval_state
             resume_path = (
                 "restart-snapshot"
                 if snapshot is not None and command == "resume" and snapshot.snapshot_type == "restart"
@@ -739,7 +828,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             }
 
             # Only sync task execution properties if TaskRuntimeState is loaded/established:
-            if task_runtime_state is not None:
+            if task_runtime_state is not None and run_type != "fork":
                 if task_runtime_state.current_node_id is not None:
                     request["currentNodeId"] = task_runtime_state.current_node_id
                 if task_runtime_state.working_node_annotation is not None:
@@ -764,7 +853,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     "runtimeTimings": dict(runtime_timings),
                 }
 
-            if _coerce_takeover_protocol(request.get("takeoverProtocol")) is None:
+            if run_type != "fork" and _coerce_takeover_protocol(request.get("takeoverProtocol")) is None:
                 seeded_protocol = build_task_takeover_protocol(
                     task=task,
                     task_type=task_type,
@@ -783,7 +872,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     root_mount["takeoverProtocol"] = request["takeoverProtocol"]
 
             preview_takeover_protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
-            if preview_takeover_protocol is not None:
+            if preview_takeover_protocol is not None and run_type != "fork":
                 preview_takeover_protocol, preview_stack = sync_takeover_runtime_state(
                     request,
                     root_mount,
@@ -852,7 +941,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
 
             takeover_prepare_started_at = perf_counter()
             takeover_protocol = _coerce_takeover_protocol(request.get("takeoverProtocol"))
-            if takeover_protocol is None:
+            if takeover_protocol is None and run_type != "fork":
                 takeover_protocol = build_task_takeover_protocol(
                     task=task,
                     task_type=task_type,
@@ -861,7 +950,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     root_mount=root_mount,
                     current_context=current_context,
                 )
-            if takeover_protocol is not None:
+            if takeover_protocol is not None and run_type != "fork":
                 request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
                 request["taskObjective"] = takeover_protocol.objective
                 request.setdefault("currentObjective", takeover_protocol.objective)
@@ -928,20 +1017,28 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if parent_run_id is None and snapshot is not None and command == "resume":
                 parent_run_id = snapshot.agent_run_id
             run_id = str(request.get("agentRunId") or new_id("run", task_id, utc_now().isoformat()))
-            run = task_repository.create_agent_run(
-                task_id,
-                {
-                    "id": run_id,
-                    "parentRunId": parent_run_id,
-                    "runType": run_type,
-                    "status": "mounting",
-                    "selectedModel": route_preview["selectedModel"],
-                    "selectedProvider": route_preview.get("selectedProvider"),
-                    "nextObjective": request.get("nextObjective") or task.current_objective or task.goal,
-                    "windowIndex": runtime_metrics["windowIndex"],
-                    "restartCount": runtime_metrics["restartCount"],
-                    "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
-                },
+            run_payload = {
+                "id": run_id,
+                "parentRunId": parent_run_id,
+                "runType": run_type,
+                "forkRootRunId": request.get("forkRootRunId"),
+                "forkDepth": request.get("forkDepth", 0),
+                "assignedWorkTreeNodeId": request.get("assignedWorkTreeNodeId"),
+                "parentContextAnchor": request.get("parentContextAnchor"),
+                "forkGroupId": request.get("forkGroupId"),
+                "status": "mounting",
+                "selectedModel": route_preview["selectedModel"],
+                "selectedProvider": route_preview.get("selectedProvider"),
+                "nextObjective": request.get("nextObjective") or task.current_objective or task.goal,
+                "windowIndex": runtime_metrics["windowIndex"],
+                "restartCount": runtime_metrics["restartCount"],
+                "cumulativeWindowSpanTokens": runtime_metrics["cumulativeWindowSpanTokens"],
+            }
+            existing_run = task_repository.get_agent_run(run_id)
+            run = (
+                task_repository.update_agent_run(run_id, run_payload)
+                if existing_run is not None
+                else task_repository.create_agent_run(task_id, run_payload)
             )
             if takeover_protocol is not None:
                 takeover_protocol, work_context_stack = sync_takeover_runtime_state(
@@ -974,7 +1071,9 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 {
                     "status": "running",
                     "currentFocus": (
-                        (_work_tree_focus_label(takeover_protocol) if takeover_protocol is not None else None)
+                        task.current_focus
+                        if run_type == "fork"
+                        else (_work_tree_focus_label(takeover_protocol) if takeover_protocol is not None else None)
                         or request.get("currentFocus")
                         or task.current_focus
                         or f"{run_type}-agent-execution"
@@ -1091,7 +1190,10 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                             )
                 runtime_timings["contextPruningMs"] = _elapsed_ms(pruning_started_at)
 
-            execution_actor_id = str(request.get("executionActorId") or ("subagent" if run_type == "subagent" else "main-agent"))
+            execution_actor_id = str(
+                request.get("executionActorId")
+                or ("subagent" if run_type == "subagent" else "fork-agent" if run_type == "fork" else "main-agent")
+            )
             llm_invoke_started_at = perf_counter()
             effective_context = pruning_result.get("retainedItems") if isinstance(pruning_result, dict) and isinstance(pruning_result.get("retainedItems"), list) else current_context
             if pruning_result is not None:
@@ -1703,10 +1805,6 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                         }
                     ],
                     "candidateEdges": [],
-                    "ownerProfileId": task.owner_profile_id,
-                    "subject": request.get("subject") or f"profile:{task.owner_profile_id}",
-                    "relation": "write",
-                    "nodePayload": write_payload,
                     "rootMount": root_mount,
                     "resumePath": resume_path,
                 },

@@ -14,6 +14,14 @@ from .execution_control import (
     save_current_task_snapshot,
 )
 from .execution_loop import execute_main_agent_work_item
+from .fork_runtime import (
+    ForkMergeAndBatchResult,
+    ForkResultEnvelope,
+    ForkRuntimeBatchResult,
+    QueuedForkRun,
+    merge_fork_result_and_plan_next_batch,
+    queue_fork_batch,
+)
 from .shutdown_control import clear_shutdown, is_shutdown_requested, request_shutdown
 from .snapshot import save_pending_tool_calls_snapshot
 
@@ -26,9 +34,15 @@ __all__ = [
     "cancel_task_execution",
     "create_task_branch_from_snapshot",
     "execute_main_agent_work_item",
+    "ForkMergeAndBatchResult",
+    "ForkResultEnvelope",
+    "ForkRuntimeBatchResult",
     "is_shutdown_requested",
     "load_package_entry",
+    "merge_fork_result_and_plan_next_batch",
     "post_task_mailbox_message",
+    "QueuedForkRun",
+    "queue_fork_batch",
     "prepare_pause_snapshot",
     "pause_task_execution",
     "queue_main_agent_execution",

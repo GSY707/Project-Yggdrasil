@@ -1,7 +1,53 @@
-from ._common import *
+from hashlib import sha256
+
+from ._common import (
+    DEFAULT_APP_ID,
+    DEFAULT_BRANCH_ID,
+    DEFAULT_OWNER_PROFILE_ID,
+    DEFAULT_PROJECT_ID,
+    DEFAULT_SPACE_ID,
+    AgentRunORM,
+    AgentRunRecord,
+    Any,
+    BudgetState,
+    ExternalRef,
+    MemoryBranchORM,
+    ProjectORM,
+    RuntimeWorkItemORM,
+    RuntimeWorkItemRecord,
+    Session,
+    SpaceORM,
+    TaskBranchORM,
+    TaskBranchRecord,
+    TaskORM,
+    TaskRecord,
+    TaskResumeAttemptORM,
+    TaskResumeAttemptRecord,
+    TaskSnapshotORM,
+    TaskSnapshotSummary,
+    _agent_run_record,
+    _runtime_work_item_record,
+    _task_branch_record,
+    _task_record,
+    _task_resume_attempt_record,
+    _task_snapshot_record,
+    datetime,
+    new_id,
+    sa,
+    utc_now,
+)
 from .platform_core import WorkspaceBootstrapRepository
 from ..write_queue import run_serialized_write
-from hashlib import sha256
+
+
+ACTIVE_FORK_RUN_STATUSES = {"initializing", "mounting", "running", "waiting-tool"}
+REQUIRED_FORK_RUN_FIELDS = (
+    "parentRunId",
+    "forkRootRunId",
+    "assignedWorkTreeNodeId",
+    "parentContextAnchor",
+    "forkGroupId",
+)
 
 
 def _hash_resume_token(value: str | None) -> str | None:
@@ -48,6 +94,23 @@ def _ensure_task_workspace(
         space_id=space_id,
         branch_name=branch_name,
     )
+
+
+def _required_str(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized:
+        raise ValueError(f"runType=fork requires {key}.")
+    return normalized
+
+
+def _validate_fork_agent_run_fields(payload: dict[str, Any]) -> None:
+    if str(payload.get("runType") or "main") != "fork":
+        return
+    for key in REQUIRED_FORK_RUN_FIELDS:
+        _required_str(payload, key)
+    if int(payload.get("forkDepth") or 0) < 1:
+        raise ValueError("runType=fork requires forkDepth >= 1.")
 
 class TaskRepository:
     def __init__(self, session: Session) -> None:
@@ -152,13 +215,48 @@ class TaskRepository:
                 return _agent_run_record(model)
         return None
 
+    def count_active_fork_runs(self, task_id: str, *, fork_root_run_id: str | None = None) -> int:
+        statement = sa.select(sa.func.count()).select_from(AgentRunORM).where(
+            AgentRunORM.task_id == task_id,
+            AgentRunORM.run_type == "fork",
+            AgentRunORM.status.in_(ACTIVE_FORK_RUN_STATUSES),
+        )
+        if fork_root_run_id is not None:
+            statement = statement.where(AgentRunORM.fork_root_run_id == fork_root_run_id)
+        return int(self.session.execute(statement).scalar_one())
+
     def update_agent_run(self, agent_run_id: str, payload: dict[str, Any]) -> AgentRunRecord:
         run = self.session.get(AgentRunORM, agent_run_id)
         if run is None:
             raise KeyError(f"Agent run {agent_run_id} not found.")
+        next_payload = {
+            "parentRunId": run.parent_run_id,
+            "runType": run.run_type,
+            "forkRootRunId": run.fork_root_run_id,
+            "forkDepth": run.fork_depth,
+            "assignedWorkTreeNodeId": run.assigned_work_tree_node_id,
+            "parentContextAnchor": run.parent_context_anchor,
+            "forkGroupId": run.fork_group_id,
+        }
+        next_payload.update(payload)
+        _validate_fork_agent_run_fields(next_payload)
 
         if "parentRunId" in payload:
             run.parent_run_id = str(payload["parentRunId"]) if payload["parentRunId"] is not None else None
+        if "forkRootRunId" in payload:
+            run.fork_root_run_id = str(payload["forkRootRunId"]) if payload["forkRootRunId"] is not None else None
+        if "forkDepth" in payload:
+            run.fork_depth = max(int(payload["forkDepth"]), 0)
+        if "assignedWorkTreeNodeId" in payload:
+            run.assigned_work_tree_node_id = (
+                str(payload["assignedWorkTreeNodeId"]) if payload["assignedWorkTreeNodeId"] is not None else None
+            )
+        if "parentContextAnchor" in payload:
+            run.parent_context_anchor = (
+                str(payload["parentContextAnchor"]) if payload["parentContextAnchor"] is not None else None
+            )
+        if "forkGroupId" in payload:
+            run.fork_group_id = str(payload["forkGroupId"]) if payload["forkGroupId"] is not None else None
         if "selectedModel" in payload:
             run.selected_model = str(payload["selectedModel"])
         if "selectedProvider" in payload:
@@ -240,6 +338,7 @@ class TaskRepository:
         task = self.session.get(TaskORM, task_id)
         if task is None:
             raise KeyError(f"Task {task_id} not found.")
+        _validate_fork_agent_run_fields(payload)
         now = utc_now()
         app_id = str(payload.get("appId") or task.app_id or DEFAULT_APP_ID)
         if task.app_id and app_id != task.app_id:
@@ -252,6 +351,15 @@ class TaskRepository:
             branch_id=task.branch_id,
             parent_run_id=str(payload.get("parentRunId")) if payload.get("parentRunId") is not None else None,
             run_type=str(payload.get("runType") or "main"),
+            fork_root_run_id=str(payload.get("forkRootRunId")) if payload.get("forkRootRunId") is not None else None,
+            fork_depth=max(int(payload.get("forkDepth", 0)), 0),
+            assigned_work_tree_node_id=(
+                str(payload.get("assignedWorkTreeNodeId")) if payload.get("assignedWorkTreeNodeId") is not None else None
+            ),
+            parent_context_anchor=(
+                str(payload.get("parentContextAnchor")) if payload.get("parentContextAnchor") is not None else None
+            ),
+            fork_group_id=str(payload.get("forkGroupId")) if payload.get("forkGroupId") is not None else None,
             selected_model=str(payload.get("selectedModel") or "gpt-5.4"),
             selected_provider=str(payload.get("selectedProvider")) if payload.get("selectedProvider") is not None else None,
             route_decision_id=str(payload.get("routeDecisionId")) if payload.get("routeDecisionId") is not None else None,

@@ -15,9 +15,18 @@
 | `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md` | 多 Agent 自分裂与工作树图调度设计盘点（2026-06-20）：梳理现有 Sub-Agent / Fork / 联邦 Agent、工作树 `dependsOn` / `relationIds` / `priority`、知识继承、模型路由、预算资源和并发冲突文档，并给出下一步应补的图关系、局部 ready-set 调度、Fork、自分裂、知识继承、冲突合同、控制面和评测规格 |
 | `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` | 工作树图与 Fork 并行协议 v0.1（2026-06-21）：正式冻结父节点局部 ready-set、控制流边 / 信息流边分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层图边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前最小合同和第一版风险检测点 |
 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` | 工作树图与 Fork 并行测试任务设计（2026-06-21）：定义 T0-T7 仿真任务、R1-R4 真实/仿真真实任务、递归 Fork 与 `maxForks` 同时活跃上限、语义正确性/加速收益/质量指标、Batch 1-5 后续实现依赖和需要用户拍板的 D1-D7 决策 |
-| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划（2026-06-21，PR1 进展已同步）：按纯函数图调度、AgentRun Fork 字段、Fork batch planner、worker Fork 运行视图、结果合并和 runtime harness 拆分 PR；当前已落地 graph reducer 与 T0/T2/T3/T4/T7 测试，Batch 2-6 仍未完成 |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划（2026-06-21，PR1/Batch 2/Batch 3/Batch 4/Batch 5/Batch 6 deterministic harness 进展已同步）：按纯函数图调度、AgentRun Fork 字段、Fork batch planner、worker Fork 运行视图、结果合并和 runtime harness 拆分 PR；当前已落地 graph reducer、AgentRun Fork 字段、fork work item planner、worker child run view、Fork result envelope merge、auto next batch DB work item、真实 transitions/Redis enqueue、两轮 deterministic worker harness、Fork 必填字段硬校验和 live candidate 入口；live provider 证据因未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 记录为 blocked |
 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行 PR1 纯函数 reducer：复用 `WorkTreeProtocol` / `WorkTreeNode`，计算 direct child ready/blocked、延迟信息流 pending 摘要、`maxForks` 活跃槽位和可启动 Fork candidates；不创建 subagent task/branch，不触碰 worker 或数据库迁移 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py` | Fork batch / result merge runtime helper（Batch 3/5）：把 ready-set launch candidates 转成 `runType=fork` 的 AgentRun 与 `core.agent.main.execute` / `intent=fork` 的 RuntimeWorkItem；同批 Fork 共享 `parentContextAnchor` / `forkGroupId`；`merge_fork_result_and_plan_next_batch()` 可合并 ForkResultEnvelope、继承更新后的 `workTreeSnapshot` 并创建下一批 DB work item |
 | `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 ready-set / Fork 并行 PR1 回归：覆盖 T0 diamond ready-set、T2 延迟信息流、T3 自动 batch 候选、T4 parent replan gate、T7 递归 Fork active limit |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py` | Agent runtime worker 主入口；Batch 4 已识别 `runType=fork`，复用预创建 fork AgentRun，并把 fork work item 转成 run-local child 指针、Working_Node 和 memory retrieval state |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py` | Agent runtime 完成/续跑/审批流转；Batch 4 已隔离 fork 完成态，Batch 5 已在 fork 完成分支接入 result envelope merge、auto next batch 和 Redis enqueue，仍不推进 task-global status/currentFocus |
+| `tests/runtime/test_fork_launch_planner.py` | Fork batch launch planner / worker run view 回归（Batch 3-4）：验证 `maxForks` 可用槽位、同批上下文锚点、不同 assigned child、main activity + fork intent work item、waiting candidates，以及 worker 消费 fork work item 时保持 child view 且不覆盖父任务焦点 |
+| `tests/runtime/test_fork_merge_and_auto_batch.py` | Fork result merge / auto batch 回归（Batch 5）：验证 result envelope 合并 child summary/evidence/failure、`planImpact=none` 自动创建并 enqueue 下一批 work item、`requires-parent-replan` 禁止自动启动、pending 信息拒绝大段 raw content、mixed outcome 只启动未阻塞 ready child |
+| `tests/runtime/test_work_tree_graph_fork_runtime_harness.py` | Fork runtime deterministic harness（Batch 6）：两轮真实 worker 消费 fork work item，fake LLM 真实写入 model invocation 与 prompt compile artifact，验证 AgentRun 元数据、work item 状态、prompt artifact、workTreeSnapshot 继承、pending summary-only 信息流和不创建 child task/task branch |
+| `evaluation/suites/work-tree-fork-runtime-harness.json` | Work-Tree Fork Runtime Harness 评测套件（Batch 6）：deterministic harness 默认入口，`runtime.fork_harness` 会执行两轮 worker harness pytest 并把通过合同写入 evaluation metrics |
+| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate 评测套件（Batch 6）：nightly/live provider 候选入口；需要 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 和 provider key，否则记录为 blocked/non-pass |
+| `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py` | AgentRun Fork 字段迁移（2026-06-21）：为 `agent_runs` 增加 `fork_root_run_id`、`fork_depth`、`assigned_work_tree_node_id`、`parent_context_anchor`、`fork_group_id` 及 Fork 根/节点/批次索引，支撑 Batch 2 审计与恢复 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发与稳定性、状态机恢复链、M9 控制面与验收链调查基线（2026-06-11）：确认 M9 control-plane 当前通过、M9 acceptance 断在 pause/resume 后续状态收口与预算失败，并列出 worker 队列、任务锁、snapshot 恢复、skip 测试和发布门禁的修复顺序 |
 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止、暂停、继续与恢复能力调查（2026-06-18，2026-06-19 同步新实现）：当前公开入口已切为 `/pause`、`/resume`、`/cancel`、`/snapshots/save-current`、`/branches`，恢复主链改为 Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked` 和 Cancel audit 30 天 |
@@ -799,6 +808,10 @@ evaluation/
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + LongCat 2；强调 tool-rich 学习过程、计划-步骤-动作结构与阶段汇报）
     ├── g4-graduate-ml-deepseek-v4.json
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + DeepSeek V4；用于 LongCat 以外的结构化对照）
+    ├── work-tree-fork-runtime-harness.json
+                                    #   工作树图 Fork Batch 6 deterministic runtime harness（执行两轮 worker harness pytest 并写入 evaluation metrics）
+    ├── work-tree-fork-runtime-live-candidate.json
+                                    #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；未开启时记录 blocked/non-pass）
     ├── g4-real-task-window-parity.json
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
@@ -828,6 +841,8 @@ evaluation/
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
+| `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
+| `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
 
 ---
 
@@ -1102,9 +1117,18 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md` | 多 Agent 自分裂与工作树图调度设计盘点：梳理 Sub-Agent / Fork / 联邦 Agent、工作树图字段、知识继承、模型路由、预算资源和冲突处理现状，明确下一批应补的正式规格与非目标 |
 | `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` | 工作树图与 Fork 并行协议：冻结父节点局部 ready-set、`dependsOn` / `relationIds` 分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前合同和第一版验收场景 |
 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` | 工作树图与 Fork 并行测试任务设计：定义 T0-T7 仿真任务、R1-R4 真实/仿真真实任务、递归 Fork 与 `maxForks` 同时活跃上限、指标、Batch 1-5 实现依赖和 D1-D7 用户决策项 |
-| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划：把协议落到 graph reducer、AgentRun Fork 字段、Fork planner、worker 运行视图、结果合并、runtime harness 和 PR 切分；当前已记录 PR1 reducer/测试进展与 Batch 2-6 未完成项 |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划：把协议落到 graph reducer、AgentRun Fork 字段、Fork planner、worker 运行视图、结果合并、runtime harness 和 PR 切分；当前已记录 PR1 reducer/测试、Batch 2 AgentRun 字段与活跃 Fork 计数、Batch 3 fork work item planner、Batch 4 worker child run view、Batch 5 result merge + transitions/Redis enqueue、Batch 6 deterministic runtime harness、Fork 必填字段硬校验和 live candidate blocked 证据 |
 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行 reducer：计算 direct child ready/blocked、延迟 pending 信息流、active fork count、available slots 和启动候选；PR1 阶段不触碰 worker/DB/subagent |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py` | Fork batch / result merge runtime helper：把 ready-set 可启动项创建为 fork AgentRun 与 main activity / fork intent work item；`merge_fork_result_and_plan_next_batch()` 支持合并 ForkResultEnvelope、继承更新后的 workTreeSnapshot 并创建下一批 DB work item；真实 fork 完成路径由 transitions 负责 Redis enqueue |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py` | Agent runtime worker 主入口：Batch 4 已识别 `runType=fork`，复用预创建 fork AgentRun，并为 fork work item 建立 child-local request 指针 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py` | Agent runtime 完成流转：Batch 4 已隔离 fork 完成态，避免 fork 完成覆盖父任务全局 status/currentFocus |
 | `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 / Fork 并行 PR1 默认 CI 回归：锁住 T0/T2/T3/T4/T7 语义 |
+| `tests/runtime/test_fork_launch_planner.py` | Fork launch planner / worker run view 默认 CI 回归：锁住 maxForks 槽位、parent context anchor、forkGroupId、assigned child、work item envelope，以及 fork worker child view |
+| `tests/runtime/test_fork_merge_and_auto_batch.py` | Fork result merge / auto batch 默认 CI 回归：锁住 ForkResultEnvelope、parent replan gate、pending summary-only 合同、mixed outcome、下一批 DB work item 创建和真实 worker enqueue |
+| `tests/runtime/test_work_tree_graph_fork_runtime_harness.py` | Fork runtime deterministic harness 默认 CI 回归：两轮 worker 真实消费 fork work item，fake LLM 真实落库 model invocation / prompt artifact，锁住 AgentRun 元数据、work item completed、artifact `runType=fork`、workTreeSnapshot 继承、pending summary-only 信息流和无 child task/task branch |
+| `evaluation/suites/work-tree-fork-runtime-harness.json` | Work-Tree Fork Runtime Harness suite：Batch 6 deterministic harness 的默认评测入口，已通过 `eval:work-tree:fork-runtime-harness` 生成正式 evaluation metrics |
+| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate suite：Batch 6 nightly/live provider 候选入口；未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 时记录为 blocked/non-pass |
+| `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py` | AgentRun Fork 字段迁移：为 `agent_runs` 增加 Fork tree 根、深度、assigned work-tree node、父上下文锚点和 sibling fork group 字段 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
 | `docs/development/TASK_STOP_CONTINUE_CAPABILITY_INVESTIGATION_2026_06_18.md` | 任务停止/继续能力调查：记录 API/UI/runtime/module/test 能力基线；2026-06-19 已同步 `/pause`、Durable Snapshot、ResumeAttempt、持久 WorkItem、`resume-blocked`、Cancel audit 与手动保存/分支的新实现口径 |
@@ -1153,6 +1177,8 @@ docs/
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
 | 工作树图 ready-set / Fork 并行纯函数调度 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
+| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
+| AgentRun Fork 元数据持久化与活跃 Fork 计数 | `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`、`packages/python-sdk/src/yggdrasil_sdk/domain.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`、`migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`tests/api/test_persistence_task_runtime_api.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
 | 某个 API 路由实现 | `services/core-api/src/yggdrasil_core_api/api/routes/<resource>.py` |
@@ -1198,3 +1224,5 @@ docs/
 | 工作树图 / Fork 并行测试任务与后续批次决策 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` |
 | 工作树图 / Fork 并行实现计划与 PR 切分 | `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` |
 | 工作树图 / Fork 并行 PR1 reducer 与默认测试 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
+| 工作树图 / Fork 并行 Batch 2 持久化字段与回归 | `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`tests/api/test_persistence_task_runtime_api.py` |
+| 工作树图 / Fork 并行 Batch 3-6 planner、work item payload、worker run view、result merge helper 与 deterministic/runtime-live 评测入口 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
