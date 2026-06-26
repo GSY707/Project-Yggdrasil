@@ -1038,7 +1038,7 @@ class TaskTakeoverProtocol(BaseModel):
     task_type: str = Field(alias="taskType")
     run_type: str = Field(alias="runType")
     current_phase: Literal["objective", "constraints", "plan", "confirm", "execute", "verify", "deliver"] = Field(alias="currentPhase")
-    status: Literal["prepared", "executing", "verified", "completed", "needs-clarification"]
+    status: Literal["prepared", "executing", "verified", "completed", "needs-clarification", "failed"]
     objective: str
     objective_summary: str = Field(alias="objectiveSummary")
     ambiguities: list[TaskTakeoverAmbiguity] = Field(default_factory=list)

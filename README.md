@@ -230,7 +230,7 @@ corepack pnpm eval:work-tree:fork-runtime-live
 
 `corepack pnpm eval:g4:graduate-ml:longcat2` 与 `corepack pnpm eval:g4:graduate-ml:deepseek-v4` 是 Graduate Researcher 应用的机器学习研究生 live 入口，重点检查 tool-rich 学习过程、预算、证据、阶段汇报和人工评审占位。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 live provider matrix，`corepack pnpm eval:g4:real-task-unrelated:dual-live` 用与本项目无关的 incident RCA 题面对照 LongCat 与 DeepSeek，`corepack pnpm eval:g4:work-tree-debug` 是显式工作树调试 harness。
 
-`corepack pnpm eval:work-tree:fork-runtime-harness` 是工作树图 Fork Batch 6 deterministic runtime harness，会通过真实 worker 消费 fork work item 并验证 AgentRun、prompt artifact、workTreeSnapshot 和 pending summary-only 信息流。`corepack pnpm eval:work-tree:fork-runtime-live` 是 nightly/live 候选入口；必须先设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 并配置 provider key，否则会记录为 blocked 而不是误报通过。
+`corepack pnpm eval:work-tree:fork-runtime-harness` 是工作树图 Fork Batch 6 deterministic runtime harness，会通过真实 worker 消费 fork work item 并验证 AgentRun、prompt artifact、workTreeSnapshot 和 pending summary-only 信息流。`corepack pnpm eval:work-tree:fork-runtime-live` 是 nightly/live 候选入口；必须先设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 并配置 provider key，否则会记录为 blocked 而不是误报通过。开启 live 后，suite 会关闭模型 fallback，要求 `longcat / LongCat-2.0-Preview` 真实 invocation、prompt compile artifact 和 live invocation evidence 与 runtime completed 终态达标；2026-06-25 已通过 `evalrun_69093187bf6c46e587c3`。
 
 历史窗口 stress 与真实任务 parity suite 文件仍保留在 `evaluation/suites/` 作为专项资产，但当前根 `package.json` 不再暴露对应 `pnpm` 脚本。若恢复这些入口，必须同时更新 `package.json`、README 和 `docs/DIRECTORY_REFERENCE.md`。
 
@@ -290,3 +290,4 @@ corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validati
 - 基于 stress + real-task 两条 live 证据，重新冻结 `restartCount`、`cumulativeWindowSpanTokens`、`restartSuccessRate0_1`、`goalCompletionParity0_1`、`deliveryEquivalence0_1` 与 `qualityDeltaToLongWindow0_100` 的正式门槛。
 - 在上述主线完成前，只维持必要的 G4 provider matrix 样本补录与最小非阻塞技术债清理，避免被次要事项分散。
 - 相关研究入口见 `docs/research/pseudo-infinite-context-window-roadmap-2026-05-16.md`、`docs/research/g4-long-task-window-restart-baseline-2026-05-15.md` 与 `docs/research/g4-real-task-window-parity-rerun-log-audit-2026-05-16.md`。
+

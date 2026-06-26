@@ -1,7 +1,68 @@
 from __future__ import annotations
 
-from .core import *  # noqa: F403,F401
-from .artifacts import *  # noqa: F403,F401
+from time import perf_counter
+from typing import Any
+
+from .artifacts import (
+    _execute_resumed_tool_calls,
+    _filter_tool_calls_by_allowed_names,
+    _is_idempotent_tool_round,
+    _normalize_tool_calls,
+    _persist_prompt_assets,
+    _request_file_payload,
+    _resolve_tool_name_policy,
+    _response_file_payload,
+    _runtime_metrics_for_response,
+    _assistant_tool_calls_payload,
+    _to_serialized_messages,
+    _tool_round_limit_result,
+    _tool_round_signature,
+    _upsert_task_conversation_record,
+)
+from .core import (
+    FALLBACK_ROUTE_CANDIDATE,
+    _DUPLICATE_TOOL_ROUND_THRESHOLD,
+    _MAX_TOOL_RETRIES,
+    _PENDING_TOOL_CALLS_KIND,
+    RuntimeRepository,
+    SafeShutdownInterrupt,
+    _append_context_length_observation,
+    _assistant_tool_round_message,
+    _canonical_tool_name,
+    _check_post_invocation_budget,
+    _check_pre_invocation_budget,
+    _default_max_tokens,
+    _default_temperature,
+    _elapsed_ms,
+    _empty_usage_totals,
+    _estimate_message_tokens,
+    _estimated_input_tokens_for_precheck,
+    _estimated_output_tokens_for_precheck,
+    _execute_tool_with_isolation,
+    _first_token_latency_ms_from_round_summaries,
+    _invocation_file_ref,
+    _local_fallback_result,
+    _merge_usage,
+    _normalize_route_decision,
+    _requested_reasoning_effort,
+    _requested_thinking_mode,
+    _runtime_audit_level,
+    _should_checkpoint_for_pause,
+    _tool_name_alias_map,
+    build_llm_tool_specs,
+    compile_runtime_prompt,
+    ensure_state_subdir,
+    finish_langfuse_generation,
+    new_id,
+    observe_span,
+    record_log,
+    record_metric,
+    resolve_workspace_root,
+    start_langfuse_generation,
+    tool_result_to_message_content,
+    utc_now,
+    write_json,
+)
 
 def invoke_runtime_completion(
     session,
@@ -57,7 +118,7 @@ def invoke_runtime_completion(
         if isinstance(tool, dict) and tool.get("name")
     }
     tool_name_policy = _resolve_tool_name_policy(request, all_registered_tools_by_name)
-    allowed_tool_names = set(tool_name_policy.get("allowedNames") or [])
+    allowed_tool_names = set(tool_name_policy.get("allowedNames") or []) if allow_tool_execution else set()
     effective_registered_tools = [
         dict(tool)
         for tool in compiled_prompt.registered_tools
@@ -331,6 +392,9 @@ def invoke_runtime_completion(
                 budget_overrun_result = post_check.model_dump(by_alias=True, mode="json")
                 round_modes.append(str(result.get("mode") or "unknown"))
                 raw_tool_calls = [call for call in result.get("toolCalls") or [] if isinstance(call, dict) and call.get("name")]
+                ignored_tool_calls = [str(call.get("name")) for call in raw_tool_calls] if not allow_tool_execution else []
+                if not allow_tool_execution:
+                    raw_tool_calls = []
                 tool_calls = _normalize_tool_calls(raw_tool_calls, tool_name_aliases)
                 tool_calls, blocked_tool_calls = _filter_tool_calls_by_allowed_names(tool_calls, allowed_tool_names)
                 current_tool_round_signature = _tool_round_signature(tool_calls) if tool_calls else None
@@ -347,6 +411,7 @@ def invoke_runtime_completion(
                         "latencyMs": _elapsed_ms(round_started_at),
                         "reasoningContentPresent": bool(result.get("reasoningContent")),
                         "toolCalls": [str(call.get("name")) for call in tool_calls],
+                        "ignoredToolCalls": ignored_tool_calls,
                         "blockedToolCalls": blocked_tool_calls,
                         "duplicateToolRoundStreak": duplicate_tool_round_streak,
                         "budgetCheckResult": budget_check_result,

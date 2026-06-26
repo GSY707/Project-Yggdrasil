@@ -460,7 +460,7 @@ uv run python -m compileall packages/python-sdk/src/yggdrasil_sdk/runtime_kernel
 
 当前仍未完成：
 
-1. Batch 6：deterministic runtime harness 已完成；slow/nightly live provider 真实链路已补入口并在未开启 live 开关时记录为 blocked。
+1. Batch 6：deterministic runtime harness 已完成；slow/nightly live provider 真实链路已补入口，未开启 live 开关时记录为 blocked，开启 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 后已取得真实 LongCat provider evidence。
 2. `runType=fork` 的必填字段策略已收紧为 repository 硬校验。
 
 本轮验证命令：
@@ -581,7 +581,7 @@ uv run pytest tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_
 6. `evaluation/suites/work-tree-fork-runtime-harness.json`
    - 新增 Batch 6 deterministic evaluation suite：`runtime.fork_harness` 会执行 harness pytest，并把通过的合同写入 evaluation metrics。
 7. `evaluation/suites/work-tree-fork-runtime-live-candidate.json`
-   - 新增 nightly/live candidate suite：`runtime.fork_harness_live_candidate` 必须显式设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 才会走 live provider，否则记录为 `blocked` 且 suite metrics 为 non-pass。
+   - 新增 nightly/live candidate suite：`runtime.fork_harness_live_candidate` 必须显式设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 才会走 live provider，否则记录为 `blocked` 且 suite metrics 为 non-pass；开启 live 后要求 fallback 关闭、真实 `longcat / LongCat-2.0-Preview` invocation、prompt artifact 和 live invocation evidence 与 runtime completed 终态达标。
 8. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py`
    - 新增 `runtime.fork_harness` 与 `runtime.fork_harness_live_candidate` handler。
 9. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py`
@@ -593,9 +593,27 @@ uv run pytest tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_
 12. `tests/api/test_persistence_task_runtime_api.py`
    - 新增 repository/API 回归，验证缺少 fork 必填字段或更新清空必填字段会失败。
 
+2026-06-25 继续完成 live provider 长任务证据：
+
+1. `evaluation/suites/work-tree-fork-runtime-live-candidate.json`
+   - live candidate 增加显式 live invocation evidence 与 completed 终态口径：`YGGDRASIL_FORK_RUNTIME_LIVE=1` 后关闭 fallback，要求真实 `longcat / LongCat-2.0-Preview` invocation、prompt compile artifact、至少 2 次 live invocation 证据，并记录 runtime terminal 状态。
+   - 固定 `tokenBudgetTotal=200000`、`maxTokens=1400`、`maxWorkerRounds=6`、`planConfirmed=true`，并支持 paused 后自动 resume。
+2. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py`
+   - live LLM handler 从单轮 worker 扩展为多轮 worker，记录 `workerRounds`、`invocationCount`、`acceptedLiveInvocationEvidence`、`acceptedBudgetPause` 和 runtime terminal 状态。
+   - 失败摘要压缩为 round-level 状态，避免把完整 runtime payload 塞进错误。
+3. `packages/python-sdk/src/yggdrasil_sdk/contracts.py`
+   - `TaskTakeoverProtocol.status` 补齐正式 `failed` 状态，匹配 transitions / work tree 失败路径真实写入值。
+4. `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py` 与 `packages/python-sdk/src/yggdrasil_sdk/prompting.py`
+   - `allowToolExecution=false` 现在是硬开关：prompt 不再暴露结构化工具，runtime 也会把模型私自返回的 tool calls 记录为 `ignoredToolCalls`，不会进入工具执行循环。
+5. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`
+   - completed protocol / completed work-tree 在 delivery advance 入口直接返回 `completed`，不再因 root node 残留 pending children 重复进入 `parent-orchestration-required`。
+6. live provider 证据：
+   - `corepack pnpm run eval:work-tree:fork-runtime-live` 在 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 与 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 下通过，生成 `evalrun_69093187bf6c46e587c3`。
+   - 本次 passed metrics 记录 `provider=longcat`、`model=LongCat-2.0-Preview`、`invocationCount=2`、最新 `invocationId=llm_2dc66b87c9a8410a9bd3`、`totalTokens=5273`、`promptCompileArtifactId=promptcmp_4774d9474c4c435b904a`、`acceptedLiveInvocationEvidence=true`、`runtimeTerminalStatus=completed`、`taskStatus=completed`。
+
 当前仍未完成：
 
-1. slow/nightly live provider 真实链路和长任务收益证据仍未跑通；本轮已执行 `corepack pnpm eval:work-tree:fork-runtime-live`，结果正确记录为 `blocked`，阻塞原因是未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1`。
+1. live suite 已取得真实 provider completed 终态证据；后续可继续把 nightly 口径从“live evidence passed”收紧为“必须 completed”，并清理 `takeover.py` / `takeover_protocol_lifecycle.py` 的重复实现面。
 
 本轮验证命令：
 
@@ -615,3 +633,4 @@ corepack pnpm run eval:work-tree:fork-runtime-live
 uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_runtime_harness or fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields or incomplete_fork_agent_run_fields or clearing_required_fork_agent_run_fields" --basetemp=tmp/pytest-fork-batch6-required-regression
 uv run ruff check packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/api/test_persistence_task_runtime_api.py
 ```
+

@@ -1136,7 +1136,9 @@ def compile_runtime_prompt(
     app_manifest = resolved_registry["application"]
     profile = _select_prompt_profile(run_type, request, app_manifest, resolved_registry["promptProfiles"])
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
+    allow_tool_execution = bool(request.get("allowToolExecution", True))
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
+    prompt_visible_tools = resolved_registered_tools if allow_tool_execution else []
 
     task_runtime_state = request.get("taskRuntimeState")
     if isinstance(task_runtime_state, dict):
@@ -1152,10 +1154,6 @@ def compile_runtime_prompt(
         task_objective = None
         current_focus = None
         current_node_id = None
-        working_node_annotation = None
-        pc_memo = None
-        top_frame_id = None
-        stack_digest = None
         resume_message = ""
         restart_message = ""
         takeover_protocol = None
@@ -1185,15 +1183,6 @@ def compile_runtime_prompt(
         current_node_id = (
             task_runtime_state.current_node_id
             or _normalized_optional_text(request.get("currentNodeId"))
-        )
-        working_node_annotation = (
-            task_runtime_state.working_node_annotation
-            or _normalized_optional_text(request.get("workingNodeAnnotation"))
-            or _working_node_tag(current_node_id)
-        )
-        pc_memo = (
-            task_runtime_state.pc_memo
-            or _normalized_optional_text(request.get("pcMemo"))
         )
         resume_message = (
             task_runtime_state.resume_message
@@ -1257,7 +1246,7 @@ def compile_runtime_prompt(
             for section in [
                 "你只能通过结构化工具、MCP 泛型工具与消息通道触达外部世界，不得假设隐藏接口。",
                 "当前可见模块能力:\n" + _format_active_capabilities(active_capabilities),
-                "当前可见结构化工具描述:\n" + _format_registered_tools(resolved_registered_tools, strip_body=is_initial_awakening),
+                "当前可见结构化工具描述:\n" + _format_registered_tools(prompt_visible_tools, strip_body=is_initial_awakening),
             ]
             if section
         ),
@@ -1313,7 +1302,7 @@ def compile_runtime_prompt(
             user_sections["work_context_stack"] = _format_work_context_stack(work_context_stack)
         if memory_retrieval_state is not None:
             user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
-    user_sections["capability_protocol_index"] = _format_capability_protocol_index(active_capabilities, resolved_registered_tools)
+    user_sections["capability_protocol_index"] = _format_capability_protocol_index(active_capabilities, prompt_visible_tools)
     user_sections["mounted_context_items"] = _format_context_lines(current_context, strip_body=is_initial_awakening)
     user_sections["runtime_glossary"] = _format_runtime_glossary()
     user_sections["response_requirements"] = _format_response_requirements(request, seed_template, resume_path)

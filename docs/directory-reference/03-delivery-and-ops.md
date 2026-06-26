@@ -160,7 +160,7 @@ evaluation/
     ├── work-tree-fork-runtime-harness.json
                                     #   工作树图 Fork Batch 6 deterministic runtime harness（执行两轮 worker harness pytest 并写入 evaluation metrics）
     ├── work-tree-fork-runtime-live-candidate.json
-                                    #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；未开启时记录 blocked/non-pass）
+                                    #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；已通过真实 LongCat runtime completed 终态）
     ├── g4-real-task-window-parity.json
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
@@ -429,4 +429,5 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | release-check | 手动 | 默认不跑 live provider smoke / G4 provider matrix（可选开启） | ~30-60 min |
 
 ---
+
 

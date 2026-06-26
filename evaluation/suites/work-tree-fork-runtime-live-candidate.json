@@ -10,7 +10,7 @@
     "pass-rate",
     "provider-invocation-status",
     "prompt-artifact-coverage",
-    "runtime-completion"
+    "runtime-live-invocation-evidence"
   ],
   "cases": [
     {
@@ -22,6 +22,20 @@
       "taskGoal": "Exercise a longer runtime task with live provider after deterministic fork harness stability is confirmed.",
       "requireLive": true,
       "allowToolExecution": false,
+      "tokenBudgetTotal": 200000,
+      "costBudgetTotal": 5.0,
+      "maxTokens": 1400,
+      "maxWorkerRounds": 6,
+      "autoResumePaused": true,
+      "acceptBudgetPauseAsEvidence": true,
+      "minLiveWorkerRounds": 4,
+      "acceptLiveInvocationEvidence": true,
+      "minLiveInvocations": 2,
+      "includePayloads": false,
+      "resumeObjective": "Resume and finish the fork runtime live candidate evidence note with result, evidence, and remaining risk.",
+      "planConfirmed": true,
+      "currentFocus": "complete live fork runtime candidate evidence",
+      "currentObjective": "Produce a concise final evidence note for the fork runtime live candidate using the mounted context. Do not ask for clarification; finish with result, evidence, and remaining risk.",
       "requestedProvider": "longcat",
       "requestedModel": "LongCat-2.0-Preview",
       "tags": [

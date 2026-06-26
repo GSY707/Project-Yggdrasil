@@ -1111,6 +1111,14 @@ def advance_takeover_after_delivery(
 ) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None, dict[str, Any]]:
     if protocol is None:
         return None, None, {"transition": "completed", "requiresContinuation": False, "currentFocus": "completed"}
+    if protocol.status == "completed" or (protocol.work_tree is not None and protocol.work_tree.status == "completed"):
+        return protocol, work_context_stack, {
+            "transition": "completed",
+            "requiresContinuation": False,
+            "currentNodeId": protocol.work_tree.current_node_id if protocol.work_tree is not None else None,
+            "nextNodeId": None,
+            "currentFocus": "completed",
+        }
 
     current_node = _current_work_tree_node(protocol)
     if protocol.work_tree is not None and current_node is not None:

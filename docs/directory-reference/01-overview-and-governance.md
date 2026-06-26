@@ -10,7 +10,7 @@
 | `docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md` | 产品打包与官方远端数据能力需求差距（2026-06-04，2026-06-06 更新）：完整 Docker Compose 产品栈、Windows 未签名安装包/托盘/手动更新器、provider 启动阻塞、本地数据治理保护性 task 删除、产品栈快照/升级/回滚已进入预览可验证状态；托管 / SaaS 和官方远端数据服务实现仍是计划项 |
 | `docs/specs/data-governance-manifest-v0.1.md` | 数据治理清单与本地删除协议 v0.1：冻结数据资产 manifest、`/data-governance` 备份快照、删除 dry-run、保护性 task 硬删除、删除证明、审计表、外部 provider / 日志 / 备份保留边界 |
 | `docs/specs/remote-data-service-contract-v0.1.md` | 官方远端数据服务契约 v0.1：冻结远端账号/工作区、显式同步、远端备份、远端删除请求、删除证明和本地优先边界；当前是计划契约，不代表服务已发布 |
-| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划：当前已同步 PR1 reducer、Batch 2 AgentRun Fork 字段、Batch 3 fork work item planner、Batch 4 worker child run view、Batch 5 result merge + transitions/Redis enqueue、Batch 6 deterministic runtime harness、Fork 必填字段硬校验和 live candidate 评测入口；live provider 证据当前因未显式开启 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 记录为 blocked |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划：当前已同步 PR1 reducer、Batch 2 AgentRun Fork 字段、Batch 3 fork work item planner、Batch 4 worker child run view、Batch 5 result merge + transitions/Redis enqueue、Batch 6 deterministic runtime harness、Fork 必填字段硬校验、live candidate 评测入口、禁用工具执行硬开关和 completed work-tree 终态短路；live provider 证据已在 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 下通过真实 LongCat runtime completed 终态（`evalrun_69093187bf6c46e587c3`） |
 | `docs/development/WEB_RESEARCH_WORK_TREE_LONG_RUN_2026_05_28.md` | Web 搜索长任务工作树入口（2026-05-28）：新增 `evalsuite_g4_web_research_work_tree_long`，固定 LongCat live 网络搜索并强化多窗口 continuation/工作树连续性观测 |
 | `docs/development/WORK_TREE_ONLY_SINGLE_TASK_DEBUG_2026_05_28.md` | 工作树单任务调试基线（2026-05-28）：将 G4 work-tree-debug case 收敛为 `activeCapabilities=[task-takeover]` 并补齐 runtime start 能力透传，用于先验证“仅工作树”执行语义 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
@@ -180,4 +180,6 @@
 - 外部协作者从 README、贡献、安全、治理和 RFC 流程即可完成首轮参与；更深的工程实现仍以中文开发文档和协议文档为主。
 
 ---
+
+
 

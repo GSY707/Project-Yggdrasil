@@ -202,7 +202,7 @@ packages/
 - `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
 - `llm_runtime/` + `tool_runtime.py` 构成正式工具分发链；`llm_runtime/core.py`、`llm_runtime/artifacts.py` 与 `llm_runtime/invoke.py` 分别承载预算/消息、工件/工具会话、模型调用主流程，包入口负责 Langfuse monkeypatch 同步。
-- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录；Batch 6 已接入 `runtime.fork_harness` 与 `runtime.fork_harness_live_candidate`，其中 live candidate 未显式开启时会记录为 blocked/non-pass。
+- `evaluation_runtime/` 是评测框架子包，承载套件加载、隔离运行、评分聚合和各阶段评测场景；设置 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 时，会把 case 沙箱保留到 `.yggdrasil/state/evaluation-sandboxes/` 供事后审计；若 suite runner 落入 local fallback，它现在也会沿用持久 state 根，避免 evalrun 与 strict 审计工件只写进临时目录；Batch 6 已接入 `runtime.fork_harness` 与 `runtime.fork_harness_live_candidate`，其中 live candidate 未显式开启时会记录为 blocked/non-pass，开启后已通过真实 LongCat runtime completed 证据。
 - `persistence/` 是唯一允许直接操作数据库的层，其他代码必须通过仓储接口。
 
 ---
@@ -344,4 +344,5 @@ adapters/
 - `packages/python-sdk/model_routing.py` 实现路由策略，适配器负责具体 API 调用和 provider 兼容性差异吸收。
 
 ---
+
 

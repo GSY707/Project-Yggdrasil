@@ -243,16 +243,66 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         start_payload["allowToolExecution"] = bool(case_payload["allowToolExecution"])
     if case_payload.get("maxToolRounds") is not None:
         start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
+    if case_payload.get("planConfirmed") is not None:
+        start_payload["planConfirmed"] = bool(case_payload["planConfirmed"])
+    if case_payload.get("takeoverPlanConfirmed") is not None:
+        start_payload["takeoverPlanConfirmed"] = bool(case_payload["takeoverPlanConfirmed"])
     if candidate_models:
         start_payload["candidateModels"] = candidate_models
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
     if started.status_code != 202:
         raise RuntimeError(f"live evaluation start failed: {started.text}")
 
-    processed = run_worker_once("agent-runtime")
-    result_payload = dict(processed.get("result") or {})
-    if result_payload.get("status") != "completed":
-        raise RuntimeError(f"live evaluation worker failed: {json.dumps(processed, ensure_ascii=False)}")
+    max_worker_rounds = max(1, int(case_payload.get("maxWorkerRounds") or 1))
+    processed_rounds: list[dict[str, Any]] = []
+    result_payload: dict[str, Any] = {}
+    for round_index in range(max_worker_rounds):
+        processed = run_worker_once("agent-runtime")
+        result_payload = dict(processed.get("result") or {})
+        processed_rounds.append(
+            {
+                "round": round_index + 1,
+                "workerStatus": processed.get("status"),
+                "resultStatus": result_payload.get("status"),
+                "transition": result_payload.get("transition"),
+                "transitionOutcome": result_payload.get("transitionOutcome"),
+                "detail": normalize_excerpt(str(result_payload.get("detail") or processed.get("detail") or ""), 240),
+                "error": normalize_excerpt(str(result_payload.get("error") or processed.get("error") or ""), 240),
+                "lastError": normalize_excerpt(str(result_payload.get("lastError") or processed.get("lastError") or ""), 240),
+                "queueDepth": result_payload.get("queueDepth"),
+            }
+        )
+        if result_payload.get("status") == "completed":
+            break
+        if result_payload.get("status") == "paused" and bool(case_payload.get("autoResumePaused", False)):
+            resumed = client.post(
+                f"/runtime/tasks/{task['id']}/resume",
+                json={
+                    "nextObjective": str(
+                        case_payload.get("resumeObjective")
+                        or case_payload.get("currentObjective")
+                        or "finish the live evaluation flow"
+                    ),
+                    "planConfirmed": bool(case_payload.get("planConfirmed", True)),
+                },
+            )
+            if resumed.status_code != 202:
+                raise RuntimeError(f"live evaluation resume failed: {resumed.text}")
+    live_round_count = sum(1 for item in processed_rounds if item.get("workerStatus") == "processed")
+    budget_pause_observed = any(
+        "budget exceeded" in str(item.get("detail") or "").lower() for item in processed_rounds
+    )
+    accepted_budget_pause = (
+        bool(case_payload.get("acceptBudgetPauseAsEvidence", False))
+        and budget_pause_observed
+        and live_round_count >= max(1, int(case_payload.get("minLiveWorkerRounds") or 1))
+    )
+    incomplete_error = None
+    if result_payload.get("status") != "completed" and not accepted_budget_pause:
+        incomplete_error = (
+            "live evaluation worker did not complete within "
+            f"{max_worker_rounds} rounds: {json.dumps(processed_rounds, ensure_ascii=False)}"
+        )
 
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -260,7 +310,7 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
         persisted_task = repository.get_task(task["id"])
-        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=5)
+        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=20)
         prompt_artifact = None
         if invocations and invocations[0].prompt_compile_artifact_id:
             prompt_artifact = prompt_repository.get_prompt_compile_artifact(invocations[0].prompt_compile_artifact_id)
@@ -275,12 +325,23 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         raise RuntimeError(
             f"live provider mismatch: expected {expected_provider}, got {invocation.resolved_provider or 'unknown'}"
         )
+    accepted_live_invocation_evidence = (
+        bool(case_payload.get("acceptLiveInvocationEvidence", False))
+        and len(invocations) >= max(1, int(case_payload.get("minLiveInvocations") or 1))
+    )
+    if incomplete_error is not None and not accepted_live_invocation_evidence:
+        raise RuntimeError(incomplete_error)
 
-    request_payload = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
-    response_payload = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
+    include_payloads = bool(case_payload.get("includePayloads", True))
     live_summary = {
         "taskId": task["id"],
         "taskStatus": persisted_task.status if persisted_task is not None else result_payload.get("status"),
+        "workerRounds": processed_rounds,
+        "acceptedBudgetPause": accepted_budget_pause,
+        "acceptedLiveInvocationEvidence": accepted_live_invocation_evidence,
+        "liveWorkerRoundCount": live_round_count,
+        "runtimeTerminalStatus": result_payload.get("status"),
+        "invocationCount": len(invocations),
         "invocationId": invocation.id,
         "invocationStatus": invocation.status,
         "provider": invocation.resolved_provider,
@@ -293,13 +354,15 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
     }
     if invocation.prompt_compile_artifact_id and prompt_artifact is None:
         raise RuntimeError(f"prompt compile artifact missing for invocation {invocation.id}")
-    return {
+    result = {
         **live_summary,
         "liveScenario": live_summary,
         "assistantPreview": normalize_excerpt(str(result_payload.get("assistantText") or ""), 240),
-        "requestPayload": request_payload,
-        "responsePayload": response_payload,
     }
+    if include_payloads:
+        result["requestPayload"] = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
+        result["responsePayload"] = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
+    return result
 
 def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient

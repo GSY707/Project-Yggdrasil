@@ -5,15 +5,16 @@ import pytest
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 import yggdrasil_model_providers
-from yggdrasil_sdk import TaskRepository, get_persistence_runtime
-from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
+from yggdrasil_sdk import TaskRepository, get_persistence_runtime, resolve_workspace_root
+from yggdrasil_sdk.persistence.repositories import RuntimeRepository, WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 from yggdrasil_sdk.runtime_kernel.takeover import (
+    advance_takeover_after_delivery,
     build_takeover_continuation_request,
     normalize_takeover_runtime_state,
 )
-from yggdrasil_sdk.runtime_kernel.snapshot import _build_restart_request_state
 from yggdrasil_sdk.contracts import TaskTakeoverProtocol
+from yggdrasil_sdk.support import read_json
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -214,8 +215,53 @@ def test_runtime_hard_blocks_tool_calls_when_tool_execution_disabled(monkeypatch
     # 关键断言：task 应正常完成，不因 tool 执行失败而 crash
     assert processed["result"]["status"] == "awaiting-approval"
     # toolExecutions 应为空（tool calls 被丢弃）
-    tool_execs = processed["result"].get("windowExecutionArtifact", {}).get("record", {}).get("toolExecutions") or []
+    record = processed["result"].get("windowExecutionArtifact", {}).get("record", {})
+    tool_execs = record.get("toolExecutions") or []
     assert len(tool_execs) == 0
+    with runtime.session_scope() as session:
+        invocation = RuntimeRepository(session).list_model_invocations(task_id="task_e1_hard_block", limit=1)[0]
+    response_path = resolve_workspace_root() / str(invocation.response_ref.locator)
+    rounds = read_json(response_path, {})["rounds"]
+    assert rounds[0]["toolCalls"] == []
+    assert rounds[0]["ignoredToolCalls"] == ["mcp.read.read_file"]
+    assert rounds[0]["blockedToolCalls"] == []
+
+
+def test_completed_work_tree_does_not_reenter_parent_orchestration() -> None:
+    protocol_payload = _root_only_takeover_protocol("task_completed_tree_terminal")
+    work_tree = protocol_payload["workTree"]
+    assert isinstance(work_tree, dict)
+    work_tree["status"] = "completed"
+    work_tree["currentNodeId"] = "root"
+    nodes = work_tree["nodes"]
+    assert isinstance(nodes, list)
+    nodes[0]["childNodeIds"] = ["child-pending"]
+    nodes.append(
+        {
+            "id": "child-pending",
+            "title": "pending child",
+            "parentNodeId": "root",
+            "questionsItAnswers": ["pending child"],
+            "nodeText": "pending child",
+            "localGoal": "pending child",
+            "phase": "executing",
+            "status": "pending",
+            "childNodeIds": [],
+            "detailLevel": 1,
+        }
+    )
+    protocol_payload["status"] = "completed"
+    protocol = TaskTakeoverProtocol.model_validate(protocol_payload)
+
+    _, _, transition = advance_takeover_after_delivery(
+        protocol,
+        task_id="task_completed_tree_terminal",
+        agent_run_id="run_completed_tree_terminal",
+        assistant_text="## 结果\n已完成。\n## 证据\n终态协议。\n## 风险\n无。\n## 已知问题\n无。",
+    )
+
+    assert transition["transition"] == "completed"
+    assert transition["requiresContinuation"] is False
 
 
 # ============================================================
