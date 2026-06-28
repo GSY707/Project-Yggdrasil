@@ -16,6 +16,48 @@ from .support import resolve_workspace_root
 _TOOL_DESCRIPTOR_CACHE: dict[tuple[Any, ...], tuple[list[ToolDescriptor], float]] = {}
 _TOOL_DESCRIPTOR_CACHE_TTL = 2.0
 _TOOL_DESCRIPTOR_CACHE_LOCK = RLock()
+_READ_ONLY_TOOL_PREFIXES = (
+    "context_pruning.plan",
+    "mcp.markitdown_local.convert_to_markdown",
+    "mcp.paper.search_",
+    "mcp.python.get_",
+    "mcp.python.inspect_",
+    "mcp.read.",
+    "mcp.search.",
+    "mcp.web.fetch_",
+    "mcp.web.search_",
+    "shared_memory.describe_",
+    "text_memory.read_",
+    "text_memory.retrieve",
+)
+_WRITE_OR_EXECUTE_TOOL_MARKERS = (
+    ".append_",
+    ".apply_",
+    ".configure_",
+    ".create",
+    ".delete",
+    ".execute.",
+    ".forget_",
+    ".install_",
+    ".prepare_",
+    ".replace_",
+    ".run_",
+    ".stage_",
+    ".submit_",
+    ".update_",
+    ".write_",
+    "report_",
+)
+_WRITE_OR_EXECUTE_PERMISSION_MARKERS = (
+    ".write",
+    "branch.write",
+    "edge.write",
+    "memory.write",
+    "model.write",
+    "node.write",
+    "pr.write",
+    "write",
+)
 
 
 def invalidate_tool_descriptor_cache() -> None:
@@ -102,6 +144,38 @@ def resolve_registered_tool_descriptors(active_capabilities: list[str] | None = 
 
 def list_registered_tool_payloads(active_capabilities: list[str] | None = None) -> list[dict[str, Any]]:
     return [tool.model_dump(by_alias=True, mode="json") for tool in resolve_registered_tool_descriptors(active_capabilities)]
+
+
+def is_read_only_tool_payload(tool: dict[str, Any] | ToolDescriptor) -> bool:
+    payload = tool.model_dump(by_alias=True, mode="json") if isinstance(tool, ToolDescriptor) else dict(tool)
+    name = str(payload.get("name") or "").strip().lower()
+    permissions = [str(item).strip().lower() for item in payload.get("permissionRequired") or []]
+    if not name:
+        return False
+    if any(marker in permission for permission in permissions for marker in _WRITE_OR_EXECUTE_PERMISSION_MARKERS):
+        return False
+    if any(marker in name for marker in _WRITE_OR_EXECUTE_TOOL_MARKERS):
+        return False
+    if any(name.startswith(prefix) for prefix in _READ_ONLY_TOOL_PREFIXES):
+        return True
+    return bool(permissions) and all(permission.endswith(".read") or permission == "read" for permission in permissions)
+
+
+def clarification_allows_read_only_tools(request: dict[str, Any]) -> bool:
+    if bool(request.get("allowToolExecution", True)):
+        return False
+    if request.get("allowClarificationReadOnlyTools") is False:
+        return False
+    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    return str(takeover_protocol.get("status") or "").strip().lower() == "needs-clarification"
+
+
+def filter_read_only_tool_payloads(registered_tools: list[dict[str, Any]] | list[ToolDescriptor]) -> list[dict[str, Any]]:
+    return [
+        tool.model_dump(by_alias=True, mode="json") if isinstance(tool, ToolDescriptor) else dict(tool)
+        for tool in registered_tools
+        if is_read_only_tool_payload(tool)
+    ]
 
 
 def build_llm_tool_specs(registered_tools: list[dict[str, Any]] | list[ToolDescriptor]) -> list[dict[str, Any]]:

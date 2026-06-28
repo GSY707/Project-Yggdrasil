@@ -121,6 +121,49 @@ def test_queue_fork_batch_creates_fork_runs_and_main_work_items() -> None:
         assert task_repository.count_active_fork_runs("task_fork_batch_queue", fork_root_run_id=parent.id) == 3
 
 
+def test_queue_fork_batch_respects_parent_merge_reserved_slots() -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task_repository.create_task(
+            {
+                "id": "task_fork_batch_merge_budget",
+                "title": "Fork batch merge budget",
+                "goal": "验证 Fork batch 为父节点合并保留预算。",
+                "status": "queued",
+            }
+        )
+        parent = task_repository.create_agent_run(
+            "task_fork_batch_merge_budget",
+            {
+                "id": "run_fork_batch_merge_budget_parent",
+                "runType": "main",
+                "status": "running",
+            },
+        )
+        ready_set = compute_parent_ready_set(
+            _work_tree(),
+            "root",
+            policy={"maxForks": 3, "reserveParentMergeSlots": 1},
+        )
+
+        result = queue_fork_batch(
+            task_repository=task_repository,
+            task_id="task_fork_batch_merge_budget",
+            parent_run_id=parent.id,
+            ready_set=ready_set,
+            policy={"maxForks": 3, "reserveParentMergeSlots": 1},
+            parent_context_anchor="ctx-parent-merge-budget",
+            fork_group_id="fork-group-merge-budget",
+        )
+
+        assert result.available_fork_slots == 2
+        assert [item.assigned_work_tree_node_id for item in result.queued_forks] == ["child-a", "child-b"]
+        assert [item.assigned_work_tree_node_id for item in result.batch_plan.waiting_candidates] == ["child-c"]
+        assert {item.work_item.payload["payload"]["availableForkSlots"] for item in result.queued_forks} == {2}
+
+
 def test_worker_consumes_fork_work_item_with_child_view(monkeypatch) -> None:
     invoke_calls: list[dict[str, object]] = []
 

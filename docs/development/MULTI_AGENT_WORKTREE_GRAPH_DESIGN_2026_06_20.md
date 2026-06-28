@@ -82,7 +82,7 @@
 - `packages/python-sdk/src/yggdrasil_sdk/collaboration_runtime/context.py` 的 `launch_subagent_task()` 已能创建子分支、子任务、只读上下文包、预算决策和持久 work item。
 - `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py` 已有持久 `RuntimeWorkItem` 的 `queued / leased / reclaimable` 路径。
 - `services/worker/src/yggdrasil_worker/registry.py` 已对 task lock miss 和 retryable failure 做 reclaim / requeue。
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_work_tree_runtime.py` 当前仍主要提供 sibling 列表和下一个 sibling 选择，不是基于 `dependsOn + relationIds + priority` 的 ready-set 图调度。
+- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py` 负责当前 work tree reducer；旧的 `takeover_work_tree_runtime.py` 已删除，避免 sibling 选择旧语义继续干扰 `dependsOn + relationIds + priority` ready-set 图调度。
 
 结论：本轮设计不需要重写现有地基；需要补“调度层”和“冲突合同”。
 

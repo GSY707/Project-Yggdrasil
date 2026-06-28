@@ -476,7 +476,7 @@ allowRecursiveFork = true
 
 影响：
 
-- 默认 disabled：安全，父节点强编排不会被绕过。
+- 默认 disabled：安全，Fork 不会绕过 `dependsOn`、ready-set 和父 Agent 合并边界。
 - 默认 predeclared-pipeline：更能展示加速，但需要更强质量门禁。
 
 ### D5：旧 sibling continuation 何时删除？
@@ -518,3 +518,11 @@ allowRecursiveFork = true
 6. 再决定是否进入 Batch 3 的 worker 集成。
 
 这条路线能先让协议变成可执行合同，再逐步进入真实并行，避免一开始就把调度、Fork、worker、预算、live 模型全部耦合在一起。
+
+## 9. 2026-06-26 实现状态复核
+
+- T0-T5 已有 pytest 覆盖和运行记录。
+- T6 已补完整原始场景：`reserveParentMergeSlots` 进入 Fork policy，并验证 8 child / max 4 / reserve 1 只启动 3 个、剩余进入 waiting；同时覆盖父合并预算吃满时不自动启动。
+- T7 已补完整递归图：A/B 一级 Fork 后，A1/A2 可继续 Fork，B1/B2 在全局 active fork 接近 `maxForks` 时只启动一个；同时覆盖 `allowRecursiveFork=false` 时保留 ready-set 但禁止 fork launch。
+- R1-R4 已新增 deterministic evaluation suite `evaluation/suites/work-tree-fork-evaluation-tasks.json`，对应脚本为 `corepack pnpm run eval:work-tree:fork-evaluation-tasks`；最近通过 run 为 `evalrun_23503bda7dee4c39b90e`，4/4 passed。
+- 仍未完成的是 R1-R4 的 live / slow 真实收益评估：当前 suite 证明的是可执行合同与形状，不证明 wall-clock speedup、duplicate-read reduction 或真实 provider 长程质量收益。

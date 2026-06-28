@@ -1,0 +1,143 @@
+{
+  "id": "evalsuite_work_tree_fork_public_showcase",
+  "name": "Work-Tree Fork Public Showcase",
+  "domain": "generic",
+  "suiteRole": "public-showcase",
+  "suiteRoleNote": "Public-facing Work-Tree Fork showcase: a resilient-energy and emergency-communications plan for a fictional city district. The deterministic case produces a benefit estimate for presentation; the live case produces real provider output. This suite is not long-task evidence.",
+  "subjectKind": "workflow",
+  "subjectRef": "work-tree:fork-public-showcase",
+  "metricRefs": [
+    "pass-rate",
+    "wall-clock-speedup",
+    "duplicate-read-reduction",
+    "merge-overhead-ratio",
+    "live-provider-invocation"
+  ],
+  "cases": [
+    {
+      "id": "evalcase_work_tree_fork_public_showcase_benefit",
+      "title": "Public Showcase Benefit Estimate",
+      "scenario": "runtime.fork_showcase_benefit",
+      "taskTitle": "2030 Resilient Energy and Emergency Communications Plan",
+      "maxParallelForks": 4,
+      "parentMergeMinutes": 38,
+      "minWallClockSpeedup": 2.1,
+      "minDuplicateReadReduction0_1": 0.25,
+      "workstreams": [
+        {
+          "id": "energy-storage",
+          "title": "Energy storage and microgrid route comparison",
+          "estimatedMinutes": 95,
+          "sourceRefs": [
+            "source://city-profile",
+            "source://load-and-renewables",
+            "source://battery-storage",
+            "source://flow-battery",
+            "source://hydrogen-storage",
+            "source://safety-codes"
+          ]
+        },
+        {
+          "id": "emergency-comms",
+          "title": "Emergency communications and continuity design",
+          "estimatedMinutes": 80,
+          "sourceRefs": [
+            "source://city-profile",
+            "source://critical-facilities",
+            "source://mesh-radio",
+            "source://satellite-backhaul",
+            "source://public-alerting",
+            "source://safety-codes"
+          ]
+        },
+        {
+          "id": "budget-procurement",
+          "title": "Budget, procurement, and staged rollout",
+          "estimatedMinutes": 70,
+          "sourceRefs": [
+            "source://city-profile",
+            "source://load-and-renewables",
+            "source://capex-benchmarks",
+            "source://grant-programs",
+            "source://procurement-rules",
+            "source://critical-facilities"
+          ]
+        },
+        {
+          "id": "risk-operations",
+          "title": "Risk, governance, operations, and drill plan",
+          "estimatedMinutes": 75,
+          "sourceRefs": [
+            "source://city-profile",
+            "source://critical-facilities",
+            "source://safety-codes",
+            "source://mutual-aid",
+            "source://maintenance-staffing",
+            "source://incident-drills"
+          ]
+        }
+      ],
+      "tags": ["work-tree", "fork", "public-showcase", "benefit-data"]
+    },
+    {
+      "id": "evalcase_work_tree_fork_public_showcase_live",
+      "title": "Public Showcase Live Provider Draft",
+      "scenario": "m8.live_llm_task_execution",
+      "taskType": "research",
+      "taskTitle": "2030 Resilient Energy and Emergency Communications Plan",
+      "taskGoal": "Produce a public-facing, evidence-driven plan for a fictional city district using Work-Tree Fork style decomposition and parent synthesis.",
+      "requireLive": true,
+      "allowFallback": false,
+      "allowToolExecution": false,
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "tokenBudgetTotal": 200000,
+      "costBudgetTotal": 5.0,
+      "maxTokens": 2200,
+      "maxWorkerRounds": 6,
+      "autoResumePaused": true,
+      "includePayloads": false,
+      "auditLevel": "strict",
+      "planConfirmed": true,
+      "takeoverPlanConfirmed": true,
+      "takeoverAutoConfirm": true,
+      "confirmPlan": true,
+      "currentFocus": "public showcase work-tree fork plan",
+      "currentObjective": "Create a final public demonstration report for a fictional city district in this run. Do not stop at a plan and do not ask for clarification. Show how four parallel workstreams feed a parent synthesis: energy storage, emergency communications, budget/procurement, and risk/operations. Use only the provided context; do not claim live web research. Include concrete numbers from the benefit estimate context.",
+      "currentContext": [
+        {
+          "id": "ctx_live_eval",
+          "title": "showcase task brief",
+          "content": "Public demo scenario: design a 2030 resilient energy and emergency communications plan for a fictional district of 180,000 residents, 65 critical facilities, 52% renewable power share, 3-6 GW regional peak load dependency, and a 72-hour resilience target for shelters, clinics, water pumps, and emergency coordination centers.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_workstreams",
+          "title": "fork workstreams",
+          "content": "The four child workstreams are: (1) energy storage and microgrid route comparison; (2) emergency communications and continuity design; (3) budget, procurement, and staged rollout; (4) risk, governance, operations, and drill plan. Parent synthesis must merge child summaries rather than concatenate them.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_benefit_metrics",
+          "title": "benefit estimate metrics",
+          "content": "Benefit estimate baseline: serial work 320 minutes; fork parallel work plus parent merge 133 minutes; estimated wall-clock speedup 2.406x; duplicate-read reduction 33.3%; parent merge overhead ratio 28.6%; evidence coverage 100%. Explain these as evaluation estimates, not measured live wall-clock.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_delivery",
+          "title": "public delivery format",
+          "content": "Output Markdown for a public demo. Include a compact executive summary, workstream table, evidence metrics table, synthesis plan, risks, and what the live run proves versus what it does not prove.",
+          "importance": 0.99
+        }
+      ],
+      "protectedItems": [
+        { "kind": "node", "id": "ctx_live_eval" },
+        { "kind": "node", "id": "ctx_benefit_metrics" }
+      ],
+      "responseRequirements": "Output Markdown only. Deliver the final public demo report now, not a plan. Required headings: ## Executive Summary, ## Workstreams, ## Evidence Metrics, ## Parent Synthesis Plan, ## Risks And Limits, ## What This Live Run Proves. Do not claim real web browsing. Use the numeric benefit estimates exactly as estimates.",
+      "requireLongTaskEvidence": false,
+      "longTaskGateKind": "showcase-smoke",
+      "tags": ["work-tree", "fork", "public-showcase", "live-provider"]
+    }
+  ]
+}

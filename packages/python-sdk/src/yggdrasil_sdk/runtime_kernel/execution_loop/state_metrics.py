@@ -211,13 +211,13 @@ def _persist_runtime_metrics_artifact(
     }
 def _window_restart_trigger(request: dict[str, Any], runtime_metrics: dict[str, Any], effective_context: list[dict[str, Any]]) -> tuple[str | None, int]:
     window_span_tokens = _estimate_context_tokens(effective_context)
-    if _int_metric(runtime_metrics.get("forcedWindowRestartBudget"), 0) > 0 and effective_context:
-        return "forcedWindowRestartBudget", window_span_tokens
     if bool(request.get("forceWindowRestart")) and effective_context:
         return "forceWindowRestart", window_span_tokens
     effective_context_window = _int_metric(runtime_metrics.get("effectiveContextWindow"), 0)
     restart_threshold = _int_metric(runtime_metrics.get("windowRestartThreshold"), 0)
     if effective_context_window > 0 and restart_threshold > 0 and window_span_tokens >= restart_threshold:
+        if _int_metric(runtime_metrics.get("forcedWindowRestartBudget"), 0) > 0:
+            return "forcedWindowRestartBudget", window_span_tokens
         return "effectiveContextWindow", window_span_tokens
     return None, window_span_tokens
 def _dedupe_memory_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

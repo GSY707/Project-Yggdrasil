@@ -9,6 +9,80 @@ from yggdrasil_sdk.contracts import WorkTreeNode, WorkTreeProtocol
 
 
 ACTIVE_FORK_STATUSES = {"initializing", "mounting", "running", "waiting-tool"}
+TERMINAL_WORK_TREE_NODE_STATUSES = {"completed", "failed", "skipped"}
+
+ResolutionAction = Literal["refine", "work", "merge", "deliver", "block"]
+FrontierStatus = Literal["open", "resolved", "accepted-risk"]
+FrontierAxis = Literal[
+    "unknown",
+    "risk",
+    "deliverable",
+    "dependency",
+    "verification",
+    "cost",
+    "conflict",
+    "failure",
+    "plan-churn",
+    "reliability",
+    "durability",
+    "transaction",
+    "planning",
+    "merge",
+    "hygiene",
+    "evaluation",
+    "observability",
+]
+
+LONG_RUN_CORE_GAP_FRONTIER_SPECS: tuple[tuple[str, FrontierAxis, str, float], ...] = (
+    (
+        "queue-reliability",
+        "reliability",
+        "Worker queue needs ack, visibility timeout, reclaim and idempotent work item semantics.",
+        0.95,
+    ),
+    (
+        "durable-snapshot",
+        "durability",
+        "Resume state must be durable; Redis TTL package entries cannot be the recovery authority.",
+        0.95,
+    ),
+    (
+        "transactional-node",
+        "transaction",
+        "Work tree node execution needs preconditions, postconditions, version checks and idempotency keys.",
+        0.9,
+    ),
+    (
+        "plan-lifecycle",
+        "planning",
+        "Plan nodes need lifecycle, supersession and stale-plan detection instead of one-shot planning.",
+        0.85,
+    ),
+    (
+        "typed-merge",
+        "merge",
+        "Fork and child results need typed merge envelopes, not only natural-language summaries.",
+        0.85,
+    ),
+    (
+        "semantic-gc",
+        "hygiene",
+        "Long work trees need semantic garbage collection for obsolete plans, summaries and transcripts.",
+        0.8,
+    ),
+    (
+        "long-run-eval",
+        "evaluation",
+        "Long and ultra-long tasks need explicit deterministic and live gates rather than smoke evidence.",
+        0.9,
+    ),
+    (
+        "observability-replay",
+        "observability",
+        "Ultra-long runs need replayable traces to locate the first bad plan, summary or tool transition.",
+        0.85,
+    ),
+)
 
 
 class PendingInformationItem(BaseModel):
@@ -25,11 +99,59 @@ class PendingInformationItem(BaseModel):
     status: Literal["pending", "attached", "dismissed"] = "pending"
 
 
+class FrontierItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    id: str
+    node_id: str | None = Field(default=None, alias="nodeId")
+    axis: FrontierAxis
+    description: str
+    severity: float = Field(default=0.5, ge=0.0, le=1.0)
+    status: FrontierStatus = "open"
+    evidence_refs: list[str] = Field(default_factory=list, alias="evidenceRefs")
+    source: str = "runtime"
+
+
+class WorkTreeResolutionPolicy(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    refine_pressure_threshold: float = Field(default=0.65, alias="refinePressureThreshold", ge=0.0, le=1.0)
+    deliver_pressure_threshold: float = Field(default=0.25, alias="deliverPressureThreshold", ge=0.0, le=1.0)
+    broad_node_detail_level: int = Field(default=1, alias="broadNodeDetailLevel", ge=0)
+    max_inline_expected_evidence: int = Field(default=2, alias="maxInlineExpectedEvidence", ge=0)
+    max_inline_text_chars: int = Field(default=480, alias="maxInlineTextChars", ge=1)
+    max_inline_children: int = Field(default=0, alias="maxInlineChildren", ge=0)
+    failure_retry_budget: int = Field(default=1, alias="failureRetryBudget", ge=0)
+    plan_churn_refine_threshold: int = Field(default=2, alias="planChurnRefineThreshold", ge=0)
+
+
+class DeliveryReadinessResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    ready: bool
+    blockers: list[str] = Field(default_factory=list)
+    open_frontier_count: int = Field(default=0, alias="openFrontierCount")
+    max_frontier_pressure: float = Field(default=0.0, alias="maxFrontierPressure")
+
+
+class NodeResolutionAssessment(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    node_id: str = Field(alias="nodeId")
+    recommended_action: ResolutionAction = Field(alias="recommendedAction")
+    frontier_pressure: float = Field(alias="frontierPressure")
+    saturation: float
+    frontiers: list[FrontierItem] = Field(default_factory=list)
+    delivery_readiness: DeliveryReadinessResult = Field(alias="deliveryReadiness")
+    reasons: list[str] = Field(default_factory=list)
+
+
 class ForkLaunchPolicy(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     max_forks: int = Field(default=3, alias="maxForks", ge=0)
     allow_recursive_fork: bool = Field(default=True, alias="allowRecursiveFork")
+    reserve_parent_merge_slots: int = Field(default=0, alias="reserveParentMergeSlots", ge=0)
     auto_launch_policy: Literal["explicit-policy-gated", "manual", "disabled"] = Field(
         default="explicit-policy-gated",
         alias="autoLaunchPolicy",
@@ -133,6 +255,121 @@ class ForkBatchPlan(BaseModel):
         return self
 
 
+def build_long_run_core_frontiers(node_id: str | None = None) -> list[FrontierItem]:
+    """Return the eight required ultra-long-task frontier seeds."""
+
+    return [
+        FrontierItem(
+            id=frontier_id,
+            nodeId=node_id,
+            axis=axis,
+            description=description,
+            severity=severity,
+            source="long-run-core-gap",
+        )
+        for frontier_id, axis, description, severity in LONG_RUN_CORE_GAP_FRONTIER_SPECS
+    ]
+
+
+def assess_node_resolution(
+    work_tree: WorkTreeProtocol | Mapping[str, Any],
+    node_id: str,
+    *,
+    graph_state: Mapping[str, Any] | None = None,
+    policy: WorkTreeResolutionPolicy | Mapping[str, Any] | None = None,
+) -> NodeResolutionAssessment:
+    request_policy = WorkTreeResolutionPolicy.model_validate(policy or WorkTreeResolutionPolicy())
+    protocol = WorkTreeProtocol.model_validate(work_tree)
+    node_by_id = {node.id: node for node in protocol.nodes}
+    node = node_by_id.get(node_id)
+    if node is None:
+        raise ValueError(f"Unknown work tree node: {node_id}")
+
+    children = _direct_children(protocol, node)
+    frontiers = _node_frontiers(
+        protocol,
+        node,
+        children=children,
+        graph_state=graph_state or {},
+        policy=request_policy,
+    )
+    open_frontiers = _open_frontiers(frontiers)
+    frontier_pressure = max((item.severity for item in open_frontiers), default=0.0)
+    delivery_readiness = compute_delivery_readiness(
+        protocol,
+        node_id=node_id,
+        graph_state={"frontierItems": [item.model_dump(by_alias=True, mode="json") for item in frontiers]},
+        policy=request_policy,
+    )
+    reasons = _resolution_reasons(
+        node,
+        children=children,
+        open_frontiers=open_frontiers,
+        delivery_readiness=delivery_readiness,
+        policy=request_policy,
+    )
+    return NodeResolutionAssessment(
+        nodeId=node.id,
+        recommendedAction=_recommended_resolution_action(
+            node,
+            children=children,
+            open_frontiers=open_frontiers,
+            delivery_readiness=delivery_readiness,
+            frontier_pressure=frontier_pressure,
+            policy=request_policy,
+        ),
+        frontierPressure=frontier_pressure,
+        saturation=_node_saturation(frontier_pressure),
+        frontiers=frontiers,
+        deliveryReadiness=delivery_readiness,
+        reasons=reasons,
+    )
+
+
+def compute_delivery_readiness(
+    work_tree: WorkTreeProtocol | Mapping[str, Any],
+    *,
+    node_id: str | None = None,
+    graph_state: Mapping[str, Any] | None = None,
+    policy: WorkTreeResolutionPolicy | Mapping[str, Any] | None = None,
+) -> DeliveryReadinessResult:
+    request_policy = WorkTreeResolutionPolicy.model_validate(policy or WorkTreeResolutionPolicy())
+    protocol = WorkTreeProtocol.model_validate(work_tree)
+    target_node_id = node_id or protocol.root_node_id
+    node_by_id = {node.id: node for node in protocol.nodes}
+    node = node_by_id.get(target_node_id or "")
+    if node is None:
+        raise ValueError(f"Unknown delivery target work tree node: {target_node_id}")
+
+    children = _direct_children(protocol, node)
+    frontiers = _node_frontiers(
+        protocol,
+        node,
+        children=children,
+        graph_state=graph_state or {},
+        policy=request_policy,
+        include_derived=False,
+    )
+    open_frontiers = [
+        item for item in _open_frontiers(frontiers) if item.severity > request_policy.deliver_pressure_threshold
+    ]
+    blockers: list[str] = []
+    if open_frontiers:
+        blockers.append("open-frontier-pressure")
+    if any(child.status not in TERMINAL_WORK_TREE_NODE_STATUSES for child in children):
+        blockers.append("unresolved-children")
+    if node.status not in {"completed", "summarizing"} and protocol.status not in {"verified", "awaiting-approval", "completed"}:
+        blockers.append("target-not-summarized")
+    if _expected_evidence_missing(node):
+        blockers.append("missing-target-evidence")
+    return DeliveryReadinessResult(
+        ready=not blockers,
+        blockers=list(dict.fromkeys(blockers)),
+        openFrontierCount=len(open_frontiers),
+        maxFrontierPressure=max((item.severity for item in open_frontiers), default=0.0),
+    )
+
+
 def compute_parent_ready_set(
     work_tree: WorkTreeProtocol | Mapping[str, Any],
     parent_node_id: str,
@@ -165,7 +402,8 @@ def compute_parent_ready_set(
     active_fork_count = sum(
         1 for run in request.active_runs if run.run_type == "fork" and run.status in ACTIVE_FORK_STATUSES
     )
-    available_fork_slots = max(request.policy.max_forks - active_fork_count, 0)
+    recursive_fork_blocked = not request.policy.allow_recursive_fork and parent.id != request.work_tree.root_node_id
+    available_fork_slots = 0 if recursive_fork_blocked else _available_fork_slots(request.policy, active_fork_count)
 
     ready_children: list[WorkTreeReadyChild] = []
     blocked_children: list[WorkTreeBlockedChild] = []
@@ -218,7 +456,7 @@ def plan_fork_batch(
     ready_set_model = WorkTreeReadySetResult.model_validate(ready_set)
     policy_model = ForkLaunchPolicy.model_validate(policy or ForkLaunchPolicy())
     effective_active_count = ready_set_model.active_fork_count if active_fork_count is None else active_fork_count
-    available_slots = max(policy_model.max_forks - effective_active_count, 0)
+    available_slots = _available_fork_slots(policy_model, effective_active_count)
     candidates = [
         ForkLaunchCandidate(
             assignedWorkTreeNodeId=child.node_id,
@@ -234,6 +472,10 @@ def plan_fork_batch(
         availableForkSlots=available_slots,
         reason="max-forks" if available_slots < len(candidates) else "ready-set",
     )
+
+
+def _available_fork_slots(policy: ForkLaunchPolicy, active_fork_count: int) -> int:
+    return max(policy.max_forks - active_fork_count - policy.reserve_parent_merge_slots, 0)
 
 
 def _direct_children(work_tree: WorkTreeProtocol, parent: WorkTreeNode) -> list[WorkTreeNode]:
@@ -318,3 +560,202 @@ def _requires_parent_replan(item: PendingInformationItem) -> bool:
         "proposed-dependency-change",
         "proposed-relation-change",
     }
+
+
+def _node_frontiers(
+    work_tree: WorkTreeProtocol,
+    node: WorkTreeNode,
+    *,
+    children: Sequence[WorkTreeNode],
+    graph_state: Mapping[str, Any],
+    policy: WorkTreeResolutionPolicy,
+    include_derived: bool = True,
+) -> list[FrontierItem]:
+    explicit = _frontiers_from_graph_state(graph_state, node_id=node.id)
+    if not include_derived:
+        return explicit
+
+    derived: list[FrontierItem] = []
+    if node.detail_level <= policy.broad_node_detail_level and _is_broad_node(node, children=children, policy=policy):
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:broad-scope",
+                nodeId=node.id,
+                axis="deliverable",
+                description="Node is a broad frame; keep it flexible but resolve it through smaller frontiers before delivery.",
+                severity=0.72,
+            )
+        )
+    unresolved_children = [child for child in children if child.status not in TERMINAL_WORK_TREE_NODE_STATUSES]
+    if unresolved_children:
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:unresolved-children",
+                nodeId=node.id,
+                axis="dependency",
+                description="Child nodes are still unresolved; parent delivery should wait for merge or further refinement.",
+                severity=min(0.95, 0.45 + 0.08 * len(unresolved_children)),
+            )
+        )
+    failed_children = [child for child in children if child.status == "failed" and not child.failure_summary]
+    if failed_children:
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:failed-child-without-summary",
+                nodeId=node.id,
+                axis="failure",
+                description="A failed child lacks failureSummary, so the parent cannot learn from the failed attempt.",
+                severity=0.85,
+            )
+        )
+    if _expected_evidence_missing(node):
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:missing-evidence",
+                nodeId=node.id,
+                axis="verification",
+                description="Expected evidence is declared but no produced evidence refs are attached.",
+                severity=0.7,
+            )
+        )
+    plan_churn = _plan_churn_count(graph_state, node.id)
+    if plan_churn > policy.plan_churn_refine_threshold:
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:plan-churn",
+                nodeId=node.id,
+                axis="plan-churn",
+                description="Plan changed repeatedly; increase local resolution before more execution.",
+                severity=min(1.0, 0.45 + 0.15 * plan_churn),
+            )
+        )
+    failed_attempts = _failure_attempt_count(graph_state, node.id)
+    if failed_attempts > policy.failure_retry_budget:
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:failure-budget",
+                nodeId=node.id,
+                axis="failure",
+                description="Failure budget exceeded at this resolution; split smaller or change approach.",
+                severity=min(1.0, 0.55 + 0.15 * failed_attempts),
+            )
+        )
+    if work_tree.root_node_id == node.id and _candidate_delivery_present(graph_state) and children and unresolved_children:
+        derived.append(
+            FrontierItem(
+                id=f"{node.id}:premature-candidate-delivery",
+                nodeId=node.id,
+                axis="verification",
+                description="A candidate delivery exists while child work is still open; record it as summary only.",
+                severity=0.9,
+            )
+        )
+    return [*explicit, *derived]
+
+
+def _frontiers_from_graph_state(graph_state: Mapping[str, Any], *, node_id: str) -> list[FrontierItem]:
+    result: list[FrontierItem] = []
+    for raw_item in graph_state.get("frontierItems") or []:
+        item = FrontierItem.model_validate(raw_item)
+        if item.node_id not in {None, node_id}:
+            continue
+        result.append(item)
+    return result
+
+
+def _open_frontiers(frontiers: Sequence[FrontierItem]) -> list[FrontierItem]:
+    return [item for item in frontiers if item.status == "open"]
+
+
+def _is_broad_node(
+    node: WorkTreeNode,
+    *,
+    children: Sequence[WorkTreeNode],
+    policy: WorkTreeResolutionPolicy,
+) -> bool:
+    return (
+        len(node.expected_evidence) > policy.max_inline_expected_evidence
+        or len(node.node_text) > policy.max_inline_text_chars
+        or len(children) > policy.max_inline_children
+    )
+
+
+def _expected_evidence_missing(node: WorkTreeNode) -> bool:
+    return bool(node.expected_evidence) and not node.produced_evidence_refs and node.status not in {
+        "failed",
+        "skipped",
+    }
+
+
+def _plan_churn_count(graph_state: Mapping[str, Any], node_id: str) -> int:
+    raw = graph_state.get("planChurn")
+    if isinstance(raw, Mapping):
+        return int(raw.get(node_id) or 0)
+    return int(graph_state.get("planChurnCount") or 0)
+
+
+def _failure_attempt_count(graph_state: Mapping[str, Any], node_id: str) -> int:
+    raw = graph_state.get("failureAttempts")
+    if isinstance(raw, Mapping):
+        return int(raw.get(node_id) or 0)
+    return int(graph_state.get("failureAttemptCount") or 0)
+
+
+def _candidate_delivery_present(graph_state: Mapping[str, Any]) -> bool:
+    return bool(
+        graph_state.get("candidateDelivery")
+        or graph_state.get("candidateDeliveryText")
+        or graph_state.get("deliveryCandidate")
+    )
+
+
+def _recommended_resolution_action(
+    node: WorkTreeNode,
+    *,
+    children: Sequence[WorkTreeNode],
+    open_frontiers: Sequence[FrontierItem],
+    delivery_readiness: DeliveryReadinessResult,
+    frontier_pressure: float,
+    policy: WorkTreeResolutionPolicy,
+) -> ResolutionAction:
+    if node.status == "blocked":
+        return "block"
+    if any(item.axis in {"failure", "plan-churn", "deliverable", "risk", "cost", "conflict"} for item in open_frontiers) and (
+        frontier_pressure >= policy.refine_pressure_threshold
+    ):
+        return "refine"
+    if any(child.status not in TERMINAL_WORK_TREE_NODE_STATUSES for child in children):
+        return "merge"
+    if any(item.axis in {"unknown", "verification", "reliability", "durability", "transaction", "evaluation", "observability"} for item in open_frontiers):
+        return "work"
+    if delivery_readiness.ready:
+        return "deliver"
+    if frontier_pressure >= policy.refine_pressure_threshold:
+        return "refine"
+    return "work"
+
+
+def _resolution_reasons(
+    node: WorkTreeNode,
+    *,
+    children: Sequence[WorkTreeNode],
+    open_frontiers: Sequence[FrontierItem],
+    delivery_readiness: DeliveryReadinessResult,
+    policy: WorkTreeResolutionPolicy,
+) -> list[str]:
+    reasons: list[str] = []
+    if node.status == "blocked":
+        reasons.append("node-blocked")
+    if any(item.severity >= policy.refine_pressure_threshold for item in open_frontiers):
+        reasons.append("frontier-pressure-above-refine-threshold")
+    if any(child.status not in TERMINAL_WORK_TREE_NODE_STATUSES for child in children):
+        reasons.append("unresolved-children")
+    if not delivery_readiness.ready:
+        reasons.extend(f"delivery-blocked:{blocker}" for blocker in delivery_readiness.blockers)
+    if not reasons:
+        reasons.append("frontier-pressure-low")
+    return list(dict.fromkeys(reasons))
+
+
+def _node_saturation(frontier_pressure: float) -> float:
+    return round(max(0.0, min(1.0, 1.0 - frontier_pressure)), 4)

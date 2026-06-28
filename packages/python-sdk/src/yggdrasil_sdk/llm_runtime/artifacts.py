@@ -214,14 +214,9 @@ def _duplicate_tool_loop_result(result: dict[str, Any], invocation_id: str, *, d
         "provider": result.get("provider"),
         "model": result.get("model"),
         "outputText": (
-            "## 结果\n"
-            "检测到重复的幂等工具循环，已停止继续发起重复工具调用。\n\n"
-            "## 证据\n"
-            "此前轮次的工具输出与来源工件已保留在工作区，可用于继续核查和综合。\n\n"
-            "## 风险\n"
-            "当前输出是安全短路通知，不是最终综合结论；若直接收尾，可能遗漏正式比较矩阵、矛盾处理和最终推荐。\n\n"
-            "## 已知问题\n"
-            "本轮未产出最终综合报告；需要基于已收集证据继续完成最终 Markdown 交付。"
+            "检测到重复的幂等工具循环，已停止继续发起相同工具调用。"
+            "此前轮次的工具输出与来源工件已保留在工作区；下一步应按当前任务目标决定，"
+            "直接综合已有材料，或只做必要的非重复核查。"
         ),
         "finishReason": "duplicate-tool-loop-short-circuit",
         "usage": dict(result.get("usage") or {}),
@@ -241,14 +236,9 @@ def _tool_round_limit_result(result: dict[str, Any], invocation_id: str, *, max_
         "provider": result.get("provider"),
         "model": result.get("model"),
         "outputText": (
-            "## 结果\n"
-            "已达到配置的工具轮次上限，本窗口在完成最终综合前停止继续调用工具。\n\n"
-            "## 证据\n"
-            "本轮运行的工具执行轨迹和来源工件已保留，可用于继续综合与复核。\n\n"
-            "## 风险\n"
-            "如果直接在此收尾，最终建议可能缺少完整比较矩阵、矛盾处理或来源汇总。\n\n"
-            "## 已知问题\n"
-            "由于本窗口工具轮次预算耗尽，本轮未形成最终完整推荐，需要在后续窗口继续完成正式交付。"
+            "已达到配置的工具轮次上限，本窗口停止继续调用工具。"
+            "本轮工具执行轨迹和来源工件已保留；后续应按当前任务目标继续综合，"
+            "或明确说明仍缺的任务相关证据。"
         ),
         "finishReason": "tool-round-limit-short-circuit",
         "usage": dict(result.get("usage") or {}),

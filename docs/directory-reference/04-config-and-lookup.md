@@ -19,13 +19,11 @@
 | `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` | 世界构建、初次苏醒与任务级工作状态读取实施文档：把新三阶段口径压成实现层计划，明确本轮先做运行时分层，不在这一轮实现完整世界编译流水线 |
 | `docs/development/TASK_WORLD_START_STATE_AND_TASK_RUNTIME_SPLIT_2026_05_26.md` | 给 code agent 的执行任务文档：用不可误解的顺序指挥粗粒度代码改造，覆盖 contracts/root_mount/execution_loop/prompting/takeover/snapshot 与三组关键测试 |
 | `docs/development/TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md` | 给 code agent 的返工任务文档：针对验收发现的残留问题，要求世界级阶段彻底不见任务信息、只有真实最近现场才能无损恢复，并让 TaskRuntimeState 成为唯一任务态入口 |
-| `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”的目标流程，并对照当前协议/提示词/运行时/测试的缺口 |
 | `docs/specs/agent-runtime-protocol-v0.2.md` | Agent 运行时协议 v0.2：本轮继续把“启动”细化为“初次苏醒形成起始状态 + 任务级单独读取工作状态”，并补上工具/知识索引优先的正式口径 |
 | `docs/specs/work-tree-protocol-v0.2.md` | 工作树协议 v0.2：本轮继续把工作树边界收紧为任务级正式对象，强调 `[ID: 003 我要干什么]` 在建世界/初次苏醒阶段只保存协议与入口，不直接携带具体任务工作树 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并明确代码只做边界与警戒 |
-| `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、父节点强编排、有限线性 continuation 轨迹和 Working Node 标签 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复，并要求 continuation 优先沿父节点编排位置继续 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：说明 Web 页面入口、完整分析页的七个主层次、CLI/API 用法和推荐排障流程，并固定 work-tree debug、时间线、cache trace、child bubble 与 mixed outcome 的读法 |
 | `docs/research/specifications/系统核心理念.md` | 记忆树系统的核心设计哲学说明 |
@@ -61,7 +59,7 @@ docs/
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
 | 工作树图 ready-set / Fork 并行纯函数调度 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
-| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
+| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json`、`evaluation/suites/work-tree-fork-evaluation-tasks.json`、`evaluation/suites/work-tree-fork-public-showcase.json` |
 | AgentRun Fork 元数据持久化与活跃 Fork 计数 | `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`、`packages/python-sdk/src/yggdrasil_sdk/domain.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`、`migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`tests/api/test_persistence_task_runtime_api.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |

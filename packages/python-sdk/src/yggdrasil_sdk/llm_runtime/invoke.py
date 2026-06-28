@@ -63,6 +63,7 @@ from .core import (
     utc_now,
     write_json,
 )
+from ..tool_runtime import clarification_allows_read_only_tools, filter_read_only_tool_payloads
 
 def invoke_runtime_completion(
     session,
@@ -112,20 +113,36 @@ def invoke_runtime_completion(
     response_runtime_metrics = _runtime_metrics_for_response(task, request)
     allow_fallback = bool(request.get("allowModelFallback", True))
     allow_tool_execution = bool(request.get("allowToolExecution", True))
+    allow_clarification_read_only_tools = clarification_allows_read_only_tools(request)
+    effective_tool_execution_enabled = allow_tool_execution or allow_clarification_read_only_tools
     all_registered_tools_by_name = {
         str(tool.get("name") or ""): dict(tool)
         for tool in compiled_prompt.registered_tools
         if isinstance(tool, dict) and tool.get("name")
     }
     tool_name_policy = _resolve_tool_name_policy(request, all_registered_tools_by_name)
-    allowed_tool_names = set(tool_name_policy.get("allowedNames") or []) if allow_tool_execution else set()
+    if allow_tool_execution:
+        allowed_tool_names = set(tool_name_policy.get("allowedNames") or [])
+        candidate_registered_tools = [dict(tool) for tool in compiled_prompt.registered_tools if isinstance(tool, dict)]
+    elif allow_clarification_read_only_tools:
+        candidate_registered_tools = filter_read_only_tool_payloads(
+            [dict(tool) for tool in compiled_prompt.registered_tools if isinstance(tool, dict)]
+        )
+        allowed_tool_names = {
+            str(tool.get("name") or "")
+            for tool in candidate_registered_tools
+            if str(tool.get("name") or "") in set(tool_name_policy.get("allowedNames") or [])
+        }
+    else:
+        candidate_registered_tools = []
+        allowed_tool_names = set()
     effective_registered_tools = [
         dict(tool)
-        for tool in compiled_prompt.registered_tools
+        for tool in candidate_registered_tools
         if isinstance(tool, dict) and str(tool.get("name") or "") in allowed_tool_names
     ]
     build_tool_specs_started_at = perf_counter()
-    tool_specs = build_llm_tool_specs(effective_registered_tools) if allow_tool_execution else []
+    tool_specs = build_llm_tool_specs(effective_registered_tools) if effective_tool_execution_enabled else []
     registered_tools_by_name = {
         str(tool.get("name") or ""): dict(tool)
         for tool in effective_registered_tools
@@ -392,8 +409,8 @@ def invoke_runtime_completion(
                 budget_overrun_result = post_check.model_dump(by_alias=True, mode="json")
                 round_modes.append(str(result.get("mode") or "unknown"))
                 raw_tool_calls = [call for call in result.get("toolCalls") or [] if isinstance(call, dict) and call.get("name")]
-                ignored_tool_calls = [str(call.get("name")) for call in raw_tool_calls] if not allow_tool_execution else []
-                if not allow_tool_execution:
+                ignored_tool_calls = [str(call.get("name")) for call in raw_tool_calls] if not effective_tool_execution_enabled else []
+                if not effective_tool_execution_enabled:
                     raw_tool_calls = []
                 tool_calls = _normalize_tool_calls(raw_tool_calls, tool_name_aliases)
                 tool_calls, blocked_tool_calls = _filter_tool_calls_by_allowed_names(tool_calls, allowed_tool_names)
@@ -455,9 +472,8 @@ def invoke_runtime_completion(
                             "role": "system",
                             "content": (
                                 "Duplicate idempotent tool loop detected. Do not call any tools in the next response. "
-                                "Use already collected evidence and produce the final Markdown delivery now. "
-                                "Must include: comparison matrix, contradiction resolution, source table, and the four headings "
-                                "## 结果 / ## 证据 / ## 风险 / ## 已知问题."
+                                "Use already collected evidence and answer only what the current task requires. "
+                                "If the available evidence is insufficient, state the concrete blocker and the next safe action."
                             ),
                         }
                     )

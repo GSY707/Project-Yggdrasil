@@ -12,7 +12,11 @@ from .hook_runtime import collect_hook_results
 from .hooks import HookNames
 from .persistence.constants import DEFAULT_APP_ID
 from .support import normalize_excerpt, read_json, relative_workspace_path, resolve_workspace_root
-from .tool_runtime import resolve_registered_tool_descriptors
+from .tool_runtime import (
+    clarification_allows_read_only_tools,
+    filter_read_only_tool_payloads,
+    resolve_registered_tool_descriptors,
+)
 _PROMPT_REGISTRY_CACHE: dict[tuple[Any, ...], tuple[dict[str, Any], float]] = {}
 _PROMPT_REGISTRY_CACHE_TTL = 2.0
 _PROMPT_REGISTRY_CACHE_LOCK = RLock()
@@ -647,19 +651,6 @@ def _format_runtime_state(root_mount: dict[str, Any], *, include_resume_message:
         ]
     )
     return "\n".join(lines).strip()
-def _format_runtime_glossary() -> str:
-    return "\n".join(
-        [
-            "运行时术语速览（不依赖项目背景知识）:",
-            "- 根挂载（root mount）: 每轮开始前注入的基础现场，包括身份、上下文、执行根。",
-            "- 工作树（work tree）: 当前任务的分解执行树；父节点编排，子节点处理局部目标。",
-            "- takeover 状态: 任务接管流程状态；needs-clarification 表示先核对理解与计划。",
-            "- scene recovery: 断点恢复现场，用于重启后继续同一节点，不代表要重做全任务。",
-            "- mounted context items: 本轮挂载的上下文切片清单，是当前可直接引用的证据范围。",
-            "- response requirements: 本轮输出合同与边界，优先约束输出结构和执行门禁。",
-            "- 规则: 如遇术语冲突或不理解，按本速览定义执行，不要依赖历史隐含语义。",
-        ]
-    )
 def _normalized_optional_text(value: Any) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
@@ -809,9 +800,7 @@ def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
     if not frames:
         return "工作上下文栈为空。"
     lines = [
-        f"topFrameId: {work_context_stack.top_frame_id}",
-        f"stackDigest: {work_context_stack.stack_digest}",
-        "activePath: " + " -> ".join(frame.node_id for frame in frames),
+        "当前工作路径: " + " -> ".join(frame.node_id for frame in frames),
     ]
     top_frame = next((frame for frame in frames if frame.id == work_context_stack.top_frame_id), frames[-1])
     if top_frame.frame_header:
@@ -828,6 +817,53 @@ def _format_work_context_stack(work_context_stack: WorkContextStack) -> str:
                 status_label = f"[{item.status}] " if item.status != "completed" else ""
                 lines.append(f"  - {status_label}{item.child_node_id}: {normalize_excerpt(item.summary, 120)}")
     return "\n".join(lines)
+
+def _format_runtime_hints(resolution: dict[str, Any]) -> str:
+    action = str(resolution.get("recommendedAction") or "work")
+    pressure = resolution.get("frontierPressure")
+    saturation = resolution.get("saturation")
+    readiness = resolution.get("deliveryReadiness") if isinstance(resolution.get("deliveryReadiness"), dict) else {}
+    frontiers = resolution.get("frontiers") if isinstance(resolution.get("frontiers"), list) else []
+    reasons = [str(item) for item in resolution.get("reasons") or [] if str(item).strip()]
+    open_frontiers = [
+        dict(item)
+        for item in frontiers
+        if isinstance(item, dict) and str(item.get("status") or "open") == "open"
+    ]
+    open_frontiers.sort(key=lambda item: float(item.get("severity") or 0.0), reverse=True)
+    top_frontiers = open_frontiers[:3]
+    lines = [
+        "运行时提示（辅助线索，不是硬控制）:",
+        f"- 当前节点: {resolution.get('nodeId') or 'unknown'}",
+        f"- 建议下一步: {action}",
+        f"- 前沿压力: {pressure if pressure is not None else 'unknown'}",
+        f"- 饱和度: {saturation if saturation is not None else 'unknown'}",
+        f"- 交付就绪度: {'ready' if bool(readiness.get('ready')) else 'not-ready'}",
+    ]
+    blockers = [str(item) for item in readiness.get("blockers") or [] if str(item).strip()]
+    if blockers:
+        lines.append("- 交付阻断: " + ", ".join(blockers[:6]))
+    if top_frontiers:
+        lines.append("可优先考虑的开放前沿（按压力排序，允许按现场调整）:")
+        for index, item in enumerate(top_frontiers, start=1):
+            lines.append(
+                f"{index}. [{item.get('axis') or 'unknown'} severity={item.get('severity')}] "
+                f"{normalize_excerpt(str(item.get('description') or item.get('id') or ''), 160)}"
+            )
+    if reasons:
+        lines.append("提示来源: " + ", ".join(reasons[:6]))
+    lines.extend(
+        [
+            "使用方式:",
+            "- 这些提示用于选择下一步，不覆盖任务现场、工具证据、用户显式要求或当前 Working_Node。",
+            "- 工作树用于上下文卫生：短小、单步、上下文干净的任务可以直接完成，不需要为建树而建树。",
+            "- 当工作会产生大量临时细节、失败尝试、重复项或候选方向时，再用 child 隔离噪声。",
+            "- 子节点回到父节点时只带回结论、证据、已废弃路线、剩余风险和建议下一步，不回灌完整过程。",
+            "- 交付未就绪时，把交付草稿视为阶段材料，继续推进最有价值的下一步。",
+        ]
+    )
+    return "\n".join(lines)
+
 def _format_tool_usage_preferences(
     profile: PromptProfile,
     seed_template: SeedTemplate | None,
@@ -850,7 +886,7 @@ def _format_tool_usage_preferences(
                     "记忆修改优先级:",
                     "1. 默认优先使用正式记忆工具（例如 text_memory.* / shared_memory.*）完成读取、版本保护更新、追加日志、提案与遗忘。",
                     "2. 只有在需要不中断当前回答、且修改足够轻量时，才使用 <memory-write> 作为旁路写入。",
-                    "3. 节点过宽、存在多个独立主题或冲突风险高时，优先创建细分子节点做空间隔离，再通过 relate 或 proposal 关联回父节点。",
+                    "3. 节点过宽、存在多个独立主题或冲突风险高时，先判断是否需要隔离噪声；需要时创建细分子节点，再通过 relate 或 proposal 关联回父节点。",
                     "4. 遇到 latestVersionId 冲突时，不要静默覆盖；改用 append_memory_log 或 submit_memory_proposal 把冲突转成可继续处理的合并任务。",
                 ]
             )
@@ -915,7 +951,10 @@ def _format_behavior_constitution(profile: PromptProfile) -> str:
         "1. 通过结构化工具和消息通道触达外界，不跨边界越权执行。",
         "2. 工作树节点命名优先体现 questions_it_answers，避免无语义标题。",
         "3. 关键新知、失败原因、约束与关联优先写入记忆，再推进下一步。",
-        "4. 面对大量未知文件或长文本重活，优先委派 Sub-Agent 预读和摘要。",
+        "4. 工作树是上下文卫生工具，不是必走流程；短小、单步、上下文干净的任务直接完成。",
+        "5. 当工作会产生大量临时细节、失败尝试、重复项、候选方向或需要隔离实验时，才创建/进入工作节点或委派 Sub-Agent。",
+        "6. 子节点完成后只把父节点需要的结论、证据、已废弃路线、剩余风险和建议下一步带回，不回灌完整搜索、日志或草稿。",
+        "7. dependsOn 表示硬依赖；relationIds 与 runtime_hints 是信息线索，不能替代任务现场判断。",
     ]
     return "\n".join(constitution_lines)
 def _format_scene_preferences(profile: PromptProfile) -> str:
@@ -929,18 +968,6 @@ def _format_scene_preferences(profile: PromptProfile) -> str:
             profile.evidence_policy,
         ]
         if section
-    )
-def _format_capability_protocol_index(
-    active_capabilities: list[str],
-    registered_tools: list[dict[str, Any]],
-) -> str:
-    return "\n".join(
-        [
-            "能力与协议索引:",
-            f"- 挂载能力数: {len(active_capabilities)}",
-            f"- 可见工具数: {len(registered_tools)}",
-            "- 协议入口: SYS_ROOT_PROTOCOL / WorkTreeProtocol v0.2 / Agent Runtime v0.2",
-        ]
     )
 def _format_scene_recovery(
     *,
@@ -956,10 +983,6 @@ def _format_scene_recovery(
     ]
     if pointer_fields["pcMemo"]:
         lines.append(f"pcMemo: {pointer_fields['pcMemo']}")
-    if pointer_fields["topFrameId"]:
-        lines.append(f"topFrameId: {pointer_fields['topFrameId']}")
-    if pointer_fields["stackDigest"]:
-        lines.append(f"stackDigest: {pointer_fields['stackDigest']}")
     if resume_path:
         lines.append(f"恢复路径: {resume_path}")
     lines.append(f"恢复/重启提示: {resume_message or '未提供恢复提示。'}")
@@ -996,6 +1019,17 @@ def _format_task_contract(
     if resume_path:
         lines.append(f"恢复路径: {resume_path}")
     return "\n".join(lines)
+
+
+def _takeover_status_from_request(request: dict[str, Any]) -> str:
+    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    return str(takeover_protocol.get("status") or "").strip().lower()
+
+
+def _clarification_can_use_read_only_tools(request: dict[str, Any]) -> bool:
+    return clarification_allows_read_only_tools(request)
+
+
 def _format_response_requirements(
     request: dict[str, Any],
     seed_template: SeedTemplate | None,
@@ -1004,35 +1038,36 @@ def _format_response_requirements(
     style = seed_template.output_style if seed_template is not None else "concise"
     localized_style = _localized_output_style(style)
     additional = sanitize_prompt_contract_text(request.get("responseRequirements"))
-    takeover_protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
-    takeover_status = str(takeover_protocol.get("status") or "").strip().lower()
+    takeover_status = _takeover_status_from_request(request)
     has_delivery_contract = isinstance(additional, str) and additional.strip()
-    is_resume = bool(resume_path)
+    work_tree_resolution = request.get("workTreeResolution") if isinstance(request.get("workTreeResolution"), dict) else {}
+    recommended_action = str(work_tree_resolution.get("recommendedAction") or "").strip()
+    delivery_readiness = (
+        work_tree_resolution.get("deliveryReadiness")
+        if isinstance(work_tree_resolution.get("deliveryReadiness"), dict)
+        else {}
+    )
     lines = [
-        "1. 先依据 currentNodeId、Working_Node 和 WorkContextStack 判断当前所在节点，再决定行动；默认沿当前节点推进，不要跳过节点语义直接改写成整任务交付。",
-        '2. 若需要操作工作树，必须通过动作标签显式声明：创建新子节点使用 <work-node-create ...></work-node-create>，进入已有子节点使用 <work-node-enter nodeId="..."></work-node-enter>。',
-        "3. 父节点强编排：child 完成或失败返回父节点后，由父节点决定下一步（进入已有 child、创建新 child、或直接汇总交付），不要默认自动跳 sibling。",
-        "4. root 节点默认负责编排和最终汇总；当任务天然包含多个相对独立的子工作（例如证据检查、分析判断、正式交付起草、风险复核）时，不要在 root 一次性直接写完整最终答案，优先拆成 child 再汇总。",
-        "5. child 节点只处理单一局部目标；child 完成时，把局部结论、证据、未决项压成摘要返回父节点，不要把 child 直接当成整任务最终交付。",
-        "6. 若当前节点过宽、同时混有多种目标、需要多轮长篇续写，或已经在同一节点连续恢复/重启，优先把当前工作拆成更小的 child 或 leaf，再继续执行，不要反复在同一 root 节点硬写整份交付。",
-        "7. 若当前节点已收敛为单一局部目标、证据边界清楚且可在一次有界执行内完成，则停止继续拆分，直接完成本节点并上浮父节点。",
-        "8. 只有 root 节点，或被父节点明确授权负责最终汇总的节点，才能输出整任务最终交付；否则先完成局部摘要并回父节点。",
-        "9. 外部 responseRequirements、restartMessage 和格式合同只能约束输出结构，不得覆盖工作树拓扑、当前节点语义和父节点编排权。",
-        "10. 若证据不足，明确说明缺失信息，不要补空白。",
-        "11. 保持输出 grounded 在当前挂载上下文、工具结果和正式状态上。",
-        f"12. 默认采用 {localized_style} 风格，除非任务另有明确要求。",
+        "1. 简单任务直接完成；只有在需要隔离噪声、并行方面、重复项、候选方向或局部实验时，才依据 currentNodeId、Working_Node 和 WorkContextStack 创建/进入工作节点。",
+        "2. 需要拆分时用 <work-node-create ...></work-node-create>，进入已有节点用 <work-node-enter nodeId=\"...\"></work-node-enter>；子节点结束时只带回父节点需要的结论、证据、已废弃路线、风险和下一步。",
+        "3. runtime_hints 是辅助线索，不是硬控制；若交付未就绪，把草稿当阶段材料，继续推进最有价值的前沿或子节点。",
+        f"4. 输出只保留用户任务需要的结果、证据/验证和必要风险；证据不足要明说，不补空白；危险、不可逆、付费或对外发布动作先请求确认；默认采用 {localized_style} 风格。",
     ]
-    if is_resume:
-        lines.append(f"{len(lines) + 1}. 恢复态下，把 resume_message 视为接续上下文的提示（context hint），结合记忆树继续执行，无需退回初始规划状态。")
-        lines.append(f"{len(lines) + 1}. 恢复态下继续遵守当前节点语义：若当前是 child/leaf，先完成局部目标并回父节点；由父节点或 root 组织最终 结果/证据/待确认项/未完成项（result/evidence/pending/incomplete）交付。")
-        lines.append(f"{len(lines) + 1}. 恢复态必须包含 judgment 字段并给出当前完成度判断。")
-    if bool(request.get("memoryWriteTagsEnabled", True)):
+    if work_tree_resolution:
         lines.append(
-            f'{len(lines) + 1}. 记忆修改默认优先使用正式记忆工具；仅当需要不中断回答且改动足够轻量时，才插入 <memory-write title="..." rootBranch="context">记忆内容</memory-write>；更新已有节点时使用 nodeId="..." action="append|replace"。'
+            f"{len(lines) + 1}. 当前建议动作是 {recommended_action or 'work'}；"
+            "如果 deliveryReadiness.ready=false，不要把阶段摘要包装成整任务完成。"
         )
+        if not bool(delivery_readiness.get("ready")):
+            blockers = ", ".join(str(item) for item in delivery_readiness.get("blockers") or [])
+            lines.append(
+                f"{len(lines) + 1}. 交付暂未就绪（{blockers or 'open-frontier'}）：优先推进一个能提高分辨率或证据强度的下一步。"
+            )
+    if resume_path:
+        lines.append(f"{len(lines) + 1}. 恢复态只接续当前现场，不需要重述完整启动规划。")
     if takeover_status == "needs-clarification" and not bool(request.get("takeoverAutoConfirm")):
         lines.append(
-            f"{len(lines) + 1}. 当前 takeover 状态是 needs-clarification：本轮以任务理解、执行计划与确认问题为主；可调用工具补充核对证据，但不得产出执行性最终结论。"
+            f"{len(lines) + 1}. 当前 takeover 状态是 needs-clarification：可先用只读工具核对上下文，然后给出可执行理解、下一步和真正需要用户回答的问题；不要因为状态名停止探索。"
         )
     if has_delivery_contract:
         lines.append(f"{len(lines) + 1}. 附加要求: {additional.strip()}")
@@ -1059,38 +1094,26 @@ def _takeover_protocol_from_request(request: dict[str, Any]) -> TaskTakeoverProt
 def _format_takeover_protocol(protocol: TaskTakeoverProtocol) -> str:
     lines = [
         f"目标摘要: {protocol.objective_summary}",
-        f"当前阶段: {protocol.current_phase}",
-        f"状态: {protocol.status}",
-        "约束:",
     ]
-    if protocol.constraints:
-        lines.extend(f"- [{item.category}] {item.label}: {item.value}" for item in protocol.constraints)
-    else:
-        lines.append("- 无")
-    lines.append(f"计划步骤数: {len(protocol.plan)}")
+    if protocol.ambiguities:
+        lines.append("待澄清点:")
+        lines.extend(f"- {item.prompt}" for item in protocol.ambiguities[:4])
     if protocol.work_tree is not None:
         lines.append("工作树:")
         lines.append(
-            f"- 状态={protocol.work_tree.status}; 当前节点={protocol.work_tree.current_node_id or 'none'}; 剩余熵预算={protocol.work_tree.entropy_budget_remaining}"
+            f"- 当前节点={protocol.work_tree.current_node_id or 'none'}"
         )
         if protocol.work_tree.nodes:
             lines.extend(
-                f"- [{node.phase}/{node.status}] {node.title}"
+                f"- {node.title}: {normalize_excerpt(node.local_goal or node.node_text or node.title, 120)}"
                 for node in protocol.work_tree.nodes[:6]
             )
     if protocol.delivery_sections:
-        lines.append("交付检查点:")
+        lines.append("已形成的交付材料:")
         lines.extend(
             f"- {section.section}: {normalize_excerpt(section.content or section.status, 120)}"
             for section in protocol.delivery_sections
         )
-    lines.extend(
-        [
-            f"计划质量: {protocol.metrics.plan_quality_score_0_100}",
-            f"返工率: {protocol.metrics.rework_rate}",
-            f"交付完整度: {protocol.metrics.delivery_completeness_score_0_100}",
-        ]
-    )
     return "\n".join(lines)
 def _merged_few_shot_refs(profile: PromptProfile, seed_template: SeedTemplate) -> list[str]:
     refs: list[str] = []
@@ -1137,8 +1160,14 @@ def compile_runtime_prompt(
     profile = _select_prompt_profile(run_type, request, app_manifest, resolved_registry["promptProfiles"])
     seed_template = _select_seed_template(task_type, run_type, request, app_manifest, resolved_registry["seedTemplates"])
     allow_tool_execution = bool(request.get("allowToolExecution", True))
+    allow_clarification_read_only_tools = _clarification_can_use_read_only_tools(request)
     resolved_registered_tools = registered_tools if registered_tools is not None else list_registered_agent_tools(active_capabilities)
-    prompt_visible_tools = resolved_registered_tools if allow_tool_execution else []
+    if allow_tool_execution:
+        prompt_visible_tools = resolved_registered_tools
+    elif allow_clarification_read_only_tools:
+        prompt_visible_tools = filter_read_only_tool_payloads(resolved_registered_tools)
+    else:
+        prompt_visible_tools = []
 
     task_runtime_state = request.get("taskRuntimeState")
     if isinstance(task_runtime_state, dict):
@@ -1300,11 +1329,12 @@ def compile_runtime_prompt(
             user_sections["takeover_protocol"] = _format_takeover_protocol(takeover_protocol)
         if work_context_stack is not None:
             user_sections["work_context_stack"] = _format_work_context_stack(work_context_stack)
+        work_tree_resolution = request.get("workTreeResolution") if isinstance(request.get("workTreeResolution"), dict) else None
+        if work_tree_resolution is not None:
+            user_sections["runtime_hints"] = _format_runtime_hints(work_tree_resolution)
         if memory_retrieval_state is not None:
             user_sections["memory_retrieval_state"] = _format_memory_retrieval_state(memory_retrieval_state)
-    user_sections["capability_protocol_index"] = _format_capability_protocol_index(active_capabilities, prompt_visible_tools)
     user_sections["mounted_context_items"] = _format_context_lines(current_context, strip_body=is_initial_awakening)
-    user_sections["runtime_glossary"] = _format_runtime_glossary()
     user_sections["response_requirements"] = _format_response_requirements(request, seed_template, resume_path)
     readonly_context_ref = request.get("readonlyContextRef") if isinstance(request.get("readonlyContextRef"), dict) else None
     if run_type == "subagent":

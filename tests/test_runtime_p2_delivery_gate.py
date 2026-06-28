@@ -5,10 +5,12 @@ import pytest
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_sdk import TaskRepository, get_persistence_runtime
+from yggdrasil_sdk.contracts import TaskTakeoverProtocol
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
 from yggdrasil_sdk.runtime_kernel.execution_control import approve_task_completion, request_task_revision
+import yggdrasil_sdk.runtime_kernel.takeover as runtime_takeover
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
-from yggdrasil_task_takeover.plugin import TaskTakeoverModule  # Ensure module hooks are registered
+from yggdrasil_task_takeover.plugin import TaskTakeoverModule  # noqa: F401  # Ensure module hooks are registered
 from yggdrasil_worker.registry import run_worker_once
 
 
@@ -44,16 +46,6 @@ def test_runtime_metrics_uses_window_span_floor_for_live_restart_paths() -> None
     assert metrics["windowIndex"] == 3
     assert metrics["restartCount"] == 2
     assert metrics["cumulativeWindowSpanTokens"] == 128000
-
-
-def test_has_formal_delivery_sections_accepts_legacy_and_live_heading_contracts() -> None:
-    assert runtime_execution_loop._has_formal_delivery_sections(
-        "# result\n完成。\n# evidence\n通过。\n# pending\n无。\n# incomplete\n无。"
-    )
-    assert runtime_execution_loop._has_formal_delivery_sections(
-        "## 结果\n完成。\n\n## 证据\n通过。\n\n## 风险\n无。\n\n## 已知问题\n无。"
-    )
-    assert not runtime_execution_loop._has_formal_delivery_sections("## 结果\n只有结果，没有其余段落。")
 
 
 def _simple_root_protocol(task_id: str) -> dict[str, object]:
@@ -113,6 +105,54 @@ def _simple_root_protocol(task_id: str) -> dict[str, object]:
         "appliedModules": ["task-takeover"],
         "hookTrace": [],
     }
+
+
+def _awaiting_approval_root_protocol(task_id: str) -> dict[str, object]:
+    protocol = _simple_root_protocol(task_id)
+    protocol["currentPhase"] = "deliver"
+    protocol["status"] = "verified"
+    work_tree = protocol["workTree"]
+    assert isinstance(work_tree, dict)
+    work_tree["status"] = "awaiting-approval"
+    work_tree["pcMemo"] = "等待批准"
+    nodes = work_tree["nodes"]
+    assert isinstance(nodes, list)
+    root = nodes[0]
+    assert isinstance(root, dict)
+    root["status"] = "completed"
+    root["executionSummary"] = "根节点已完成，等待批准。"
+    return protocol
+
+
+def _seed_awaiting_approval_task(task_id: str, run_id: str) -> None:
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        task_repository = TaskRepository(session)
+        task = task_repository.create_task(
+            {
+                "id": task_id,
+                "title": f"{task_id} awaiting approval",
+                "goal": "验证显式 approval 控制面。",
+                "status": "awaiting-approval",
+                "currentObjective": "等待批准或重新打开修订。",
+                "currentFocus": "awaiting-approval",
+            }
+        )
+        task_repository.create_agent_run(
+            task.id,
+            {
+                "id": run_id,
+                "status": "completed",
+                "selectedModel": "LongCat-Flash-Lite",
+                "selectedProvider": "longcat",
+            },
+        )
+        runtime_takeover.persist_task_takeover_protocol(
+            TaskTakeoverProtocol.model_validate(_awaiting_approval_root_protocol(task_id)),
+            task_id=task.id,
+            run_id=run_id,
+        )
 
 
 def _nested_work_tree_protocol(task_id: str) -> dict[str, object]:
@@ -202,7 +242,7 @@ def _nested_work_tree_protocol(task_id: str) -> dict[str, object]:
     }
 
 
-def _fake_completion_factory(text: str = "# result\n完成。\n# evidence\n通过。\n# pending\n无。\n# incomplete\n无。"):
+def _fake_completion_factory(text: str = "结果：完成。\n证据：通过。"):
     def _fake(*args, **kwargs):
         return {
             "assistantText": text,
@@ -223,31 +263,9 @@ def _fake_completion_factory(text: str = "# result\n完成。\n# evidence\n通�
     return _fake
 
 
-def test_approve_task_completion_moves_to_completed(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _fake_completion_factory()
-    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", fake)
-    
+def test_approve_task_completion_moves_to_completed() -> None:
     runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        TaskRepository(session).create_task({
-            "id": "task_p2_approve_test",
-            "title": "P2 approve test",
-            "goal": "验证 approve 闭环。",
-            "status": "draft",
-        })
-
-    started = client.post(
-        "/runtime/tasks/task_p2_approve_test/start",
-        json={
-            "currentObjective": "完成交付。",
-            "takeoverProtocol": _simple_root_protocol("task_p2_approve_test"),
-        },
-    )
-    assert started.status_code == 202
-
-    processed = run_worker_once("agent-runtime")
-    assert processed["result"]["status"] == "awaiting-approval"
+    _seed_awaiting_approval_task("task_p2_approve_test", "run_p2_approve_test")
 
     # Approve
     result = approve_task_completion("task_p2_approve_test")
@@ -265,7 +283,7 @@ def test_request_task_revision_reopens_and_requeues(monkeypatch: pytest.MonkeyPa
     def _fake(*args, **kwargs):
         call_count[0] += 1
         return {
-            "assistantText": "# result\n完成。\n# evidence\n通过。\n# pending\n无。\n# incomplete\n无。",
+            "assistantText": "结果：完成。\n证据：通过。",
             "invocation": {
                 "id": f"inv_p2_revision_{call_count[0]}",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -282,27 +300,7 @@ def test_request_task_revision_reopens_and_requeues(monkeypatch: pytest.MonkeyPa
         }
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
     
-    runtime = get_persistence_runtime()
-    with runtime.session_scope() as session:
-        WorkspaceBootstrapRepository(session).ensure_default_workspace()
-        TaskRepository(session).create_task({
-            "id": "task_p2_revision_test",
-            "title": "P2 revision test",
-            "goal": "验证 revision 闭环。",
-            "status": "draft",
-        })
-
-    started = client.post(
-        "/runtime/tasks/task_p2_revision_test/start",
-        json={
-            "currentObjective": "完成交付。",
-            "takeoverProtocol": _simple_root_protocol("task_p2_revision_test"),
-        },
-    )
-    assert started.status_code == 202
-
-    processed = run_worker_once("agent-runtime")
-    assert processed["result"]["status"] == "awaiting-approval"
+    _seed_awaiting_approval_task("task_p2_revision_test", "run_p2_revision_test")
 
     # Request revision
     result = request_task_revision("task_p2_revision_test", {"reason": "需要补充证据。"})
@@ -329,7 +327,7 @@ def test_approve_rejects_non_awaiting_approval_task() -> None:
         approve_task_completion("task_p2_approve_reject")
 
 
-def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_delivery_gate_allows_task_relevant_delivery_without_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _fake_completion_factory(text="# result\n完成。\n# evidence\n通过。")
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", fake)
     
@@ -339,7 +337,7 @@ def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missi
         TaskRepository(session).create_task({
             "id": "task_p2_gate_block",
             "title": "P2 delivery gate block",
-            "goal": "验证 pending/incomplete 缺失会阻断正式交付。",
+            "goal": "验证缺少 optional delivery sections 不会阻断交付。",
             "status": "draft",
         })
 
@@ -353,13 +351,13 @@ def test_delivery_gate_retries_once_then_blocks_when_pending_or_incomplete_missi
     assert started.status_code == 202
 
     first = run_worker_once("agent-runtime")
-    assert first["result"]["status"] == "awaiting-approval"
-    assert first["result"]["task"]["status"] == "awaiting-approval"
+    assert first["result"]["status"] == "completed"
+    assert first["result"]["task"]["status"] == "completed"
     assert first["result"]["run"]["status"] == "completed"
-    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "completed"
 
 
-def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_delivery_gate_does_not_force_retry_for_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     call_count = [0]
 
     def _fake(*args, **kwargs):
@@ -367,7 +365,7 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
         assistant_text = (
             "我先读取当前上下文并确认证据边界。"
             if call_count[0] == 1
-            else "# result\n完成。\n# evidence\n通过。\n# pending\n无。\n# incomplete\n无。"
+            else "结果：完成。\n证据：通过。"
         )
         return {
             "assistantText": assistant_text,
@@ -394,7 +392,7 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
         TaskRepository(session).create_task({
             "id": "task_p2_gate_retry_success",
             "title": "P2 delivery gate retry success",
-            "goal": "验证模型误停后 runtime 会补一轮并恢复正式交付。",
+            "goal": "验证缺少 optional sections 不触发格式型重试。",
             "status": "draft",
         })
 
@@ -411,6 +409,7 @@ def test_delivery_gate_continuation_recovers_when_second_attempt_meets_contract(
     assert first["result"]["status"] == "awaiting-approval"
     assert first["result"]["task"]["status"] == "awaiting-approval"
     assert first["result"]["run"]["status"] == "completed"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
     assert call_count[0] == 1
 
 
@@ -418,13 +417,24 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
     def _fake(*args, **kwargs):
         request = kwargs["request"]
         current_node_id = str(request.get("currentNodeId") or "")
+        work_tree_nodes = (request.get("takeoverProtocol") or {}).get("workTree", {}).get("nodes") or []
+        completed_children = sorted(
+            str(node.get("id"))
+            for node in work_tree_nodes
+            if isinstance(node, dict)
+            and str(node.get("parentNodeId") or "") == "root"
+            and str(node.get("status") or "") == "completed"
+        )
         text_by_node = {
-            "child-1": "# result\n子节点一完成。\n# evidence\nchild-1 证据齐全。\n# pending\n继续 child-2。\n# incomplete\n无。",
-            "child-2": "# result\n子节点二完成。\n# evidence\nchild-2 证据齐全。\n# pending\n汇总 root。\n# incomplete\n无。",
-            "root": "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
+            "child-1": "子节点一完成。证据：child-1 证据齐全。下一步继续 child-2。",
+            "child-2": "子节点二完成。证据：child-2 证据齐全。下一步汇总 root。",
+            "root": "根节点已汇总两个子节点。证据：已形成最终答案。等待显式批准。",
         }
+        assistant_text = text_by_node[current_node_id]
+        if current_node_id == "root" and completed_children == ["child-1"]:
+            assistant_text = "root 继续编排并进入 child-2。\n<work-node-enter nodeId=\"child-2\"></work-node-enter>"
         return {
-            "assistantText": text_by_node[current_node_id],
+            "assistantText": assistant_text,
             "invocation": {
                 "id": f"inv_p2_multinode_{current_node_id}",
                 "resolvedModel": "LongCat-Flash-Lite",
@@ -468,9 +478,19 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
     assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
 
     second = run_worker_once("agent-runtime")
-    assert second["result"]["status"] == "needs-clarification"
-    assert second["result"]["task"]["status"] == "awaiting-approval"
-    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "needs-clarification"
+    assert second["result"]["status"] == "continuing"
+    assert second["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "child-2"
+    assert second["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "enter-existing-child"
+
+    third = run_worker_once("agent-runtime")
+    assert third["result"]["status"] == "continuing"
+    assert third["result"]["queuedWorkItem"]["payload"]["payload"]["currentNodeId"] == "root"
+    assert third["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
+
+    fourth = run_worker_once("agent-runtime")
+    assert fourth["result"]["status"] == "awaiting-approval"
+    assert fourth["result"]["task"]["status"] == "awaiting-approval"
+    assert fourth["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "awaiting-approval"
 
     revision = request_task_revision(
         "task_p2_multinode_revision_approve",
@@ -481,7 +501,7 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
     assert revision["takeoverProtocol"]["workTree"]["currentNodeId"] == "root"
 
     rerun = run_worker_once("agent-runtime")
-    assert rerun["result"]["status"] == "needs-clarification"
+    assert rerun["result"]["status"] == "awaiting-approval"
     assert rerun["result"]["task"]["status"] == "awaiting-approval"
 
     approval = approve_task_completion("task_p2_multinode_revision_approve")

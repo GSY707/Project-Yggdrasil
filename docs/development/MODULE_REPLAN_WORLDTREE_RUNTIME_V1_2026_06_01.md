@@ -4,9 +4,9 @@
 
 - 先把世界树 agent 的主语义稳定在清晰模块边界内，再做大规模整理。
 - 保证三条核心行为不回退：
-  - 父节点强编排
-  - child 完成后回父节点（或同层 sibling）
-  - 根节点交付先进入 awaiting-approval，再由控制面 approve/revision 收口
+  - 工作树只作为上下文卫生与按需隔离工具，不变回硬控制器
+  - child 完成后只回传父节点需要的结论、证据、废弃路线、风险和下一步
+  - 根节点在需要用户确认、不可逆动作或发布边界时进入 awaiting-approval，再由控制面 approve/revision 收口
 
 ## 模块边界（建议目标态）
 
@@ -28,8 +28,7 @@
 ### 3) runtime_kernel.takeover_domain
 - 职责：世界树核心语义（父子节点推进、work context stack、delivery/revision 生命周期）。
 - 主要文件：
-  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_work_tree_runtime.py
-  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_protocol_lifecycle.py
+  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py
 - 约束：child 完成必须上浮，不允许 child 直接整任务收口。
 
 ### 4) runtime_kernel.transition_gate
@@ -93,8 +92,7 @@
 - 涉及文件：
   - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_worker_entry.py
   - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop_transitions.py
-  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_work_tree_runtime.py
-  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_protocol_lifecycle.py
+  - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py
   - packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_control.py
 - 对应测试：
   - tests/test_runtime_p2_delivery_gate.py

@@ -22,6 +22,15 @@ from .fork_runtime import (
     merge_fork_result_and_plan_next_batch,
     queue_fork_batch,
 )
+from .work_tree_graph import (
+    DeliveryReadinessResult,
+    FrontierItem,
+    NodeResolutionAssessment,
+    WorkTreeResolutionPolicy,
+    assess_node_resolution,
+    build_long_run_core_frontiers,
+    compute_delivery_readiness,
+)
 from .shutdown_control import clear_shutdown, is_shutdown_requested, request_shutdown
 from .snapshot import save_pending_tool_calls_snapshot
 
@@ -34,6 +43,11 @@ __all__ = [
     "cancel_task_execution",
     "create_task_branch_from_snapshot",
     "execute_main_agent_work_item",
+    "assess_node_resolution",
+    "build_long_run_core_frontiers",
+    "compute_delivery_readiness",
+    "DeliveryReadinessResult",
+    "FrontierItem",
     "ForkMergeAndBatchResult",
     "ForkResultEnvelope",
     "ForkRuntimeBatchResult",
@@ -53,4 +67,6 @@ __all__ = [
     "retry_task_execution",
     "save_current_task_snapshot",
     "save_pending_tool_calls_snapshot",
+    "NodeResolutionAssessment",
+    "WorkTreeResolutionPolicy",
 ]

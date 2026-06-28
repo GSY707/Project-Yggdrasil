@@ -1,0 +1,136 @@
+{
+  "id": "evalsuite_work_tree_fork_evaluation_tasks",
+  "name": "Work-Tree Fork Evaluation Tasks",
+  "domain": "generic",
+  "suiteRole": "runtime-debug-harness",
+  "suiteRoleNote": "Deterministic executable coverage for R1-R4 from WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md. These cases validate fork planning shape, summary-only pending flow, parent replan gates, and evidence references without live provider cost.",
+  "subjectKind": "workflow",
+  "subjectRef": "work-tree:fork-evaluation-tasks",
+  "metricRefs": [
+    "pass-rate",
+    "fork-count",
+    "parent-context-anchor",
+    "pending-summary-only-flow",
+    "parent-replan-gate"
+  ],
+  "cases": [
+    {
+      "id": "evalcase_work_tree_fork_r1_repo_implementation_review",
+      "title": "R1 Repository Multi-Area Implementation Readiness Review",
+      "scenario": "runtime.fork_evaluation_task",
+      "evaluationTask": "R1",
+      "taskType": "coding",
+      "taskTitle": "Repository multi-area implementation readiness review",
+      "taskGoal": "Fork four sibling children to review contracts, runtime reducers, tests, and docs, then merge them into implementation slices.",
+      "policy": { "maxForks": 4, "reserveParentMergeSlots": 0 },
+      "expectedMinForks": 3,
+      "requireEvidenceRefs": true,
+      "requiredOutputSections": ["area summary", "evidence", "implementation slices"],
+      "childSpecs": [
+        { "id": "contracts", "title": "Contracts review", "area": "contracts", "priority": 1, "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/contracts.py"] },
+        { "id": "runtime-reducer", "title": "Runtime reducer review", "area": "runtime reducer", "priority": 2, "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py"] },
+        { "id": "tests", "title": "Tests review", "area": "tests", "priority": 3, "evidenceRefs": ["tests/runtime/test_work_tree_graph_scheduler.py"] },
+        { "id": "docs", "title": "Docs review", "area": "docs", "priority": 4, "evidenceRefs": ["docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md"] }
+      ],
+      "tags": ["work-tree", "fork", "R1", "repo-scoped", "deterministic"]
+    },
+    {
+      "id": "evalcase_work_tree_fork_r2_release_gate_review",
+      "title": "R2 Product Release Path Multi-Face Review",
+      "scenario": "runtime.fork_evaluation_task",
+      "evaluationTask": "R2",
+      "taskType": "release",
+      "taskTitle": "Product release path multi-face review",
+      "taskGoal": "Review release docs, packaging scripts, product smoke, and web release page in parallel, then block downstream auto batch when a hard release gap changes the plan.",
+      "policy": { "maxForks": 4, "reserveParentMergeSlots": 0 },
+      "expectedMinForks": 4,
+      "expectParentReplanRequired": true,
+      "expectAutoLaunchBlocked": true,
+      "requirePendingSummaryOnly": true,
+      "requiredOutputSections": ["release gate", "blocking gaps", "next batch decision"],
+      "childSpecs": [
+        { "id": "release-docs", "title": "Release docs review", "priority": 1, "relationIds": ["release-gate"], "evidenceRefs": ["README.md"] },
+        { "id": "packaging", "title": "Packaging scripts review", "priority": 2, "relationIds": ["release-gate"], "evidenceRefs": ["packaging"] },
+        { "id": "product-smoke", "title": "Product smoke review", "priority": 3, "relationIds": ["release-gate"], "evidenceRefs": ["scripts"] },
+        { "id": "web-release", "title": "Web release page review", "priority": 4, "relationIds": ["release-gate"], "evidenceRefs": ["apps/web"] }
+      ],
+      "pendingInformationItems": [
+        {
+          "id": "release-hard-gap",
+          "sourceNodeId": "product-smoke",
+          "targetNodeId": "web-release",
+          "relationId": "release-gate",
+          "relationType": "proposed-dependency-change",
+          "category": "dependency-change",
+          "summary": "Product smoke found a hard release gap; parent must decide fix, retest, or report downgrade before launching downstream work.",
+          "evidenceRefs": ["smoke://product-release#hard-gap"]
+        }
+      ],
+      "tags": ["work-tree", "fork", "R2", "release-gate", "deterministic"]
+    },
+    {
+      "id": "evalcase_work_tree_fork_r3_externalized_material_compare",
+      "title": "R3 Externalized Material Package Comparison",
+      "scenario": "runtime.fork_evaluation_task",
+      "evaluationTask": "R3",
+      "taskType": "analysis",
+      "taskTitle": "Externalized material package comparison",
+      "taskGoal": "Fork three externalized material reviews and merge common risks, differences, evidence references, and priority actions.",
+      "policy": { "maxForks": 3, "reserveParentMergeSlots": 0 },
+      "expectedMinForks": 3,
+      "requirePendingSummaryOnly": true,
+      "requiredOutputSections": ["common risks", "differences", "evidence", "priority actions"],
+      "childSpecs": [
+        { "id": "material-a", "title": "Material package A review", "priority": 1, "relationIds": ["external-material"], "evidenceRefs": ["fixture://external-material-a"] },
+        { "id": "material-b", "title": "Material package B review", "priority": 2, "relationIds": ["external-material"], "evidenceRefs": ["fixture://external-material-b"] },
+        { "id": "material-c", "title": "Material package C review", "priority": 3, "relationIds": ["external-material"], "evidenceRefs": ["fixture://external-material-c"] }
+      ],
+      "pendingInformationItems": [
+        {
+          "id": "common-risk-summary",
+          "sourceNodeId": "material-a",
+          "targetNodeId": "material-b",
+          "relationId": "external-material",
+          "relationType": "evidence",
+          "category": "summary",
+          "summary": "Material A flags vendor lock-in and missing recovery ownership; downstream comparison should classify whether B/C share the same risk.",
+          "evidenceRefs": ["fixture://external-material-a#risk"]
+        }
+      ],
+      "tags": ["work-tree", "fork", "R3", "externalized", "deterministic"]
+    },
+    {
+      "id": "evalcase_work_tree_fork_r4_multi_file_migration_plan",
+      "title": "R4 Multi-File Migration Plan Generation",
+      "scenario": "runtime.fork_evaluation_task",
+      "evaluationTask": "R4",
+      "taskType": "coding",
+      "taskTitle": "Multi-file migration plan generation",
+      "taskGoal": "Fork module-level reviews across contracts, persistence, runtime, and evaluation, route pending findings by summary, and synthesize a staged migration plan.",
+      "policy": { "maxForks": 4, "reserveParentMergeSlots": 1 },
+      "expectedMinForks": 3,
+      "expectedWaiting": ["evaluation"],
+      "requirePendingSummaryOnly": true,
+      "requiredOutputSections": ["module findings", "cross-module routing", "staged migration plan"],
+      "childSpecs": [
+        { "id": "contracts", "title": "Contracts migration impact", "priority": 1, "relationIds": ["migration"], "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/contracts.py"] },
+        { "id": "persistence", "title": "Persistence migration impact", "priority": 2, "relationIds": ["migration"], "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/persistence"] },
+        { "id": "runtime", "title": "Runtime migration impact", "priority": 3, "relationIds": ["migration"], "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/runtime_kernel"] },
+        { "id": "evaluation", "title": "Evaluation migration impact", "priority": 4, "relationIds": ["migration"], "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime"] }
+      ],
+      "pendingInformationItems": [
+        {
+          "id": "runtime-contract-routing",
+          "sourceNodeId": "contracts",
+          "targetNodeId": "runtime",
+          "relationId": "migration",
+          "relationType": "evidence",
+          "category": "summary",
+          "summary": "Contract field changes must be reflected in runtime payload shape before evaluation assertions are updated.",
+          "evidenceRefs": ["packages/python-sdk/src/yggdrasil_sdk/contracts.py#field-change"]
+        }
+      ],
+      "tags": ["work-tree", "fork", "R4", "migration", "deterministic"]
+    }
+  ]
+}

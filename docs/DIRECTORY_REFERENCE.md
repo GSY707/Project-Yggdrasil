@@ -3,7 +3,7 @@
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：基于应用包 `dashboard.json` 元数据设计场景页、任务模板、预期产物、应用设置，并定义 Agent 工作过程下探、返回、折叠和历史窗口回顾的 UI 规则 |
 | `docs/design-handoff/03-settings-debug-configuration.md` | 设置/调试/配置界面 brief：把 provider、模型预算、工作区、数据隐私、应用配置、Prompt、MCP、评测、观测和运行时调试拆成普通设置、高级设置和维护者调试三层 |
 | `docs/design-handoff/04-launcher-experience.md` | 启动器设计需求文档：面向外包团队定义安装向导、桌面主窗口、托盘菜单、应用包直达快捷方式、Docker/provider 检查、状态诊断、备份恢复、更新回滚和错误状态的用户体验要求 |
-| `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`docs/new/`、v0.2 运行时/工作树规格、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
+| `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估（2026-06-05）：按 PRD、`当前正式项目定义、v0.2 运行时/工作树规格与 2026-06-28 LLM 工作树指南、应用包接口和产品化差距文档，对工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等设计项给出完成度评分、证据和下一步优先级 |
 | `docs/development/STITCH_DESIGN_ACCEPTANCE_2026_06_17.md` | Stitch 设计稿四组页面验收报告（2026-06-17）：仅从 `Project Yggdrasil Design System` 验收主页、应用包、设置、启动器四组；Gemini 3.1 Pro 按第 3 节合格线连续返工至 V10；仓库只保留最终通过候选证据包，最终采用 V10 主页、V8 应用包、V6 设置、V9/V6 启动器组合，结论为“通过，可进入工程实现” |
 | `docs/development/DESIGN_ENGINEERING_IMPLEMENTATION_PLAN_2026_06_17.md` | Stitch 设计落到工程实现与未完成项计划（2026-06-17，2026-06-18 更新：阶段 0-3 已完成）：把 V10/V8/V6/V9-V6 最终设计组合转成工程路线，并记录 Start 首页、四应用矩阵、普通设置中心、启动器主路径语言、维护闭环确认门、真实 Docker upgrade/rollback 验证、默认卸载保留本地数据验证和阶段 4-5 未完成项 |
 | `docs/development/UX_DESIGN_TEAM_HANDOFF_2026_06_04.md` | UX 设计团队交接准备文档（2026-06-04）：基于当前 Web 工作台、用户采用度审计和发布路线，整理专业设计团队接手前需要准备的产品定义、用户旅程、功能真相表、术语体系、数据边界、未来形态和交付物要求 |
@@ -15,17 +15,24 @@
 | `docs/development/MULTI_AGENT_WORKTREE_GRAPH_DESIGN_2026_06_20.md` | 多 Agent 自分裂与工作树图调度设计盘点（2026-06-20）：梳理现有 Sub-Agent / Fork / 联邦 Agent、工作树 `dependsOn` / `relationIds` / `priority`、知识继承、模型路由、预算资源和并发冲突文档，并给出下一步应补的图关系、局部 ready-set 调度、Fork、自分裂、知识继承、冲突合同、控制面和评测规格 |
 | `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` | 工作树图与 Fork 并行协议 v0.1（2026-06-21）：正式冻结父节点局部 ready-set、控制流边 / 信息流边分工、Fork 直接继承父 Agent 上下文缓存、child 执行焦点、上下层图边传递、延迟信息流索引、递归 Fork 与 `maxForks` 同时活跃上限、实现前最小合同和第一版风险检测点 |
 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` | 工作树图与 Fork 并行测试任务设计（2026-06-21）：定义 T0-T7 仿真任务、R1-R4 真实/仿真真实任务、递归 Fork 与 `maxForks` 同时活跃上限、语义正确性/加速收益/质量指标、Batch 1-5 后续实现依赖和需要用户拍板的 D1-D7 决策 |
-| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划（2026-06-21，PR1/Batch 2/Batch 3/Batch 4/Batch 5/Batch 6 deterministic/live harness 进展已同步）：按纯函数图调度、AgentRun Fork 字段、Fork batch planner、worker Fork 运行视图、结果合并和 runtime harness 拆分 PR；当前已落地 graph reducer、AgentRun Fork 字段、fork work item planner、worker child run view、Fork result envelope merge、auto next batch DB work item、真实 transitions/Redis enqueue、两轮 deterministic worker harness、Fork 必填字段硬校验、live candidate 入口、禁用工具执行硬开关和 completed work-tree 终态短路；`YGGDRASIL_FORK_RUNTIME_LIVE=1` 下已通过真实 LongCat runtime completed 证据（`evalrun_69093187bf6c46e587c3`） |
-| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行 PR1 纯函数 reducer：复用 `WorkTreeProtocol` / `WorkTreeNode`，计算 direct child ready/blocked、延迟信息流 pending 摘要、`maxForks` 活跃槽位和可启动 Fork candidates；不创建 subagent task/branch，不触碰 worker 或数据库迁移 |
+| `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` | 工作树图与 Fork 并行实现计划（2026-06-21，PR1/Batch 2/Batch 3/Batch 4/Batch 5/Batch 6 deterministic/live harness、T6/T7/R1-R4 与公开展示题进展已同步）：按纯函数图调度、AgentRun Fork 字段、Fork batch planner、worker Fork 运行视图、结果合并和 runtime harness 拆分 PR；当前已落地 graph reducer、AgentRun Fork 字段、fork work item planner、worker child run view、Fork result envelope merge、auto next batch DB work item、真实 transitions/Redis enqueue、两轮 deterministic worker harness、Fork 必填字段硬校验、live candidate 入口、禁用工具执行硬开关、completed work-tree 终态短路、T6 父合并预算保留、T7 递归 Fork active limit、R1-R4 deterministic evaluation suite、公开展示 benefit/live suite 与显式手动 long/ultra live 长任务门槛；`YGGDRASIL_FORK_RUNTIME_LIVE=1` 下已通过真实 LongCat runtime completed smoke 证据（`evalrun_69093187bf6c46e587c3`），公开展示 live 已通过 `evalrun_f6ca4e22241542d4906b`，但二者都不是长任务证据 |
+| `docs/development/ROLLING_FRONTIER_WORK_TREE_RESOLUTION_2026_06_27.md` | 滚动前沿工作树分辨率运行提示说明（2026-06-27）：记录 `FrontierItem` / `WorkTreeResolutionPolicy` / `assess_node_resolution()` / `compute_delivery_readiness()` 及 worker 注入、`runtime_hints`、delivery reducer 证据硬门槛的链路，把“宽泛节点合法、失败预算推动提高分辨率、开放前沿作为提示、expected evidence 缺口才硬阻断”固定为长程任务口径，并列出 queue reliability、durable snapshot、transactional node、plan lifecycle、typed merge、semantic GC、long-run eval、observability replay 八个核心前沿 |
+| `docs/development/LLM_LONG_HORIZON_OVERDESIGN_AUDIT_2026_06_27.md` | LLM 长程控制过度设计审计（2026-06-27）：按“够不够长 / LLM 是否持续控制工作”重扫 prompt 硬规则、delivery gate、needs-clarification、workTreeResolution、状态层级、approval、Fork ready-set、memory-write 和 root mount，区分必须保留的安全边界与应降级为自然语言工作日志或后台审计的过度设计，并记录 Batch 1-4 已落地项与仍保留的 awaiting-approval / 状态重复 / Fork 调度 / root mount 后续项 |
+| `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` | LLM 工作树使用指南与案例（2026-06-28）：把用户工作树使用笔记收敛为正式 agent-facing guidance，明确工作树是上下文卫生工具而非硬控制器，并补齐 7 类单场景、4 个组合案例、父节点摘要格式和反例 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` | 工作树图 ready-set / Fork 并行纯函数 reducer：复用 `WorkTreeProtocol` / `WorkTreeNode`，计算 direct child ready/blocked、延迟信息流 pending 摘要、`maxForks` 活跃槽位、`reserveParentMergeSlots` 父合并预算保留、`allowRecursiveFork=false` 递归启动阻断和可启动 Fork candidates；2026-06-27 新增滚动前沿分辨率提示纯函数，支持 `FrontierItem`、八个长程核心前沿种子、节点 resolution assessment 与 delivery readiness 计算，开放前沿默认只作提示，`expectedEvidence` 缺失会在交付前形成 `missing-target-evidence` blocker |
 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py` | Fork batch / result merge runtime helper（Batch 3/5）：把 ready-set launch candidates 转成 `runType=fork` 的 AgentRun 与 `core.agent.main.execute` / `intent=fork` 的 RuntimeWorkItem；同批 Fork 共享 `parentContextAnchor` / `forkGroupId`；`merge_fork_result_and_plan_next_batch()` 可合并 ForkResultEnvelope、继承更新后的 `workTreeSnapshot` 并创建下一批 DB work item |
-| `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 ready-set / Fork 并行 PR1 回归：覆盖 T0 diamond ready-set、T2 延迟信息流、T3 自动 batch 候选、T4 parent replan gate、T7 递归 Fork active limit |
-| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py` | Agent runtime worker 主入口；Batch 4 已识别 `runType=fork`，复用预创建 fork AgentRun，并把 fork work item 转成 run-local child 指针、Working_Node 和 memory retrieval state |
-| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py` | Agent runtime 完成/续跑/审批流转；Batch 4 已隔离 fork 完成态，Batch 5 已在 fork 完成分支接入 result envelope merge、auto next batch 和 Redis enqueue，仍不推进 task-global status/currentFocus |
+| `tests/runtime/test_work_tree_graph_scheduler.py` | 工作树图 ready-set / Fork 并行与滚动前沿分辨率回归：覆盖 T0 diamond ready-set、T2 延迟信息流、T3 自动 batch 候选、T4 parent replan gate、T6 父合并预算、T7 递归 Fork active limit、宽泛节点 refine、候选交付阻断、失败预算、八个核心前沿、expected evidence blocker、上游 readiness 权威性、turn evidence 写回和 worker stale payload 清理 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py` | Agent runtime worker 主入口；Batch 4 已识别 `runType=fork`，复用预创建 fork AgentRun，并把 fork work item 转成 run-local child 指针、Working_Node 和 memory retrieval state；2026-06-27 新增 `workTreeResolution` 注入，在 takeover/work tree 同步后计算当前节点 resolution，并在 assessment 失败时清除陈旧 payload |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py` | Agent runtime 完成/续跑/审批流转；Batch 4 已隔离 fork 完成态，Batch 5 已在 fork 完成分支接入 result envelope merge、auto next batch 和 Redis enqueue；2026-06-27 会把 `request.workTreeResolution` 传入 takeover delivery reducer，但只把 surviving `missing-target-evidence` 当硬阻断，其余 readiness 信号留作提示 / 审计 |
+| `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py` | Task takeover reducer：负责 work tree/context stack 推进、parent orchestration、child bubble、revision reopen 与 approval finalize；2026-06-27 收窄 `work-tree-resolution-blocked`，只在缺少 expected evidence 等真实证据缺口时阻断交付，本轮真实 evidence refs 会写回 `producedEvidenceRefs` |
+| `packages/python-sdk/src/yggdrasil_sdk/prompting.py` | Runtime prompt 编译器：恢复态会渲染 `<runtime_hints>`，只暴露当前节点、建议下一步、delivery readiness 和 severity 最高的 3 个开放前沿；系统行为宪法、runtime hints 与 response requirements 已切到“工作树是上下文卫生工具、简单任务直接完成、按需隔离噪声、子节点只回传摘要”的新口径 |
 | `tests/runtime/test_fork_launch_planner.py` | Fork batch launch planner / worker run view 回归（Batch 3-4）：验证 `maxForks` 可用槽位、同批上下文锚点、不同 assigned child、main activity + fork intent work item、waiting candidates，以及 worker 消费 fork work item 时保持 child view 且不覆盖父任务焦点 |
 | `tests/runtime/test_fork_merge_and_auto_batch.py` | Fork result merge / auto batch 回归（Batch 5）：验证 result envelope 合并 child summary/evidence/failure、`planImpact=none` 自动创建并 enqueue 下一批 work item、`requires-parent-replan` 禁止自动启动、pending 信息拒绝大段 raw content、mixed outcome 只启动未阻塞 ready child |
 | `tests/runtime/test_work_tree_graph_fork_runtime_harness.py` | Fork runtime deterministic harness（Batch 6）：两轮真实 worker 消费 fork work item，fake LLM 真实写入 model invocation 与 prompt compile artifact，验证 AgentRun 元数据、work item 状态、prompt artifact、workTreeSnapshot 继承、pending summary-only 信息流和不创建 child task/task branch |
 | `evaluation/suites/work-tree-fork-runtime-harness.json` | Work-Tree Fork Runtime Harness 评测套件（Batch 6）：deterministic harness 默认入口，`runtime.fork_harness` 会执行两轮 worker harness pytest 并把通过合同写入 evaluation metrics |
-| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate 评测套件（Batch 6）：nightly/live provider 候选入口；需要 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 和 provider key，否则记录为 blocked/non-pass；开启后关闭 fallback，要求真实 `longcat / LongCat-2.0-Preview` invocation、prompt artifact、live invocation evidence 与 runtime completed 终态，已生成 passed `evalrun_69093187bf6c46e587c3` |
+| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate 评测套件（Batch 6）：手动 live provider smoke 候选入口；需要 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 和 provider key，否则记录为 blocked/non-pass；开启后关闭 fallback，要求真实 `longcat / LongCat-2.0-Preview` invocation、prompt artifact、live invocation evidence 与 runtime completed 终态，已生成 passed `evalrun_69093187bf6c46e587c3`；不是长任务证据 |
+| `evaluation/suites/work-tree-fork-evaluation-tasks.json` | Work-Tree Fork Evaluation Tasks suite：把 R1-R4 从设计文档落成 deterministic 评测入口，覆盖四区域 repo 审查、release gate parent replan、三资料包 summary-only 对比和多文件迁移计划 + 父合并预算保留；已通过 `evalrun_23503bda7dee4c39b90e` |
+| `evaluation/suites/work-tree-fork-public-showcase.json` | Work-Tree Fork Public Showcase suite：公开展示题“2030 韧性能源与应急通信计划”，benefit case 给出 2.406x 估算加速、58.44% wall-clock reduction、33.33% duplicate-read reduction，live case 真实 LongCat completed；已通过 `evalrun_f6ca4e22241542d4906b`；用于展示，不作为长任务或收益实测证明 |
 | `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py` | AgentRun Fork 字段迁移（2026-06-21）：为 `agent_runs` 增加 `fork_root_run_id`、`fork_depth`、`assigned_work_tree_node_id`、`parent_context_anchor`、`fork_group_id` 及 Fork 根/节点/批次索引，支撑 Batch 2 审计与恢复 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发与稳定性、状态机恢复链、M9 控制面与验收链调查基线（2026-06-11）：确认 M9 control-plane 当前通过、M9 acceptance 断在 pause/resume 后续状态收口与预算失败，并列出 worker 队列、任务锁、snapshot 恢复、skip 测试和发布门禁的修复顺序 |
@@ -37,12 +44,9 @@
 | `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：面向外部试用者或录屏演示，按 Web 路径完成“导入素材 -> 选择应用 -> 创建任务 -> 启动任务 -> 查看结果”，并明确 provider key、备份恢复和删除边界 |
 | `docs/development/G4_WEB_RESEARCH_DEFAULT_FAILURE_AUDIT_2026_05_27.md` | G4 默认网络研究测试失败审计（2026-05-27）：固化 `evalrun_52ffd96d5551405da5b0` 的行为偏差，明确“重复幂等工具循环触发提前停止 -> 未进入结构化交付”的失败链路与证据位置 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐（2026-05-27）：冻结“理解任务 -> 形成计划 -> 向发起者核对 -> 再执行”的目标流程，并对照当前协议、提示词、运行时与测试缺口 |
-| `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑（2026-05-26）：冻结“父节点强编排、child 完成/失败先回编排父节点、允许有限线性 continuation 轨迹、leaf 拆分尽量交给 LLM、根节点停在 awaiting-approval”的目标口径 |
 | `docs/development/LLM_WORK_ANALYZER.md` | LLM 工作分析器设计与使用说明：说明 run-first 分析器的数据源、粒度、持久化位置、API/CLI 入口与当前限制 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：面向任务操作者和评测/排障同学，说明 Web、CLI、API 入口与常见排查流程；当前已补齐 work-tree debug 摘要卡、时间线、cache trace、child bubble 与 mixed outcome 的固定读法 |
 | `docs/development/REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md` | 真实任务测试约定与工作树后续任务拆分（2026-05-25）：冻结“默认真实任务应单目标、弱项目内生化、由 agent 自主规划”的出题约定，并记录 P1/P2/P3/P5 本轮收口状态 |
-| `docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md` | 工作树真实任务调试基线（2026-05-25）：把“父节点强编排”的工作树目标冻结成真实任务调试模型，并把验收重点转到 child 先回父节点、父节点再决定 sibling/leaf 的路径 |
-| `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档（2026-05-23）：基于 `docs/new/` 三份新方案，给出 Boot Prompt、父节点强编排的工作树 v0.2、有限线性 continuation 轨迹、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁的落地步骤 |
 | `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` | 世界构建、初次苏醒与任务级工作状态读取实施文档（2026-05-26）：把新三阶段规格翻译成实现层执行计划，明确 root mount 只做世界级/起始状态挂载，任务级工作状态单独读取，并给出 contracts/root_mount/execution_loop/prompting/takeover/snapshot/tests 的落地顺序 |
 | `docs/development/GRADUATE_STANDARD_EXECUTION_CLASSIFICATION_2026_05_30.md` | Graduate 标准执行分类（2026-05-30）：按“当前可做/可做但需确认/当前不可闭环”划分升级路径，并给出面向高标准验收的执行顺序 |
 | `docs/development/GRADUATE_STANDARD_EXTERNAL_REQUIREMENTS_2026_05_30.md` | Graduate 标准外部依赖需求文档（2026-05-30）：定义 provider 参数绑定、网络来源可达性、人工评审与预算审批的外部验收要求与交付物 |
@@ -53,9 +57,8 @@
 | `docs/specs/task-pause-resume-continuation-contract-v0.1.md` | 任务暂停、恢复与继续契约 v0.1（2026-06-18）：正式定义 Start、Pause、Queued Pause、Safe-Stop、Durable Snapshot、Resume、Continue、Retry、Cancel、Shutdown、长期恢复、ResumeAttempt、持久 WorkItem、snapshot 保留策略、手动保存/分支、tool-call 暂停等价性、API 语义和验收门禁 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把“先建世界 / 再醒来 / 再开始工作”拆成世界级与任务级两层，强调建世界与初次苏醒不得接触具体工作信息，并进一步冻结“工具/知识索引优先、能力/知识到工具的关联召回、起始状态、无损恢复和分层诊断”规则 |
 | `docs/specs/application-package-interface-v0.1.md` | 应用包接口总规范 v0.1：统一定义应用包的 manifest、prompt / memory 文件、MCP 服务器、前端界面、dashboard 任务模板、示例任务、预期产物和控制面 API，供别的团队按正式契约开发应用包 |
-| `docs/specs/graduate-researcher-app-v0.1.md` | Graduate Researcher 应用包定义 v0.1：定义“研究生”应用的目标、预算语义、计划-步骤-动作三层模型与 tool-rich 默认工具包 |
+| `docs/specs/graduate-researcher-app-v0.1.md` | Graduate Researcher 应用包定义 v0.1：定义“研究生”应用的目标、预算语义、计划-步骤-动作三层模型、按需分解规则与 tool-rich 默认工具包 |
 | `docs/specs/graduate-researcher-test-standard-v0.1.md` | Graduate Researcher 测试标准 v0.1：定义“机器学习研究生”长任务场景的结果验收口径，聚焦自主规划、稳定性、非急性子与工具覆盖 |
-| `docs/new/工作树.md` | 新工作树方案：把工作树定义为“我要干什么”分支下的动态工作记忆与执行栈，并明确父节点强编排、有限线性 continuation 轨迹和 child 摘要上浮 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，并要求 continuation 优先沿父节点编排位置和最近线性轨迹继续 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心重新定义生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent、邮箱和分期，并明确代码只做边界与警戒 |
 | `docs/research/project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md` | 记忆树理论目标差距评估（2026-05-17）：围绕"全部记忆上树、窗口仅最小子任务工作集"给出实现现状、主要差距与量化结论（综合完成度 59/100，差距 41/100） |
@@ -90,9 +93,9 @@
 | `migrations/versions/1e3a7b8c9d01_high_concurrency_indexes.py` | 高并发表索引迁移：nodes/import_fragments/task_snapshots/model_invocations 复合索引 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/5/26 更新：`docs/new/世界树计划正式项目定义.md`、`docs/new/工作树.md`、`docs/new/元提示词.md`、`docs/specs/agent-runtime-protocol-v0.2.md`、`docs/specs/work-tree-protocol-v0.2.md`、`docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md`、`docs/development/WORK_TREE_REAL_TASK_DEBUG_BASELINE_2026_05_25.md` 与 `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` 已统一收口到新目标：父节点强编排、child 完成/失败先回编排父节点、允许有限线性 continuation 轨迹、leaf 拆分尽量交给 LLM、代码只做边界与警戒、根节点仍以 `awaiting-approval` 收口；同日继续落下首轮实现推进：`runtime_kernel/takeover.py` 已把 child 完成/失败后的默认路径改为先回编排父节点，`execution_loop_part_a.py` 新增 `work-node-enter` 助手标签以支持父节点显式进入已有 child，`tests/test_runtime_p4_foundation.py` 已改成锁住 `child -> parent re-orchestrate -> existing child -> parent -> awaiting-approval` 的新路径。2026/5/25 更新：测试环境默认通过 `tests/conftest.py` 关闭 `LANGFUSE_TRACING_ENABLED`，并在 `README.md` 基础验证章节补充“跑测试前先启动 OTel Collector”的备注，避免导出端点不可达带来的额外等待；同日更新：新增 `llm_work_analysis.py` 作为正式 LLM 工作分析器，按 run 拼接 DB 与 state 工件并产出 run/window/turn/tool/artifact/source 多粒度分析；`scripts/analyze_llm_work_run.py` 与 core-api `/runtime/analysis/runs`、`/tasks/{taskId}/analysis/latest` 已接入这一能力，用于评测与调试；同日继续更新：新增 `REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md`，正式冻结“默认真实任务应尽量弱项目内生化、单目标、由 agent 自主规划”的出题约定，并把工作树后续工作拆成测试合同、门禁闭环、缓存、硬化、观测五类任务包；此前 2026/5/24 更新：`runtime_kernel/takeover.py` 已从初始化器升级为正式 reducer，负责 work tree/context stack 推进、revision reopen 与 approval finalize；`execution_loop_transitions.py` 已形成完整 P4 闭环：根节点完成进入 `awaiting-approval`，并通过控制面 approve/revision 闭环；`execution_loop_part_a.py` / `execution_loop_part_b.py` 现已支持以 `work-node-create` 助手输出标签在正式主循环里动态扩树、在 retrieval 查询中优先使用 work tree 当前节点语义，并在异常/预算失败时把当前节点写回 `failed + failureSummary`；`execution_loop_transitions.py` 还会为 continuation/pause/restart 输出独立 `workContextStackRef` 栈快照引用；P5 现已补齐并发安全闭环：`tool_runtime.py` 会向正式工具透传 `sourceWorkTreeNodeId`，`modules/text-memory/` 暴露 `read_node` / `read_index` / `update_memory_with_version` / `append_memory_log` / `submit_memory_proposal` / `forget_node` 等正式记忆工具，`append_memory_log` 现通过仓储层原子追加避免并发日志静默覆盖，`prompting.py` 也已明确“正式记忆工具优先、`<memory-write>` 旁路次之”，并在宽节点或高冲突场景优先引导创建细分子节点做空间隔离；P6 已完成闭环：`collaboration_runtime_part_a.py` / `collaboration_runtime_part_b.py` 不仅为 sub-agent launch/worker/PR manifest 透传 `workTreeNodeId` 与 `subagentBudgetDecision`，还会把 child completion summary 合并回 parent work tree 与 `childCompletionSummaries`，再通过独立 `mailbox_messages` / `side_channel_events` 持久化表、对应 Alembic 迁移 `7ad7d9b8c4f1_runtime_mailbox_side_channel_tables.py`、`runtime/tasks/{taskId}/mailbox` / `side-channel` API 和 `execution_loop_part_b.py` 的 mailbox 注入路径唤醒 parent 继续汇总；`runtime_kernel/root_mount.py` 现在优先从仓储读取 mailbox state 并返回 `mailboxMessages`，`takeover.py` 也已补齐 `load_persisted_work_context_stack()` 与 parent merge helper；`services/core-api/.../tasks.py` 与 `services/agent-runtime/app.py` 新增 `approve-completion` / `request-revision` 路由，`runtime_service.py` 暴露 `canApprove/canRequestRevision/recommendedRevisionNodeId`；`packages/frontend-sdk/src/types.ts` 与 `apps/web/app/components/task-detail-page.tsx` 现已把这些运行时控制字段、mailbox state/message 和 side-channel event 正式接到任务详情页；P7 门禁已统一到单路径：`tests/test_runtime_p4_foundation.py` 覆盖显式传递与默认请求两种入口，均进入 `awaiting-approval`，不再保留 legacy `completed` 快速路径；`prompting.py` 会把 `work_context_stack` 和 `childCompletionSummaries` 暴露给模型；`contracts.py` 修复了显式 root-only v0.2 work tree 被错误包裹成自引用 root 的兼容升级问题。此前 2026/5/24 更新：`runtime_kernel/root_mount.py` 现已输出中文语义根指针、`SYS_ROOT_PROTOCOL`、启动加载顺序、tool/capability index、mailbox/standby 状态与 `startupMode`，`execution_loop_part_b.py` 在 retrieval 前优先恢复 `currentNodeId/Working_Node/pcMemo`、对无活动工作 `start` 直接走 `standby` 短路，并把损坏 snapshot 的 blocker 持久化；`execution_loop_transitions.py` 在根节点交付时切到 `awaiting-approval`，并要求 work tree 节点先写 `executionSummary`；2026/5/23 更新：补充提示词、启动流程、工作流程重做执行文档、`docs/new/` 三份新方案入口，以及 Agent 运行时/工作树 v0.2 正式规格；2026/5/18 更新：补充“功能形态分类与提示词功能检查计划”文档入口；2026/5/17 已完成开发相关大文件治理，`P2_IMPLEMENTATION_SPEC_2026_05_17.md` 已拆分为任务14/15/16/17与集成验收五份子文档；`tests/test_runtime_and_pruning.py` 已按主题拆分至 `tests/runtime/` 下 4 个文件；`tests/test_persistence_api.py` 已按 API 主题拆分至 `tests/api/` 下 3 个文件；`execution_loop.py`、`llm_runtime.py`、`ops_runtime_live.py`、`collaboration_runtime.py` 已改为兼容门面并拆分到 part 文件。）
-> 2026/5/26 本轮继续同步：`prompting.py` 的 response requirements 已增强任务编排引导，明确 root 默认负责编排与最终汇总、天然可拆的任务优先下放 child、child 只处理单一局部目标并回父节点交摘要、同一节点连续恢复/重启时优先继续拆分而不是反复在 root 硬写整份交付；`tests/test_prompting_runtime.py` 已补断言锁住这些引导。此前 2026/5/26 同步：新增 `evaluation/suites/g4-real-task-unrelated-dual-live.json` 与 `eval:g4:real-task-unrelated:dual-live`，把“先用与本项目完全无关的题目观察真实执行过程”固定成正式入口；当前题面为外部 incident RCA，同题分别跑 `longcat / LongCat-2.0-Preview` 与 `deepseek_direct / deepseek-v4-flash`，并在主报告后强制追加 formal delivery footer（`## 结果` / `## 证据` / `## 风险` / `## 已知问题`），避免 unrelated live run 先被 runtime delivery gate 截断。此前 2026/5/26 同步：`execution_loop_part_b.py` 已恢复 root/single-path overflow 的 carry-forward restart snapshot 续跑，`tests/runtime/test_runtime_restart_and_resume.py` 与 `tests/test_g4_multiscene.py` 已改成锁住 `window-restart-queued` 闭环；`execution_loop_transitions.py` 现对 `delivery-gate-blocked` 增加一次限次纠偏续跑，`tests/test_runtime_p2_delivery_gate.py` 新增“误停补一轮可恢复、二次仍缺段才失败”回归。此前 2026/5/25 同步：`evaluation/suites/g4-real-task-externalized.json` 已作为默认真实任务入口，`g4-real-task-minimal-workset.json` 只保留 legacy 参考，`g4-real-task-work-tree-debug.json` 明确为 `runtime-debug-harness`；`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py` 已把 `delivery.pending` / `delivery.incomplete` 升级为 hard gate，`tests/test_runtime_p2_delivery_gate.py` 新增“缺字段即 delivery-gate-blocked”与“多节点链路 revision -> 复跑 -> approve”回归；`docs/LLM_WORK_ANALYZER_USER_GUIDE.md` 与两份 v0.2 协议文档也已补齐 work-tree debug 固定读法，以及 provider prefix cache 与 runtime continuation cache 的边界说明。
-> 2026/5/27 同步：`packages/python-sdk/src/yggdrasil_sdk/prompting.py` 继续收紧工作树编排提示词，新增“先判定当前节点语义、child/leaf 默认先上浮、仅 root 或被父节点授权节点可做整任务最终交付、格式合同不得覆盖工作树拓扑、节点收敛后停止拆分”的硬约束；`tests/test_prompting_runtime.py` 新增对应断言，并补“task contract 优先使用 TaskRuntimeState 的 currentObjective/currentFocus”和“节点状态区块先于 response requirements”回归；`evaluation/suites/g4-real-task-work-tree-debug.json` 当前验证路径切到 `deepseek_direct / deepseek-v4-pro`（`allowPaidModels=true`）用于观察工作树强编排行为。
+> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/6/28 更新：运行中 LLM 的工作树口径已切到“上下文卫生、按需隔离、摘要回收”；`docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md`、`docs/specs/agent-runtime-protocol-v0.2.md`、`docs/specs/work-tree-protocol-v0.2.md` 与 `docs/architecture/runtime-principles-for-newcomers.md` 是当前入口。旧强控制路线已清出当前目录索引，不再作为运行时或评测主口径。）
+> 2026/6/28 当前运行中 LLM 工作树口径同步：`packages/python-sdk/src/yggdrasil_sdk/prompting.py` 已把系统行为宪法、`runtime_hints` 使用说明和 response requirements 切到 `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` 的口径：工作树是上下文卫生工具，不是必走流程；简单任务直接完成；只有在需要隔离噪声、重复项、候选方向、局部实验或并行方面时才创建/进入工作节点；子节点回父节点只带回结论、证据、已废弃路线、风险和下一步。`applications/graduate-researcher/` 的 prompt profile、scene、few-shot 与出厂记忆已改为按需分解，`docs/specs/graduate-researcher-app-v0.1.md` 已同步 3.0 规则；旧硬控制记录只作为历史背景，不再作为当前 LLM prompt 主口径。
+> 2026/6/28 真实任务测试前置修复：`runtime_kernel/execution_loop/state_metrics.py` 的 `_window_restart_trigger()` 不再把 `forcedWindowRestartBudget > 0` 当作未超阈值也触发的伪 overflow；只有显式 `forceWindowRestart` 或 `windowSpanTokens >= windowRestartThreshold` 才进入窗口切换/overflow 分支。`evaluation/suites/g4-real-task-web-research-default.json` 已同步取消 fake restart 通过门槛，把默认完成态改为 `completed`，并把四段交付验收从精确 footer 标题降为内容关键词；默认真实任务入口现在以真实 live 模型调用、联网工具证据和交付合同判定效果。
 > 2026/5/27 继续同步：`evaluation/suites/g4-real-task-work-tree-debug.json` 进一步把“先服从 seeded currentNodeId / Working_Node / WorkContextStack，再完成七段报告格式”写进 suite 级 contract；`tests/test_g4_multiscene.py` 新增对应断言，避免 live case 再被纯格式化完整报告语气拉回 root-only。
 > 2026/5/27 再同步：`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`、`execution_loop_part_b.py` 与 `execution_loop_transitions.py` 已把“先核对再执行”升级为正式门禁：默认进入 `needs-clarification`，未确认前强制 `allowToolExecution=false` 且仅允许输出“任务理解+执行计划+确认问题”，并在执行收口阶段阻止未核对任务被标记完成；对应回归已补到 `tests/test_task_takeover.py`、`tests/test_prompting_runtime.py` 与 `tests/test_runtime_p4_foundation.py`。
 > 2026/5/27 导出同步：已按 `YGGDRASIL_EVAL_PRESERVE_SANDBOX=1` 重跑 `eval:m8:live` 并固化 LongCat live 工件，新增 `tmp/longcat2-live-export-20260527/`（含 `longcat2-request.json`、`longcat2-response.json`、`longcat2-prompt-compiled.json`、`longcat2_full_dialogue.md` 以及 Flash-Lite 对照组同名工件），用于“provider 全字段请求/响应 + 对话可读化”审计与复盘。
@@ -101,7 +104,7 @@
 > 2026/5/27 本轮追加同步：新增 `tmp/longcat2-live-export-completed-only-latest/single-work-full-dialogue-success-or-awaiting-approval.md`，按“success 或 awaiting-approval（含 run completed）”口径导出单次工作全量对话，不改 case 判定规则。
 > 2026/5/27 默认测试切换：新增 `evaluation/suites/g4-real-task-web-research-default.json`（网络检索 + 多源对比 + 矛盾处理），并将 `package.json` 的 `eval:g4:multiscene` 默认入口切到 `evalsuite_g4_real_task_web_research_default`；同时新增显式脚本 `eval:g4:web-research:default`。
 > 2026/5/27 本轮排障同步：`evaluation_runtime/suite_cases_g4.py` 已为 G4 默认 live matrix 启动请求补齐 `takeoverPlanConfirmed/planConfirmed/confirmPlan/takeoverAutoConfirm`；`runtime_kernel/execution_loop_part_b.py` 在 takeover prepare 阶段增加 auto-confirm 回填与状态兜底；`prompting.py` 新增 auto-confirm 下对 takeover 协议与 response requirements 的 clarification 抑制分支；`runtime_kernel/execution_loop_part_a.py` 为 `cumulativeWindowSpanTokens` 增加基于 `effectiveContextWindow * max(windowIndex-1, restartCount)` 的跨度下限，避免窗口跨度被当前上下文 token 低估。
-> 2026/5/27 本轮导出与提速同步：`observability_exporters.py` 新增 loopback OTLP 端点可达性缓存探测（本地 4318/localhost 不可达时快速禁用 exporter，避免重复超时重试）；同时新增一份成功 run 的 completed-only 导出包 `tmp/longcat2-live-export-completed-only-20260527-223151/` 并刷新 `tmp/longcat2-live-export-completed-only-latest/`（含 request/response/compiled-prompt/full-dialogue）。
+> 2026/5/27 本轮导出与提速同步：`observability_exporters.py` 新增 loopback OTLP 端点可达性缓存探测（本地 4318/localhost 不可达时快速禁用 exporter，避免重复超时重试）；同时新增一份成功 run 的 completed-only 导出包 `tmp/longcat2-live-export-completed-only-20260527-223151/` 并刷新 `tmp/longcat2-live-export-completed-only-latest/`（含 request/response/compiled-prompt/full-dialogue）。2026/6/26 追加：同一探测也覆盖默认本地 Langfuse/OTEL ingest `127.0.0.1:3100`，project keys 存在但本地服务未启动时会把 exporter 视为可选并跳过 client 创建，避免 live suite flush 阶段输出不可达告警。
 > 2026/5/27 可视化同步：`tmp/longcat2-live-export-completed-only-latest/codex-worktree-viewer.html` 已新增单页审计视图，默认读取同目录 `request/response/prompt-compiled` 三件套，提供类 Codex 对话流、工作树预览、父节点返回醒目标记与节点上下文长度标签，便于快速复核真实执行路径。
 > 2026/5/27 可视化修正：`codex-worktree-viewer.html` 已修复消息源字段读取（兼容 `request.messages` 与 `request.body.messages`），并新增“单节点 + 多窗口续跑”结构诊断横幅，避免把真实执行结构误判为页面漏渲染。
 > 2026/5/27 可视化与导出可读性修正：`codex-worktree-viewer.html` 已新增“messages(本次调用) vs windows(任务生命周期)”口径说明，并对 system/user 消息中的重复 `## 结果/## 证据/## 风险/## 已知问题` 约束片段做折叠标注；同目录新增 `evalcase_g4_web_research_grid_storage_short64k-full-dialogue-clean.md` 作为清洗版对话记录，便于快速审阅而不丢失主干信息。
@@ -140,8 +143,8 @@
 > 2026/5/31 tool-call 前置失败加固同步：`packages/python-sdk/src/yggdrasil_sdk/llm_runtime.py` 已把空对象/空数组参数视为占位值，并在 `_execute_tool_with_isolation` 执行前新增 required 参数校验（缺参直接 `ToolCallValidationError` 失败，不再把无效调用打到工具层）；同时 `tests/test_llm_retry_and_safe_shutdown.py` 新增“从 `argumentsText` 精确抽取 required 字段”与“占位参数快速失败且不触发工具执行”的严格回归。
 > 2026/5/31 G4 论文落盘持久化同步：`packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases_g4.py` 新增评测输出保存逻辑，每次 provider-matrix 执行都会把完整 assistant 正文写入 `.yggdrasil/state/preserved-papers/g4/`（含 `.md` 正文与 `.json` 元数据），并在失败错误串里追加 `paper=<path>`，避免临时 sandbox 清理后论文丢失。
 > 2026/5/31 Graduate LongCat2 配置去重启语义同步：`evaluation/suites/g4-graduate-ml-longcat2.json` 已把 `acceptanceMinRestartCount/windowIndex/cumulativeWindowSpanTokens` 的重启门槛下调为非必需，并将 `forcedWindowRestartBudget` 置 0、`restartMessage` 改为中性 continuation 文案，避免在 work-tree 主路径下继续向模型注入“窗口重启”叙事。
-> 2026/5/31 Graduate Researcher 三层强分解提示词重构：`applications/graduate-researcher/prompt-profiles/main-agent.yaml`、`applications/graduate-researcher/scenes/generic-default.yaml`、`applications/graduate-researcher/few-shots/ml-learning-cycle.v1.yaml` 已改为“可分解必须先分解、不可分解才进入步骤层、动作层单步骤服务”的硬约束，并显式禁止多步骤粘连与“重启叙事”归因；规格文档 `docs/specs/graduate-researcher-app-v0.1.md` 同步新增 3.0 强制分解规则。
-> 2026/5/31 Graduate live suite 合同对齐：`evaluation/suites/g4-graduate-ml-deepseek-v4.json` 与 `evaluation/suites/g4-graduate-ml-longcat2.json` 已统一升级 `responseRequirements` 为强制分解合同（可分解必须先分解、单步骤激活、动作只服务当前步骤、禁止多步骤粘连草稿），并在 DeepSeek 套件侧去除 restart 语义门槛（`acceptanceMinRestartCount/windowIndex/cumulativeWindowSpanTokens` 置为非必需，`forcedWindowRestartBudget=0`）。
+> 2026/5/31 Graduate Researcher 三层硬分解提示词重构（历史背景，已被 2026/6/28 按需分解口径取代）：当前运行资产已切回按需分解，规格文档 `docs/specs/graduate-researcher-app-v0.1.md` 已改为 3.0 按需分解规则。
+> 2026/5/31 Graduate live suite 合同对齐（历史背景）：当时 `evaluation/suites/g4-graduate-ml-deepseek-v4.json` 与 `evaluation/suites/g4-graduate-ml-longcat2.json` 曾升级为旧硬分解合同；当前评测若需检查长程研究质量，应锚定证据、阶段账本、工具事实和交付文件，而不是要求每轮先建树。
 > 2026/5/31 Graduate 首轮分解与工具参数约束升级：`applications/graduate-researcher/prompt-profiles/main-agent.yaml` 新增“首轮必须先输出计划/步骤/动作分解骨架，首轮禁工具调用”与“禁止空参数工具调用”规则；`evaluation/suites/g4-graduate-ml-deepseek-v4.json`、`evaluation/suites/g4-graduate-ml-longcat2.json` 的 `responseRequirements` 同步加入首轮分解与禁空参数工具调用合同，降低 provider 在第一轮直接进入无效 tool-call 的概率。
 > 2026/5/31 探索先行机制同步：`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py` 的 research 计划蓝图已新增 `explore` 前置阶段，并基于 `taskId+objective+currentFocus` 做稳定随机探索路径选择（文献优先/争议优先/验证优先）；`applications/graduate-researcher/prompt-profiles/main-agent.yaml`、`applications/graduate-researcher/scenes/generic-default.yaml` 与 `applications/graduate-researcher/few-shots/ml-learning-cycle.v1.yaml` 已同步“先探索再规划”合同；`tests/test_task_takeover.py` 已新增研究任务 explore 阶段与稳定性回归。
 > 2026/5/31 Graduate PromptProfile 启动失败回归同步：保持 `packages/python-sdk/src/yggdrasil_sdk/prompting.py` 的 `PromptProfile` 严格字段校验（禁止额外顶层字段漂入），并在 `tests/test_prompting_runtime.py` 新增 Graduate 应用编译回归，锁定 `yggdrasil.graduate-researcher.main-agent` + `yggdrasil.seed.graduate-researcher.default` 的启动链路可用，避免再次出现启动期 `extra_forbidden` 故障。
@@ -417,7 +420,7 @@ packages/
 │       │   └── vector_store.py     # pgvector 向量操作封装
 │       │
 │       ├── # ── 运行时核心 ──────────────────────────────
-│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、durable snapshot store、安全关闭、任务接管、工作树图 ready-set reducer；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen 与 approval finalize）
+│       ├── runtime_kernel/         # 核心运行时内核子包（root mount、主循环、durable snapshot store、安全关闭、任务接管、工作树图 ready-set reducer 与滚动前沿 runtime hints；execution_loop 已收敛为包级入口 + state/worker/transitions 语义模块；takeover reducer 现负责 work tree/context stack 推进、revision reopen、approval finalize 和 expected evidence 缺口硬阻断）
 │       ├── llm_runtime/            # LLM 调用封装包（core/artifacts/invoke 三层；包入口保留原 `yggdrasil_sdk.llm_runtime` 导入面）
 │       ├── tool_runtime.py         # 工具注册与执行运行时
 │       ├── hook_runtime.py         # Hook 事件触发与分发运行时
@@ -425,7 +428,7 @@ packages/
 │       ├── application_runtime.py  # 应用配置加载与初始化
 │       │
 │       ├── # ── Prompt 管理 ──────────────────────────────
-│       ├── prompting.py            # Prompt 模板管理、版本控制（22KB）；runtime prompt 已增加 bootSections 四段（physical_interface/world_roots/behavior_constitution/scene_recovery），其中 physical_interface 现在只保留稳定接口绑定与实际 tool/capability inventory，场景化 tool policy 已移出 boot；恢复态会规范化 Working_Node / currentNodeId / memoryRetrievalState.workTreeNodeId / pcMemo，并在 P4 路径附带 `work_context_stack` / `childCompletionSummaries`；response requirements 已显式加入 `work-node-create` / `work-node-enter` 标签契约用于父节点编排，few-shot 仍在恢复态自动跳过
+│       ├── prompting.py            # Prompt 模板管理、版本控制；runtime prompt 已增加 bootSections 四段（physical_interface/world_roots/behavior_constitution/scene_recovery），其中 physical_interface 现在只保留稳定接口绑定与实际 tool/capability inventory，场景化 tool policy 已移出 boot；恢复态会规范化 Working_Node / currentNodeId / memoryRetrievalState.workTreeNodeId / pcMemo，并在 P4 路径附带 `work_context_stack` / `childCompletionSummaries`；`runtime_hints` 区块会暴露当前节点、建议下一步、readiness 和最高压力前 3 个开放前沿；response requirements 已切到“工作树是上下文卫生工具、简单任务直接完成、按需隔离噪声、子节点只回传摘要”的短合同，few-shot 仍在恢复态自动跳过
 │       ├── prompt_modules/
 │       │   ├── compiler.py         # PromptCompiler 核心（模板 + 记忆 → 最终 Prompt）
 │       │   └── formatters.py       # 不同格式的 Prompt 输出渲染
@@ -449,7 +452,7 @@ packages/
 │       │
 │       ├── # ── 可观测性 ─────────────────────────────────
 │       ├── observability.py        # OTel Tracer 封装（11KB）
-│       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse）
+│       ├── observability_exporters.py # 多后端导出器（Jaeger、Langfuse；本地 4318/3100 不可达时自动跳过可选 exporter）
 │       │
 │       └── # ── 运维工具 ─────────────────────────────────
 │           ├── data_governance.py  # 数据资产 manifest、删除影响预览、task 硬删除执行与审计记录
@@ -467,15 +470,15 @@ packages/
 ```
 
 **关键说明：**
-- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、durable snapshot store、resume attempt、控制面、任务接管与工作树图调度纯函数。
-- `runtime_kernel/work_tree_graph.py` 是工作树图 / Fork 并行 PR1 的纯函数 reducer：只读取 `WorkTreeProtocol`、active fork run 视图、graphState 和 policy，输出 direct child ready/blocked set、pending 信息流摘要、可用 Fork 槽位与候选 batch；它明确不复用 subagent task/branch，也不切 task-global `currentNodeId`。
+- `runtime_kernel/` 是系统最核心的运行时子包，承载任务状态机、Agent 执行编排、上下文管理、durable snapshot store、resume attempt、控制面、任务接管、工作树图调度纯函数与滚动前沿 runtime hints。
+- `runtime_kernel/work_tree_graph.py` 是工作树图 / Fork 并行与滚动前沿 resolution 的纯函数 reducer：读取 `WorkTreeProtocol`、active fork run 视图、graphState 和 policy，输出 direct child ready/blocked set、pending 信息流摘要、可用 Fork 槽位、候选 batch、节点 resolution assessment 和 delivery readiness；这些结果默认作为提示 / 审计线索，只有 expected evidence 缺口在 reducer 中形成硬阻断。它明确不复用 subagent task/branch，也不切 task-global `currentNodeId`。
 - `runtime_kernel/root_mount.py` 现在不再只给底层 identity/context/execution refs；它还会输出中文语义根指针、`SYS_ROOT_PROTOCOL`、`startupLoadOrder`、tool/capability index、mailbox/standby 状态，以及 `standby / resume-node / bootstrap` 三态 `startupMode`，作为启动恢复的数据面。
-- `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`，同时额外落 `runtime/window-executions/*.json` 结构化窗口工件，记录每窗 work tree、retrieval、合同摘要与交付状态。
+- `runtime_kernel/execution_loop/` 当前为包级运行主链：`state_metrics.py` / `state_window.py` / `state_memory.py` 承载指标、窗口工件、记忆树物化与 assistant tag 解析，`transitions.py` 承载完成/续跑/审批流转，`worker.py` 承载主 worker 入口；包入口仍保持 `yggdrasil_sdk.runtime_kernel.execution_loop` monkeypatch 与导入面。执行链仍保持“先基于 takeover protocol 预生成 work tree 锚点，再把外来 `currentContext` 物化进记忆树并执行 retrieval”，并已在 retrieval 前优先恢复 `currentNodeId / workingNodeAnnotation / pcMemo`；2026-06-27 后，worker 会在 takeover/work tree 同步后注入 `workTreeResolution`，prompt 将其作为 `runtime_hints`，transitions 只把 surviving `missing-target-evidence` 作为交付硬阻断。2026-06-28 起，`state_metrics._window_restart_trigger()` 只在显式 `forceWindowRestart` 或实际超过窗口阈值时触发窗口切换/overflow，`forcedWindowRestartBudget` 不再伪造未超阈值的失败。
 - 本轮设计冻结已同步到规格层：`docs/specs/agent-runtime-protocol-v0.2.md` 明确 `restart-recovery` 仅 legacy/stress 兼容、v2 默认“压缩优先+超阈值失败”；`docs/specs/work-tree-protocol-v0.2.md` 把第 9 章改为“窗口超阈值处理”，补齐压缩范围起止约束；`docs/specs/runtime-domain-data-spec-v0.1.md` 为 `ContextPruningPlan` 增加 `compressionRange` 元数据并固化 `maxUncompressedTailBeforeDecompress` 语义。
-- `runtime_kernel/execution_loop/` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，非根子节点完成/失败会先回父节点，由父节点通过 `work-node-enter` / `work-node-create` 显式编排后续路径，根节点完成进入 `awaiting-approval`，随后只能由 approve/revision 控制面推进到 `completed` 或重新打开节点。`task-takeover` 模块现已把 `delivery.result / evidence / pending / incomplete` 全部升级为正式门禁；若首次输出缺少 `pending` 或 `incomplete`，runtime 会先在同一节点排一轮纠偏续跑，要求直接补齐正式交付；若纠偏后仍未过 gate，才会收敛成 `delivery-gate-blocked`。
+- `runtime_kernel/execution_loop/` 也负责正式任务进度流转：`Task.status/currentFocus/windowIndex/restartCount` 提供全局运行态，`TaskTakeoverProtocol.workTree.currentNodeId/status` 与 `WorkContextStack.topFrameId` 提供执行节点级进度；在当前单一路径下，非根子节点完成/失败会先回父节点，由父节点通过 `work-node-enter` / `work-node-create` 显式编排后续路径，根节点完成仍进入 `awaiting-approval`（本轮标记为后续要收窄的控制边界）。`task-takeover` 模块现在只保留安全 / 来源证据类 hard gate；`delivery.result / evidence` 为 advisory，`pending / incomplete` 不再作为硬交付门禁，缺少可选章节不会触发格式型 retry / failed。
 - `runtime_kernel/snapshot_store.py` 是 durable snapshot payload 权威存储入口，写入 `.yggdrasil/state/snapshots/{projectId}/{taskId}/{snapshotId}/manifest.json` 与 blobs；`runtime_kernel/snapshot.py` 负责 active-paused/latest-auto snapshot 物化，并在 pending tool-call safe-stop 上拒绝半截 arguments、只为完整 tool-call 写 durable checkpoint；`runtime_kernel/execution_control.py` 负责 `/pause`、`/resume`、`/cancel`、保存 snapshot 与从 user-saved snapshot 创建分支。
-- `runtime_kernel/execution_loop/worker.py` 对恢复态 snapshot 做 manifest/checksum/rehydrate 校验；失败进入 `resume-blocked` 并保留 blocker，不再 fallback start；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed，对应回归位于 `tests/test_runtime_p4_foundation.py`。
-- `prompting.py` 的 response requirements 现会向模型暴露最小 `memory-write` 标签语法，并显式给出 `work-node-create` / `work-node-enter` 标签契约（父节点强编排下由父节点决定进入已有 child、创建新 child 或汇总交付）；runtime prompt 还会附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack`，把最近几层 frame 的 `childCompletionSummaries` 暴露给父节点续跑；few-shot 示例不再作为独立 user/assistant 消息写入 prompt，而是折叠进系统示例块，并在恢复态跳过以降低重复文本；takeover 协议段现在也优先给出 work tree / step count 摘要，而不是重新渲染显式计划清单。
+- `runtime_kernel/execution_loop/worker.py` 对恢复态 snapshot 做 manifest/checksum/rehydrate 校验；失败进入 `resume-blocked` 并保留 blocker，不再 fallback start；同一文件现在也会把 `invoke_runtime_completion()` 的 provider/LLM invocation exception 纳入 failed-leaf continuation：非根叶子若已有 `failureTransition.requiresContinuation`，会像窗口超限一样先写回 `failed + failureSummary`，再排队 sibling/parent continuation，而不是直接把整任务打成 failed；滚动前沿链路中，worker 在 assessment 失败时会清除陈旧 `workTreeResolution`，避免 stale payload 误导 prompt/transition。
+- `prompting.py` 的 response requirements 已从强编排合同收敛为短自主工作合同：简单任务直接完成；只有在需要隔离噪声、并行方面、重复项、候选方向或局部实验时，才按当前节点 / Working_Node / WorkContextStack 用 `work-node-create` / `work-node-enter` 拆分或切换；`runtime_hints` 只是辅助线索，不覆盖任务、工具、用户请求和当前节点；子节点结束时只带回父节点需要的结论、证据、已废弃路线、风险和下一步。runtime prompt 仍附带结构化 `memory_retrieval_state`，并在恢复态把 Working_Node、`currentNodeId`、`pcMemo` 与 retrieval node pointer 统一到同一执行节点；P4 路径额外会渲染 `work_context_stack` 和必要 child summaries；takeover 协议段优先给出 work tree 摘要，不再渲染计划质量、返工率和交付完整度。
 - `llm_work_analysis.py` 现作为正式的 run-first 分析器：主键骨架是 task/run/model_invocations，本地补读 request/response/prompt/metrics/takeover/work-context/window-execution 工件，并默认把结果写入 `state/analysis/llm-work/` 供评测与调试复用；当前已补齐 cache summary、work-tree timeline、approval stop、mixed outcome 与 per-invocation `runtime/window-executions/by-invocation/` 历史工件读取。
 - `langfuse_trace_layered_analysis.py` 现兼容中文化的任务目标/任务说明/当前焦点标签，避免 prompt 标签本地化后 Langfuse 文本审查丢失任务抽取结果。
 - `llm_runtime/` + `tool_runtime.py` 构成正式工具分发链；当前正式主链走 `llm_runtime/core.py`、`llm_runtime/artifacts.py` 与 `llm_runtime/invoke.py`，包入口负责 Langfuse monkeypatch 同步，不再保留无意义的 `part_a/part_b` 文件。
@@ -648,6 +651,12 @@ docs/
 │   │                               #   工作树图与 Fork 并行测试任务设计：定义仿真任务、真实任务、验收指标、后续批次依赖和用户决策项
 │   ├── WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md
 │   │                               #   工作树图与 Fork 并行实现计划：按 graph reducer、AgentRun 字段、Fork planner、worker 运行视图、结果合并和 runtime harness 拆分实现 PR
+│   ├── ROLLING_FRONTIER_WORK_TREE_RESOLUTION_2026_06_27.md
+│   │                               #   滚动前沿工作树分辨率提示：宽泛节点合法、开放前沿提示 refine/work/merge/deliver/block、失败预算推动拆小，expected evidence 缺口才硬阻断，并固定八个长程核心前沿
+│   ├── LLM_LONG_HORIZON_OVERDESIGN_AUDIT_2026_06_27.md
+│   │                               #   LLM 长程控制过度设计审计：区分安全边界与过度控制，提出 prompt 瘦身、delivery gate 降级、clarification 不禁工具和状态瘦身顺序
+│   ├── LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md
+│   │                               #   LLM 工作树使用指南与案例：把工作树定位为上下文卫生工具，补齐 7 类使用场景、4 个组合案例、父节点摘要格式和反例
 │   ├── DESIGN_COMPLETION_EVALUATION_2026_06_05.md
 │   │                               #   设计完成度评估：按当前设计文档和实现证据，给出工程设计、外部用户采用度、产品发行、数据治理、协作、模块和评测等完成度评分
 │   ├── STITCH_DESIGN_ACCEPTANCE_2026_06_17.md
@@ -656,8 +665,6 @@ docs/
 │   │                               #   Stitch 最终设计落到工程实现与未完成项计划：阶段 0 已补齐代码入口、旧入口清理、文件级改造和测试清单，后续按桌面主路径、启动器维护闭环、验证清理、移动端/窄屏和可访问性分阶段执行
 │   ├── stitch-design-captures-2026-06-17/
 │   │                               #   Stitch 抓取证据包：只保留 Project Yggdrasil Design System 的最终通过候选 post-rework-v10-passline/，不包含 API key；失败轮次只在验收报告中保留文字判定
-│   ├── WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md
-│   │                               #   世界树 Agent 当前工作逻辑 vs 目标工作逻辑：聚焦父节点强编排、有限线性 continuation 轨迹以及上下文在推进/失败/恢复/交付中的变化
 │   ├── TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md
 │   │                               #   任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”流程，并标注当前实现缺口与分级推进建议
 │   ├── WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md
@@ -670,8 +677,6 @@ docs/
 │   │                               #   产品打包与官方远端数据能力需求差距：Docker 产品栈、桌面封装、删除治理、SaaS、远端托管/备份/删除的计划与缺口
 │   ├── PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md
 │   │                               #   产品发行完成度评估：综合 55/100，分层评估本地试用、正式发行、Docker 产品栈、桌面封装、数据治理、SaaS 和远端数据服务
-│   ├── ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md
-│   │                               #   提示词、启动流程、工作流程重做执行文档：Boot Prompt、工作树 v0.2、WorkContextStack 栈式上下文、启动恢复、运行循环、记忆冲突、多 Agent 与验收门禁
 │   ├── FEATURE_CLASSIFICATION_AND_PROMPT_CHECK_PLAN_2026_05_18.md
 │   │                               #   功能形态分类与提示词功能检查计划：按纯代码 / 代码+提示词 / 纯提示词分类当前设计，并给出以纯提示词为重点的检查路径
 │   └── ...                         #   其他开发专题文档同顶层速览
@@ -682,7 +687,6 @@ docs/
 │   └── GITHUB_RELEASES_PLAYBOOK.md # GitHub Releases 发布手册：staged repo ZIP、SHA256、手动更新、Docker 检测/引导、签名预留和发布后核验
 │
 ├── new/                            # 新方案草稿与当前重做输入材料
-│   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
 │   ├── 元提示词.md                  # 新 Boot Prompt 方案：I/O 绑定、根指针、行为宪法和现场恢复
 │   └── 世界树计划正式项目定义.md    # 正式项目定义草稿与用户笔记：生命周期、根内容、能力、工具、工作树与分期
 │
@@ -714,7 +718,7 @@ docs/
 │   ├── task-pause-resume-continuation-contract-v0.1.md # 任务暂停、恢复与继续契约：长期 Durable Snapshot、ResumeAttempt、持久 WorkItem、手动保存/分支、tool-call 等价性与不得 fallback start
 │   ├── world-build-awakening-task-start-protocol-v0.1.md # 世界构建、初次苏醒与任务启动协议：区分世界级学习与任务级工作状态读取，引入起始状态与无损恢复优先级
 │   ├── application-package-interface-v0.1.md # 应用包接口总规范：manifest、prompt/memory 文件、MCP 服务器、前端界面、场景任务模板与控制面 API
-│   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义与计划-步骤-动作三层模型
+│   ├── graduate-researcher-app-v0.1.md       # Graduate Researcher 应用包定义：目标分析、预算语义、计划-步骤-动作三层模型与按需分解规则
 │   ├── graduate-researcher-test-standard-v0.1.md # Graduate Researcher 测试标准：机器学习研究生场景的行为验收口径
 │   ├── agent-runtime-protocol-v0.1.md       # Agent 运行时协议规格
 │   ├── task-takeover-protocol-v0.1.md       # Gate 2 任务接管协议：目标/约束/计划/验证/交付与出口标准
@@ -799,9 +803,9 @@ evaluation/
     ├── g4-real-task-externalized.json
                                     #   G4 默认真实任务入口（single-goal / externalized；用于正式 real-task 合同）
     ├── g4-real-task-unrelated-dual-live.json
-                                    #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照，并强制 formal delivery footer 以穿过 delivery gate）
+                                    #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照；历史 case 可能仍带旧 footer 合同，不代表当前 runtime delivery gate）
     ├── g4-real-task-web-research-default.json
-                                    #   G4 默认 Web Research 入口（网络检索 + 多源对比 + 矛盾处理；当前 eval:g4:multiscene 与 eval:g4:web-research:default 均映射到这里）
+                                    #   G4 默认 Web Research 入口（网络检索 + 多源对比 + 矛盾处理；当前 eval:g4:multiscene 与 eval:g4:web-research:default 均映射到这里；不再用 fake restart 或 approval 门槛作为通过条件）
     ├── g4-web-research-work-tree-long.json
                                     #   G4 Web Research 长任务入口（固定 LongCat live，强调多窗口 continuation 与工作树连续性）
     ├── g4-graduate-ml-longcat2.json
@@ -811,7 +815,11 @@ evaluation/
     ├── work-tree-fork-runtime-harness.json
                                     #   工作树图 Fork Batch 6 deterministic runtime harness（执行两轮 worker harness pytest 并写入 evaluation metrics）
     ├── work-tree-fork-runtime-live-candidate.json
-                                    #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；已通过真实 LongCat runtime completed 终态）
+                                    #   工作树图 Fork Batch 6 手动 live candidate smoke（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；已通过真实 LongCat runtime completed 终态）
+    ├── work-tree-fork-evaluation-tasks.json
+                                    #   工作树图 Fork R1-R4 deterministic evaluation tasks（四区域审查、release gate、三资料包对比、多文件迁移计划）
+    ├── work-tree-fork-public-showcase.json
+                                    #   工作树图 Fork 公开展示题（韧性能源与应急通信计划；benefit 估算 + LongCat live 输出；不是长任务证据）
     ├── g4-real-task-window-parity.json
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
@@ -843,6 +851,8 @@ evaluation/
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
 | `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
 | `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
+| `eval:work-tree:fork-evaluation-tasks` | `suites/work-tree-fork-evaluation-tasks.json` |
+| `eval:work-tree:fork-public-showcase` | `suites/work-tree-fork-public-showcase.json` |
 
 ---
 
@@ -866,7 +876,7 @@ infra/
 │                                   #   OTel Collector :4318
 ├── docker-compose.product.yml      # 完整产品栈预览（依赖 + migrate + Core API/Agent Runtime/Module Host/Worker/Web）
 ├── langfuse-compose.yml            # Langfuse 本地观测栈（独立端口段，避免冲突）
-│                                   #   Langfuse Web :3100
+│                                   #   Langfuse Web :3100（可选；未启动时 exporter 自动跳过）
 │                                   #   ClickHouse :18123
 │                                   #   Langfuse MinIO :19090
 └── otel-collector-config.yaml      # OTel Collector 配置（Traces → Jaeger + Debug）
@@ -959,7 +969,7 @@ tests/
 │   │                               # 启停控制、资产/训练/prompt/mcp 控制面 API 回归
 │   └── test_persistence_app_scope_api.py
 │                                   # appId 过滤语义与 M9 control-plane suite 回归
-├── test_prompting_runtime.py       # PromptCompiler 链路端到端
+├── test_prompting_runtime.py       # PromptCompiler 链路端到端；覆盖恢复态 `runtime_hints` 区块、最高 3 个开放前沿排序、短 response requirements、clarification 只读工具和 takeover 协议瘦身
 ├── test_runtime_and_pruning.py     # 迁移索引文件（运行时/裁剪专项测试已拆分到 tests/runtime）
 ├── test_runtime_p4_foundation.py   # P4/P7 基础回归：work tree reducer、awaiting-approval、单路径运行态与 approval/revision 闭环
 ├── runtime/
@@ -972,7 +982,7 @@ tests/
 │   ├── test_runtime_pause_regressions.py
 │   │                               # queued pause durable snapshot、resume attempt 幂等与 runtime metrics 计数回归
 │   └── test_work_tree_graph_scheduler.py
-│                                   # 工作树图 ready-set / Fork 并行 PR1 回归：diamond、延迟信息流、自动 batch、父节点重排门禁与 maxForks 活跃上限
+│                                   # 工作树图 ready-set / Fork 并行与滚动前沿分辨率提示回归：diamond、延迟信息流、自动 batch、父节点重排门禁、maxForks 活跃上限、宽泛节点 refine、开放前沿 advisory、失败预算、八个长程核心前沿、expected evidence hard blocker、turn evidence 写回与 stale payload 清理
 ├── test_text_memory_and_adapters.py# 文本记忆模块与适配器集成
 ├── test_module_catalog.py          # 模块目录发现与注册
 ├── test_module_host_eventing.py    # 模块宿主事件总线集成
@@ -1098,11 +1108,9 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `pnpm-lock.yaml` | Node.js 依赖锁定文件（不要手动修改） |
 | `LLM.txt` | LLM 配置说明文档；运行时代码不会读取此文件，真实凭据只通过环境变量注入 |
 | `docs/research/README.md` | research 目录组织导航：按用途分类为路线图、项目评估、完成报告、规范设计、技术分析和历史归档 |
-| `docs/development/ROOT_PROMPT_STARTUP_WORKFLOW_REWORK_EXECUTION_2026_05_23.md` | 提示词、启动流程、工作流程重做执行文档：把 `docs/new/` 方案转成可分阶段实现、验证和回滚的工程任务，现已纳入父节点强编排与有限线性 continuation 轨迹主流程 |
 | `docs/development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` | 世界构建、初次苏醒与任务级工作状态读取实施文档：把新三阶段口径压成实现层计划，明确本轮先做运行时分层，不在这一轮实现完整世界编译流水线 |
 | `docs/development/TASK_WORLD_START_STATE_AND_TASK_RUNTIME_SPLIT_2026_05_26.md` | 给 code agent 的执行任务文档：用不可误解的顺序指挥粗粒度代码改造，覆盖 contracts/root_mount/execution_loop/prompting/takeover/snapshot 与三组关键测试 |
 | `docs/development/TASK_WORLD_START_STATE_RUNTIME_REWORK_FIXUP_2026_05_26.md` | 给 code agent 的返工任务文档：针对验收发现的残留问题，要求世界级阶段彻底不见任务信息、只有真实最近现场才能无损恢复，并让 TaskRuntimeState 成为唯一任务态入口 |
-| `docs/development/WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md` | 世界树 Agent 当前工作逻辑 vs 目标工作逻辑：从世界树 agent 视角整理“父节点强编排、child 回编排父节点、有限线性轨迹、awaiting-approval 收口”的正式目标链路 |
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”的目标流程，并对照当前协议/提示词/运行时/测试的缺口 |
 | `docs/development/DESIGN_COMPLETION_EVALUATION_2026_06_05.md` | 设计完成度评估：按当前设计文档和静态实现证据评估工程设计、外部用户采用度、产品发行、数据治理、协作、模块、评测等完成度，并给出下一步优先级 |
 | `docs/design-handoff/README.md` | UX 重塑外包资料包：聚合四组用户接触界面的设计 brief、外包交付物、当前实现依据和验收门槛 |
@@ -1127,7 +1135,9 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `tests/runtime/test_fork_merge_and_auto_batch.py` | Fork result merge / auto batch 默认 CI 回归：锁住 ForkResultEnvelope、parent replan gate、pending summary-only 合同、mixed outcome、下一批 DB work item 创建和真实 worker enqueue |
 | `tests/runtime/test_work_tree_graph_fork_runtime_harness.py` | Fork runtime deterministic harness 默认 CI 回归：两轮 worker 真实消费 fork work item，fake LLM 真实落库 model invocation / prompt artifact，锁住 AgentRun 元数据、work item completed、artifact `runType=fork`、workTreeSnapshot 继承、pending summary-only 信息流和无 child task/task branch |
 | `evaluation/suites/work-tree-fork-runtime-harness.json` | Work-Tree Fork Runtime Harness suite：Batch 6 deterministic harness 的默认评测入口，已通过 `eval:work-tree:fork-runtime-harness` 生成正式 evaluation metrics |
-| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate suite：Batch 6 nightly/live provider 候选入口；未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 时记录为 blocked/non-pass，开启后要求真实 LongCat runtime completed 终态，已通过 `evalrun_69093187bf6c46e587c3` |
+| `evaluation/suites/work-tree-fork-runtime-live-candidate.json` | Work-Tree Fork Runtime Live Candidate suite：Batch 6 手动 live provider smoke 候选入口；未设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 时记录为 blocked/non-pass，开启后要求真实 LongCat runtime completed 终态，已通过 `evalrun_69093187bf6c46e587c3`；不是长任务证据 |
+| `evaluation/suites/work-tree-fork-evaluation-tasks.json` | Work-Tree Fork Evaluation Tasks suite：R1-R4 deterministic evaluation 入口，已通过 `evalrun_23503bda7dee4c39b90e` |
+| `evaluation/suites/work-tree-fork-public-showcase.json` | Work-Tree Fork Public Showcase suite：公开展示 benefit 估算 + live 入口，已通过 `evalrun_f6ca4e22241542d4906b`；不是长任务证据 |
 | `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py` | AgentRun Fork 字段迁移：为 `agent_runs` 增加 Fork tree 根、深度、assigned work-tree node、父上下文锚点和 sibling fork group 字段 |
 | `docs/development/DEBUG_PLAN_2026_06_08.md` | 夜间调试计划：收拢 runtime 状态机、sub-agent / GitHub 协作、M9 控制面与并发稳定性相关功能，配套说明本轮从 nightly/slow 中暂时跳过的测试 |
 | `docs/development/RUNTIME_CONCURRENCY_M9_INVESTIGATION_2026_06_11.md` | Runtime 并发、状态恢复与 M9 验收调查基线：记录 M9 control-plane 通过、M9 acceptance 的 pause/resume finalization 失败、worker 丢任务风险、snapshot 恢复缺口和后续修复顺序 |
@@ -1139,7 +1149,6 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | `docs/specs/task-pause-resume-continuation-contract-v0.1.md` | 任务暂停、恢复与继续契约 v0.1：冻结“隔天/长期继续”为硬能力，定义 Durable Snapshot、ResumeAttempt、持久 WorkItem、resume-blocked、Queued Pause、Cancel、snapshot retention、手动保存分支、tool-call 暂停等价性和不得 fallback start 的恢复合同 |
 | `docs/specs/world-build-awakening-task-start-protocol-v0.1.md` | 世界构建、初次苏醒与任务启动协议 v0.1：把通用 Agent 的建世界、一次性初次苏醒、起始状态、任务开始和无损恢复顺序拆成正式规则，并进一步收紧为“工具/知识索引优先、能力/知识节点可关联工具节点、开始工作前必须先读取工作状态”的正式口径 |
 | `docs/new/世界树计划正式项目定义.md` | 世界树计划正式项目定义草稿与用户笔记：以 LLM 为核心，将代码定位为服务 LLM 的世界环境，并明确代码只做边界与警戒 |
-| `docs/new/工作树.md` | 新工作树方案：定义工作树节点 schema、LOD 拓扑、状态流转、父节点强编排、有限线性 continuation 轨迹和 Working Node 标签 |
 | `docs/new/元提示词.md` | 新元提示词/Boot Prompt 方案：启动时完成 I/O 绑定、根指针寻址、行为宪法和程序计数器恢复，并要求 continuation 优先沿父节点编排位置继续 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：说明 Web 页面入口、完整分析页的七个主层次、CLI/API 用法和推荐排障流程，并固定 work-tree debug、时间线、cache trace、child bubble 与 mixed outcome 的读法 |
 | `docs/demos/LOCAL_FIRST_TASK_DEMO.md` | 本地首次成功演示脚本：用正式 Web 产品入口演示导入素材、附加任务、选择应用模板、创建/启动任务和查看结果 |
@@ -1177,7 +1186,7 @@ docs/
 |---------|---------|
 | 任务执行的核心逻辑（含记忆树物化检索、memory-write 标签写树与窗口重启主循环） | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/` |
 | 工作树图 ready-set / Fork 并行纯函数调度 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
-| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
+| Fork batch launch planner / work item payload / worker child view / result merge helper / deterministic runtime harness | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json`、`evaluation/suites/work-tree-fork-evaluation-tasks.json`、`evaluation/suites/work-tree-fork-public-showcase.json` |
 | AgentRun Fork 元数据持久化与活跃 Fork 计数 | `packages/python-sdk/src/yggdrasil_sdk/persistence/orm.py`、`packages/python-sdk/src/yggdrasil_sdk/domain.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py`、`migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`tests/api/test_persistence_task_runtime_api.py` |
 | LLM 调用与模型路由 | `packages/python-sdk/src/yggdrasil_sdk/llm_runtime/` |
 | Prompt 编译逻辑 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py` |
@@ -1223,8 +1232,12 @@ docs/
 | 工作树图 ready-set / Fork 并行正式协议 | `docs/specs/work-tree-graph-fork-parallel-protocol-v0.1.md` |
 | 工作树图 / Fork 并行测试任务与后续批次决策 | `docs/development/WORK_TREE_GRAPH_FORK_EVALUATION_TASKS_2026_06_21.md` |
 | 工作树图 / Fork 并行实现计划与 PR 切分 | `docs/development/WORK_TREE_GRAPH_FORK_IMPLEMENTATION_PLAN_2026_06_21.md` |
+| 滚动前沿 / 长程任务分辨率提示 | `docs/development/ROLLING_FRONTIER_WORK_TREE_RESOLUTION_2026_06_27.md`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`、`packages/python-sdk/src/yggdrasil_sdk/prompting.py`、`tests/runtime/test_work_tree_graph_scheduler.py`、`tests/test_prompting_runtime.py` |
+| LLM 长程控制过度设计删减路线 | `docs/development/LLM_LONG_HORIZON_OVERDESIGN_AUDIT_2026_06_27.md`、`packages/python-sdk/src/yggdrasil_sdk/prompting.py`、`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py`、`packages/python-sdk/src/yggdrasil_sdk/tool_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/llm_runtime/invoke.py`、`packages/python-sdk/src/yggdrasil_sdk/llm_runtime/artifacts.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py` |
+| LLM 工作树使用指南与案例 | `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` |
+| 运行时 LLM 工作树新口径 | `packages/python-sdk/src/yggdrasil_sdk/prompting.py`、`tests/test_prompting_runtime.py`、`applications/graduate-researcher/prompt-profiles/main-agent.yaml`、`applications/graduate-researcher/scenes/generic-default.yaml`、`applications/graduate-researcher/few-shots/ml-learning-cycle.v1.yaml`、`applications/graduate-researcher/memory/core-learning-principles.yaml`、`docs/specs/graduate-researcher-app-v0.1.md` |
 | 工作树图 / Fork 并行 PR1 reducer 与默认测试 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/work_tree_graph.py`、`tests/runtime/test_work_tree_graph_scheduler.py` |
 | 工作树图 / Fork 并行 Batch 2 持久化字段与回归 | `migrations/versions/c2f4b8a91d63_agent_run_fork_fields.py`、`packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py`、`tests/api/test_persistence_task_runtime_api.py` |
-| 工作树图 / Fork 并行 Batch 3-6 planner、work item payload、worker run view、result merge helper 与 deterministic/runtime-live 评测入口 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json` |
+| 工作树图 / Fork 并行 Batch 3-6 planner、work item payload、worker run view、result merge helper 与 deterministic/runtime-live/R1-R4/公开展示评测入口 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py`、`tests/runtime/test_fork_launch_planner.py`、`tests/runtime/test_fork_merge_and_auto_batch.py`、`tests/runtime/test_work_tree_graph_fork_runtime_harness.py`、`evaluation/suites/work-tree-fork-runtime-harness.json`、`evaluation/suites/work-tree-fork-runtime-live-candidate.json`、`evaluation/suites/work-tree-fork-evaluation-tasks.json`、`evaluation/suites/work-tree-fork-public-showcase.json` |
 
 

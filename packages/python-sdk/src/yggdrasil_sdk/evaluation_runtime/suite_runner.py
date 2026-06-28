@@ -24,6 +24,8 @@ from .suite_cases.m9 import (
 from .suite_cases.runtime import (
     _run_fork_runtime_harness_case,
     _run_fork_runtime_live_candidate_case,
+    _run_fork_evaluation_task_case,
+    _run_fork_showcase_benefit_case,
     _run_live_llm_task_case,
     _run_live_llm_tool_case,
     _run_main_agent_case,
@@ -58,6 +60,8 @@ SCENARIO_HANDLERS: dict[str, Any] = {
     "g4.live_provider_matrix": _run_g4_live_provider_matrix_case,
     "runtime.fork_harness": _run_fork_runtime_harness_case,
     "runtime.fork_harness_live_candidate": _run_fork_runtime_live_candidate_case,
+    "runtime.fork_evaluation_task": _run_fork_evaluation_task_case,
+    "runtime.fork_showcase_benefit": _run_fork_showcase_benefit_case,
 }
 
 def run_evaluation_suite(suite_id: str, workspace_root: Path | None = None) -> dict[str, Any]:

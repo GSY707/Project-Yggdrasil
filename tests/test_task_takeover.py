@@ -97,7 +97,7 @@ def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None
     assert verification["metrics"]["verificationPassRate"] == 1.0
 
 
-def test_task_takeover_module_hard_fails_when_required_delivery_section_missing() -> None:
+def test_task_takeover_module_ignores_optional_delivery_sections_when_missing() -> None:
     plugin = TaskTakeoverModule()
 
     verification = plugin.verify_delivery(
@@ -108,13 +108,10 @@ def test_task_takeover_module_hard_fails_when_required_delivery_section_missing(
         }
     )
 
-    incomplete_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.incomplete")
-    pending_item = next(item for item in verification["verificationItems"] if item["label"] == "delivery.pending")
-    assert pending_item["gateMode"] == "hard"
-    assert incomplete_item["gateMode"] == "hard"
-    assert incomplete_item["status"] == "failed"
-    assert verification["metrics"]["deliveryCompletenessScore0_100"] == 85.0
-    assert verification["metrics"]["verificationPassRate"] == 0.75
+    labels = {item["label"] for item in verification["verificationItems"]}
+    assert labels == {"delivery.result", "delivery.evidence"}
+    assert verification["metrics"]["deliveryCompletenessScore0_100"] == 100.0
+    assert verification["metrics"]["verificationPassRate"] == 1.0
 
 
 def test_parse_delivery_sections_handles_english_headers() -> None:

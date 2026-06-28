@@ -1,7 +1,6 @@
 from __future__ import annotations
 from copy import deepcopy
 from typing import Any
-from ._common import *  # noqa: F403,F401
 from ..contracts import (
     ExternalRef,
     TaskRuntimeState,
@@ -16,7 +15,19 @@ from ..contracts import (
     WorkTreeNode,
     WorkTreeProtocol,
 )
-from ..support import read_json
+from ..hook_runtime import collect_hook_results
+from ..hooks import HookNames
+from ..support import (
+    ensure_state_subdir,
+    new_id,
+    normalize_excerpt,
+    read_json,
+    relative_workspace_path,
+    resolve_workspace_root,
+    utc_now,
+    write_json,
+)
+from .work_tree_graph import compute_delivery_readiness
 _WORK_TREE_PHASE_MAP = {
     "objective": "planning",
     "constraints": "planning",
@@ -135,6 +146,20 @@ def is_takeover_plan_confirmed(request: dict[str, Any]) -> bool:
         if key in request and bool(request.get(key)):
             return True
     return False
+
+
+def _takeover_confirmation_required(request: dict[str, Any]) -> bool:
+    return bool(
+        request.get("requireTakeoverPlanConfirmation")
+        or request.get("manualPlanConfirmationRequired")
+        or request.get("dangerousPlanConfirmationRequired")
+    )
+
+
+def _has_required_takeover_ambiguity(protocol: TaskTakeoverProtocol) -> bool:
+    return any(bool(getattr(item, "required", False)) for item in protocol.ambiguities)
+
+
 def enforce_takeover_confirmation_gate(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -143,9 +168,12 @@ def enforce_takeover_confirmation_gate(
     if protocol is None:
         return None
     confirmed = is_takeover_plan_confirmed(request)
+    confirmation_required = _takeover_confirmation_required(request)
     metrics_payload = protocol.metrics.model_dump(by_alias=True, mode="json")
-    metrics_payload["clarificationNeeded"] = not confirmed
-    metrics_payload["planConfirmationNeeded"] = not confirmed
+    metrics_payload["clarificationNeeded"] = (
+        _has_required_takeover_ambiguity(protocol) or (confirmation_required and not confirmed)
+    )
+    metrics_payload["planConfirmationNeeded"] = confirmation_required and not confirmed
     metrics_payload["planConfirmed"] = confirmed
     if confirmed:
         if protocol.status == "needs-clarification":
@@ -156,6 +184,8 @@ def enforce_takeover_confirmation_gate(
                     "metrics": TaskTakeoverMetrics.model_validate(metrics_payload),
                 }
             )
+        return protocol.model_copy(update={"metrics": TaskTakeoverMetrics.model_validate(metrics_payload)})
+    if not confirmation_required:
         return protocol.model_copy(update={"metrics": TaskTakeoverMetrics.model_validate(metrics_payload)})
     return protocol.model_copy(
         update={
@@ -889,11 +919,23 @@ def complete_current_work_node(
     for node in work_tree.nodes:
         payload = node.model_dump(by_alias=True, mode="json")
         if node.id == current_node.id:
+            produced_evidence_refs: list[dict[str, Any]] = []
+            seen_refs: set[tuple[str, str]] = set()
+            for ref in [*(payload.get("producedEvidenceRefs") or []), *(evidence_refs or [])]:
+                if not isinstance(ref, dict):
+                    continue
+                kind = str(ref.get("kind") or "").strip()
+                ref_id = str(ref.get("id") or "").strip()
+                if not kind or not ref_id or (kind, ref_id) in seen_refs:
+                    continue
+                seen_refs.add((kind, ref_id))
+                produced_evidence_refs.append({"kind": kind, "id": ref_id})
             payload.update(
                 {
                     "status": "completed",
                     "executionSummary": summary,
                     "failureSummary": None,
+                    "producedEvidenceRefs": produced_evidence_refs,
                     "updatedAt": now,
                 }
             )
@@ -1100,6 +1142,70 @@ def _blocked_gate_labels(protocol: TaskTakeoverProtocol) -> list[str]:
             if item.gate_mode == "hard" and item.status != "passed":
                 labels.append(item.label)
     return labels
+
+
+def _delivery_blockers_that_survive_this_turn(
+    blockers: list[str],
+    *,
+    evidence_refs: list[dict[str, Any]] | None,
+    frontier_pressure_satisfied_by_turn_evidence: bool = False,
+) -> list[str]:
+    result: list[str] = []
+    has_turn_evidence = _has_turn_evidence(evidence_refs)
+    for blocker in blockers:
+        normalized = str(blocker or "").strip()
+        if not normalized or normalized == "target-not-summarized":
+            continue
+        if normalized != "missing-target-evidence":
+            continue
+        if frontier_pressure_satisfied_by_turn_evidence:
+            continue
+        if has_turn_evidence:
+            continue
+        result.append(normalized)
+    return list(dict.fromkeys(result))
+
+
+def _has_turn_evidence(evidence_refs: list[dict[str, Any]] | None) -> bool:
+    return any(
+        isinstance(item, dict) and str(item.get("kind") or "").strip() and str(item.get("id") or "").strip()
+        for item in evidence_refs or []
+    )
+
+
+def _frontier_satisfied_by_turn_evidence(
+    frontier: dict[str, Any],
+    *,
+    evidence_refs: list[dict[str, Any]] | None,
+) -> bool:
+    if not _has_turn_evidence(evidence_refs):
+        return False
+    return str(frontier.get("id") or "").endswith(":missing-evidence")
+
+
+def _frontiers_that_survive_this_turn(
+    frontiers: list[Any],
+    *,
+    evidence_refs: list[dict[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], bool]:
+    raw_open_frontiers = [
+        dict(item)
+        for item in frontiers
+        if isinstance(item, dict) and str(item.get("status") or "open") == "open"
+    ]
+    surviving_frontiers = [
+        dict(item)
+        for item in frontiers
+        if isinstance(item, dict)
+        and not _frontier_satisfied_by_turn_evidence(item, evidence_refs=evidence_refs)
+    ]
+    surviving_open_frontiers = [
+        item for item in surviving_frontiers if str(item.get("status") or "open") == "open"
+    ]
+    frontier_pressure_satisfied = bool(raw_open_frontiers) and not surviving_open_frontiers
+    return surviving_frontiers, frontier_pressure_satisfied
+
+
 def advance_takeover_after_delivery(
     protocol: TaskTakeoverProtocol | None,
     *,
@@ -1108,6 +1214,7 @@ def advance_takeover_after_delivery(
     assistant_text: str,
     work_context_stack: WorkContextStack | dict[str, Any] | None = None,
     evidence_refs: list[dict[str, Any]] | None = None,
+    work_tree_resolution: dict[str, Any] | None = None,
 ) -> tuple[TaskTakeoverProtocol | None, WorkContextStack | None, dict[str, Any]]:
     if protocol is None:
         return None, None, {"transition": "completed", "requiresContinuation": False, "currentFocus": "completed"}
@@ -1165,13 +1272,83 @@ def advance_takeover_after_delivery(
                 "currentFocus": focus_label,
                 "pendingChildNodeIds": pending_child_ids,
             }
+
+    readiness_blockers: list[str] = []
+    if protocol.work_tree is not None and current_node is not None and isinstance(work_tree_resolution, dict):
+        raw_frontier_items = (
+            work_tree_resolution.get("frontiers")
+            if isinstance(work_tree_resolution.get("frontiers"), list)
+            else []
+        )
+        frontier_items, frontier_pressure_satisfied = _frontiers_that_survive_this_turn(
+            raw_frontier_items,
+            evidence_refs=evidence_refs,
+        )
+        resolution_readiness = (
+            work_tree_resolution.get("deliveryReadiness")
+            if isinstance(work_tree_resolution.get("deliveryReadiness"), dict)
+            else {}
+        )
+        resolution_blockers = [
+            str(blocker)
+            for blocker in resolution_readiness.get("blockers") or []
+            if str(blocker).strip()
+        ]
+        readiness_blockers.extend(
+            _delivery_blockers_that_survive_this_turn(
+                resolution_blockers,
+                evidence_refs=evidence_refs,
+                frontier_pressure_satisfied_by_turn_evidence=frontier_pressure_satisfied,
+            )
+        )
+        if resolution_readiness and not bool(resolution_readiness.get("ready")) and not resolution_blockers:
+            readiness_blockers.append("resolution-not-ready")
+        try:
+            readiness = compute_delivery_readiness(
+                protocol.work_tree,
+                node_id=current_node.id,
+                graph_state={"frontierItems": frontier_items},
+            )
+            readiness_blockers = [
+                *readiness_blockers,
+                *_delivery_blockers_that_survive_this_turn(
+                    [str(blocker) for blocker in readiness.blockers],
+                    evidence_refs=evidence_refs,
+                    frontier_pressure_satisfied_by_turn_evidence=frontier_pressure_satisfied,
+                ),
+            ]
+        except Exception:
+            readiness_blockers = list(dict.fromkeys(readiness_blockers))
+    readiness_blockers = list(dict.fromkeys(readiness_blockers))
+    if readiness_blockers:
+        normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+            protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            work_context_stack=work_context_stack,
+        )
+        return normalized_protocol or protocol, normalized_stack, {
+            "transition": "work-tree-resolution-blocked",
+            "requiresContinuation": True,
+            "currentNodeId": (
+                normalized_protocol.work_tree.current_node_id
+                if normalized_protocol is not None and normalized_protocol.work_tree is not None
+                else current_node.id if current_node is not None else None
+            ),
+            "nextNodeId": current_node.id if current_node is not None else None,
+            "currentFocus": "work-tree-resolution-blocked:" + ",".join(readiness_blockers[:3]),
+            "deliveryReadiness": {
+                "ready": False,
+                "blockers": readiness_blockers,
+            },
+        }
     
     # Hard gate check: if result or evidence is missing, don't complete
     if protocol is not None and protocol.verification_items:
         if not _check_delivery_hard_gates(protocol):
             return protocol, work_context_stack, {
                 "transition": "delivery-gate-blocked",
-                "requiresContinuation": False,
+                "requiresContinuation": True,
                 "currentFocus": "delivery-gate-blocked",
                 "blockedGates": _blocked_gate_labels(protocol),
             }
@@ -1565,7 +1742,7 @@ def finalize_task_takeover_protocol(
 ) -> TaskTakeoverProtocol | None:
     if protocol is None:
         return None
-    if not is_takeover_plan_confirmed(request):
+    if _takeover_confirmation_required(request) and not is_takeover_plan_confirmed(request):
         return enforce_takeover_confirmation_gate(protocol, request=request)
     module_ids = [str(item) for item in root_mount.get("activeCapabilities") or []] or None
     payload = {

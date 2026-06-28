@@ -21,8 +21,8 @@
 
 - `docs/PRD-v0.1.md`
 - `docs/new/世界树计划正式项目定义.md`
-- `docs/new/工作树.md`
 - `docs/new/元提示词.md`
+- `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md`
 - `docs/specs/README.md`
 - `docs/specs/agent-runtime-protocol-v0.2.md`
 - `docs/specs/work-tree-protocol-v0.2.md`
@@ -36,7 +36,7 @@
 
 优先级说明：
 
-1. `docs/new/` 与 `docs/specs/*v0.2.md` 是当前运行语义的高优先级来源。
+1. `docs/new/` 中的正式项目定义、`docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` 与 `docs/specs/*v0.2.md` 是当前运行语义的高优先级来源。
 2. PRD v0.1 仍用于衡量第一版范围和里程碑。
 3. 6 月 3 日用户采用度审计是历史基线；部分缺口已在 6 月 4 日后被实现补齐，不能照抄为当前事实。
 
@@ -65,7 +65,7 @@
 
 - 项目已从“单一对话应用”收口为长期任务 Agent OS、记忆树基础设施和模块平台。
 - `docs/specs/README.md` 明确 v0.2 运行语义为当前重做入口。
-- `agent-runtime-protocol-v0.2.md` 和 `work-tree-protocol-v0.2.md` 已冻结父节点强编排、工作树、Boot Prompt、RootMount、邮箱、侧信道和 `awaiting-approval` 收口。
+- `agent-runtime-protocol-v0.2.md` 和 `work-tree-protocol-v0.2.md` 已把工作树收口为上下文卫生与按需隔离机制；运行时保留 Boot Prompt、RootMount、邮箱、侧信道和必要的安全/审批边界。
 
 未完成：
 

@@ -210,7 +210,6 @@ payload.availableForkSlots = <slots>
 
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py`
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`
-- `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_work_tree_runtime.py`
 - `packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/prompting.py`
 - `tests/runtime/test_fork_worker_view.py`
 
@@ -581,7 +580,7 @@ uv run pytest tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_
 6. `evaluation/suites/work-tree-fork-runtime-harness.json`
    - 新增 Batch 6 deterministic evaluation suite：`runtime.fork_harness` 会执行 harness pytest，并把通过的合同写入 evaluation metrics。
 7. `evaluation/suites/work-tree-fork-runtime-live-candidate.json`
-   - 新增 nightly/live candidate suite：`runtime.fork_harness_live_candidate` 必须显式设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 才会走 live provider，否则记录为 `blocked` 且 suite metrics 为 non-pass；开启 live 后要求 fallback 关闭、真实 `longcat / LongCat-2.0-Preview` invocation、prompt artifact 和 live invocation evidence 与 runtime completed 终态达标。
+   - 新增手动 live candidate suite：`runtime.fork_harness_live_candidate` 必须显式设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 才会走 live provider，否则记录为 `blocked` 且 suite metrics 为 non-pass；开启 live 后要求 fallback 关闭、真实 `longcat / LongCat-2.0-Preview` invocation、prompt artifact 和 live invocation evidence 与 runtime completed 终态达标。该入口是 live smoke，不是长任务证据。
 8. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py`
    - 新增 `runtime.fork_harness` 与 `runtime.fork_harness_live_candidate` handler。
 9. `packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py`
@@ -613,7 +612,28 @@ uv run pytest tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_
 
 当前仍未完成：
 
-1. live suite 已取得真实 provider completed 终态证据；后续可继续把 nightly 口径从“live evidence passed”收紧为“必须 completed”，并清理 `takeover.py` / `takeover_protocol_lifecycle.py` 的重复实现面。
+1. live suite 的“长任务证据”门槛仍未硬化为强制多 invocation / 多 worker round；当前 stronger evidence 仍依赖历史 `evalrun_69093187bf6c46e587c3`，而不是 suite 对 `minLiveInvocations` 的硬失败。
+2. R1-R4 当前已落成 deterministic suite/case，但还不是真实 live 多 worker 仓库审查 run；后续如要证明真实收益，需要把 `evalsuite_work_tree_fork_evaluation_tasks` 升级为 live / slow 变体并加入 wall-clock、duplicate-read、merge-cost 指标。
+
+2026-06-26 追加收口：
+
+1. `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover_protocol_lifecycle.py` 已删除；delivery/revision lifecycle 的正式入口收敛到 `runtime_kernel/takeover.py`，不再保留重复实现面。
+2. `packages/python-sdk/src/yggdrasil_sdk/observability_exporters.py` 已把本地 Langfuse/OTEL ingest `127.0.0.1:3100` 改为可选：当 project keys 存在但本地 3100 不可达时，不创建 Langfuse client，flush 阶段也不会触发 SDK exporter 重试告警；远端 endpoint 不做本地探测。
+3. `tests/test_m8_runtime.py` 增加本地 Langfuse endpoint 不可达时跳过 client 构造的回归，并调整本地 base URL 测试为显式模拟端点可达。
+4. 评估任务试跑状态复核：T0-T7 已覆盖并重新跑过；R1-R4 已落成 deterministic suite/case，真实收益仍需 live/slow 变体继续验证。
+5. 本轮 3100 可选化后重跑 `corepack pnpm run eval:work-tree:fork-runtime-live` 通过，生成 `evalrun_913700242df54a1d93cc`，`provider=longcat`、`model=LongCat-2.0-Preview`、`runtimeTerminalStatus=completed`、`taskStatus=completed`、`passRate=1.0`，且输出未再出现 `127.0.0.1:3100` 不可达告警。本 run 只有 1 次 invocation，因此只作为“可选 exporter + live completed smoke”证据；更强的长任务证据仍以 `evalrun_69093187bf6c46e587c3` 的 2 次 invocation 记录为准。
+6. T6 Budget-Limited Fork Batch 已补完整原始场景：`reserveParentMergeSlots` 进入 `ForkLaunchPolicy`，`tests/runtime/test_work_tree_graph_scheduler.py` 覆盖 8 child / max 4 / reserve 1 -> 只启动 3 个、剩余等待，以及合并预算吃满后降级为父策略。
+7. T7 Recursive Fork Active Limit 已补完整递归图：A/B 一级 fork 后，A1/A2 可在 `maxForks=5` 下继续启动，B1/B2 只剩一个槽位时只启动 B1；同时补 `allowRecursiveFork=false` 时保留 child ready-set 但禁止 fork launch。
+8. R1-R4 已新增 `evaluation/suites/work-tree-fork-evaluation-tasks.json` 与 `eval:work-tree:fork-evaluation-tasks`，由 `runtime.fork_evaluation_task` deterministic handler 验证 R1 四区域审查、R2 release gate parent replan、R3 三资料包 summary-only 对比、R4 多文件迁移计划 + 父合并预算保留。已通过 `evalrun_23503bda7dee4c39b90e`，4/4 passed。
+9. 公开展示题已新增为 `evaluation/suites/work-tree-fork-public-showcase.json` 与 `eval:work-tree:fork-public-showcase`。题面是“2030 韧性能源与应急通信计划”：benefit case 产出 `serialBaselineMinutes=320`、`forkParallelMinutes=133`、`wallClockSpeedup=2.406`、`wallClockReduction0_1=0.5844`、`duplicateReadReduction0_1=0.3333`、`mergeOverheadRatio0_1=0.2857`、`evidenceCoverage0_1=1.0`；这些是基于拆分计划的展示估算，不是实测收益证明。live case 已真实调用 `longcat / LongCat-2.0-Preview`，`evalrun_f6ca4e22241542d4906b` completed，2/2 cases passed，live 侧记录 `workerRounds=2`、`invocationCount=2`、`totalTokens=7364`、`runtimeTerminalStatus=completed`；该 run 是合格展示 live smoke，不是长任务证据。
+
+live 长任务门槛设计：
+
+1. 长任务门槛必须是显式手动、昂贵、真实 live 评测；不得放入 nightly 默认路径，避免持续产生大额 provider 支出。未设置 `requireLongTaskEvidence=true` 的 suite 只能称为 smoke 或展示，不得称为长任务证据。
+2. 非真实实测数据没有长任务说服力；少于 100000 token 的短任务也不得作为长程能力证明。展示题中的 benefit case 只能说明“按拆分计划估算的收益假设”，不能替代真实 A/B 实测。
+3. 长程任务硬门槛：`longTaskGateKind=long`、`requireLongTaskEvidence=true`、至少 `longTaskMinInvocations=100`、`longTaskMinNonCacheTokens=1000000`、`longTaskMinWorkTreeDepth=2`、`longTaskRequiredTerminalStatus=completed`。token 口径是非缓存成本 token，即非缓存输入 token + 输出 token；要求 `aggregateNonCacheInputTokenSource=explicit`，不能用缓存命中不明的 fallback 估算冒充。
+4. 超长程任务硬门槛：`longTaskGateKind=ultra`、`requireLongTaskEvidence=true`、至少 `longTaskMinInvocations=1000`、`longTaskMinNonCacheTokens=10000000`、`longTaskMinWorkTreeDepth=4`、`longTaskRequiredTerminalStatus=completed`。这是独立手动评测档，不进 nightly。
+5. 真正评估 Work-Tree Fork 收益时，应另建昂贵手动 A/B suite：同题分别跑串行 baseline 与 fork live，比较真实 wall-clock、非缓存成本 token、质量评分、失败率、重复读取/重复上下文比例和 parent merge overhead。只有这种 A/B 结果才可作为“收益证据”；public showcase 只负责展示可读题面与 live provider 输出。
 
 本轮验证命令：
 
@@ -632,5 +652,13 @@ corepack pnpm run eval:work-tree:fork-runtime-harness
 corepack pnpm run eval:work-tree:fork-runtime-live
 uv run pytest tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_work_tree_graph_scheduler.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_runtime_harness or fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields or incomplete_fork_agent_run_fields or clearing_required_fork_agent_run_fields" --basetemp=tmp/pytest-fork-batch6-required-regression
 uv run ruff check packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/fork_runtime.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/worker.py packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/task.py packages/python-sdk/src/yggdrasil_sdk/persistence/repositories/_records.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_cases/runtime.py packages/python-sdk/src/yggdrasil_sdk/evaluation_runtime/suite_runner.py tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_fork_launch_planner.py tests/api/test_persistence_task_runtime_api.py
+uv run ruff check packages/python-sdk/src/yggdrasil_sdk/observability_exporters.py tests/test_m8_runtime.py
+uv run pytest tests/test_m8_runtime.py -q -k "observability_summary_reports_exporters or langfuse_client_uses_local_base_url_and_project_keys or langfuse_client_skips_unavailable_local_base_url" --basetemp=tmp/pytest-otel-optional
+uv run pytest tests/runtime/test_work_tree_graph_scheduler.py tests/runtime/test_fork_launch_planner.py tests/runtime/test_fork_merge_and_auto_batch.py tests/runtime/test_work_tree_graph_fork_runtime_harness.py tests/api/test_persistence_task_runtime_api.py -q -k "fork_runtime_harness or fork_merge or fork_launch or worker_consumes_fork or work_tree_graph or fork_agent_run_fields or incomplete_fork_agent_run_fields or clearing_required_fork_agent_run_fields" --basetemp=tmp/pytest-fork-eval-tasks-current
+uv run pytest tests/test_runtime_p4_stability_hardening.py::test_completed_work_tree_does_not_reenter_parent_orchestration -q --basetemp=tmp/pytest-takeover-cleanup
+corepack pnpm run eval:work-tree:fork-runtime-live
+uv run pytest tests/runtime/test_work_tree_graph_scheduler.py tests/runtime/test_fork_launch_planner.py -q --basetemp=tmp/pytest-fork-t6-t7
+corepack pnpm run eval:work-tree:fork-evaluation-tasks
+corepack pnpm run eval:work-tree:fork-public-showcase
 ```
 

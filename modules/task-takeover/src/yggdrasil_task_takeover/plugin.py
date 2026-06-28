@@ -41,10 +41,8 @@ _SECTION_MARKERS: dict[str, tuple[str, ...]] = {
 }
 
 _SECTION_WEIGHTS: dict[str, float] = {
-    "result": 0.40,
-    "evidence": 0.30,
-    "pending": 0.15,
-    "incomplete": 0.15,
+    "result": 0.55,
+    "evidence": 0.45,
 }
 
 _WEB_GROUNDED_REQUIREMENT_MARKERS = (
@@ -143,7 +141,7 @@ def _plan_blueprint(task_type: str, *, entropy_source: str = "") -> list[tuple[s
             ("plan", "定位实现面", "识别受影响的代码面、依赖面和验证入口。", ["affected files", "validation target"]),
             ("execute", "实施改动", "完成代码、配置或文档的正式变更，不留临时分支逻辑。", ["code change", "config change"]),
             ("verify", "验证行为", "运行聚焦验证，确认行为、类型或回归没有被破坏。", ["tests", "typecheck", "runtime proof"]),
-            ("deliver", "结构化交付", "按结果、证据、待确认项、未完成项交付，避免半成品。", ["result section", "evidence section"]),
+            ("deliver", "交付结果", "按任务需要输出结果、证据和必要风险，不填空洞模板。", ["result", "evidence"]),
         ]
     if task_type == "research":
         explore_title, explore_instructions, explore_evidence = _stable_exploration_variant(entropy_source or "research")
@@ -152,15 +150,15 @@ def _plan_blueprint(task_type: str, *, entropy_source: str = "") -> list[tuple[s
             ("objective", "固定研究问题", "明确问题边界、交付口径和已知未知项。", ["question scope", "decision target"]),
             ("constraints", "抽取约束", "固定来源、时间窗、证据标准和风险边界。", ["source policy", "time window"]),
             ("plan", "收集与归纳", "组织检索、筛选、比较与综合步骤。", ["source list", "comparison frame"]),
-            ("verify", "校验证据", "区分已证实结论与待确认假设。", ["verified claim", "open assumption"]),
-            ("deliver", "结构化输出", "输出结论、证据、待确认项和剩余空洞。", ["result section", "evidence section"]),
+            ("verify", "校验证据", "区分已证实结论与仍需验证的假设。", ["verified claim", "open assumption"]),
+            ("deliver", "交付结论", "输出结论、证据和必要风险，不填空洞模板。", ["result", "evidence"]),
         ]
     return [
         ("objective", "固定目标", "明确当前任务目标和交付边界。", ["normalized objective"]),
         ("constraints", "抽取约束", "抽取预算、环境、工具和交付约束。", ["constraints"]),
         ("plan", "形成计划", "生成可执行且可验证的步骤。", ["plan steps"]),
         ("verify", "验证输出", "确认输出具备证据和边界说明。", ["verification proof"]),
-        ("deliver", "结构化交付", "按正式交付模板收尾。", ["delivery sections"]),
+        ("deliver", "交付结果", "输出任务需要的结果、验证和必要风险。", ["result", "evidence"]),
     ]
 
 
@@ -253,10 +251,8 @@ def _parse_delivery_sections(model_output: str) -> list[dict[str, object]]:
 def _verification_items(delivery_sections: list[dict[str, object]]) -> list[dict[str, object]]:
     sections_by_name = {str(item.get("section")): item for item in delivery_sections}
     required = {
-        "result": ("必须有明确结果总结。", "hard"),
-        "evidence": ("必须有支撑结果的证据或验证。", "hard"),
-        "pending": ("必须交代仍待确认的前提或风险。", "hard"),
-        "incomplete": ("必须交代未完成项或明确写无。", "hard"),
+        "result": ("建议给出明确结果总结。", "advisory"),
+        "evidence": ("建议给出支撑结果的证据或验证。", "advisory"),
     }
     items: list[dict[str, object]] = []
     for section, (detail, gate_mode) in required.items():
@@ -296,7 +292,13 @@ def _delivery_completeness(delivery_sections: list[dict[str, object]]) -> float:
 def _rework_metrics(plan_steps: list[dict[str, object]], verification_items: list[dict[str, object]]) -> tuple[int, float]:
     if not plan_steps:
         return 0, 0.0
-    warnings = len([item for item in verification_items if item.get("status") in {"warning", "failed"}])
+    warnings = len(
+        [
+            item
+            for item in verification_items
+            if item.get("gateMode") == "hard" and item.get("status") in {"warning", "failed"}
+        ]
+    )
     return warnings, round(warnings / len(plan_steps), 4)
 
 
@@ -417,7 +419,7 @@ class TaskTakeoverModule(BaseModulePlugin):
         startup_contract = root_mount.get("startupContract") if isinstance(root_mount.get("startupContract"), dict) else {}
         root_branches = root_mount.get("rootBranches") if isinstance(root_mount.get("rootBranches"), dict) else {}
         constraints: list[dict[str, object]] = [
-            _build_constraint("delivery", "交付结构", "结果 / 证据 / 待确认项 / 未完成项", source="gate-2", required=True),
+            _build_constraint("delivery", "交付证据", "按任务需要说明结果、证据和必要风险。", source="gate-2", required=False),
             _build_constraint("tooling", "可见能力", ", ".join([str(item) for item in root_mount.get("activeCapabilities") or []]) or "none", source="root-mount", required=False),
         ]
         if root_branches:

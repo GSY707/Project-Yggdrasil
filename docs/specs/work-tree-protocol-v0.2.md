@@ -1,14 +1,14 @@
 # Work Tree Protocol v0.2
 
-- 文档状态：Accepted for P1 implementation
+- 文档状态：Accepted as current work-tree runtime protocol
 - 版本：v0.2
-- 日期：2026-05-23
-- 取代范围：v0.2 为唯一正式运行语义。
+- 日期：2026-05-23，2026-06-28 更新 LLM 使用口径
+- 取代范围：v0.2 为当前工作树数据协议；LLM 使用口径以 2026-06-28 的上下文卫生规则为准。
 - 设计来源：
-  - [新工作树方案](../new/工作树.md)
   - [新 Boot Prompt 方案](../new/元提示词.md)
   - [世界树计划正式项目定义草稿](../new/世界树计划正式项目定义.md)
   - [世界构建、初次苏醒与任务级工作状态读取实施文档](../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md)
+  - [LLM 工作树使用指南与案例](../development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md)
 - 关联文档：
   - [Agent 运行时协议 v0.2](agent-runtime-protocol-v0.2.md)
   - [运行时与工具数据规格 v0.1](runtime-domain-data-spec-v0.1.md)
@@ -16,27 +16,27 @@
 
 ## 1. 定位
 
-工作树是任务开始后挂载到记忆树语义根 `[ID: 003 我要干什么]` 下的动态工作记忆。它不是外部项目管理清单，也不是 takeover plan 的只读投影。它是 LLM 当前执行状态、执行栈、局部上下文、递归分解和摘要上浮的正式载体。
+工作树是任务开始后挂载到记忆树语义根 `[ID: 003 我要干什么]` 下的动态工作记忆。它不是外部项目管理清单，也不是 takeover plan 的只读投影。它的首要作用是上下文卫生：当某段工作会产生大量临时细节、失败尝试、重复项、候选方向或局部实验时，把这些内容隔离在合适的工作节点里，让父节点只保留结论、证据、已废弃路线、剩余风险和下一步判断。
 
 v0.2 的核心变化：
 
-1. 工作树从“计划投影”升级为“执行栈和工作记忆”。
-2. LLM 可以在协议约束下动态创建、细分、跳转、总结和关闭工作节点。
+1. 工作树从“计划投影”升级为“上下文卫生工具和工作记忆”。
+2. LLM 可以在协议约束下动态创建、进入、总结和关闭工作节点，但不要求每个任务都建树。
 3. 系统负责拓扑、版本、权限、审计、恢复指针和窗口一致性。
-4. 父节点中的 LLM 负责语义判断、节点命名、局部摘要、失败经验、下潜和上浮决策。
-5. child 完成或失败后，必须先回编排父节点，由父节点决定是否进入 sibling、继续拆 leaf 或请求外部输入。
-6. 上下文窗口以当前工作切片为主；允许保留有限线性 continuation 轨迹，但长期状态仍必须写入工作树或记忆树。
+4. LLM 负责判断当前任务是否需要拆分：短小、单步、上下文干净的任务可以直接完成；高噪声、多方向、重复性或需要隔离实验的工作再进入工作树。
+5. child 完成或失败后，应通过摘要把父节点真正需要的结论、证据、失败经验、废弃路线和风险带回；下一步由当前任务现场、工具证据、用户要求、`dependsOn` 硬依赖和 LLM 判断共同决定。
+6. 上下文窗口以当前工作切片为主；长期状态仍应写入工作树、记忆树或正式工件。
 
 ## 2. 与 v0.1 的决策差异
 
 | 主题 | v0.1 | v0.2 |
 | --- | --- | --- |
 | 节点来源 | 从 `TaskTakeoverProtocol.plan` 派生 | takeover plan 只作为初始建议，LLM 可动态扩树 |
-| 控制流 | 计划步骤驱动 | 当前工作节点驱动，但下一步去向由编排父节点决定 |
+| 控制流 | 计划步骤驱动 | LLM 按当前工作节点和现场证据自主推进；`dependsOn` 是硬依赖，`relationIds` / `runtime_hints` 是信息线索 |
 | 数据流 | prompt/request/runtime 共享同一 work tree snapshot | 每个窗口必须共享同一 `Working_Node`、工作树版本和检索节点 |
 | 完成语义 | runtime 可在交付后直接 completed | 根节点完成后进入 `awaiting-approval`，批准后才 completed |
 | 压缩恢复 | recoveryAnchor 为 resume/repair 入口 | `workingNodeAnnotation` 同时是上下文书签和返回指针 |
-| 摘要 | 交付摘要附属于 takeover artifact | 每个完成/失败节点必须写 `executionSummary` |
+| 摘要 | 交付摘要附属于 takeover artifact | 需要回到父节点或跨窗口复用时写 `executionSummary` / `failureSummary`，摘要必须过滤无效过程噪声 |
 | 冲突处理 | 不定义语义冲突路径 | 定义版本重试、追加日志、提案合并、主动分节点 |
 
 ## 3. 根位置与命名
@@ -153,11 +153,11 @@ WorkTreeNode:
 | `questionsItAnswers` | 是 | LLM | 语义索引路牌，至少 1 条 |
 | `nodeText` | 是 | LLM | 50 到 200 字左右的自然语言状态切片 |
 | `localGoal` | 是 | LLM | 当前节点的局部目标 |
-| `localConstraints` | 是 | LLM | 当前节点必须遵守的局部约束 |
+| `localConstraints` | 是 | LLM | 当前节点需要遵守的局部约束 |
 | `localContextRefs` | 可空 | Kernel/LLM | 当前节点依赖的记忆、资产、文档或外部引用 |
 | `workingNodeAnnotation` | 是 | Kernel | 固定格式 `<Working_Node: {id}>` |
-| `executionSummary` | 条件必填 | LLM | 完成或跳过前必须写入 |
-| `failureSummary` | 条件必填 | LLM | 失败或阻塞时必须写入，说明避坑经验 |
+| `executionSummary` | 条件必填 | LLM | 需要回到父节点、跨窗口恢复或供后续节点复用时写入 |
+| `failureSummary` | 条件必填 | LLM | 失败或阻塞信息会影响后续判断时写入，说明避坑经验 |
 | `phase` | 是 | Kernel/LLM | 节点所处执行阶段 |
 | `status` | 是 | Kernel | 节点状态 |
 | `childNodeIds` | 是 | Kernel | 子节点列表 |
@@ -354,9 +354,9 @@ WorkTreeNode.workingNodeAnnotation == WorkContextStack.topFrame.workingNodeAnnot
 
 规则：
 
-1. 父节点必须能用自己的 `executionSummary` 或 `nodeText` 覆盖子节点完成后的结果。
+1. 父节点应能用自己的 `executionSummary` 或 `nodeText` 覆盖子节点完成后的结果。
 2. 子节点不能与父节点目标无关。
-3. 子节点完成后，必须通过摘要上浮更新父节点的局部状态。
+3. 子节点完成后，应通过摘要更新父节点可用的局部状态，避免完整过程回灌。
 4. 上下文限制的是工作深度，不是总任务长度。
 
 ### 6.2 水平关联
@@ -493,8 +493,8 @@ nextRecommendation: string|null
 
 约束：
 
-1. 成功节点必须写 `executionSummary`。
-2. 失败节点必须写 `failureSummary`。
+1. 成功节点若需要父节点合并、后续节点复用或跨窗口恢复，应写 `executionSummary`。
+2. 失败节点若会影响后续判断，应写 `failureSummary`。
 3. 摘要应保留可复用结论、证据、决策理由、避坑经验和后续建议。
 4. 摘要不能包含完整推理流水账。
 
@@ -504,10 +504,10 @@ nextRecommendation: string|null
 
 约束：
 
-1. 当前节点必须已有 `executionSummary`。
-2. 当前节点 `expectedEvidence` 若非空，必须有对应 `producedEvidenceRefs` 或明确说明不适用。
-3. 完成子节点后，系统返回父节点。
-4. 完成根节点后，工作树进入 `awaiting-approval`。
+1. 当前节点若有父节点合并、后续复用或跨窗口恢复需求，应已有 `executionSummary`。
+2. 当前节点 `expectedEvidence` 若非空，应有对应 `producedEvidenceRefs` 或明确说明不适用。
+3. 完成子节点后，系统记录可合并摘要；下一步由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
+4. 完成根节点后，工作树可进入 `awaiting-approval` 或直接交付路径，具体取决于当前应用的审批配置。
 
 ### 8.5 fail_node
 
@@ -515,9 +515,9 @@ nextRecommendation: string|null
 
 约束：
 
-1. 必须写 `failureSummary`。
-2. 必须说明失败类型：信息不足、权限不足、工具失败、设计不成立、外部阻塞、预算不足。
-3. 父节点读取失败摘要后决定：重试、改走兄弟分支、请求用户、终止任务。
+1. 应写 `failureSummary`，说明失败类型：信息不足、权限不足、工具失败、设计不成立、外部阻塞、预算不足。
+2. 失败摘要只带回可复用避坑经验、证据和剩余风险，不带回完整失败过程。
+3. 后续路径由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
 
 ### 8.6 append_relation
 
@@ -568,11 +568,11 @@ outcome: completed|failed|blocked|skipped
 约束：
 
 1. `sourceNodeId` 必须等于当前 top frame 的 nodeId。
-2. `summary` 必须来自 `executionSummary` 或 `failureSummary`。
+2. `summary` 应来自 `executionSummary` 或 `failureSummary`。
 3. pop 后 `WorkTreeProtocol.currentNodeId` 必须等于父节点，除非父节点也立即完成并继续 pop。
-4. 父帧必须追加 `childCompletionSummaries`。
+4. 父帧应追加 `childCompletionSummaries`。
 5. pop 不得把子节点完整执行过程拼回父级上下文。
-6. pop 后优先继续父帧 `cursorState` 指向的下一子节点。
+6. pop 后可以参考父帧 `cursorState`、ready-set、用户要求和工具证据选择下一步。
 
 ## 9. 上下文压缩与窗口超阈值处理
 
@@ -632,14 +632,14 @@ droppedRefs: [EntityRef]
 
 ### 10.1 Sub-Agent
 
-Sub-Agent 用于大量预读、建树、摘要、验证、非决策性重活。
+Sub-Agent 用于需要并行、隔离上下文或独立工作流的大量预读、摘要、验证和非决策性重活；简单任务不应为了使用 Sub-Agent 而拆分。
 
 规则：
 
 1. Sub-Agent 权限低于主 Agent。
-2. Sub-Agent 必须绑定一个工作树节点或子节点。
+2. Sub-Agent 应绑定一个明确的工作树节点、子节点或只读上下文切片。
 3. Sub-Agent 不接管全局 currentNodeId。
-4. Sub-Agent 结果必须写回节点摘要、候选记忆节点或 PR proposal。
+4. Sub-Agent 结果应写回节点摘要、候选记忆节点或 PR proposal。
 5. 主 Agent 负责语义合并和最终上浮。
 
 ### 10.2 Fork

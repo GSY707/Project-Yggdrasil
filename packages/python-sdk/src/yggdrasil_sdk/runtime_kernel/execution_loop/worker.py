@@ -81,6 +81,7 @@ from ..root_mount import (
 )
 from ..snapshot import _verify_snapshot_integrity
 from ..snapshot_store import read_snapshot_entry, read_state_file_ref, verify_snapshot_manifest
+from ..work_tree_graph import assess_node_resolution, build_long_run_core_frontiers
 
 
 def _load_snapshot_context(snapshot: TaskSnapshotSummary | None) -> list[dict[str, Any]]:
@@ -96,6 +97,62 @@ def _load_snapshot_context(snapshot: TaskSnapshotSummary | None) -> list[dict[st
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     return []
+
+
+def _inject_work_tree_resolution(
+    request: dict[str, Any],
+    root_mount: dict[str, Any],
+    takeover_protocol: TaskTakeoverProtocol | None,
+) -> dict[str, Any] | None:
+    def _clear_stale_resolution() -> None:
+        request.pop("workTreeResolution", None)
+        root_mount.pop("workTreeResolution", None)
+
+    if takeover_protocol is None or takeover_protocol.work_tree is None:
+        _clear_stale_resolution()
+        return None
+    node_id = str(
+        request.get("currentNodeId")
+        or request.get("workTreeNodeId")
+        or takeover_protocol.work_tree.current_node_id
+        or takeover_protocol.work_tree.root_node_id
+        or ""
+    ).strip()
+    if not node_id:
+        _clear_stale_resolution()
+        return None
+    graph_state = dict(request.get("workTreeGraphState") or {}) if isinstance(request.get("workTreeGraphState"), dict) else {}
+    if request.get("candidateDeliveryText") is not None:
+        graph_state["candidateDeliveryText"] = request.get("candidateDeliveryText")
+    if bool(request.get("enableLongRunCoreFrontiers")):
+        existing_frontiers = [
+            dict(item)
+            for item in graph_state.get("frontierItems") or []
+            if isinstance(item, dict)
+        ]
+        existing_ids = {str(item.get("id") or "") for item in existing_frontiers}
+        long_run_frontiers = [
+            item.model_dump(by_alias=True, mode="json")
+            for item in build_long_run_core_frontiers(takeover_protocol.work_tree.root_node_id or node_id)
+            if item.id not in existing_ids
+        ]
+        graph_state["frontierItems"] = [*existing_frontiers, *long_run_frontiers]
+    try:
+        assessment = assess_node_resolution(
+            takeover_protocol.work_tree,
+            node_id,
+            graph_state=graph_state,
+            policy=request.get("workTreeResolutionPolicy") if isinstance(request.get("workTreeResolutionPolicy"), dict) else None,
+        )
+    except Exception as exc:
+        _logger.debug("Failed to assess work tree resolution for task request: %s", exc)
+        _clear_stale_resolution()
+        return None
+    payload = assessment.model_dump(by_alias=True, mode="json")
+    request["workTreeResolution"] = payload
+    root_mount["workTreeResolution"] = payload
+    request["workTreeGraphState"] = graph_state
+    return payload
 
 
 def _block_resume_attempt(
@@ -887,6 +944,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 if preview_stack is not None:
                     request["workContextStack"] = preview_stack.model_dump(by_alias=True, mode="json")
                     root_mount["workContextStack"] = request["workContextStack"]
+                _inject_work_tree_resolution(request, root_mount, preview_takeover_protocol)
 
             pre_retrieval_context = [dict(item) for item in current_context if isinstance(item, dict)]
             memory_retrieval_started_at = perf_counter()
@@ -1052,6 +1110,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                     root_mount["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
                 if work_context_stack is not None:
                     root_mount["workContextStack"] = work_context_stack.model_dump(by_alias=True, mode="json")
+                _inject_work_tree_resolution(request, root_mount, takeover_protocol)
             route_decision = runtime_repository.create_model_route_decision(
                 {
                     **route_preview,
@@ -1768,6 +1827,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
             if takeover_protocol is not None:
                 request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
                 root_mount["takeoverProtocol"] = request["takeoverProtocol"]
+                _inject_work_tree_resolution(request, root_mount, takeover_protocol)
             if assistant_work_tree_actions.get("applied"):
                 assistant_work_tree_transition = assistant_work_tree_actions
             runtime_timings["takeoverFinalizeMs"] = _elapsed_ms(takeover_finalize_started_at)

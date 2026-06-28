@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from yggdrasil_sdk import compile_runtime_prompt
+from yggdrasil_sdk.tool_runtime import filter_read_only_tool_payloads
 
 
 def _task(**overrides):
@@ -28,6 +29,56 @@ def _root_mount(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def test_filter_read_only_tool_payloads_keeps_inspection_tools_only() -> None:
+    tools = [
+        {
+            "name": "mcp.read.read_file",
+            "moduleId": "mcp-bridge",
+            "version": "0.1.0",
+            "displayName": "Read file",
+            "schemaRef": "test",
+            "executionMode": "sync",
+            "permissionRequired": ["tool.mcp.invoke"],
+            "inputSchema": {},
+        },
+        {
+            "name": "mcp.search.search_text",
+            "moduleId": "mcp-bridge",
+            "version": "0.1.0",
+            "displayName": "Search text",
+            "schemaRef": "test",
+            "executionMode": "sync",
+            "permissionRequired": ["tool.mcp.invoke"],
+            "inputSchema": {},
+        },
+        {
+            "name": "mcp.edit.write_file",
+            "moduleId": "mcp-bridge",
+            "version": "0.1.0",
+            "displayName": "Write file",
+            "schemaRef": "test",
+            "executionMode": "sync",
+            "permissionRequired": ["tool.mcp.invoke"],
+            "inputSchema": {},
+        },
+        {
+            "name": "mcp.execute.run_command",
+            "moduleId": "mcp-bridge",
+            "version": "0.1.0",
+            "displayName": "Run command",
+            "schemaRef": "test",
+            "executionMode": "sync",
+            "permissionRequired": ["tool.mcp.invoke"],
+            "inputSchema": {},
+        },
+    ]
+
+    assert [tool["name"] for tool in filter_read_only_tool_payloads(tools)] == [
+        "mcp.read.read_file",
+        "mcp.search.search_text",
+    ]
 
 
 def test_compile_runtime_prompt_for_graduate_researcher_profile_succeeds() -> None:
@@ -201,9 +252,10 @@ def test_compile_runtime_prompt_includes_takeover_protocol_when_present() -> Non
     assert compiled.takeover_protocol.objective == "把 Gate 2 接管协议注入 Prompt。"
     assert "目标摘要: 把 Gate 2 接管协议注入 Prompt。" in compiled.messages[-1]["content"]
     assert "工作树:" in compiled.messages[-1]["content"]
-    assert "计划步骤数: 1" in compiled.messages[-1]["content"]
+    assert "计划步骤数" not in compiled.messages[-1]["content"]
     assert "1. [plan] 形成计划" not in compiled.messages[-1]["content"]
-    assert "计划质量: 92.0" in compiled.messages[-1]["content"]
+    assert "当前节点=worktree-node-1" in compiled.messages[-1]["content"]
+    assert "计划质量" not in compiled.messages[-1]["content"]
 
 
 def test_compile_runtime_prompt_enforces_clarification_gate_when_takeover_needs_confirmation() -> None:
@@ -267,7 +319,80 @@ def test_compile_runtime_prompt_enforces_clarification_gate_when_takeover_needs_
         resume_path=None,
     )
 
-    assert "当前 takeover 状态是 needs-clarification" in compiled.user_sections["response_requirements"]
+    response_requirements = compiled.user_sections["response_requirements"]
+    assert "当前 takeover 状态是 needs-clarification" in response_requirements
+    assert "可先用只读工具核对上下文" in response_requirements
+
+
+def test_compile_runtime_prompt_allows_read_only_tools_during_clarification() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["mcp-bridge", "task-takeover"]),
+        current_context=[],
+        request={
+            "allowToolExecution": False,
+            "taskRuntimeState": {"phase": "task-state-loaded"},
+            "takeoverProtocol": {
+                "id": "takeover_confirm_readonly_tools",
+                "version": "0.1.0",
+                "taskId": "task_takeover_confirm_readonly_tools",
+                "taskType": "coding",
+                "runType": "main",
+                "currentPhase": "confirm",
+                "status": "needs-clarification",
+                "objective": "先核对再执行。",
+                "objectiveSummary": "先核对再执行。",
+                "ambiguities": [],
+                "constraints": [],
+                "plan": [],
+                "deliverySections": [],
+                "verificationItems": [],
+                "metrics": {
+                    "planQualityScore0_100": 90.0,
+                    "reworkCount": 0,
+                    "reworkRate": 0.0,
+                    "clarificationNeeded": True,
+                    "planConfirmationNeeded": True,
+                    "planConfirmed": False,
+                    "deliveryCompletenessScore0_100": 0.0,
+                    "verificationPassRate": 0.0,
+                },
+                "appliedModules": ["task-takeover"],
+                "hookTrace": [],
+            },
+        },
+        resume_path=None,
+        registered_tools=[
+            {
+                "name": "mcp.read.read_file",
+                "moduleId": "mcp-bridge",
+                "version": "0.1.0",
+                "displayName": "Read file",
+                "schemaRef": "test",
+                "executionMode": "sync",
+                "permissionRequired": ["tool.mcp.invoke"],
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "implementationRef": "tests.fake:read_file",
+            },
+            {
+                "name": "mcp.edit.write_file",
+                "moduleId": "mcp-bridge",
+                "version": "0.1.0",
+                "displayName": "Write file",
+                "schemaRef": "test",
+                "executionMode": "sync",
+                "permissionRequired": ["tool.mcp.invoke"],
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "implementationRef": "tests.fake:write_file",
+            },
+        ],
+    )
+
+    physical_interface = compiled.system_sections["physical_interface"]
+    assert "mcp.read.read_file" in physical_interface
+    assert "mcp.edit.write_file" not in physical_interface
 
 
 def test_compile_runtime_prompt_for_writing_selects_writing_seed() -> None:
@@ -467,6 +592,9 @@ def test_boot_behavior_constitution_is_stable_and_scene_specific_text_stays_outs
 
     assert "场景偏好与执行倾向" not in compiled.boot_sections["behavior_constitution"]
     assert "行为宪法" in compiled.boot_sections["behavior_constitution"]
+    assert "工作树是上下文卫生工具，不是必走流程" in compiled.boot_sections["behavior_constitution"]
+    assert "短小、单步、上下文干净的任务直接完成" in compiled.boot_sections["behavior_constitution"]
+    assert "relationIds 与 runtime_hints 是信息线索" in compiled.boot_sections["behavior_constitution"]
     assert "场景偏好与执行倾向" in compiled.system_sections["scene_preferences"]
     assert "高风险或不可逆操作必须显式请求确认。" not in compiled.boot_sections["physical_interface"]
     assert "工具使用偏好:" in compiled.system_sections["tool_usage_preferences"]
@@ -490,19 +618,16 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "记忆修改优先级:" in tool_policy
     assert "默认优先使用正式记忆工具" in tool_policy
     assert "只有在需要不中断当前回答、且修改足够轻量时，才使用 <memory-write>" in tool_policy
-    assert "节点过宽、存在多个独立主题或冲突风险高时，优先创建细分子节点做空间隔离" in tool_policy
+    assert "节点过宽、存在多个独立主题或冲突风险高时，先判断是否需要隔离噪声" in tool_policy
     assert "latestVersionId 冲突时，不要静默覆盖" in tool_policy
-    assert "记忆修改默认优先使用正式记忆工具" in response_requirements
-    assert "<memory-write title=\"...\" rootBranch=\"context\">" in response_requirements
+    assert "简单任务直接完成" in response_requirements
     assert "<work-node-create ...></work-node-create>" in response_requirements
     assert "<work-node-enter nodeId=\"...\"></work-node-enter>" in response_requirements
-    assert "child 完成或失败返回父节点后，由父节点决定下一步" in response_requirements
-    assert "root 节点默认负责编排和最终汇总" in response_requirements
-    assert "child 节点只处理单一局部目标" in response_requirements
-    assert "已经在同一节点连续恢复/重启，优先把当前工作拆成更小的 child 或 leaf" in response_requirements
-    assert "停止继续拆分，直接完成本节点并上浮父节点" in response_requirements
-    assert "只有 root 节点，或被父节点明确授权负责最终汇总的节点，才能输出整任务最终交付" in response_requirements
-    assert "不得覆盖工作树拓扑、当前节点语义和父节点编排权" in response_requirements
+    assert "只带回父节点需要的结论、证据、已废弃路线、风险和下一步" in response_requirements
+    assert "runtime_hints 是辅助线索，不是硬控制" in response_requirements
+    assert "输出只保留用户任务需要的结果、证据/验证和必要风险" in response_requirements
+    assert "记忆修改默认优先使用正式记忆工具" not in response_requirements
+    assert "child 完成或失败返回父节点后，由父节点决定下一步" not in response_requirements
 
 
 def test_compile_runtime_prompt_task_contract_uses_runtime_state_objective_and_focus() -> None:
@@ -560,6 +685,94 @@ def test_compile_runtime_prompt_places_node_state_before_response_requirements()
     user_message = compiled.messages[1]["content"]
     assert user_message.index("<task_contract>") < user_message.index("<response_requirements>")
     assert user_message.index("<scene_recovery>") < user_message.index("<response_requirements>")
+
+
+def test_compile_runtime_prompt_includes_soft_runtime_hints() -> None:
+    compiled = compile_runtime_prompt(
+        task=_task(),
+        run_type="main",
+        task_type="coding",
+        root_mount=_root_mount(activeCapabilities=["task-takeover", "context-pruning"]),
+        current_context=[],
+        request={
+            "appId": "yggdrasil.app.software-factory",
+            "taskRuntimeState": {
+                "phase": "task-state-loaded",
+                "taskObjective": "实现滚动前沿控制。",
+                "currentFocus": "resolution-frontier",
+                "currentNodeId": "root",
+                "workingNodeAnnotation": "<Working_Node: root>",
+            },
+            "workTreeResolution": {
+                "nodeId": "root",
+                "recommendedAction": "refine",
+                "frontierPressure": 0.9,
+                "saturation": 0.1,
+                "frontiers": [
+                    {
+                        "id": "queue-reliability",
+                        "nodeId": "root",
+                        "axis": "reliability",
+                        "description": "Worker queue needs ack and reclaim semantics.",
+                        "severity": 0.95,
+                        "status": "open",
+                    },
+                    {
+                        "id": "durable-snapshot",
+                        "nodeId": "root",
+                        "axis": "durability",
+                        "description": "Resume state must be durable.",
+                        "severity": 0.9,
+                        "status": "open",
+                    },
+                    {
+                        "id": "typed-merge",
+                        "nodeId": "root",
+                        "axis": "merge",
+                        "description": "Child results need typed merge envelopes.",
+                        "severity": 0.85,
+                        "status": "open",
+                    },
+                    {
+                        "id": "low-priority-cleanup",
+                        "nodeId": "root",
+                        "axis": "hygiene",
+                        "description": "A low-priority cleanup should stay out of this prompt.",
+                        "severity": 0.1,
+                        "status": "open",
+                    },
+                ],
+                "deliveryReadiness": {
+                    "ready": False,
+                    "blockers": ["open-frontier-pressure", "target-not-summarized"],
+                },
+                "reasons": ["frontier-pressure-above-refine-threshold"],
+            },
+        },
+        resume_path="snapshot",
+    )
+
+    resolution_section = compiled.user_sections["runtime_hints"]
+    response_requirements = compiled.user_sections["response_requirements"]
+    user_message = compiled.messages[1]["content"]
+
+    assert "运行时提示（辅助线索，不是硬控制）" in resolution_section
+    assert "建议下一步: refine" in resolution_section
+    assert "交付就绪度: not-ready" in resolution_section
+    assert "工作树用于上下文卫生" in resolution_section
+    assert "短小、单步、上下文干净的任务可以直接完成" in resolution_section
+    assert "不回灌完整过程" in resolution_section
+    assert "可优先考虑的开放前沿" in resolution_section
+    assert "Worker queue needs ack and reclaim semantics." in resolution_section
+    assert "Resume state must be durable." in resolution_section
+    assert "Child results need typed merge envelopes." in resolution_section
+    assert "A low-priority cleanup should stay out of this prompt." not in resolution_section
+    assert resolution_section.index("Worker queue needs ack") < resolution_section.index("Resume state must be durable")
+    assert resolution_section.index("Resume state must be durable") < resolution_section.index("Child results need typed merge")
+    assert "允许按现场调整" in resolution_section
+    assert "当前建议动作是 refine" in response_requirements
+    assert "不要把阶段摘要包装成整任务完成" in response_requirements
+    assert user_message.index("<runtime_hints>") < user_message.index("<response_requirements>")
 
 
 def test_resume_prompt_prefers_restart_message_and_keeps_single_recovery_memo() -> None:

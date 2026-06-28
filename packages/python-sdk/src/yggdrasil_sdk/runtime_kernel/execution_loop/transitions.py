@@ -26,19 +26,6 @@ from ..fork_runtime import ForkResultEnvelope, merge_fork_result_and_plan_next_b
 from ..root_mount import _elapsed_ms
 
 
-def _has_formal_delivery_sections(text: str) -> bool:
-	normalized = str(text or "")
-	normalized_lower = normalized.lower()
-	required_heading_sets = (
-		("# result", "# evidence", "# pending", "# incomplete"),
-		("## 结果", "## 证据", "## 风险", "## 已知问题"),
-	)
-	return any(
-		all(section in candidate for section in headings)
-		for candidate, headings in ((normalized_lower, required_heading_sets[0]), (normalized, required_heading_sets[1]))
-	)
-
-
 def _work_tree_all_leaves_complete(work_tree: Any) -> bool:
 	if work_tree is None:
 		return False
@@ -322,6 +309,7 @@ def _finalize_execution_transition(
 				assistant_text=str(llm_result.get("assistantText") or ""),
 				work_context_stack=work_context_stack,
 				evidence_refs=evidence_refs,
+				work_tree_resolution=request.get("workTreeResolution") if isinstance(request.get("workTreeResolution"), dict) else None,
 			)
 		if takeover_protocol is not None and takeover_protocol.work_tree is not None:
 			takeover_protocol, work_context_stack = sync_takeover_runtime_state(
@@ -407,9 +395,7 @@ def _finalize_execution_transition(
 						"currentFocus": request.get("nextFocus") or request.get("currentFocus") or f"continue:{next_node_id}",
 					}
 			elif terminal_candidate and current_node_id == root_node_id:
-				has_formal_delivery_sections = _has_formal_delivery_sections(assistant_text)
-				all_leaves_complete = _work_tree_all_leaves_complete(takeover_protocol.work_tree)
-				if has_formal_delivery_sections or all_leaves_complete:
+				if _work_tree_all_leaves_complete(takeover_protocol.work_tree):
 					takeover_protocol = takeover_protocol.model_copy(
 						update={
 							"status": "verified",
@@ -448,7 +434,7 @@ def _finalize_execution_transition(
 			):
 				transition_state = {
 					"transition": "delivery-gate-blocked",
-					"requiresContinuation": False,
+					"requiresContinuation": work_context_stack is not None,
 					"currentFocus": "delivery-gate-blocked",
 					"blockedGates": blocked_hard_gates,
 				}
@@ -480,8 +466,8 @@ def _finalize_execution_transition(
 				task_status = "failed"
 				transition_outcome = "failed"
 			elif isinstance(transition_state, dict) and transition_state.get("transition") == "delivery-gate-blocked":
-				result_status = "failed"
-				task_status = "failed"
+				result_status = "needs-clarification"
+				task_status = "resume-blocked"
 				transition_outcome = "delivery-gate-blocked"
 			elif bool((transition_state or {}).get("requiresContinuation")) and work_context_stack is not None:
 				work_context_stack_ref = _persist_work_context_stack_ref(
@@ -498,13 +484,12 @@ def _finalize_execution_transition(
 				)
 				if delivery_gate_retry_allowed:
 					blocked_gates = [str(item) for item in (transition_state or {}).get("blockedGates") or [] if str(item).strip()]
-					blocked_summary = ", ".join(blocked_gates) if blocked_gates else "delivery.result/evidence/pending/incomplete"
+					blocked_summary = ", ".join(blocked_gates) if blocked_gates else "delivery evidence or policy"
 					corrective_tail = (
-						"Previous output stopped before the formal delivery contract was satisfied. "
-						f"Blocked hard gates: {blocked_summary}. "
-						"Continue immediately from the same work-tree node and emit the final delivery now. "
-						"Do not add planning preambles, scanning notes, or process narration. "
-						"Output Markdown only and satisfy all required delivery sections in one response."
+						"Previous output did not satisfy a hard safety or evidence gate. "
+						f"Blocked gates: {blocked_summary}. "
+						"Continue from the same work-tree node, gather or cite the missing evidence if possible, "
+						"or state the remaining blocker and the next safe action."
 					)
 					base_response_requirements = str(continuation_payload.get("responseRequirements") or request.get("responseRequirements") or "").strip()
 					continuation_payload["responseRequirements"] = " ".join(
@@ -596,8 +581,8 @@ def _finalize_execution_transition(
 		or transition_outcome == "delivery-gate-blocked"
 	)
 	if (blocked_hard_gates_final or delivery_gate_blocked_final) and task_status == "completed":
-		result_status = "failed"
-		task_status = "failed"
+		result_status = "needs-clarification"
+		task_status = "resume-blocked"
 		transition_outcome = "delivery-gate-blocked"
 
 	if is_fork_run and result_status == "completed":
@@ -700,11 +685,7 @@ def _finalize_execution_transition(
 	if takeover_protocol is not None and takeover_protocol.work_tree is not None:
 		if blocked_hard_gates_final or delivery_gate_blocked_final:
 			takeover_protocol_payload = takeover_protocol.model_dump(by_alias=True, mode="json")
-			takeover_protocol_payload["status"] = "failed"
-			takeover_protocol_payload["workTree"] = {
-				**takeover_protocol_payload.get("workTree", {}),
-				"status": "failed",
-			}
+			takeover_protocol_payload["status"] = "needs-clarification"
 			takeover_protocol = TaskTakeoverProtocol.model_validate(takeover_protocol_payload)
 		if task_status == "completed" and not blocked_hard_gates_final and not delivery_gate_blocked_final:
 			takeover_protocol_payload = takeover_protocol.model_dump(by_alias=True, mode="json")

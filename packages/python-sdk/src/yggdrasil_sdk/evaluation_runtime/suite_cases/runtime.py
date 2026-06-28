@@ -218,10 +218,9 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
     require_live = bool(case_payload.get("requireLive", False))
     if require_live and not candidate_models:
         raise RuntimeError(f"requested live candidate is unavailable: {requested_provider}/{requested_model}")
-    start_payload = {
-        "currentFocus": str(case_payload.get("currentFocus") or "M8 live LLM evaluation"),
-        "currentObjective": str(case_payload.get("currentObjective") or "Use the mounted context to explain how memory-tree retrieval improves answer grounding."),
-        "currentContext": [
+    current_context = case_payload.get("currentContext")
+    if not isinstance(current_context, list) or not current_context:
+        current_context = [
             {
                 "id": "ctx_live_eval",
                 "title": str(case_payload.get("contextTitle") or "M8 live benchmark context"),
@@ -231,8 +230,15 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
                 ),
                 "importance": 0.98,
             }
-        ],
-        "protectedItems": [{"kind": "node", "id": "ctx_live_eval"}],
+        ]
+    protected_items = case_payload.get("protectedItems")
+    if not isinstance(protected_items, list):
+        protected_items = [{"kind": "node", "id": "ctx_live_eval"}]
+    start_payload = {
+        "currentFocus": str(case_payload.get("currentFocus") or "M8 live LLM evaluation"),
+        "currentObjective": str(case_payload.get("currentObjective") or "Use the mounted context to explain how memory-tree retrieval improves answer grounding."),
+        "currentContext": [dict(item) for item in current_context],
+        "protectedItems": [dict(item) for item in protected_items],
         "allowModelFallback": bool(case_payload.get("allowFallback", True)),
         "temperature": float(case_payload.get("temperature") or 0.15),
         "maxTokens": int(case_payload.get("maxTokens") or 320),
@@ -247,6 +253,20 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         start_payload["planConfirmed"] = bool(case_payload["planConfirmed"])
     if case_payload.get("takeoverPlanConfirmed") is not None:
         start_payload["takeoverPlanConfirmed"] = bool(case_payload["takeoverPlanConfirmed"])
+    if case_payload.get("takeoverAutoConfirm") is not None:
+        start_payload["takeoverAutoConfirm"] = bool(case_payload["takeoverAutoConfirm"])
+    if case_payload.get("confirmPlan") is not None:
+        start_payload["confirmPlan"] = bool(case_payload["confirmPlan"])
+    if case_payload.get("responseRequirements") is not None:
+        start_payload["responseRequirements"] = str(case_payload["responseRequirements"])
+    if case_payload.get("restartMessage") is not None:
+        start_payload["restartMessage"] = str(case_payload["restartMessage"])
+    if case_payload.get("effectiveContextWindow") is not None:
+        start_payload["effectiveContextWindow"] = int(case_payload["effectiveContextWindow"])
+    if case_payload.get("windowRestartRatio") is not None:
+        start_payload["windowRestartRatio"] = float(case_payload["windowRestartRatio"])
+    if case_payload.get("forcedWindowRestartBudget") is not None:
+        start_payload["forcedWindowRestartBudget"] = int(case_payload["forcedWindowRestartBudget"])
     if candidate_models:
         start_payload["candidateModels"] = candidate_models
     started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
@@ -310,7 +330,12 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
         persisted_task = repository.get_task(task["id"])
-        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=20)
+        invocation_read_limit = max(
+            20,
+            int(case_payload.get("longTaskMinInvocations") or case_payload.get("minLiveInvocations") or 0),
+            int(case_payload.get("longTaskInvocationReadLimit") or 0),
+        )
+        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=invocation_read_limit)
         prompt_artifact = None
         if invocations and invocations[0].prompt_compile_artifact_id:
             prompt_artifact = prompt_repository.get_prompt_compile_artifact(invocations[0].prompt_compile_artifact_id)
@@ -333,6 +358,7 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         raise RuntimeError(incomplete_error)
 
     include_payloads = bool(case_payload.get("includePayloads", True))
+    aggregate_usage = _aggregate_live_invocation_usage(invocations)
     live_summary = {
         "taskId": task["id"],
         "taskStatus": persisted_task.status if persisted_task is not None else result_payload.get("status"),
@@ -349,11 +375,20 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         "traceId": invocation.trace_id,
         "latencyMs": invocation.latency_ms,
         "totalTokens": int((invocation.input_tokens_used or 0) + (invocation.output_tokens_used or 0)),
+        "aggregateTotalTokens": aggregate_usage["totalTokens"],
+        "aggregateOutputTokens": aggregate_usage["outputTokens"],
+        "aggregateNonCacheInputTokens": aggregate_usage["nonCacheInputTokens"],
+        "aggregateNonCacheBillableTokens": aggregate_usage["nonCacheBillableTokens"],
+        "aggregateNonCacheInputTokenSource": aggregate_usage["nonCacheInputTokenSource"],
         "costUsed": float(invocation.cost_used or 0.0),
         "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
     }
     if invocation.prompt_compile_artifact_id and prompt_artifact is None:
         raise RuntimeError(f"prompt compile artifact missing for invocation {invocation.id}")
+    long_task_gate = _evaluate_live_long_task_gate(case_payload, live_summary)
+    live_summary["longTaskGate"] = long_task_gate
+    if long_task_gate["required"] and not long_task_gate["passed"]:
+        raise RuntimeError(f"live long task gate failed: {json.dumps(long_task_gate, ensure_ascii=False)}")
     result = {
         **live_summary,
         "liveScenario": live_summary,
@@ -363,6 +398,105 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
         result["requestPayload"] = _read_external_ref_json(invocation.request_ref, resolve_workspace_root())
         result["responsePayload"] = _read_external_ref_json(invocation.response_ref, resolve_workspace_root())
     return result
+
+
+def _aggregate_live_invocation_usage(invocations: list[Any]) -> dict[str, Any]:
+    total_tokens = 0
+    output_tokens_total = 0
+    non_cache_input_tokens = 0
+    explicit_non_cache_count = 0
+    for invocation in invocations:
+        input_tokens = int(getattr(invocation, "input_tokens_used", 0) or 0)
+        output_tokens = int(getattr(invocation, "output_tokens_used", 0) or 0)
+        output_tokens_total += output_tokens
+        total_tokens += input_tokens + output_tokens
+        response_payload = _read_external_ref_json(getattr(invocation, "response_ref", None), resolve_workspace_root())
+        usage = response_payload.get("usage") if isinstance(response_payload, dict) else None
+        if not isinstance(usage, dict):
+            usage = response_payload.get("usageDetails") if isinstance(response_payload, dict) else None
+        if isinstance(usage, dict) and usage.get("nonCacheInputTokens") is not None:
+            non_cache_input_tokens += max(int(usage.get("nonCacheInputTokens") or 0), 0)
+            explicit_non_cache_count += 1
+            continue
+        if isinstance(usage, dict) and usage.get("cacheHitInputTokens") is not None:
+            cache_hit = max(int(usage.get("cacheHitInputTokens") or 0), 0)
+            non_cache_input_tokens += max(input_tokens - cache_hit, 0)
+            explicit_non_cache_count += 1
+            continue
+        non_cache_input_tokens += input_tokens
+    return {
+        "totalTokens": total_tokens,
+        "outputTokens": output_tokens_total,
+        "nonCacheInputTokens": non_cache_input_tokens,
+        "nonCacheBillableTokens": non_cache_input_tokens + output_tokens_total,
+        "nonCacheInputTokenSource": "explicit" if explicit_non_cache_count == len(invocations) and invocations else "fallback-inputTokens",
+    }
+
+
+def _evaluate_live_long_task_gate(case_payload: dict[str, Any], live_summary: dict[str, Any]) -> dict[str, Any]:
+    required = bool(case_payload.get("requireLongTaskEvidence", False))
+    gate_kind = str(case_payload.get("longTaskGateKind") or "custom")
+    if gate_kind == "long":
+        default_min_invocations = 100
+        default_min_non_cache_tokens = 1_000_000
+        default_min_work_tree_depth = 2
+    elif gate_kind == "ultra":
+        default_min_invocations = 1000
+        default_min_non_cache_tokens = 10_000_000
+        default_min_work_tree_depth = 4
+    else:
+        default_min_invocations = 1
+        default_min_non_cache_tokens = 0
+        default_min_work_tree_depth = 1
+    min_worker_rounds = max(1, int(case_payload.get("longTaskMinWorkerRounds") or case_payload.get("minLiveWorkerRounds") or default_min_invocations))
+    min_invocations = max(1, int(case_payload.get("longTaskMinInvocations") or case_payload.get("minLiveInvocations") or default_min_invocations))
+    min_non_cache_tokens = max(
+        0,
+        int(
+            case_payload.get("longTaskMinNonCacheTokens")
+            or case_payload.get("longTaskMinNonCacheBillableTokens")
+            or default_min_non_cache_tokens
+        ),
+    )
+    min_work_tree_depth = max(1, int(case_payload.get("longTaskMinWorkTreeDepth") or default_min_work_tree_depth))
+    observed_work_tree_depth = max(0, int(case_payload.get("longTaskObservedWorkTreeDepth") or live_summary.get("workTreeDepth") or 0))
+    terminal_required = str(case_payload.get("longTaskRequiredTerminalStatus") or "completed")
+    require_explicit_non_cache = bool(case_payload.get("longTaskRequireExplicitNonCacheTokens", True))
+    non_cache_source = str(live_summary.get("aggregateNonCacheInputTokenSource") or "")
+    checks = {
+        "workerRounds": int(live_summary.get("liveWorkerRoundCount") or 0) >= min_worker_rounds,
+        "invocations": int(live_summary.get("invocationCount") or 0) >= min_invocations,
+        "nonCacheBillableTokens": int(live_summary.get("aggregateNonCacheBillableTokens") or 0) >= min_non_cache_tokens,
+        "explicitNonCacheTokens": (not require_explicit_non_cache) or non_cache_source == "explicit",
+        "workTreeDepth": observed_work_tree_depth >= min_work_tree_depth,
+        "terminalStatus": str(live_summary.get("runtimeTerminalStatus") or "") == terminal_required,
+    }
+    return {
+        "kind": gate_kind,
+        "required": required,
+        "passed": all(checks.values()),
+        "checks": checks,
+        "observed": {
+            "workerRounds": live_summary.get("liveWorkerRoundCount"),
+            "invocations": live_summary.get("invocationCount"),
+            "aggregateTotalTokens": live_summary.get("aggregateTotalTokens"),
+            "aggregateOutputTokens": live_summary.get("aggregateOutputTokens"),
+            "aggregateNonCacheInputTokens": live_summary.get("aggregateNonCacheInputTokens"),
+            "aggregateNonCacheBillableTokens": live_summary.get("aggregateNonCacheBillableTokens"),
+            "aggregateNonCacheInputTokenSource": live_summary.get("aggregateNonCacheInputTokenSource"),
+            "workTreeDepth": observed_work_tree_depth,
+            "terminalStatus": live_summary.get("runtimeTerminalStatus"),
+        },
+        "thresholds": {
+            "minWorkerRounds": min_worker_rounds,
+            "minInvocations": min_invocations,
+            "minNonCacheBillableTokens": min_non_cache_tokens,
+            "minWorkTreeDepth": min_work_tree_depth,
+            "requireExplicitNonCacheTokens": require_explicit_non_cache,
+            "terminalStatus": terminal_required,
+        },
+    }
+
 
 def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
     from fastapi.testclient import TestClient
@@ -554,6 +688,176 @@ def _run_fork_runtime_harness_case(case: dict[str, Any] | None = None) -> dict[s
             "pending-summary-only-flow",
             "no-child-task-or-task-branch",
         ],
+    }
+
+
+def _run_fork_evaluation_task_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    from ...contracts import WorkTreeProtocol
+    from ...runtime_kernel.work_tree_graph import compute_parent_ready_set, plan_fork_batch
+
+    case_payload = dict(case or {})
+    evaluation_task = str(case_payload.get("evaluationTask") or case_payload.get("id") or "R")
+    child_specs = [dict(item) for item in case_payload.get("childSpecs") or []]
+    if not child_specs:
+        raise RuntimeError(f"{evaluation_task} has no childSpecs")
+
+    policy = dict(case_payload.get("policy") or {})
+    root_children = [str(item.get("id") or f"child-{index}") for index, item in enumerate(child_specs, start=1)]
+    nodes: list[dict[str, Any]] = [
+        _fork_eval_node("root", parent=None, children=root_children, status="in-progress", priority=0),
+    ]
+    for index, spec in enumerate(child_specs, start=1):
+        nodes.append(
+            _fork_eval_node(
+                str(spec.get("id") or f"child-{index}"),
+                title=str(spec.get("title") or spec.get("area") or f"child-{index}"),
+                depends_on=[str(dep) for dep in spec.get("dependsOn") or []],
+                relation_ids=[str(relation) for relation in spec.get("relationIds") or []],
+                priority=int(spec.get("priority") or index),
+                status=str(spec.get("status") or "pending"),
+            )
+        )
+    work_tree = WorkTreeProtocol.model_validate(
+        {
+            "id": f"wt-{evaluation_task.lower()}",
+            "rootNodeId": "root",
+            "rootObjective": str(case_payload.get("taskGoal") or case_payload.get("taskTitle") or evaluation_task),
+            "status": "active",
+            "currentNodeId": "root",
+            "nodes": nodes,
+        }
+    )
+    graph_state = {"pendingInformationItems": [dict(item) for item in case_payload.get("pendingInformationItems") or []]}
+    ready_set = compute_parent_ready_set(work_tree, "root", graph_state=graph_state, policy=policy)
+    batch_plan = plan_fork_batch(ready_set, policy)
+
+    launched = [candidate.assigned_work_tree_node_id for candidate in batch_plan.launch_candidates]
+    waiting = [candidate.assigned_work_tree_node_id for candidate in batch_plan.waiting_candidates]
+    min_forks = int(case_payload.get("expectedMinForks") or len(child_specs))
+    if len(launched) < min_forks:
+        raise RuntimeError(f"{evaluation_task} launched {len(launched)} forks, expected at least {min_forks}")
+
+    expected_waiting = [str(item) for item in case_payload.get("expectedWaiting") or []]
+    if expected_waiting and waiting != expected_waiting:
+        raise RuntimeError(f"{evaluation_task} waiting mismatch: expected {expected_waiting}, got {waiting}")
+
+    if bool(case_payload.get("expectParentReplanRequired", False)) and not ready_set.parent_replan_required:
+        raise RuntimeError(f"{evaluation_task} expected parent replan gate")
+    if bool(case_payload.get("expectAutoLaunchBlocked", False)) and ready_set.can_auto_launch:
+        raise RuntimeError(f"{evaluation_task} expected auto launch to be blocked")
+
+    required_output_sections = [str(item) for item in case_payload.get("requiredOutputSections") or []]
+    evidence_refs = [str(item) for spec in child_specs for item in spec.get("evidenceRefs") or []]
+    if bool(case_payload.get("requireEvidenceRefs", True)) and len(evidence_refs) < len(child_specs):
+        raise RuntimeError(f"{evaluation_task} expected at least one evidence ref per child")
+
+    pending_summary_only = all("rawContent" not in dict(item) for item in graph_state["pendingInformationItems"])
+    if bool(case_payload.get("requirePendingSummaryOnly", False)) and not pending_summary_only:
+        raise RuntimeError(f"{evaluation_task} pending information contains rawContent")
+
+    return {
+        "evaluationTask": evaluation_task,
+        "mode": "deterministic-fork-evaluation-task",
+        "forkCount": len(launched),
+        "launched": launched,
+        "waiting": waiting,
+        "sameParentContextAnchor": True,
+        "parentReplanRequired": ready_set.parent_replan_required,
+        "canAutoLaunch": ready_set.can_auto_launch,
+        "pendingSummaryOnly": pending_summary_only,
+        "evidenceRefCount": len(evidence_refs),
+        "requiredOutputSections": required_output_sections,
+        "implementationSlices": [str(item.get("title") or item.get("area") or item.get("id")) for item in child_specs],
+    }
+
+
+def _run_fork_showcase_benefit_case(case: dict[str, Any] | None = None) -> dict[str, Any]:
+    case_payload = dict(case or {})
+    workstreams = [dict(item) for item in case_payload.get("workstreams") or []]
+    if not workstreams:
+        raise RuntimeError("showcase benefit case requires workstreams")
+    max_parallel = max(1, int(case_payload.get("maxParallelForks") or len(workstreams)))
+    parent_merge_minutes = max(0.0, float(case_payload.get("parentMergeMinutes") or 0.0))
+    serial_minutes = sum(max(0.0, float(item.get("estimatedMinutes") or 0.0)) for item in workstreams)
+    fork_slots = [0.0 for _ in range(max_parallel)]
+    for item in sorted(workstreams, key=lambda row: -float(row.get("estimatedMinutes") or 0.0)):
+        slot_index = min(range(max_parallel), key=lambda index: fork_slots[index])
+        fork_slots[slot_index] += max(0.0, float(item.get("estimatedMinutes") or 0.0))
+    parallel_child_minutes = max(fork_slots) if fork_slots else 0.0
+    parallel_total_minutes = parallel_child_minutes + parent_merge_minutes
+    speedup = serial_minutes / parallel_total_minutes if parallel_total_minutes > 0 else 0.0
+
+    serial_refs: list[str] = []
+    for item in workstreams:
+        serial_refs.extend(str(ref) for ref in item.get("sourceRefs") or [])
+    unique_refs = sorted(set(serial_refs))
+    serial_read_count = len(serial_refs)
+    unique_read_count = len(unique_refs)
+    duplicate_read_reduction = 1.0 - (unique_read_count / serial_read_count) if serial_read_count else 0.0
+    evidence_coverage = sum(1 for item in workstreams if item.get("sourceRefs")) / len(workstreams)
+    merge_overhead_ratio = parent_merge_minutes / parallel_total_minutes if parallel_total_minutes > 0 else 0.0
+    result = {
+        "mode": "public-showcase-benefit-estimate",
+        "taskTitle": str(case_payload.get("taskTitle") or "Public showcase long task"),
+        "forkCount": len(workstreams),
+        "maxParallelForks": max_parallel,
+        "serialBaselineMinutes": round(serial_minutes, 2),
+        "forkParallelMinutes": round(parallel_total_minutes, 2),
+        "parallelChildMinutes": round(parallel_child_minutes, 2),
+        "parentMergeMinutes": round(parent_merge_minutes, 2),
+        "wallClockSpeedup": round(speedup, 4),
+        "wallClockReduction0_1": round(1.0 - (parallel_total_minutes / serial_minutes), 4) if serial_minutes else 0.0,
+        "serialReadCount": serial_read_count,
+        "uniqueReadCount": unique_read_count,
+        "duplicateReadReduction0_1": round(duplicate_read_reduction, 4),
+        "mergeOverheadRatio0_1": round(merge_overhead_ratio, 4),
+        "evidenceCoverage0_1": round(evidence_coverage, 4),
+        "uniqueEvidenceRefs": unique_refs,
+        "workstreams": [
+            {
+                "id": str(item.get("id") or ""),
+                "title": str(item.get("title") or item.get("id") or ""),
+                "estimatedMinutes": float(item.get("estimatedMinutes") or 0.0),
+                "sourceRefCount": len(item.get("sourceRefs") or []),
+            }
+            for item in workstreams
+        ],
+    }
+    min_speedup = float(case_payload.get("minWallClockSpeedup") or 1.0)
+    min_duplicate_reduction = float(case_payload.get("minDuplicateReadReduction0_1") or 0.0)
+    if result["wallClockSpeedup"] < min_speedup:
+        raise RuntimeError(f"showcase speedup below threshold: {result['wallClockSpeedup']} < {min_speedup}")
+    if result["duplicateReadReduction0_1"] < min_duplicate_reduction:
+        raise RuntimeError(
+            f"showcase duplicate-read reduction below threshold: {result['duplicateReadReduction0_1']} < {min_duplicate_reduction}"
+        )
+    return result
+
+
+def _fork_eval_node(
+    node_id: str,
+    *,
+    title: str | None = None,
+    parent: str | None = "root",
+    children: list[str] | None = None,
+    depends_on: list[str] | None = None,
+    relation_ids: list[str] | None = None,
+    priority: int = 100,
+    status: str = "pending",
+) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "title": title or node_id,
+        "parentNodeId": parent,
+        "questionsItAnswers": [title or node_id],
+        "nodeText": title or node_id,
+        "localGoal": title or node_id,
+        "phase": "executing",
+        "status": status,
+        "childNodeIds": children or [],
+        "dependsOn": depends_on or [],
+        "relationIds": relation_ids or [],
+        "priority": priority,
     }
 
 

@@ -190,7 +190,7 @@ corepack pnpm web:dev
 
 ### 基础验证
 
-- 运行 `uv run pytest -q` 前请先确保本地 OTel Collector 已启动（例如执行 `corepack pnpm infra:up`），避免 observability 导出端点不可达导致额外等待。
+- 运行 `uv run pytest -q` 不再强制要求本地 OTel Collector 或 Langfuse；本地 `4318` / `3100` 不可达时 observability exporter 会自动跳过。只有需要采集 traces/metrics 时，再先执行 `corepack pnpm infra:up` 或启动 `langfuse-compose.yml`。
 
 ```powershell
 uv run pytest -q
@@ -230,7 +230,7 @@ corepack pnpm eval:work-tree:fork-runtime-live
 
 `corepack pnpm eval:g4:graduate-ml:longcat2` 与 `corepack pnpm eval:g4:graduate-ml:deepseek-v4` 是 Graduate Researcher 应用的机器学习研究生 live 入口，重点检查 tool-rich 学习过程、预算、证据、阶段汇报和人工评审占位。`corepack pnpm eval:g4:provider-matrix` 是 Gate 4 live provider matrix，`corepack pnpm eval:g4:real-task-unrelated:dual-live` 用与本项目无关的 incident RCA 题面对照 LongCat 与 DeepSeek，`corepack pnpm eval:g4:work-tree-debug` 是显式工作树调试 harness。
 
-`corepack pnpm eval:work-tree:fork-runtime-harness` 是工作树图 Fork Batch 6 deterministic runtime harness，会通过真实 worker 消费 fork work item 并验证 AgentRun、prompt artifact、workTreeSnapshot 和 pending summary-only 信息流。`corepack pnpm eval:work-tree:fork-runtime-live` 是 nightly/live 候选入口；必须先设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 并配置 provider key，否则会记录为 blocked 而不是误报通过。开启 live 后，suite 会关闭模型 fallback，要求 `longcat / LongCat-2.0-Preview` 真实 invocation、prompt compile artifact 和 live invocation evidence 与 runtime completed 终态达标；2026-06-25 已通过 `evalrun_69093187bf6c46e587c3`。
+`corepack pnpm eval:work-tree:fork-runtime-harness` 是工作树图 Fork Batch 6 deterministic runtime harness，会通过真实 worker 消费 fork work item 并验证 AgentRun、prompt artifact、workTreeSnapshot 和 pending summary-only 信息流。`corepack pnpm eval:work-tree:fork-runtime-live` 是手动 live 候选入口；必须先设置 `YGGDRASIL_FORK_RUNTIME_LIVE=1` 并配置 provider key，否则会记录为 blocked 而不是误报通过。开启 live 后，suite 会关闭模型 fallback，要求 `longcat / LongCat-2.0-Preview` 真实 invocation、prompt compile artifact 和 live invocation evidence 与 runtime completed 终态达标；2026-06-25 已通过 `evalrun_69093187bf6c46e587c3`。该入口是 live smoke，不是长任务证据。
 
 历史窗口 stress 与真实任务 parity suite 文件仍保留在 `evaluation/suites/` 作为专项资产，但当前根 `package.json` 不再暴露对应 `pnpm` 脚本。若恢复这些入口，必须同时更新 `package.json`、README 和 `docs/DIRECTORY_REFERENCE.md`。
 

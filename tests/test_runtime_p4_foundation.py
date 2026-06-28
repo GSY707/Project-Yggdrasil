@@ -258,7 +258,7 @@ def test_root_mount_exposes_root_branches_and_startup_contract() -> None:
             "spaceId": "space_p4_preview",
             "branchId": "branch_p4_preview",
             "taskObjective": "stabilize startup contract",
-            "responseRequirements": "必须包含 result/evidence/pending/incomplete。",
+            "responseRequirements": "按任务需要说明结果和证据。",
             "restartMessage": "窗口切换后沿当前节点继续。",
         },
     )
@@ -272,7 +272,7 @@ def test_root_mount_exposes_root_branches_and_startup_contract() -> None:
     assert mount_package["systemRootProtocol"]["nodeId"] == "SYS_ROOT_PROTOCOL"
     assert mount_package["startupLoadOrder"] == ["你的能力", "你的工具", "你的工作", "你的知识"]
     assert mount_package["startupMode"] == "bootstrap"
-    assert mount_package["startupContract"]["responseRequirements"] == "必须包含 result/evidence/pending/incomplete。"
+    assert mount_package["startupContract"]["responseRequirements"] == "按任务需要说明结果和证据。"
     assert mount_package["startupContract"]["restartMessage"] == "窗口切换后沿当前节点继续。"
 
 
@@ -337,17 +337,26 @@ def test_work_tree_bootstraps_pointer_when_plan_is_empty() -> None:
     assert bootstrap_node.recovery_anchor == "resume:bootstrap"
 
 
-def test_takeover_confirmation_gate_requires_confirmation_before_prepared() -> None:
+def test_takeover_confirmation_gate_is_advisory_unless_explicitly_required() -> None:
     protocol = TaskTakeoverProtocol.model_validate(_root_only_takeover_protocol("task_p4_confirm_gate"))
-    gated = runtime_takeover.enforce_takeover_confirmation_gate(
+    advisory = runtime_takeover.enforce_takeover_confirmation_gate(
         protocol,
         request={},
+    )
+    assert advisory is not None
+    assert advisory.status == "executing"
+    assert advisory.current_phase == "execute"
+    assert advisory.metrics.plan_confirmation_needed is False
+    assert advisory.metrics.plan_confirmed is False
+
+    gated = runtime_takeover.enforce_takeover_confirmation_gate(
+        protocol,
+        request={"requireTakeoverPlanConfirmation": True},
     )
     assert gated is not None
     assert gated.status == "needs-clarification"
     assert gated.current_phase == "confirm"
     assert gated.metrics.plan_confirmation_needed is True
-    assert gated.metrics.plan_confirmed is False
 
     prepared = runtime_takeover.enforce_takeover_confirmation_gate(
         gated,
@@ -982,11 +991,11 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
                 {
                     "id": "ctx_overflow_leaf",
                     "title": "overflow leaf",
-                    "content": "窗口超限叶子失败后要回到父节点。",
+                    "content": "窗口超限叶子失败后要回到父节点。" * 80,
                     "importance": 0.9,
                 }
             ],
-            "effectiveContextWindow": 64000,
+            "effectiveContextWindow": 120,
             "forcedWindowRestartBudget": 1,
             "allowToolExecution": False,
             "temperature": 0.1,

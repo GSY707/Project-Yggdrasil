@@ -80,6 +80,14 @@ def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() ->
     assert all(case.get("allowToolExecution") is True for case in cases)
     assert {case["parityPairKey"] for case in cases} == {"g4-web-research-default-grid-storage"}
     assert {case.get("auditLevel") for case in cases} == {"strict"}
+    case = cases[0]
+    assert case["acceptanceMinRestartCount"] == 0
+    assert case["acceptanceMinWindowIndex"] == 1
+    assert case["acceptanceMinCumulativeWindowSpanTokens"] == 0
+    assert case["forcedWindowRestartBudget"] == 0
+    assert case["expectedResultStatus"] == "completed"
+    assert case["expectedTaskStatus"] == "completed"
+    assert case["acceptanceRequiredPhrases"] == ["结果", "证据", "风险", "已知问题"]
 def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 

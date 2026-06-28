@@ -163,7 +163,7 @@ class _ExporterState:
 
         self._endpoint_health[endpoint] = (now, available)
         if not available:
-            _logger.debug("OTel endpoint unreachable, exporter disabled for now: %s", endpoint)
+            _logger.debug("Observability endpoint unreachable, exporter disabled for now: %s", endpoint)
         return available
 
     def _resource(self, service_name: str):
@@ -234,6 +234,8 @@ class _ExporterState:
             return None
         if not _truthy_env("LANGFUSE_TRACING_ENABLED", default=True):
             return None
+        if base_url is None or not self._endpoint_available(base_url):
+            return None
 
         identity = (public_key, secret_key, base_url)
         if self._langfuse_identity == identity and self._langfuse_client is not None:
@@ -287,8 +289,25 @@ def get_exporter_status() -> dict[str, Any]:
     otel_ready = bool(otel_configured and TracerProvider is not None and MeterProvider is not None)
     public_key = _langfuse_public_key()
     secret_key = _langfuse_secret_key()
+    langfuse_host = _langfuse_base_url()
     langfuse_configured = bool(public_key and secret_key)
-    langfuse_ready = bool(langfuse_configured and LangfuseClient is not None and _truthy_env("LANGFUSE_TRACING_ENABLED", default=True))
+    langfuse_endpoint_available = True if not langfuse_configured else bool(langfuse_host and _STATE._endpoint_available(langfuse_host))
+    langfuse_ready = bool(
+        langfuse_configured
+        and LangfuseClient is not None
+        and _truthy_env("LANGFUSE_TRACING_ENABLED", default=True)
+        and langfuse_endpoint_available
+    )
+    if langfuse_ready or not langfuse_configured:
+        langfuse_detail = None
+    elif LangfuseClient is None:
+        langfuse_detail = "langfuse sdk is unavailable"
+    elif not _truthy_env("LANGFUSE_TRACING_ENABLED", default=True):
+        langfuse_detail = "langfuse tracing is disabled"
+    elif not langfuse_endpoint_available:
+        langfuse_detail = "langfuse local endpoint is unavailable; exporter is optional and disabled for now"
+    else:
+        langfuse_detail = "langfuse project keys are missing or invalid"
     return {
         "otel": {
             "configured": otel_configured,
@@ -303,8 +322,8 @@ def get_exporter_status() -> dict[str, Any]:
             "configured": langfuse_configured,
             "enabled": langfuse_ready,
             "ready": langfuse_ready,
-            "host": _langfuse_base_url(),
-            "detail": None if langfuse_ready or not langfuse_configured else "langfuse sdk is unavailable, tracing is disabled, or project keys are missing",
+            "host": langfuse_host,
+            "detail": langfuse_detail,
         },
     }
 

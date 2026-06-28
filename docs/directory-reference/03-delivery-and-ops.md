@@ -14,8 +14,6 @@ docs/
 ├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
 ├── P2_TASK_14_17_FILE_STATUS_AUDIT.md # P2 任务14-17 文件现状审计：成本预算检查、工具执行隔离、runtime metrics、safe-stop机制全景分析，6项关键缺失+6项重要缺失
 ├── development/                    # 开发专题文档目录（具体文件见顶层速览）
-│   ├── WORLD_TREE_AGENT_WORKFLOW_CURRENT_VS_TARGET_2026_05_26.md
-│   │                               #   世界树 Agent 当前工作逻辑 vs 目标工作逻辑：聚焦父节点强编排、有限线性 continuation 轨迹以及上下文在推进/失败/恢复/交付中的变化
 │   ├── TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md
 │   │                               #   任务核对流程审计与对齐：冻结“理解任务->形成计划->向发起者核对->再执行”流程，并标注当前实现缺口与分级推进建议
 │   ├── WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md
@@ -36,7 +34,6 @@ docs/
 │   └── LOCAL_FIRST_TASK_DEMO.md    # 本地首次成功演示脚本：Web 导入素材、附加任务、模板启动与结果查看
 │
 ├── new/                            # 新方案草稿与当前重做输入材料
-│   ├── 工作树.md                    # 新工作树方案：工作记忆、执行栈、LOD 下潜/上浮与 Working Node 标签
 │   ├── 元提示词.md                  # 新 Boot Prompt 方案：I/O 绑定、根指针、行为宪法和现场恢复
 │   └── 世界树计划正式项目定义.md    # 正式项目定义草稿与用户笔记：生命周期、根内容、能力、工具、工作树与分期
 │
@@ -148,9 +145,9 @@ evaluation/
     ├── g4-real-task-externalized.json
                                     #   G4 默认真实任务入口（single-goal / externalized；用于正式 real-task 合同）
     ├── g4-real-task-unrelated-dual-live.json
-                                    #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照，并强制 formal delivery footer 以穿过 delivery gate）
+                                    #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照；历史 case 可能仍带旧 footer 合同，不代表当前 runtime delivery gate）
     ├── g4-real-task-web-research-default.json
-                                    #   G4 默认真实任务入口（网络检索 + 多源对比 + 矛盾处理；strict 审计与 formal delivery footer）
+                                    #   G4 默认真实任务入口（网络检索 + 多源对比 + 矛盾处理；strict 审计保留，不再用 fake restart 或 approval 门槛作为通过条件）
     ├── g4-web-research-work-tree-long.json
                                     #   G4 web research 长任务入口（固定 LongCat live，强调多窗口 continuation 与工作树连续性）
     ├── g4-graduate-ml-longcat2.json
@@ -161,6 +158,10 @@ evaluation/
                                     #   工作树图 Fork Batch 6 deterministic runtime harness（执行两轮 worker harness pytest 并写入 evaluation metrics）
     ├── work-tree-fork-runtime-live-candidate.json
                                     #   工作树图 Fork Batch 6 nightly/live candidate（需要 YGGDRASIL_FORK_RUNTIME_LIVE=1 和 provider key；已通过真实 LongCat runtime completed 终态）
+    ├── work-tree-fork-evaluation-tasks.json
+                                    #   工作树图 Fork R1-R4 deterministic evaluation tasks（四区域审查、release gate、三资料包对比、多文件迁移计划）
+    ├── work-tree-fork-public-showcase.json
+                                    #   工作树图 Fork 公开展示题（韧性能源与应急通信计划；benefit 数据 + LongCat live 输出）
     ├── g4-real-task-window-parity.json
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
@@ -190,6 +191,8 @@ evaluation/
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
 | `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
 | `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
+| `eval:work-tree:fork-evaluation-tasks` | `suites/work-tree-fork-evaluation-tasks.json` |
+| `eval:work-tree:fork-public-showcase` | `suites/work-tree-fork-public-showcase.json` |
 
 ---
 
@@ -213,7 +216,7 @@ infra/
 │                                   #   OTel Collector :4318
 ├── docker-compose.product.yml      # 完整产品栈预览（依赖 + migrate + Core API/Agent Runtime/Module Host/Worker/Web）
 ├── langfuse-compose.yml            # Langfuse 本地观测栈（独立端口段，避免冲突）
-│                                   #   Langfuse Web :3100
+│                                   #   Langfuse Web :3100（可选；未启动时 exporter 自动跳过）
 │                                   #   ClickHouse :18123
 │                                   #   Langfuse MinIO :19090
 └── otel-collector-config.yaml      # OTel Collector 配置（Traces → Jaeger + Debug）

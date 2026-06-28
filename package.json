@@ -26,6 +26,8 @@
     "eval:g4:work-tree-debug": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_debug",
     "eval:work-tree:fork-runtime-harness": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_work_tree_fork_runtime_harness",
     "eval:work-tree:fork-runtime-live": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_work_tree_fork_runtime_live_candidate",
+    "eval:work-tree:fork-evaluation-tasks": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_work_tree_fork_evaluation_tasks",
+    "eval:work-tree:fork-public-showcase": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_work_tree_fork_public_showcase",
     "release:check": "corepack pnpm run check:python:syntax && uv run pytest -q && corepack pnpm run eval:regression && corepack pnpm run eval:m8:benchmark && corepack pnpm run eval:m9:control-plane && corepack pnpm run eval:g2:regression && corepack pnpm run eval:g4:multiscene && corepack pnpm run web:lint && corepack pnpm run web:typecheck && corepack pnpm run web:build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",

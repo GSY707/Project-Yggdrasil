@@ -419,8 +419,8 @@ def test_format_response_requirements_resume_path_enforces_delivery_first() -> N
         resume_path="restart-snapshot",
     )
 
-    assert "result/evidence/pending/incomplete" in formatted
-    assert "judgment" in formatted
+    assert "任务需要的结果、证据/验证和必要风险" in formatted
+    assert "judgment" not in formatted
     assert "默认采用" in formatted
     assert "简洁" in formatted
 
@@ -442,11 +442,19 @@ def test_window_restart_trigger_threshold_boundary_and_forced_budget() -> None:
     assert span_equal >= 90
     assert trigger_equal == "effectiveContextWindow"
 
-    trigger_forced, _ = runtime_execution_loop._window_restart_trigger(
+    trigger_forced_below, _ = runtime_execution_loop._window_restart_trigger(
         request={},
         runtime_metrics={"effectiveContextWindow": 120, "windowRestartThreshold": 90, "forcedWindowRestartBudget": 1},
         effective_context=[{"id": "x", "content": "tiny"}],
     )
+    assert trigger_forced_below is None
+
+    trigger_forced, span_forced = runtime_execution_loop._window_restart_trigger(
+        request={},
+        runtime_metrics={"effectiveContextWindow": 120, "windowRestartThreshold": 90, "forcedWindowRestartBudget": 1},
+        effective_context=[{"id": "x", "content": "a" * 360}],
+    )
+    assert span_forced >= 90
     assert trigger_forced == "forcedWindowRestartBudget"
 
 

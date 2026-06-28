@@ -3,7 +3,7 @@
   "name": "Work-Tree Fork Runtime Live Candidate",
   "domain": "generic",
   "suiteRole": "runtime-debug-harness",
-  "suiteRoleNote": "Batch 6 nightly/live candidate for collecting real provider evidence after the deterministic fork runtime harness passes. This suite requires YGGDRASIL_FORK_RUNTIME_LIVE=1 and configured provider credentials.",
+  "suiteRoleNote": "Batch 6 manual live candidate for collecting real provider evidence after the deterministic fork runtime harness passes. This suite requires YGGDRASIL_FORK_RUNTIME_LIVE=1 and configured provider credentials. It is a live smoke candidate, not long-task evidence.",
   "subjectKind": "workflow",
   "subjectRef": "work-tree:fork-runtime-live-candidate",
   "metricRefs": [
@@ -15,10 +15,10 @@
   "cases": [
     {
       "id": "evalcase_work_tree_fork_runtime_harness_nightly_live_candidate",
-      "title": "Nightly Fork Runtime Live Candidate",
+      "title": "Manual Fork Runtime Live Candidate",
       "scenario": "runtime.fork_harness_live_candidate",
       "taskType": "coding",
-      "taskTitle": "Work-Tree Fork Runtime Nightly Candidate",
+      "taskTitle": "Work-Tree Fork Runtime Live Candidate",
       "taskGoal": "Exercise a longer runtime task with live provider after deterministic fork harness stability is confirmed.",
       "requireLive": true,
       "allowToolExecution": false,
@@ -43,7 +43,7 @@
         "fork",
         "runtime-harness",
         "batch-6",
-        "nightly",
+        "manual-live",
         "live-candidate"
       ],
       "expectedPrecondition": "Run deterministic harness and fork regression suite first; set YGGDRASIL_FORK_RUNTIME_LIVE=1 and configure live provider credentials."

@@ -4,8 +4,6 @@ import threading
 
 from fastapi.testclient import TestClient
 import pytest
-import sqlalchemy as sa
-import yggdrasil_model_providers
 
 from yggdrasil_agent_runtime.app import app as runtime_app
 from yggdrasil_agent_runtime.runtime import build_root_mount_package, prepare_pause_snapshot
@@ -19,7 +17,6 @@ from yggdrasil_sdk import (
     resolve_workspace_root,
 )
 from yggdrasil_sdk.persistence.constants import DEFAULT_APP_ID
-from yggdrasil_sdk.persistence.orm import RetrievalRequestORM
 from yggdrasil_sdk.persistence.repositories import NodeRepository, RuntimeRepository, WorkspaceBootstrapRepository
 import yggdrasil_sdk.runtime_kernel.execution_loop as runtime_execution_loop
 from yggdrasil_worker.registry import run_worker_once
@@ -159,7 +156,7 @@ def test_context_pruning_retains_protected_refs() -> None:
                     "id": "ctx_response_requirements",
                     "kind": "responseRequirements",
                     "title": "responseRequirements",
-                    "content": "result/evidence/pending/incomplete 必须齐全。",
+                    "content": "按任务需要说明结果和证据。",
                     "importance": 0.0,
                 },
             ],

@@ -15,6 +15,7 @@ import yggdrasil_sdk.ops_runtime.scorecard as ops_runtime_scorecard
 from yggdrasil_sdk import TaskRepository, create_runtime_backup, get_persistence_runtime, restore_runtime_backup, run_evaluation_suite, summarize_observability
 from yggdrasil_sdk.evaluation_runtime import isolated_runtime_environment
 from yggdrasil_sdk.evaluation_runtime.suite_cases import _run_live_llm_task_case, _run_live_llm_tool_case
+from yggdrasil_sdk.evaluation_runtime.suite_cases.runtime import _evaluate_live_long_task_gate
 from yggdrasil_sdk.mcp_bridge import ensure_mcp_bridge_config
 from yggdrasil_sdk.ops_runtime import list_runtime_backups, prepare_real_user_validation_sandbox, summarize_real_user_scorecard
 from yggdrasil_sdk.persistence.repositories import WorkspaceBootstrapRepository
@@ -75,6 +76,48 @@ def test_live_llm_cases_fail_on_missing_candidate_not_bad_import(monkeypatch) ->
 
     with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-2.0-Preview"):
         _run_live_llm_tool_case({"requireLive": True})
+
+
+def test_live_long_task_gate_uses_manual_expensive_thresholds() -> None:
+    gate = _evaluate_live_long_task_gate(
+        {"requireLongTaskEvidence": True, "longTaskGateKind": "long"},
+        {
+            "liveWorkerRoundCount": 100,
+            "invocationCount": 100,
+            "aggregateNonCacheBillableTokens": 1_000_000,
+            "aggregateNonCacheInputTokenSource": "explicit",
+            "workTreeDepth": 2,
+            "runtimeTerminalStatus": "completed",
+        },
+    )
+
+    assert gate["required"] is True
+    assert gate["passed"] is True
+    assert gate["thresholds"]["minInvocations"] == 100
+    assert gate["thresholds"]["minNonCacheBillableTokens"] == 1_000_000
+    assert gate["thresholds"]["minWorkTreeDepth"] == 2
+
+
+def test_live_ultra_long_task_gate_rejects_short_smoke_runs() -> None:
+    gate = _evaluate_live_long_task_gate(
+        {"requireLongTaskEvidence": True, "longTaskGateKind": "ultra"},
+        {
+            "liveWorkerRoundCount": 999,
+            "invocationCount": 999,
+            "aggregateNonCacheBillableTokens": 9_999_999,
+            "aggregateNonCacheInputTokenSource": "explicit",
+            "workTreeDepth": 3,
+            "runtimeTerminalStatus": "completed",
+        },
+    )
+
+    assert gate["passed"] is False
+    assert gate["thresholds"]["minInvocations"] == 1000
+    assert gate["thresholds"]["minNonCacheBillableTokens"] == 10_000_000
+    assert gate["thresholds"]["minWorkTreeDepth"] == 4
+    assert gate["checks"]["invocations"] is False
+    assert gate["checks"]["nonCacheBillableTokens"] is False
+    assert gate["checks"]["workTreeDepth"] is False
 
 
 def test_isolated_evaluation_environment_redirects_workspace_writes() -> None:
@@ -283,7 +326,7 @@ def test_live_task_token_budget_defaults_to_unbounded_without_override() -> None
     assert ops_runtime_live._live_task_token_budget({"budgetTokenTotal": 24000, "maxTokens": 900}) == 24000
 
 
-def test_duplicate_tool_loop_short_circuit_keeps_formal_delivery_sections() -> None:
+def test_duplicate_tool_loop_short_circuit_stays_task_neutral() -> None:
     payload = sdk_llm_runtime._duplicate_tool_loop_result(
         {
             "mode": "live",
@@ -297,14 +340,13 @@ def test_duplicate_tool_loop_short_circuit_keeps_formal_delivery_sections() -> N
     )
 
     text = str(payload["outputText"])
-    assert "## 结果" in text
-    assert "## 证据" in text
-    assert "## 风险" in text
-    assert "## 已知问题" in text
+    assert "## 结果" not in text
+    assert "比较矩阵" not in text
+    assert "当前任务目标" in text
     assert payload["finishReason"] == "duplicate-tool-loop-short-circuit"
 
 
-def test_tool_round_limit_short_circuit_keeps_formal_delivery_sections() -> None:
+def test_tool_round_limit_short_circuit_stays_task_neutral() -> None:
     payload = sdk_llm_runtime._tool_round_limit_result(
         {
             "mode": "live",
@@ -318,10 +360,9 @@ def test_tool_round_limit_short_circuit_keeps_formal_delivery_sections() -> None
     )
 
     text = str(payload["outputText"])
-    assert "## 结果" in text
-    assert "## 证据" in text
-    assert "## 风险" in text
-    assert "## 已知问题" in text
+    assert "## 结果" not in text
+    assert "比较矩阵" not in text
+    assert "当前任务目标" in text
     assert payload["finishReason"] == "tool-round-limit-short-circuit"
 
 
@@ -576,6 +617,7 @@ def test_langfuse_client_uses_local_base_url_and_project_keys(monkeypatch) -> No
     monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "1")
     monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setattr(observability_exporters, "LangfuseClient", FakeLangfuseClient)
+    monkeypatch.setattr(observability_exporters._STATE, "_endpoint_available", lambda _endpoint: True)
     observability_exporters._STATE._langfuse_client = None
     observability_exporters._STATE._langfuse_identity = None
 
@@ -585,3 +627,29 @@ def test_langfuse_client_uses_local_base_url_and_project_keys(monkeypatch) -> No
     assert captured["public_key"] == "pk-lf-test"
     assert captured["secret_key"] == "sk-lf-test"
     assert captured["base_url"] == "http://127.0.0.1:3100"
+
+
+def test_langfuse_client_skips_unavailable_local_base_url(monkeypatch) -> None:
+    captured: dict[str, bool] = {"constructed": False}
+
+    class FakeLangfuseClient:
+        def __init__(self, **_kwargs):
+            captured["constructed"] = True
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-test")
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "1")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "http://127.0.0.1:9")
+    monkeypatch.setattr(observability_exporters, "LangfuseClient", FakeLangfuseClient)
+    monkeypatch.setattr(observability_exporters._STATE, "_endpoint_available", lambda _endpoint: False)
+    observability_exporters._STATE._langfuse_client = None
+    observability_exporters._STATE._langfuse_identity = None
+
+    client = observability_exporters._STATE.langfuse_client()
+    status = observability_exporters.get_exporter_status()
+
+    assert client is None
+    assert captured["constructed"] is False
+    assert status["langfuse"]["configured"] is True
+    assert status["langfuse"]["ready"] is False
+    assert status["langfuse"]["detail"] == "langfuse local endpoint is unavailable; exporter is optional and disabled for now"
