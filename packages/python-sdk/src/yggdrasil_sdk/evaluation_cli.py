@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from .evaluation_runtime import list_evaluation_suite_definitions, run_evaluation_suite
 from .support import load_workspace_dotenv
@@ -9,6 +10,8 @@ from .support import load_workspace_dotenv
 
 def main() -> None:
     load_workspace_dotenv()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(description="Run Project Yggdrasil evaluation suites.")
     subparsers = parser.add_subparsers(dest="command", required=True)

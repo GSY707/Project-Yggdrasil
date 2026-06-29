@@ -351,14 +351,21 @@ def _usage_value(payload: dict[str, Any], *path: str) -> Any:
         current = current.get(part)
     return current
 def _usage_int(payload: dict[str, Any], *candidates: tuple[str, ...]) -> int:
+    saw_zero = False
     for candidate in candidates:
         value = _usage_value(payload, *candidate)
         if value is None:
             continue
         try:
-            return int(value)
+            parsed = int(value)
         except (TypeError, ValueError):
             continue
+        if parsed > 0:
+            return parsed
+        if parsed == 0:
+            saw_zero = True
+    if saw_zero:
+        return 0
     return 0
 def _normalize_usage(raw_usage: dict[str, Any], messages: list[dict[str, Any]], output_text: str) -> dict[str, int]:
     input_tokens = _usage_int(
@@ -379,15 +386,18 @@ def _normalize_usage(raw_usage: dict[str, Any], messages: list[dict[str, Any]], 
 
     cache_hit_input_tokens = _usage_int(
         raw_usage,
+        ("cache_read_tokens",),
         ("cache_read_input_tokens",),
         ("input_cached_tokens",),
         ("cached_input_tokens",),
-        ("cached_tokens",),
         ("prompt_tokens_details", "cached_tokens"),
         ("input_tokens_details", "cached_tokens"),
+        ("effectiveCachedTokens",),
+        ("cached_tokens",),
     )
     cache_write_input_tokens = _usage_int(
         raw_usage,
+        ("cache_write_tokens",),
         ("cache_creation_input_tokens",),
         ("cache_write_input_tokens",),
         ("prompt_tokens_details", "cache_creation_tokens"),
@@ -1012,7 +1022,6 @@ def invoke_model(
         request_payload["tools"] = prepared_tools
         request_payload["tool_choice"] = "auto"
 
-    encoded_payload = json.dumps(request_payload).encode("utf-8")
     endpoint = f"{config.base_url}/chat/completions"
     headers = {
         "Authorization": f"Bearer {config.api_key}",

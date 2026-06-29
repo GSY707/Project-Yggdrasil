@@ -1,0 +1,228 @@
+{
+  "id": "evalsuite_g4_real_task_work_tree_critique_continue_live",
+  "name": "G4 Real-Task Work-Tree Critique Continue Live",
+  "domain": "generic",
+  "suiteRole": "runtime-debug-harness",
+  "suiteRoleNote": "Single live experiment: seed an awaiting-approval storage-research work tree with an incomplete approval text, then send a critical revision request that asks the LLM to continue instead of only explaining.",
+  "conventions": {
+    "conformsTo": null,
+    "exemptionReason": "This experiment intentionally seeds takeoverProtocol and uses request-revision to test post-completion correction behavior."
+  },
+  "metricRefs": ["pass-rate", "tool-evidence", "post-completion-action", "work-tree-continuation"],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:work-tree:critique-continue",
+  "cases": [
+    {
+      "id": "evalcase_g4_work_tree_critique_continue_grid_storage_live",
+      "title": "G4 Work-Tree Critique Continue: Grid Storage Research",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-work-tree-critique-continue-grid-storage",
+      "parityPairKey": "g4-work-tree-critique-continue-grid-storage",
+      "parityRole": "critique-continue",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
+      "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
+      "currentFocus": "g4-work-tree-critique-continue-grid-storage",
+      "currentObjective": "Use the seeded work tree to finish source search, route comparison, and recommendation synthesis for long-duration energy storage.",
+      "currentContext": [
+        {
+          "id": "ctx_web_research_scope",
+          "title": "decision scope",
+          "content": "Target operator profile: peak load 3-6 GW, renewable share 45%-60%, procurement horizon to 2030. Decision criteria must include levelized storage cost range, safety risk profile, supply-chain risk, and implementation lead time.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_web_research_method",
+          "title": "research method",
+          "content": "You must perform network search and compare sources from multiple domains. At least one source should be policy/regulator, one should be industry report, and one should be academic or technical institution.",
+          "importance": 0.98
+        },
+        {
+          "id": "ctx_work_tree_contract",
+          "title": "work-tree contract",
+          "content": "The seeded work tree is authoritative. Complete the current child node, bubble evidence to the parent, move to the next child node, and only finalize at root after source search, comparison, and recommendation synthesis are complete.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_web_research_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled. Build the report from verifiable web evidence. Include a source table and contradiction handling. If you write that the next step is needed, perform that next step before final delivery.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "takeoverProtocol": {
+        "id": "takeover___TASK_ID__",
+        "version": "0.1.0",
+        "taskId": "__TASK_ID__",
+        "taskType": "research",
+        "runType": "main",
+        "currentPhase": "deliver",
+        "status": "verified",
+        "objective": "交付储能路线选择研究结论。",
+        "objectiveSummary": "先完成证据搜索，再完成路线对比，最后回到根节点给出推荐。",
+        "ambiguities": [],
+        "constraints": [],
+        "plan": [
+          {
+            "id": "step_source_search",
+            "title": "多源证据搜索",
+            "instructions": "搜索政策/技术机构/行业或学术来源，记录 URL、发布日期和关键主张。",
+            "phase": "execute",
+            "status": "in-progress",
+            "dependsOn": [],
+            "expectedEvidence": ["source-table"]
+          },
+          {
+            "id": "step_route_comparison",
+            "title": "路线对比与矛盾处理",
+            "instructions": "比较 Li-ion、sodium-ion、flow battery、green hydrogen，并处理至少一个来源矛盾。",
+            "phase": "execute",
+            "status": "pending",
+            "dependsOn": ["step_source_search"],
+            "expectedEvidence": ["comparison-matrix", "contradiction-resolution"]
+          },
+          {
+            "id": "step_recommendation",
+            "title": "根节点推荐收口",
+            "instructions": "综合成本、安全、供应链和部署速度，给出面向 2030 的推荐。",
+            "phase": "deliver",
+            "status": "pending",
+            "dependsOn": ["step_source_search", "step_route_comparison"],
+            "expectedEvidence": ["final-recommendation"]
+          }
+        ],
+        "workTree": {
+          "version": "0.2.0",
+          "id": "work_tree___TASK_ID__",
+          "taskId": "__TASK_ID__",
+          "rootNodeId": "root",
+          "rootObjective": "交付储能路线选择研究结论。",
+          "status": "awaiting-approval",
+          "currentNodeId": "root",
+          "loadedNodeIds": ["root", "source-search", "route-comparison"],
+          "activePathNodeIds": ["root"],
+          "pcMemo": "seeded approval: report still has next-step gaps",
+          "entropyBudgetRemaining": 10,
+          "versionCounter": 1,
+          "nodes": [
+            {
+              "id": "root",
+              "title": "储能路线推荐收口",
+              "parentNodeId": null,
+              "questionsItAnswers": ["2030 年中型电网运营商应该选择哪些储能路线"],
+              "nodeText": "综合子节点证据，给出推荐、约束和风险。",
+              "localGoal": "形成最终推荐报告。",
+              "workingNodeAnnotation": "<Working_Node: root>",
+              "phase": "delivery",
+              "status": "completed",
+              "childNodeIds": ["source-search", "route-comparison"],
+              "expectedEvidence": ["final-recommendation"],
+              "detailLevel": 0,
+              "recoveryAnchor": "resume:root"
+            },
+            {
+              "id": "source-search",
+              "title": "多源证据搜索",
+              "parentNodeId": "root",
+              "questionsItAnswers": ["有哪些可信来源支持各储能路线的成本、安全、部署和供应链判断"],
+              "nodeText": "搜索并筛选政策、技术机构、行业和学术来源。",
+              "localGoal": "产出可审计来源表。",
+              "workingNodeAnnotation": "<Working_Node: source-search>",
+              "phase": "executing",
+              "status": "completed",
+              "childNodeIds": [],
+              "planStepIds": ["step_source_search"],
+              "expectedEvidence": ["source-table"],
+              "detailLevel": 1,
+              "recoveryAnchor": "resume:source-search"
+            },
+            {
+              "id": "route-comparison",
+              "title": "路线对比与矛盾处理",
+              "parentNodeId": "root",
+              "questionsItAnswers": ["四种路线在 2030 约束下如何排序，来源矛盾如何处理"],
+              "nodeText": "构建对比矩阵并解释来源矛盾。",
+              "localGoal": "产出对比矩阵和矛盾处理依据。",
+              "workingNodeAnnotation": "<Working_Node: route-comparison>",
+              "phase": "executing",
+              "status": "completed",
+              "childNodeIds": [],
+              "planStepIds": ["step_route_comparison"],
+              "expectedEvidence": ["comparison-matrix", "contradiction-resolution"],
+              "detailLevel": 1,
+              "recoveryAnchor": "resume:route-comparison"
+            }
+          ]
+        },
+        "deliverySections": [],
+        "verificationItems": [],
+        "metrics": {
+          "planQualityScore0_100": 90.0,
+          "reworkCount": 0,
+          "reworkRate": 0.0,
+          "clarificationNeeded": false,
+          "deliveryCompletenessScore0_100": 0.0,
+          "verificationPassRate": 0.0
+        },
+        "appliedModules": ["task-takeover"],
+        "hookTrace": []
+      },
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "allowPaidModels": false,
+      "requireLive": true,
+      "expectedResultStatus": "awaiting-approval",
+      "expectedTaskStatus": "awaiting-approval",
+      "seedAwaitingApprovalBeforePostActions": true,
+      "seededApprovalFocus": "awaiting-approval: seeded incomplete storage report",
+      "seededApprovalObjective": "Revise the incomplete storage route report by continuing the missing evidence and contradiction work.",
+      "seededApprovalAssistantText": "已交付一版储能路线选择报告，但报告只列出若干下一步：补齐政策/监管来源、补齐来源矛盾处理、复核 2030 成本区间。报告没有真正完成这些下一步，不能作为最终结论。",
+      "temperature": 0.1,
+      "maxTokens": 8000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 16.0,
+      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceMinSuccessfulToolExecutions": 1,
+      "acceptanceMinEvidenceLinks": 1,
+      "acceptanceMinWorkTreeContinuity0_1": 1.0,
+      "acceptanceMinMinimalWorksetRatio0_1": 0.2,
+      "failOnAcceptanceViolation": false,
+      "responseRequirements": "Use network search and follow the seeded work tree. First complete source-search, then route-comparison, then root recommendation. Include a comparison matrix, contradiction analysis, source table with URL/domain/published date/key claim, and final recommendation. If you write that a next step is required, perform it before approval. Output Markdown only.",
+      "restartMessage": "Window restart: preserve currentNodeId, WorkContextStack, source table, comparison matrix, contradiction analysis, and final recommendation. Continue the seeded work tree rather than restarting at root.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 0,
+      "maxToolRounds": 24,
+      "maxWindowCycles": 24,
+      "workspaceProfile": "g4-work-tree-critique-continue-grid-storage",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "postCompletionActions": [
+        {
+          "id": "critique-continue-root",
+          "kind": "runtime-revision",
+          "nodeId": "root",
+          "userMessage": "这个任务还不能只停在报告和下一步建议上。你需要继续执行未完成的工作节点：补齐缺失证据、补齐矛盾处理，并把工作树推进到真正完成。不要只解释原因，请继续做。",
+          "responseRequirements": "Continue from the reopened work-tree node. If evidence is missing, use web tools. If a next step is mentioned, execute it before returning for approval. Keep source table, contradiction analysis, comparison matrix, and recommendation auditable. Output Markdown only.",
+          "expectedResultStatus": "awaiting-approval",
+          "maxWindowCycles": 12,
+          "maxWorkerWaitSeconds": 240
+        }
+      ],
+      "tags": ["g4", "real-task", "web-research", "work-tree", "critique-continue"],
+      "difficulty": "hard"
+    }
+  ]
+}

@@ -20,7 +20,7 @@
 ### 已具备
 
 - `docs/specs/work-tree-protocol-v0.2.md` 与 `docs/specs/agent-runtime-protocol-v0.2.md` 已定义接管阶段与执行门禁：目标解析 -> 约束抽取 -> 计划生成 -> 执行 -> 验证 -> 交付。
-- `docs/specs/work-tree-protocol-v0.2.md`、`docs/specs/agent-runtime-protocol-v0.2.md` 与 `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` 已把工作树收口为上下文卫生工具：简单任务直接完成，需要隔离噪声、候选方向、重复项、局部实验或并行工作时才建节点；child 只回传父节点需要的摘要。
+- `docs/specs/work-tree-protocol-v0.2.md`、`docs/specs/agent-runtime-protocol-v0.2.md` 与 `docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` 已把工作树收口为上下文卫生工具：root/非叶子节点负责高层视角、流程控制、方向重估和信息合并；叶子节点负责具体执行；执行噪声、候选方向、重复项、局部实验或并行工作进入 child/leaf；child 回传父节点需要的有用信息、引用、废弃路线和风险。
 - 2026-05 的工作树强编排调试材料已不再作为当前目标口径。
 
 ### 缺口
@@ -38,7 +38,7 @@
 - `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`
   - 已形成 work tree 状态推进与 root `awaiting-approval` 收口。
 - `packages/python-sdk/src/yggdrasil_sdk/prompting.py`
-  - 已对按需工作树、节点语义、摘要回收和输出结构做提示约束。
+  - 已对按需工作树、节点语义、有用信息回收和输出结构做提示约束。
 
 ### 缺口
 

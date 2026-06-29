@@ -352,6 +352,51 @@ def test_execute_resumed_tool_calls_preserves_reasoning_content_when_restoring_a
     assert conversation_messages[2]["tool_call_id"] == "call_resume_note_index"
 
 
+def test_tool_result_reflection_reminder_is_user_turn_after_tool_batch() -> None:
+    from yggdrasil_sdk.llm_runtime.invoke import _tool_result_reflection_reminder_message
+
+    message = _tool_result_reflection_reminder_message(
+        {"toolResultReflectionReminder": True},
+        [
+            {"name": "mcp.web.search_web"},
+            {"name": "mcp.web.fetch_webpage"},
+        ],
+        3,
+    )
+
+    assert message is not None
+    assert message["role"] == "user"
+    assert "Workflow control checkpoint" in message["content"]
+    assert "roundIndex=3" in message["content"]
+    assert "mcp.web.search_web" in message["content"]
+    assert "mcp.web.fetch_webpage" in message["content"]
+    assert _tool_result_reflection_reminder_message({"toolResultReflectionReminder": False}, [], 0) is None
+
+
+def test_work_tree_node_tool_call_soft_limit_warns_on_sixth_tool_call() -> None:
+    from yggdrasil_sdk.llm_runtime.invoke import _tool_result_reflection_reminder_message
+
+    before_limit = _tool_result_reflection_reminder_message(
+        {"workTreeNodeToolCallSoftLimit": {"limit": 5}, "workTreeNodeId": "leaf-a"},
+        [{"name": "mcp.web.search_web"}],
+        4,
+        node_tool_call_count=5,
+    )
+    warning = _tool_result_reflection_reminder_message(
+        {"workTreeNodeToolCallSoftLimit": {"limit": 5}, "workTreeNodeId": "leaf-a"},
+        [{"name": "mcp.web.fetch_webpage"}],
+        5,
+        node_tool_call_count=6,
+    )
+
+    assert before_limit is None
+    assert warning is not None
+    assert warning["role"] == "user"
+    assert "当前工作树节点已经超过本节点的 5 次 toolcall 机会" in warning["content"]
+    assert "currentNodeId=leaf-a" in warning["content"]
+    assert "下次 toolcall 将被拒绝" in warning["content"]
+
+
 def test_pending_tool_calls_snapshot_rejects_partial_streaming_tool_call() -> None:
     from yggdrasil_sdk.runtime_kernel.snapshot import save_pending_tool_calls_snapshot
 

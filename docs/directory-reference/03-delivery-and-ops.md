@@ -147,9 +147,7 @@ evaluation/
     ├── g4-real-task-unrelated-dual-live.json
                                     #   G4 无关任务双模型 live 入口（固定 unrelated incident RCA；LongCat 2 与 DeepSeek v4 Flash 同题对照；历史 case 可能仍带旧 footer 合同，不代表当前 runtime delivery gate）
     ├── g4-real-task-web-research-default.json
-                                    #   G4 默认真实任务入口（网络检索 + 多源对比 + 矛盾处理；strict 审计保留，不再用 fake restart 或 approval 门槛作为通过条件）
-    ├── g4-web-research-work-tree-long.json
-                                    #   G4 web research 长任务入口（固定 LongCat live，强调多窗口 continuation 与工作树连续性）
+                                    #   G4 默认真实任务入口（网络检索 + 多源对比 + 矛盾处理；strict 审计保留，要求 live 工具调用、窗口执行工件和工作树连续性证据，不再用 fake restart/cache gate/approval 门槛作为通过条件）
     ├── g4-graduate-ml-longcat2.json
                                     #   机器学习研究生专用 live 入口（Graduate Researcher 应用 + LongCat 2）
     ├── g4-graduate-ml-deepseek-v4.json
@@ -166,8 +164,26 @@ evaluation/
                                     #   G4 真实任务窗口对照专项资产（当前根 package.json 不暴露 pnpm 脚本）
     ├── g4-real-task-window-parity-flash.json
                                     #   G4 真实任务窗口对照 flash 专项资产（当前根 package.json 不暴露 pnpm 脚本）
-    └── g4-real-task-work-tree-debug.json
+    ├── g4-real-task-work-tree-debug.json
                                     #   G4 真实任务工作树调试 harness（显式嵌套 takeoverProtocol，从 child 节点起步；当前目标已切到 child 先回父节点、父节点再决定 sibling/leaf 的编排语义）
+    ├── g4-real-task-work-tree-post-question-live.json
+                                    #   G4 live 行为实验：主任务完成后追加 user 追问，审计 LLM 为什么没有使用工作树或没有继续下一步
+    ├── g4-real-task-work-tree-step-reflection-live.json
+                                    #   G4 live 行为实验：每个重要证据/工具批次后要求重新审视目标与工作树位置，验证是否能打断 root-only 惯性
+    ├── g4-real-task-work-tree-critique-continue-live.json
+                                    #   G4 live 行为实验：种 awaiting-approval 半成品后发送批评式 revision，验证 LLM 是否继续执行以及是否进入工作节点
+    ├── g4-real-task-work-tree-tool-end-reminder-live.json
+                                    #   G4 live 行为实验：工具批次结束后注入流程控制反思提醒，验证是否能打断单节点工具惯性
+    ├── g4-real-task-work-tree-tool-call-leaf-example-live.json
+                                    #   G4 live 行为实验：用“工具调用即 leaf”强示例要求先建 child/leaf 再执行工具
+    ├── g4-real-task-work-tree-leaf-self-talk-live.json
+                                    #   G4 live 行为实验：用更明确的 leaf 执行、自言自语和执行后判断示例验证流程控制稳定性
+    ├── g4-real-task-work-tree-deepseek-v4-pro-live.json
+                                    #   G4 live 行为实验：同题切换 deepseek_direct/deepseek-v4-pro，区分模型能力与工作树使用行为
+    ├── g4-real-task-work-tree-deepseek-v4-pro-critique-continue-live.json
+                                    #   G4 live 行为实验：DeepSeek leaf/父评估口径上叠加“批评后继续 + 先做任务控制分析”，验证 revision 是否能重开 completed+unfinished 工作树并继续正确调度
+    └── g4-real-task-work-tree-deepseek-v4-pro-node-tool-budget-live.json
+                                    #   G4 live 行为实验：DeepSeek + auto-unfinished continuation + 每节点 5 次 toolcall 软预算，验证工具预算是否促成 leaf/父节点流程控制
 ```
 
 **评测命令映射：**
@@ -184,11 +200,19 @@ evaluation/
 | `eval:g4:provider-matrix` | `suites/g4-provider-matrix.json` |
 | `eval:g4:provider-matrix:longform` | `suites/g4-provider-matrix-longform.json` |
 | `eval:g4:web-research:default` | `suites/g4-real-task-web-research-default.json` |
-| `eval:g4:web-research:work-tree-long` | `suites/g4-web-research-work-tree-long.json` |
 | `eval:g4:graduate-ml:longcat2` | `suites/g4-graduate-ml-longcat2.json` |
 | `eval:g4:graduate-ml:deepseek-v4` | `suites/g4-graduate-ml-deepseek-v4.json` |
 | `eval:g4:real-task-unrelated:dual-live` | `suites/g4-real-task-unrelated-dual-live.json` |
 | `eval:g4:work-tree-debug` | `suites/g4-real-task-work-tree-debug.json` |
+| `eval:g4:work-tree:post-question` | `suites/g4-real-task-work-tree-post-question-live.json` |
+| `eval:g4:work-tree:step-reflection` | `suites/g4-real-task-work-tree-step-reflection-live.json` |
+| `eval:g4:work-tree:critique-continue` | `suites/g4-real-task-work-tree-critique-continue-live.json` |
+| `eval:g4:work-tree:tool-end-reminder` | `suites/g4-real-task-work-tree-tool-end-reminder-live.json` |
+| `eval:g4:work-tree:tool-call-leaf-example` | `suites/g4-real-task-work-tree-tool-call-leaf-example-live.json` |
+| `eval:g4:work-tree:leaf-self-talk` | `suites/g4-real-task-work-tree-leaf-self-talk-live.json` |
+| `eval:g4:work-tree:deepseek-v4-pro` | `suites/g4-real-task-work-tree-deepseek-v4-pro-live.json` |
+| `eval:g4:work-tree:deepseek-v4-pro-critique-continue` | `suites/g4-real-task-work-tree-deepseek-v4-pro-critique-continue-live.json` |
+| `eval:g4:work-tree:deepseek-v4-pro-node-tool-budget` | `suites/g4-real-task-work-tree-deepseek-v4-pro-node-tool-budget-live.json` |
 | `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
 | `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
 | `eval:work-tree:fork-evaluation-tasks` | `suites/work-tree-fork-evaluation-tasks.json` |

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
+import yggdrasil_model_providers
 from yggdrasil_sdk.evaluation_runtime.bootstrap import _seed_runtime_task, isolated_runtime_environment, local_evaluation_runtime_environment
 import yggdrasil_sdk.evaluation_runtime.scorer as evaluation_scorer
 import yggdrasil_sdk.evaluation_runtime.suite_cases_g4 as suite_cases_g4
@@ -78,16 +79,30 @@ def test_g4_real_task_web_research_default_suite_enforces_live_web_contract() ->
     assert len(cases) == 1
     assert {case["requestedProvider"] for case in cases} == {"longcat"}
     assert all(case.get("allowToolExecution") is True for case in cases)
+    case = cases[0]
+    assert case["activeCapabilities"] == [
+        "task-takeover",
+        "mcp-bridge",
+        "context-pruning",
+        "text-memory",
+    ]
     assert {case["parityPairKey"] for case in cases} == {"g4-web-research-default-grid-storage"}
     assert {case.get("auditLevel") for case in cases} == {"strict"}
-    case = cases[0]
     assert case["acceptanceMinRestartCount"] == 0
     assert case["acceptanceMinWindowIndex"] == 1
     assert case["acceptanceMinCumulativeWindowSpanTokens"] == 0
     assert case["forcedWindowRestartBudget"] == 0
     assert case["expectedResultStatus"] == "completed"
     assert case["expectedTaskStatus"] == "completed"
-    assert case["acceptanceRequiredPhrases"] == ["结果", "证据", "风险", "已知问题"]
+    assert not case.get("acceptanceRequiredPhrases")
+    assert case["acceptanceMinWindowExecutionCount"] == 1
+    assert case["acceptanceMinWorkTreeContinuity0_1"] == 1.0
+    assert case["acceptanceMinMinimalWorksetRatio0_1"] == 0.2
+    assert case["acceptanceMaxPlanningStubRate0_1"] == 0.0
+    assert case["acceptanceMaxRetrievalDriftRate0_1"] == 0.0
+    assert case["acceptanceRequireObservedToolCategories"] == ["web"]
+    assert case["acceptanceMinSuccessfulToolExecutions"] == 6
+    assert case["acceptanceMinEvidenceLinks"] == 2
 def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -97,6 +112,125 @@ def test_g4_real_task_web_research_default_suite_does_not_seed_takeover_path() -
     assert len(cases) == 1
     case = cases[0]
     assert "takeoverProtocol" not in case
+def test_g4_work_tree_behavior_experiment_suites_are_single_case_and_separate() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+
+    post_question = suites["evalsuite_g4_real_task_work_tree_post_question_live"]["cases"]
+    step_reflection = suites["evalsuite_g4_real_task_work_tree_step_reflection_live"]["cases"]
+    critique_continue = suites["evalsuite_g4_real_task_work_tree_critique_continue_live"]["cases"]
+    tool_end_reminder = suites["evalsuite_g4_real_task_work_tree_tool_end_reminder_live"]["cases"]
+    tool_call_leaf_example = suites["evalsuite_g4_real_task_work_tree_tool_call_leaf_example_live"]["cases"]
+    leaf_self_talk = suites["evalsuite_g4_real_task_work_tree_leaf_self_talk_live"]["cases"]
+    deepseek_v4_pro = suites["evalsuite_g4_real_task_work_tree_deepseek_v4_pro_live"]["cases"]
+    deepseek_v4_pro_critique_continue = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_critique_continue_live"
+    ]["cases"]
+    deepseek_v4_pro_node_tool_budget = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_node_tool_budget_live"
+    ]["cases"]
+    deepseek_v4_pro_directive_required = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_directive_required_live"
+    ]["cases"]
+    deepseek_v4_pro_parent_retention = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_parent_retention_live"
+    ]["cases"]
+    deepseek_v4_pro_finish_prune = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_finish_prune_live"
+    ]["cases"]
+    longcat_finish_prune = suites["evalsuite_g4_real_task_work_tree_longcat_finish_prune_live"]["cases"]
+
+    assert len(post_question) == 1
+    assert len(step_reflection) == 1
+    assert len(critique_continue) == 1
+    assert len(tool_end_reminder) == 1
+    assert len(tool_call_leaf_example) == 1
+    assert len(leaf_self_talk) == 1
+    assert len(deepseek_v4_pro) == 1
+    assert len(deepseek_v4_pro_critique_continue) == 1
+    assert len(deepseek_v4_pro_node_tool_budget) == 1
+    assert len(deepseek_v4_pro_directive_required) == 1
+    assert len(deepseek_v4_pro_parent_retention) == 1
+    assert len(deepseek_v4_pro_finish_prune) == 1
+    assert len(longcat_finish_prune) == 1
+    assert post_question[0]["postCompletionActions"][0]["kind"] == "diagnostic-followup"
+    assert "current work-tree position" in step_reflection[0]["responseRequirements"]
+    assert critique_continue[0]["postCompletionActions"][0]["kind"] == "runtime-revision"
+    assert critique_continue[0]["seedAwaitingApprovalBeforePostActions"] is True
+    assert critique_continue[0]["takeoverProtocol"]["workTree"]["currentNodeId"] == "root"
+    assert critique_continue[0]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
+    assert critique_continue[0]["expectedResultStatus"] == "awaiting-approval"
+    assert tool_end_reminder[0]["toolResultReflectionReminder"] is True
+    assert "<work-node-create" in tool_call_leaf_example[0]["responseRequirements"]
+    assert "concrete tool-backed work belongs in leaf nodes" in tool_call_leaf_example[0]["responseRequirements"]
+    assert "leaf must not declare the whole task complete" in tool_call_leaf_example[0]["responseRequirements"]
+    assert "parent/orchestrator must evaluate each child handoff" in tool_call_leaf_example[0]["responseRequirements"]
+    assert "Visible workflow note" in leaf_self_talk[0]["responseRequirements"]
+    assert "after each leaf tool batch" in leaf_self_talk[0]["responseRequirements"]
+    assert deepseek_v4_pro[0]["requestedProvider"] == "deepseek_direct"
+    assert deepseek_v4_pro[0]["requestedModel"] == "deepseek-v4-pro"
+    assert "leaf must not declare the whole task complete" in deepseek_v4_pro[0]["responseRequirements"]
+    assert "parent/orchestrator must evaluate each child handoff" in deepseek_v4_pro[0]["responseRequirements"]
+    assert deepseek_v4_pro_critique_continue[0]["postCompletionActions"][0]["kind"] == "runtime-revision"
+    assert deepseek_v4_pro_critique_continue[0]["postCompletionActions"][0]["nodeId"] == "root"
+    assert "Task Control Analysis" in deepseek_v4_pro_critique_continue[0]["postCompletionActions"][0]["responseRequirements"]
+    assert "toolResultReflectionReminder" in deepseek_v4_pro_critique_continue[0]["postCompletionActions"][0]
+    assert deepseek_v4_pro_node_tool_budget[0]["workTreeNodeToolCallSoftLimit"]["limit"] == 5
+    assert deepseek_v4_pro_node_tool_budget[0]["postCompletionActions"][0]["nodeId"] == "auto-unfinished"
+    assert deepseek_v4_pro_node_tool_budget[0]["postCompletionActions"][0]["workTreeNodeToolCallSoftLimit"]["limit"] == 5
+    assert deepseek_v4_pro_directive_required[0]["workTreeDirectiveRequired"] is True
+    assert "自然语言说换节点或 Leaf Handoff 无效" in deepseek_v4_pro_directive_required[0]["responseRequirements"]
+    assert "<work-node-complete" in deepseek_v4_pro_directive_required[0]["responseRequirements"]
+    assert "A final synthesis child may draft the complete report" in deepseek_v4_pro_directive_required[0]["responseRequirements"]
+    assert "at most one current-node-changing work-tree directive" in deepseek_v4_pro_directive_required[0]["responseRequirements"]
+    assert deepseek_v4_pro_directive_required[0]["maxWindowCycles"] == 64
+    assert deepseek_v4_pro_directive_required[0]["allowManualContinueOnMaxWindowCycles"] is True
+    assert deepseek_v4_pro_directive_required[0]["postCompletionActions"][0]["kind"] == "runtime-revision"
+    assert "<work-node-complete" in deepseek_v4_pro_directive_required[0]["postCompletionActions"][0]["responseRequirements"]
+    assert deepseek_v4_pro_directive_required[0]["postCompletionActions"][0]["maxWindowCycles"] == 64
+    assert deepseek_v4_pro_directive_required[0]["postCompletionActions"][0]["allowManualContinueOnMaxWindowCycles"] is True
+    assert deepseek_v4_pro_directive_required[0]["postCompletionActions"][1]["includeRuntimeSnapshot"] is True
+    assert deepseek_v4_pro_parent_retention[0]["requestedProvider"] == "deepseek_direct"
+    assert "Parent Evidence Inventory" in deepseek_v4_pro_parent_retention[0]["responseRequirements"]
+    assert "completed child outputs as authoritative" in deepseek_v4_pro_parent_retention[0]["responseRequirements"]
+    assert deepseek_v4_pro_parent_retention[0]["postCompletionActions"][1]["includeRuntimeSnapshot"] is True
+    assert deepseek_v4_pro_finish_prune[0]["requestedProvider"] == "deepseek_direct"
+    assert "<work-node-skip" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert "<work-node-prune" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert "Parent stopping condition" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert longcat_finish_prune[0]["requestedProvider"] == "longcat"
+    assert longcat_finish_prune[0]["requestedModel"] == "LongCat-2.0-Preview"
+    assert "<work-node-skip" in longcat_finish_prune[0]["responseRequirements"]
+
+
+def test_g4_seeded_revision_case_persists_awaiting_approval_takeover() -> None:
+    suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
+    case = suites["evalsuite_g4_real_task_work_tree_critique_continue_live"]["cases"][0]
+    task = _seed_runtime_task(
+        "task_g4_seeded_revision_case",
+        app_id=case["appId"],
+        title=case["taskTitle"],
+        goal=case["taskGoal"],
+        current_focus=case["currentFocus"],
+        current_objective=case["currentObjective"],
+        token_budget_total=None,
+        cost_budget_total=1.0,
+    )
+
+    processed = suite_cases_g4._g4_seed_awaiting_approval_for_revision(
+        task_id=task["id"],
+        case_payload=case,
+        requested_provider="longcat",
+        requested_model="LongCat-2.0-Preview",
+    )
+
+    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["takeoverProtocol"]["workTree"]["status"] == "awaiting-approval"
+    runtime = suite_cases_g4.get_persistence_runtime()
+    with runtime.session_scope() as session:
+        persisted = suite_cases_g4.TaskRepository(session).get_task(task["id"])
+        assert persisted is not None
+        assert persisted.status == "awaiting-approval"
+
 def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated() -> None:
     start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
         {
@@ -123,6 +257,87 @@ def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated
     assert "takeoverProtocol" not in start_payload
     assert start_payload["allowToolExecution"] is True
     assert start_payload["takeoverPlanConfirmed"] is True
+def test_g4_followup_conversation_appends_user_turn_after_assistant_completion() -> None:
+    messages = suite_cases_g4._g4_followup_conversation_messages(
+        request_payload={
+            "messages": [
+                {"role": "system", "content": "system policy"},
+                {"role": "user", "content": "do the task"},
+            ]
+        },
+        response_payload={
+            "conversationMessages": [
+                {"role": "system", "content": "system policy"},
+                {"role": "user", "content": "do the task"},
+                {"role": "tool", "content": "web result"},
+                {"role": "assistant", "content": "final report"},
+            ]
+        },
+        response_text="final report",
+        user_message="为什么不用工作树？",
+    )
+
+    assert messages[-2] == {"role": "assistant", "content": "final report"}
+    assert messages[-1] == {"role": "user", "content": "为什么不用工作树？"}
+    assert messages[2]["role"] == "user"
+    assert messages[2]["content"].startswith("[tool message]")
+def test_g4_diagnostic_followup_artifact_preserves_output_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "services").mkdir()
+    (tmp_path / "modules").mkdir()
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "test-provider",
+            "model": "test-model",
+            "outputText": "诊断回答",
+            "usage": {"totalTokens": 12},
+            "costUsed": 0.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+    monkeypatch.setattr(suite_cases_g4, "resolve_workspace_root", lambda: tmp_path)
+
+    result = suite_cases_g4._run_g4_diagnostic_followup_action(
+        case_payload={"matrixKey": "diagnostic-artifact"},
+        action={"id": "ask-why", "userMessage": "为什么不用工作树？", "includeRuntimeSnapshot": True},
+        request_payload={
+            "messages": [{"role": "user", "content": "do it"}],
+            "takeoverProtocol": {
+                "workTree": {
+                    "currentNodeId": "root",
+                    "nodes": [{"id": "root", "title": "root", "status": "in-progress"}],
+                }
+            },
+        },
+        response_payload={
+            "conversationMessages": [{"role": "assistant", "content": "done"}],
+            "takeoverProtocol": {
+                "workTree": {
+                    "currentNodeId": "root",
+                    "status": "active",
+                    "nodes": [{"id": "root", "title": "root", "status": "in-progress"}],
+                }
+            },
+            "windowExecutionArtifact": {"record": {"transitionOutcome": "work-tree-directive-required"}},
+        },
+        response_text="done",
+        requested_provider="test-provider",
+        requested_model="test-model",
+    )
+
+    artifact_path = tmp_path / str(result["artifactRef"]["locator"])
+    artifact = suite_cases_g4.read_json(artifact_path, {})
+
+    assert result["outputText"] == "诊断回答"
+    assert artifact["assistantText"] == "诊断回答"
+    assert artifact["outputText"] == "诊断回答"
+    assert artifact["runtimeSnapshotIncluded"] is True
+    assert artifact["runtimeSnapshot"]["transitionOutcome"] == "work-tree-directive-required"
+    assert any("[runtime/work-tree snapshot]" in message["content"] for message in artifact["messages"])
 def test_g4_live_provider_matrix_start_payload_pins_expected_prompt_contract() -> None:
     start_payload = suite_cases_g4._g4_live_provider_matrix_start_payload(
         {
@@ -153,6 +368,10 @@ def test_g4_live_provider_matrix_start_payload_passes_tool_name_policy() -> None
             "currentFocus": "g4-graduate-ml-longcat2",
             "currentObjective": "Keep tool visibility constrained.",
             "toolNameDenylist": ["mcp.read.*", "mcp.search.*"],
+            "toolResultReflectionReminder": "Reflect after tools.",
+            "workTreeNodeToolCallSoftLimit": {"limit": 5},
+            "workTreeDirectiveRequired": True,
+            "workTreeChildScopeCheckpoint": True,
         },
         {"id": "task_grad_policy", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
         app_id="yggdrasil.app.graduate-researcher",
@@ -161,6 +380,10 @@ def test_g4_live_provider_matrix_start_payload_passes_tool_name_policy() -> None
     )
 
     assert start_payload["toolNameDenylist"] == ["mcp.read.*", "mcp.search.*"]
+    assert start_payload["toolResultReflectionReminder"] == "Reflect after tools."
+    assert start_payload["workTreeNodeToolCallSoftLimit"] == {"limit": 5}
+    assert start_payload["workTreeDirectiveRequired"] is True
+    assert start_payload["workTreeChildScopeCheckpoint"] is True
 def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_protocol() -> None:
     explicit_protocol = {
         "id": "takeover_debug_case",
@@ -314,6 +537,42 @@ def test_g4_wait_for_target_worker_result_fails_fast_on_worker_poll_timeout() ->
             run_worker_once_fn=_run_worker_once,
             worker_poll_timeout_seconds=0.05,
         )
+
+
+def test_g4_wait_for_target_worker_result_can_return_manual_continue_at_window_limit() -> None:
+    events = iter(
+        [
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {
+                    "status": "continuing",
+                    "assistantText": "created final synthesis child",
+                    "queuedWorkItem": {"id": "workitem_next", "queue": "agent-runtime"},
+                },
+            }
+        ]
+    )
+
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        assert timeout_seconds == 1
+        return next(events)
+
+    processed_runs, processed, result_payload = suite_cases_g4._g4_wait_for_target_worker_result(
+        task_id="task_target",
+        expected_result_status="completed",
+        max_window_cycles=1,
+        max_worker_wait_seconds=30,
+        run_worker_once_fn=_run_worker_once,
+        allow_manual_continue_on_max_window_cycles=True,
+    )
+
+    assert len(processed_runs) == 1
+    assert processed["result"]["status"] == "continuing"
+    assert result_payload["status"] == "manual-continue-required"
+    assert result_payload["reason"] == "max-window-cycles-reached"
+    assert result_payload["manualContinue"]["taskId"] == "task_target"
+    assert result_payload["manualContinue"]["queuedWorkItem"]["id"] == "workitem_next"
 def test_g4_budget_state_with_top_up_preserves_used_budget_fields() -> None:
     updated = suite_cases_g4._g4_budget_state_with_top_up(
         BudgetState.model_validate(
@@ -372,6 +631,65 @@ def test_g4_wait_for_target_worker_result_allows_budget_recovery_callback() -> N
     assert len(processed_runs) == 2
     assert str((processed.get("payload") or {}).get("taskId") or "") == "task_target"
     assert result_payload["status"] == "awaiting-approval"
+def test_g4_runtime_revision_action_posts_user_critique_and_waits_for_worker() -> None:
+    events = iter(
+        [
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": {"status": "awaiting-approval", "assistantText": "revised report"},
+            }
+        ]
+    )
+    posted: list[tuple[str, dict[str, object]]] = []
+
+    class _FakeResponse:
+        status_code = 202
+        text = ""
+
+        def json(self) -> dict[str, object]:
+            return {"status": "queued"}
+
+    class _FakeClient:
+        def post(self, path: str, json: dict[str, object]):
+            posted.append((path, json))
+            return _FakeResponse()
+
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        assert timeout_seconds == 1
+        return next(events)
+
+    action_result, processed_runs, _processed, result_payload = suite_cases_g4._run_g4_runtime_revision_action(
+        client=_FakeClient(),
+        task_id="task_target",
+        case_payload={"matrixKey": "test-runtime-revision"},
+        action={
+            "id": "critique-continue",
+            "kind": "runtime-revision",
+            "nodeId": "root",
+            "userMessage": "为什么只写下一步但不继续？请继续做。",
+            "responseRequirements": "Continue work.",
+            "workTreeNodeToolCallSoftLimit": {"limit": 5},
+        },
+        expected_result_status="awaiting-approval",
+        max_window_cycles=4,
+        max_worker_wait_seconds=30,
+        run_worker_once_fn=_run_worker_once,
+        recovery_handler_fn=None,
+        candidate_models=[{"provider": "deepseek_direct", "model": "deepseek-v4-pro"}],
+    )
+
+    assert posted[0][0] == "/runtime/tasks/task_target/request-revision"
+    assert posted[0][1]["reason"] == "为什么只写下一步但不继续？请继续做。"
+    assert posted[0][1]["nodeId"] == "root"
+    assert posted[0][1]["responseRequirements"] == "Continue work."
+    assert posted[0][1]["candidateModels"] == [{"provider": "deepseek_direct", "model": "deepseek-v4-pro"}]
+    assert posted[0][1]["workTreeNodeToolCallSoftLimit"] == {"limit": 5}
+    assert action_result["status"] == "completed"
+    assert action_result["workerResultStatus"] == "awaiting-approval"
+    assert len(processed_runs) == 1
+    assert result_payload is not None
+    assert result_payload["assistantText"] == "revised report"
 def test_g4_recover_live_budget_pause_resumes_with_topped_up_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_task = SimpleNamespace(
         status="paused",
@@ -543,6 +861,45 @@ def test_g4_contract_verification_accepts_work_tree_debug_report() -> None:
     assert result["enabled"] is True
     assert result["passed"] is True
     assert result["issues"] == []
+def test_g4_contract_verification_rejects_web_research_without_runtime_tool_evidence() -> None:
+    response_text = "\n".join(
+        [
+            "## 结果",
+            "报告包含来源 https://example.org/source-a 与 https://example.org/source-b。",
+            "## 证据",
+            "来源表和矛盾处理已经写入。",
+            "## 风险",
+            "仍需复核。",
+            "## 已知问题",
+            "无。",
+        ]
+    )
+
+    result = suite_cases_g4._g4_contract_verification_results(
+        {
+            "acceptanceMinWindowExecutionCount": 1,
+            "acceptanceMinWorkTreeContinuity0_1": 1.0,
+            "acceptanceMaxPlanningStubRate0_1": 0.0,
+            "acceptanceRequireObservedToolCategories": ["web"],
+            "acceptanceMinSuccessfulToolExecutions": 6,
+            "acceptanceMinEvidenceLinks": 2,
+        },
+        response_text,
+        {"restartCount": 0, "windowIndex": 1, "cumulativeWindowSpanTokens": 0},
+        {
+            "windowExecutionCount": 0,
+            "workTreeContinuity0_1": 0.0,
+            "planningStubRate0_1": 0.0,
+        },
+        [],
+    )
+
+    assert result["enabled"] is True
+    assert result["passed"] is False
+    assert any("windowExecutionCount 不足" in issue for issue in result["issues"])
+    assert any("workTreeContinuity0_1 不足" in issue for issue in result["issues"])
+    assert any("实测工具类别覆盖不足" in issue for issue in result["issues"])
+    assert any("成功工具动作不足" in issue for issue in result["issues"])
 def test_isolated_runtime_environment_resets_paid_gate_unless_case_explicitly_allows_it() -> None:
     previous = os.environ.get("YGGDRASIL_ALLOW_PAID_MODELS")
     os.environ["YGGDRASIL_ALLOW_PAID_MODELS"] = "1"
@@ -608,6 +965,45 @@ def test_g4_provider_matrix_metrics_capture_token_and_context_usage() -> None:
     assert suite_cases_g4._g4_max_context_length_tokens(observations) == 1800
     assert runtime_metrics["restartCount"] == 2
     assert runtime_metrics["effectiveContextWindow"] == 120
+def test_g4_tool_execution_names_read_nested_response_tool_records() -> None:
+    names = suite_cases_g4._g4_tool_execution_names(
+        [
+            {
+                "responsePayload": {
+                    "toolExecutions": [
+                        {"tool": {"name": "mcp.web.search_web"}, "success": True},
+                        {"tool": {"name": "mcp.web.fetch_webpage"}, "success": True},
+                        {"tool": {"name": "mcp.web.search_web"}, "success": True},
+                    ]
+                }
+            }
+        ]
+    )
+
+    assert names == ["mcp.web.search_web", "mcp.web.fetch_webpage"]
+
+
+def test_g4_tool_metrics_fall_back_to_round_tool_calls_when_execution_records_are_missing() -> None:
+    invocation_rows = [
+        {
+            "responsePayload": {
+                "rounds": [
+                    {"index": 0, "toolCalls": ["text_memory.read_index", "mcp.web.search_web"]},
+                    {"index": 1, "toolCalls": ["mcp.web.fetch_webpage", "mcp.web.fetch_webpage"]},
+                ]
+            }
+        }
+    ]
+
+    names = suite_cases_g4._g4_tool_execution_names(invocation_rows)
+    metrics = suite_cases_g4._g4_tool_execution_metrics(invocation_rows)
+
+    assert names == ["text_memory.read_index", "mcp.web.search_web", "mcp.web.fetch_webpage"]
+    assert metrics["totalToolExecutions"] == 4
+    assert metrics["successfulToolExecutions"] == 4
+    assert metrics["toolCategories"] == ["memory", "web"]
+
+
 def test_g4_contract_verification_detects_planning_stub_and_missing_restart_evidence() -> None:
     result = suite_cases_g4._g4_contract_verification_results(
         {

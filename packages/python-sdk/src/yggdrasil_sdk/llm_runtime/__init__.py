@@ -4,6 +4,7 @@ from typing import Any
 
 from .core import *  # noqa: F403,F401
 from .artifacts import *  # noqa: F403,F401
+from .behavior_recorder import *  # noqa: F403,F401
 from .invoke import *  # noqa: F403,F401
 from . import invoke as _invoke_module
 

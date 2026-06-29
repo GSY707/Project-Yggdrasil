@@ -41,6 +41,8 @@ _TAKEOVER_CONFIRMATION_KEYS: tuple[str, ...] = (
     "planConfirmed",
     "confirmPlan",
 )
+_UNFINISHED_WORK_NODE_STATUSES = {"pending", "in-progress", "summarizing", "blocked", "failed"}
+_AUTO_UNFINISHED_REVISION_NODE_IDS = {"auto", "auto-unfinished", "unfinished", "unfinished-node", "auto_unfinished"}
 def _work_tree_status(protocol_status: str) -> str:
     if protocol_status == "completed":
         return "completed"
@@ -116,6 +118,70 @@ def _work_tree_from_protocol_parts(
     )
 def _work_tree_node_index(work_tree: WorkTreeProtocol) -> dict[str, WorkTreeNode]:
     return {node.id: node for node in work_tree.nodes}
+def _work_tree_child_ids(work_tree: WorkTreeProtocol, node: WorkTreeNode) -> list[str]:
+    return node.child_node_ids or [item.id for item in work_tree.nodes if item.parent_node_id == node.id]
+def _is_unfinished_work_tree_node(node: WorkTreeNode | None) -> bool:
+    return node is not None and str(node.status) in _UNFINISHED_WORK_NODE_STATUSES
+def _has_unfinished_child(work_tree: WorkTreeProtocol, node: WorkTreeNode) -> bool:
+    node_by_id = _work_tree_node_index(work_tree)
+    return any(_is_unfinished_work_tree_node(node_by_id.get(child_id)) for child_id in _work_tree_child_ids(work_tree, node))
+def _has_unfinished_descendant(work_tree: WorkTreeProtocol, node: WorkTreeNode, *, node_by_id: dict[str, WorkTreeNode] | None = None) -> bool:
+    lookup = node_by_id or _work_tree_node_index(work_tree)
+    stack = list(_work_tree_child_ids(work_tree, node))
+    visited: set[str] = set()
+    while stack:
+        child_id = stack.pop()
+        if child_id in visited:
+            continue
+        visited.add(child_id)
+        child = lookup.get(child_id)
+        if child is None:
+            continue
+        if _is_unfinished_work_tree_node(child):
+            return True
+        stack.extend(_work_tree_child_ids(work_tree, child))
+    return False
+def _normalize_revision_start_node_id(work_tree: WorkTreeProtocol, node_by_id: dict[str, WorkTreeNode], node_id: str | None) -> str | None:
+    target_node_id = node_id or work_tree.current_node_id or work_tree.root_node_id
+    if target_node_id == "root" and target_node_id not in node_by_id and work_tree.root_node_id:
+        return work_tree.root_node_id
+    return target_node_id
+def _resolve_unfinished_revision_target_node_id(work_tree: WorkTreeProtocol, start_node_id: str | None) -> str | None:
+    node_by_id = _work_tree_node_index(work_tree)
+    start_node_id = _normalize_revision_start_node_id(work_tree, node_by_id, start_node_id)
+    start_node = node_by_id.get(start_node_id or "")
+    if start_node is not None:
+        if _has_unfinished_child(work_tree, start_node):
+            return start_node.id
+        parent = node_by_id.get(start_node.parent_node_id or "")
+        if parent is not None:
+            for child_id in _work_tree_child_ids(work_tree, parent):
+                if child_id == start_node.id:
+                    continue
+                sibling = node_by_id.get(child_id)
+                if _is_unfinished_work_tree_node(sibling) or (sibling is not None and _has_unfinished_descendant(work_tree, sibling, node_by_id=node_by_id)):
+                    return parent.id
+            if _is_unfinished_work_tree_node(parent):
+                return parent.id
+        if _is_unfinished_work_tree_node(start_node):
+            return start_node.id
+        if _has_unfinished_descendant(work_tree, start_node, node_by_id=node_by_id):
+            return start_node.id
+
+    unfinished_nodes = [node for node in work_tree.nodes if _is_unfinished_work_tree_node(node)]
+    if not unfinished_nodes:
+        return start_node.id if start_node is not None else start_node_id
+    for node in unfinished_nodes:
+        parent = node_by_id.get(node.parent_node_id or "")
+        if parent is not None:
+            return parent.id
+    return unfinished_nodes[0].id
+def _resolve_revision_target_node_id(work_tree: WorkTreeProtocol, node_id: str | None) -> str | None:
+    node_by_id = _work_tree_node_index(work_tree)
+    raw_node_id = str(node_id or "").strip() or None
+    if raw_node_id in _AUTO_UNFINISHED_REVISION_NODE_IDS:
+        return _resolve_unfinished_revision_target_node_id(work_tree, work_tree.current_node_id or work_tree.root_node_id)
+    return _normalize_revision_start_node_id(work_tree, node_by_id, raw_node_id)
 def _work_tree_active_path_node_ids(work_tree: WorkTreeProtocol, *, current_node_id: str | None = None) -> list[str]:
     node_by_id = _work_tree_node_index(work_tree)
     node_id = current_node_id or work_tree.current_node_id
@@ -1117,6 +1183,81 @@ def fail_current_work_node(
         "nextNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
         "currentFocus": _work_tree_focus_label(normalized_protocol),
     }
+
+
+def skip_work_tree_node(
+    protocol: TaskTakeoverProtocol,
+    *,
+    task_id: str,
+    agent_run_id: str,
+    node_id: str,
+    reason: str,
+    work_context_stack: WorkContextStack | dict[str, Any] | None = None,
+) -> tuple[TaskTakeoverProtocol, WorkContextStack, dict[str, Any]]:
+    if protocol.work_tree is None:
+        raise ValueError("Takeover protocol does not have a work tree.")
+    target_node_id = str(node_id or "").strip()
+    if not target_node_id:
+        raise ValueError("Work-tree skip requires a node id.")
+    skip_reason = normalize_excerpt(str(reason or "").strip(), 240)
+    if not skip_reason:
+        raise ValueError("Work-tree skip requires a non-empty reason.")
+    work_tree = protocol.work_tree
+    if target_node_id == str(work_tree.root_node_id or ""):
+        raise ValueError("Cannot skip the root work-tree node.")
+    node_by_id = _work_tree_node_index(work_tree)
+    target_node = node_by_id.get(target_node_id)
+    if target_node is None:
+        raise ValueError(f"Work-tree node {target_node_id} does not exist.")
+    if target_node.child_node_ids and not _node_children_terminal(work_tree, target_node.id):
+        raise ValueError(f"Work-tree node {target_node_id} still has unfinished child nodes.")
+
+    now = utc_now()
+    updated_nodes: list[dict[str, Any]] = []
+    for node in work_tree.nodes:
+        payload = node.model_dump(by_alias=True, mode="json")
+        if node.id == target_node.id:
+            payload.update(
+                {
+                    "status": "skipped",
+                    "failureSummary": skip_reason,
+                    "updatedAt": now,
+                }
+            )
+        updated_nodes.append(payload)
+
+    current_node_id = str(work_tree.current_node_id or "")
+    if current_node_id == target_node.id:
+        current_node_id = str(target_node.parent_node_id or work_tree.root_node_id or "")
+    updated_protocol = TaskTakeoverProtocol.model_validate(
+        {
+            **protocol.model_dump(by_alias=True, mode="json"),
+            "status": "executing",
+            "currentPhase": "execute",
+            "workTree": {
+                **work_tree.model_dump(by_alias=True, mode="json"),
+                "nodes": updated_nodes,
+                "currentNodeId": current_node_id or work_tree.current_node_id,
+                "status": "active",
+                "updatedAt": now,
+            },
+        }
+    )
+    normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+        updated_protocol,
+        task_id=task_id,
+        agent_run_id=agent_run_id,
+        work_context_stack=work_context_stack,
+    )
+    if normalized_protocol is None or normalized_stack is None:
+        raise ValueError("Failed to normalize skipped work-tree state.")
+    return normalized_protocol, normalized_stack, {
+        "transition": "work-tree-skip",
+        "requiresContinuation": True,
+        "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
+        "skippedNodeId": target_node.id,
+        "currentFocus": _work_tree_focus_label(normalized_protocol),
+    }
 def _check_delivery_hard_gates(protocol: TaskTakeoverProtocol) -> bool:
     """检查 hard gate 类型的 verification item 是否全部 passed。"""
     for item in protocol.verification_items:
@@ -1433,6 +1574,11 @@ def build_takeover_continuation_request(
         "maxUncompressedTailBeforeDecompress",
         "selectedModel",
         "selectedProvider",
+        "toolResultReflectionReminder",
+        "workTreeNodeToolCallSoftLimit",
+        "workTreeDirectiveRequired",
+        "workTreeDirectiveRequiredOnNaturalLanguage",
+        "workTreeChildScopeCheckpoint",
     ):
         if key in base_request:
             continuation[key] = deepcopy(base_request[key])
@@ -1505,7 +1651,7 @@ def reopen_takeover_work_node_for_revision(
     if protocol.work_tree is None:
         raise ValueError("Takeover protocol does not have a work tree.")
     work_tree = protocol.work_tree
-    target_node_id = node_id or work_tree.current_node_id or work_tree.root_node_id
+    target_node_id = _resolve_revision_target_node_id(work_tree, node_id)
     if target_node_id is None:
         raise ValueError("Could not determine revision target node.")
     node_by_id = _work_tree_node_index(work_tree)

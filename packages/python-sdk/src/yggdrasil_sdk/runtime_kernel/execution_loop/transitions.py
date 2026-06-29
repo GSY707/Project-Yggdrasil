@@ -99,6 +99,20 @@ def _fork_result_envelope_from_request(
 	)
 
 
+def _append_continuation_instruction(payload: dict[str, Any], instruction: str) -> None:
+	text = str(instruction or "").strip()
+	if not text:
+		return
+	base_requirements = str(payload.get("responseRequirements") or "").strip()
+	base_requirements_normalized = " ".join(base_requirements.split())
+	text_normalized = " ".join(text.split())
+	if base_requirements and text_normalized and text_normalized in base_requirements_normalized:
+		payload["responseRequirements"] = base_requirements
+	else:
+		payload["responseRequirements"] = " ".join(part for part in (base_requirements, text) if part)
+	payload["resumeMessage"] = text
+
+
 def _finalize_execution_transition(
 	*,
 	session,
@@ -300,7 +314,12 @@ def _finalize_execution_transition(
 			result_status = "needs-clarification"
 			task_status = "awaiting-approval"
 			transition_outcome = "needs-clarification"
-		transition_state = assistant_work_tree_transition if isinstance(assistant_work_tree_transition, dict) and assistant_work_tree_transition.get("applied") else None
+		transition_state = (
+			assistant_work_tree_transition
+			if isinstance(assistant_work_tree_transition, dict)
+			and (assistant_work_tree_transition.get("applied") or assistant_work_tree_transition.get("directiveRequired"))
+			else None
+		)
 		if transition_state is None:
 			takeover_protocol, work_context_stack, transition_state = advance_takeover_after_delivery(
 				takeover_protocol,
@@ -402,7 +421,9 @@ def _finalize_execution_transition(
 							"work_tree": takeover_protocol.work_tree.model_copy(update={"status": "awaiting-approval"}),
 						}
 					)
-		# Always enforce hard delivery gates, even when an assistant transition was pre-applied.
+		# Hard delivery gates are root-delivery gates.  A child/leaf may surface
+		# evidence gaps to its parent for replanning; the root still cannot pass
+		# final approval until the same gates are satisfied.
 		if takeover_protocol is not None and takeover_protocol.verification_items:
 			blocked_hard_gates: list[str] = []
 			verification_items_payload = (
@@ -428,7 +449,25 @@ def _finalize_execution_transition(
 						status = str(getattr(item, "status", "") or "").strip().lower()
 						if gate_mode == "hard" and status != "passed":
 							blocked_hard_gates.append(str(getattr(item, "label", "unknown")))
-			if blocked_hard_gates and not (
+			enforce_blocked_hard_gates = True
+			transition_name_for_gate = (
+				str(transition_state.get("transition") or "").strip()
+				if isinstance(transition_state, dict)
+				else ""
+			)
+			if transition_name_for_gate in {
+				"bubble-parent",
+				"bubble-parent-after-failure",
+				"continue-sibling",
+				"work-tree-continue",
+			}:
+				enforce_blocked_hard_gates = False
+			if takeover_protocol.work_tree is not None:
+				current_node_id = str(takeover_protocol.work_tree.current_node_id or "").strip()
+				root_node_id = str(takeover_protocol.work_tree.root_node_id or "").strip()
+				if current_node_id and root_node_id and current_node_id != root_node_id:
+					enforce_blocked_hard_gates = False
+			if enforce_blocked_hard_gates and blocked_hard_gates and not (
 				isinstance(transition_state, dict)
 				and transition_state.get("transition") == "delivery-gate-blocked"
 			):
@@ -457,14 +496,6 @@ def _finalize_execution_transition(
 				result_status = "needs-clarification"
 				task_status = "awaiting-approval"
 				transition_outcome = "needs-clarification"
-			elif takeover_protocol.work_tree.status == "awaiting-approval":
-				result_status = "awaiting-approval"
-				task_status = "awaiting-approval"
-				transition_outcome = "awaiting-approval"
-			elif takeover_protocol.work_tree.status == "failed":
-				result_status = "failed"
-				task_status = "failed"
-				transition_outcome = "failed"
 			elif isinstance(transition_state, dict) and transition_state.get("transition") == "delivery-gate-blocked":
 				result_status = "needs-clarification"
 				task_status = "resume-blocked"
@@ -482,6 +513,32 @@ def _finalize_execution_transition(
 					parent_run_id=run.id,
 					current_focus=(transition_state or {}).get("currentFocus") if isinstance(transition_state, dict) else None,
 				)
+				transition_name = str((transition_state or {}).get("transition") or "")
+				if transition_name == "work-tree-directive-required":
+					detected_claims = [
+						str(item)
+						for item in (transition_state or {}).get("detectedClaims") or []
+						if str(item).strip()
+					]
+					claim_summary = "; ".join(detected_claims[:4]) if detected_claims else "natural-language work-tree switch"
+					_append_continuation_instruction(
+						continuation_payload,
+						str((transition_state or {}).get("correctionMessage") or "").strip()
+						or (
+							"Work-tree directive required: the previous answer claimed a node switch "
+							f"({claim_summary}) without an applied work-tree directive. "
+							"First emit exactly one <work-node-create ...></work-node-create> or "
+							"<work-node-enter nodeId=\"...\"></work-node-enter> directive, or "
+							'<work-node-complete status="completed">...</work-node-complete> when the current child/leaf is ready to hand off, then stop.'
+						),
+					)
+				elif transition_name in {"enter-child", "enter-existing-child"}:
+					_append_continuation_instruction(
+						continuation_payload,
+						"Child/leaf start checkpoint: before the first concrete tool call in this node, "
+						"confirm this node's work scope, stopping point, and return path to the parent. "
+						'After the stopping point is reached, output exactly one <work-node-complete status="completed">...</work-node-complete> directive with result, evidence, gaps/risks, and parent-next notes; do not declare the whole task complete from a child/leaf.',
+					)
 				if delivery_gate_retry_allowed:
 					blocked_gates = [str(item) for item in (transition_state or {}).get("blockedGates") or [] if str(item).strip()]
 					blocked_summary = ", ".join(blocked_gates) if blocked_gates else "delivery evidence or policy"
@@ -491,11 +548,7 @@ def _finalize_execution_transition(
 						"Continue from the same work-tree node, gather or cite the missing evidence if possible, "
 						"or state the remaining blocker and the next safe action."
 					)
-					base_response_requirements = str(continuation_payload.get("responseRequirements") or request.get("responseRequirements") or "").strip()
-					continuation_payload["responseRequirements"] = " ".join(
-						part for part in (base_response_requirements, corrective_tail) if part
-					)
-					continuation_payload["resumeMessage"] = corrective_tail
+					_append_continuation_instruction(continuation_payload, corrective_tail)
 					continuation_payload["deliveryGateRetryCount"] = delivery_gate_retry_count + 1
 				if work_context_stack_ref is not None:
 					continuation_payload["workContextStackRef"] = work_context_stack_ref
@@ -538,6 +591,14 @@ def _finalize_execution_transition(
 				result_status = "continuing"
 				task_status = "queued"
 				transition_outcome = str((transition_state or {}).get("transition") or "continued")
+			elif takeover_protocol.work_tree.status == "awaiting-approval":
+				result_status = "awaiting-approval"
+				task_status = "awaiting-approval"
+				transition_outcome = "awaiting-approval"
+			elif takeover_protocol.work_tree.status == "failed":
+				result_status = "failed"
+				task_status = "failed"
+				transition_outcome = "failed"
 	blocked_hard_gates_final: list[str] = []
 	if takeover_protocol is not None and takeover_protocol.verification_items:
 		verification_items_payload = (

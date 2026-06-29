@@ -300,6 +300,136 @@ def _split_structured_tag_values(value: str | None, *, fallback: list[str] | Non
     if normalized:
         return normalized
     return [item for item in (fallback or []) if str(item).strip()]
+
+
+def _coerce_work_tree_directive_required_config(request: dict[str, Any]) -> dict[str, Any]:
+    raw_value = None
+    for key in ("workTreeDirectiveRequired", "workTreeDirectiveRequiredOnNaturalLanguage"):
+        if key in request:
+            raw_value = request.get(key)
+            break
+    if raw_value is None:
+        return {"enabled": False}
+    if isinstance(raw_value, bool):
+        return {"enabled": raw_value}
+    if isinstance(raw_value, dict):
+        enabled = raw_value.get("enabled")
+        if enabled is None:
+            enabled = True
+        return {
+            "enabled": bool(enabled),
+            "message": str(raw_value.get("message") or raw_value.get("correctionMessage") or "").strip(),
+        }
+    text = str(raw_value).strip()
+    if not text or text.lower() in {"0", "false", "no", "off", "disabled"}:
+        return {"enabled": False}
+    if text.lower() in {"1", "true", "yes", "on", "enabled"}:
+        return {"enabled": True}
+    return {"enabled": True, "message": text}
+
+
+def _natural_language_work_tree_claims(text: str) -> list[str]:
+    claims: list[str] = []
+    for match in _WORK_TREE_NATURAL_LANGUAGE_DIRECTIVE_CLAIM_PATTERN.finditer(str(text or "")):
+        claim = normalize_excerpt(str(match.group(0) or "").strip(), 120)
+        if claim and claim not in claims:
+            claims.append(claim)
+    return claims[:8]
+
+
+def _claims_include_child_delivery(claims: list[str]) -> bool:
+    delivery_pattern = re.compile(
+        r"(handoff|交接|移交|返回父节点|回到父节点|交给父节点|return(?:ed|ing)?\s+to\s+parent)",
+        re.IGNORECASE,
+    )
+    return any(delivery_pattern.search(str(claim or "")) for claim in claims)
+
+
+def _blocked_directives_include_child_delivery(blocked: list[dict[str, Any]]) -> bool:
+    for item in blocked:
+        reason = str(item.get("reason") or "").strip().lower()
+        preview = str(item.get("tagPreview") or "").strip().lower()
+        if reason in {"missing-completion-summary", "invalid-completion-status"}:
+            return True
+        if "work-node-complete" in preview or "work-node-handoff" in preview:
+            return True
+    return False
+
+
+def _work_tree_valid_delivery_example(current_node_id: str, current_node_title: str) -> str:
+    node_label = current_node_title or current_node_id or "当前 child/leaf"
+    return (
+        "如果当前 child/leaf 已到停止点，正确交付路径是输出一个可应用的完成 directive 并停止，例如：\n"
+        '<work-node-complete status="completed">\n'
+        f"Scope: {node_label}\n"
+        "Result: 已完成本节点负责的具体调查/实现/验证。\n"
+        "Evidence: 列出本节点实际使用的工具结果、文件、链接、测试或记忆引用。\n"
+        "Gaps/Risks: 列出仍不确定、失败尝试、已废弃路线和风险。\n"
+        "Parent next: 请父节点评估本交付，决定继续开下一个 leaf、补证据，或收束最终交付。\n"
+        "</work-node-complete>"
+    )
+
+
+def _work_tree_directive_required_transition(
+    *,
+    request: dict[str, Any],
+    takeover_protocol: TaskTakeoverProtocol | None,
+    action_payload: dict[str, Any],
+    blocked: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    config = _coerce_work_tree_directive_required_config(request)
+    if not bool(config.get("enabled")):
+        return None
+    if takeover_protocol is None or takeover_protocol.work_tree is None:
+        return None
+
+    assistant_text = str(action_payload.get("cleanAssistantText") or "")
+    claims = _natural_language_work_tree_claims(assistant_text)
+    malformed_directives = bool(blocked) and int(action_payload.get("detectedCount") or 0) > 0
+    if not claims and not malformed_directives:
+        return None
+    current_node = _current_work_tree_node(takeover_protocol)
+    current_node_id = (
+        str(takeover_protocol.work_tree.current_node_id or "")
+        if takeover_protocol.work_tree is not None
+        else ""
+    )
+    current_node_title = str(getattr(current_node, "title", "") or "").strip()
+    reason = "malformed-work-tree-directive" if malformed_directives and not claims else "natural-language-node-switch-without-directive"
+    custom_message = str(config.get("message") or "").strip()
+    if custom_message:
+        correction_message = custom_message
+    elif _claims_include_child_delivery(claims) or _blocked_directives_include_child_delivery(blocked):
+        correction_message = (
+            "工作树流程漂移提醒：你刚才用自然语言声称 leaf handoff/返回父节点，"
+            "但 runtime 没有收到可应用的完成 directive，所以当前 child/leaf 没有被标记完成，"
+            "父节点也没有拿到可评估的交付。"
+            + "\n"
+            + _work_tree_valid_delivery_example(current_node_id, current_node_title)
+            + "\n不要继续调用资料、搜索、编辑或计算工具；先输出且只输出一个真正的工作树完成 directive。"
+        )
+    else:
+        correction_message = (
+            "工作树流程漂移提醒：你刚才用自然语言声称创建、进入或切换工作节点，"
+            "但 runtime 没有收到可应用的 <work-node-create ...></work-node-create>、"
+            "<work-node-enter nodeId=\"...\"></work-node-enter> 或 "
+            '<work-node-complete status="completed">...</work-node-complete> directive，所以工作树状态没有变化。'
+            "先输出一个真正的工作树 directive；不要继续调用资料、搜索、编辑或计算工具，也不要把父节点当 leaf 继续执行。"
+        )
+    return {
+        "transition": "work-tree-directive-required",
+        "requiresContinuation": True,
+        "currentNodeId": current_node_id,
+        "nextNodeId": current_node_id,
+        "currentFocus": "work-tree-directive-required",
+        "reason": reason,
+        "detectedClaims": claims,
+        "currentNodeTitle": current_node_title,
+        "correctionMessage": correction_message,
+        "blockedDirectives": blocked,
+    }
+
+
 def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) -> dict[str, Any]:
     if not enabled:
         return {
@@ -316,6 +446,71 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
         raw_tag = str(match.group(0) or "")
         action_name = str(match.group("action") or "create").strip().lower() or "create"
         attributes = _parse_memory_write_tag_attributes(str(match.group("attrs") or ""))
+        if action_name in {"skip", "prune"}:
+            node_id = str(attributes.get("nodeid") or "").strip()
+            reason = str(match.group("content") or attributes.get("reason") or "").strip()
+            if not node_id:
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "missing-nodeid",
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            if not reason:
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "missing-skip-reason",
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            parsed_actions.append(
+                {
+                    "action": "skip",
+                    "rawTag": raw_tag,
+                    "nodeId": node_id,
+                    "reason": reason,
+                }
+            )
+            return ""
+        if action_name in {"complete", "handoff"}:
+            status_raw = str(attributes.get("status") or "completed").strip().lower()
+            if status_raw in {"complete", "done", "success", "succeeded"}:
+                status_raw = "completed"
+            if status_raw in {"failure", "error"}:
+                status_raw = "failed"
+            if status_raw not in {"completed", "failed"}:
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "invalid-completion-status",
+                        "statusValue": status_raw,
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            summary = str(match.group("content") or attributes.get("summary") or "").strip()
+            if not summary:
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "missing-completion-summary",
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            parsed_actions.append(
+                {
+                    "action": "complete",
+                    "rawTag": raw_tag,
+                    "completionStatus": status_raw,
+                    "summary": summary,
+                }
+            )
+            return ""
         if action_name == "enter":
             node_id = str(attributes.get("nodeid") or "").strip()
             if not node_id:
@@ -386,12 +581,35 @@ def _apply_parsed_assistant_work_tree_actions(
     work_context_stack = request.get("workContextStack") if isinstance(request.get("workContextStack"), dict) else None
 
     if takeover_protocol is None or takeover_protocol.work_tree is None or not actions:
-        return takeover_protocol, _coerce_work_context_stack(work_context_stack), {
+        result = {
             "detectedCount": int(action_payload.get("detectedCount") or len(blocked)),
             "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),
             "applied": [],
             "blocked": blocked,
         }
+        directive_required = _work_tree_directive_required_transition(
+            request=request,
+            takeover_protocol=takeover_protocol,
+            action_payload=action_payload,
+            blocked=blocked,
+        )
+        if directive_required is not None:
+            normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+                takeover_protocol,
+                task_id=task_id,
+                agent_run_id=agent_run_id,
+                work_context_stack=work_context_stack,
+            )
+            if normalized_protocol is not None:
+                takeover_protocol = normalized_protocol
+                if normalized_protocol.work_tree is not None:
+                    directive_required["currentNodeId"] = normalized_protocol.work_tree.current_node_id
+                    directive_required["nextNodeId"] = normalized_protocol.work_tree.current_node_id
+            if normalized_stack is not None:
+                work_context_stack = normalized_stack
+            result.update(directive_required)
+            result["directiveRequired"] = True
+        return takeover_protocol, _coerce_work_context_stack(work_context_stack), result
 
     current_node = _current_work_tree_node(takeover_protocol)
     default_parent_node_id = (
@@ -399,9 +617,25 @@ def _apply_parsed_assistant_work_tree_actions(
         if current_node is not None
         else takeover_protocol.work_tree.current_node_id or takeover_protocol.work_tree.root_node_id
     )
+    multi_state_transition_blocked: list[dict[str, Any]] = []
+    if len(actions) > 1 and any(str(item.get("action") or "").strip().lower() in {"enter", "complete", "skip"} for item in actions):
+        first_action = actions[0]
+        for extra_action in actions[1:]:
+            multi_state_transition_blocked.append(
+                {
+                    "status": "blocked",
+                    "reason": "multiple-work-tree-state-directives-in-one-window",
+                    "action": str(extra_action.get("action") or "").strip() or None,
+                    "tagPreview": normalize_excerpt(str(extra_action.get("rawTag") or ""), 160),
+                }
+            )
+        actions = [first_action]
+        blocked.extend(multi_state_transition_blocked)
+
     updated_protocol = takeover_protocol
     updated_stack = _coerce_work_context_stack(work_context_stack)
     applied: list[dict[str, Any]] = []
+    action_transition: dict[str, Any] | None = None
 
     for action in actions:
         action_kind = str(action.get("action") or "create").strip().lower() or "create"
@@ -424,6 +658,63 @@ def _apply_parsed_assistant_work_tree_actions(
                         "action": "enter",
                         "nodeId": target_node_id,
                         "activated": True,
+                    }
+                )
+            elif action_kind == "skip":
+                target_node_id = str(action.get("nodeId") or "").strip()
+                if not target_node_id:
+                    raise ValueError("Missing target work-tree node id.")
+                updated_protocol, updated_stack, action_transition = skip_work_tree_node(
+                    updated_protocol,
+                    task_id=task_id,
+                    agent_run_id=agent_run_id,
+                    node_id=target_node_id,
+                    reason=str(action.get("reason") or "").strip(),
+                    work_context_stack=updated_stack,
+                )
+                applied.append(
+                    {
+                        "status": "applied",
+                        "action": "skip",
+                        "nodeId": target_node_id,
+                        "summary": normalize_excerpt(str(action.get("reason") or ""), 160),
+                        "activated": False,
+                    }
+                )
+            elif action_kind == "complete":
+                if updated_protocol is None or updated_protocol.work_tree is None:
+                    raise ValueError("Takeover protocol does not have a work tree.")
+                completed_node = _current_work_tree_node(updated_protocol)
+                if completed_node is None:
+                    raise ValueError("Current work-tree node is missing.")
+                completion_status = str(action.get("completionStatus") or "completed").strip().lower()
+                summary = str(action.get("summary") or "").strip()
+                if completion_status == "failed":
+                    updated_protocol, updated_stack, action_transition = fail_current_work_node(
+                        updated_protocol,
+                        task_id=task_id,
+                        agent_run_id=agent_run_id,
+                        failure_summary=summary,
+                        work_context_stack=updated_stack,
+                    )
+                else:
+                    updated_protocol, updated_stack, action_transition = complete_current_work_node(
+                        updated_protocol,
+                        task_id=task_id,
+                        agent_run_id=agent_run_id,
+                        execution_summary=summary,
+                        work_context_stack=updated_stack,
+                        evidence_refs=[],
+                    )
+                applied.append(
+                    {
+                        "status": "applied",
+                        "action": "complete",
+                        "nodeId": completed_node.id,
+                        "parentNodeId": completed_node.parent_node_id,
+                        "completionStatus": completion_status,
+                        "summary": normalize_excerpt(summary, 160),
+                        "activated": False,
                     }
                 )
             else:
@@ -464,11 +755,33 @@ def _apply_parsed_assistant_work_tree_actions(
             blocked.append(
                 {
                     "status": "blocked",
-                    "reason": "enter-child-failed" if action_kind == "enter" else "create-child-failed",
+                    "reason": (
+                        "enter-child-failed"
+                        if action_kind == "enter"
+                        else "complete-child-failed" if action_kind == "complete" else "skip-child-failed" if action_kind == "skip" else "create-child-failed"
+                    ),
                     "title": str(action.get("title") or action.get("nodeId") or "").strip() or None,
                     "detail": str(exc),
                 }
             )
+
+    if not applied:
+        result = {
+            "detectedCount": int(action_payload.get("detectedCount") or len(blocked)),
+            "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),
+            "applied": [],
+            "blocked": blocked,
+        }
+        directive_required = _work_tree_directive_required_transition(
+            request=request,
+            takeover_protocol=takeover_protocol,
+            action_payload=action_payload,
+            blocked=blocked,
+        )
+        if directive_required is not None:
+            result.update(directive_required)
+            result["directiveRequired"] = True
+        return updated_protocol, updated_stack, result
 
     if applied and updated_protocol is not None and updated_protocol.work_tree is not None:
         updated_protocol, updated_stack = sync_takeover_runtime_state(
@@ -482,19 +795,39 @@ def _apply_parsed_assistant_work_tree_actions(
         )
 
     primary_action = str(applied[0].get("action") or "create") if applied else "create"
-    transition = {
-        "transition": "enter-existing-child" if primary_action == "enter" else "enter-child",
-        "requiresContinuation": bool(applied),
-        "currentNodeId": updated_protocol.work_tree.current_node_id if updated_protocol is not None and updated_protocol.work_tree is not None else None,
-        "nextNodeId": (
-            applied[0].get("nodeId")
-            if applied and primary_action == "enter"
-            else applied[0].get("childNodeId") if applied else None
-        ),
-        "currentFocus": _work_tree_focus_label(updated_protocol) if applied else request.get("currentFocus"),
-        "createdNodeIds": [item["childNodeId"] for item in applied if item.get("action") == "create" and item.get("childNodeId")],
-        "enteredNodeIds": [item["nodeId"] for item in applied if item.get("action") == "enter" and item.get("nodeId")],
-    }
+    if action_transition is not None:
+        transition = {
+            **action_transition,
+            "completedNodeIds": [
+                item["nodeId"]
+                for item in applied
+                if item.get("action") == "complete" and item.get("completionStatus") == "completed" and item.get("nodeId")
+            ],
+            "failedNodeIds": [
+                item["nodeId"]
+                for item in applied
+                if item.get("action") == "complete" and item.get("completionStatus") == "failed" and item.get("nodeId")
+            ],
+        }
+    else:
+        transition = {
+            "transition": "enter-existing-child" if primary_action == "enter" else "enter-child",
+            "requiresContinuation": bool(applied),
+            "currentNodeId": updated_protocol.work_tree.current_node_id if updated_protocol is not None and updated_protocol.work_tree is not None else None,
+            "nextNodeId": (
+                applied[0].get("nodeId")
+                if applied and primary_action == "enter"
+                else applied[0].get("childNodeId") if applied else None
+            ),
+            "currentFocus": _work_tree_focus_label(updated_protocol) if applied else request.get("currentFocus"),
+        }
+    transition.update(
+        {
+            "createdNodeIds": [item["childNodeId"] for item in applied if item.get("action") == "create" and item.get("childNodeId")],
+            "enteredNodeIds": [item["nodeId"] for item in applied if item.get("action") == "enter" and item.get("nodeId")],
+            "skippedNodeIds": [item["nodeId"] for item in applied if item.get("action") == "skip" and item.get("nodeId")],
+        }
+    )
     return updated_protocol, updated_stack, {
         "detectedCount": int(action_payload.get("detectedCount") or (len(applied) + len(blocked))),
         "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),

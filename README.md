@@ -211,7 +211,6 @@ corepack pnpm eval:m9:acceptance
 corepack pnpm eval:g2:regression
 corepack pnpm eval:g4:multiscene
 corepack pnpm eval:g4:web-research:default
-corepack pnpm eval:g4:web-research:work-tree-long
 corepack pnpm eval:g4:graduate-ml:longcat2
 corepack pnpm eval:g4:graduate-ml:deepseek-v4
 corepack pnpm eval:g4:provider-matrix
@@ -224,7 +223,7 @@ corepack pnpm eval:work-tree:fork-runtime-live
 
 补充说明：`corepack pnpm eval:m8:live` 不是离线假跑，它会按 live suite 中的 `requestedProvider/requestedModel` 直接检查真实 provider 候选。当前默认请求 `longcat/LongCat-2.0-Preview`，并保留 `longcat/LongCat-Flash-Lite` 作为对照 case；如果未配置 `YGGDRASIL_LLM_API_KEY_LONGCAT` 或 `LONGCAT_API_KEY`，suite 会在调用前失败，并且不会产生任何供应商侧调用记录。
 
-`corepack pnpm eval:g4:multiscene` 目前沿用历史命名，但根脚本已经切到默认 Web Research 真实任务 suite；`corepack pnpm eval:g4:web-research:default` 是同一 suite 的显式入口，聚焦网络检索、多源对比和矛盾处理。`corepack pnpm eval:g4:web-research:work-tree-long` 是 Web Research 长任务入口，用于观察多窗口 continuation 与工作树连续性。
+`corepack pnpm eval:g4:multiscene` 目前沿用历史命名，但根脚本已经切到默认 Web Research 真实任务 suite；`corepack pnpm eval:g4:web-research:default` 是同一 suite 的显式入口，聚焦网络检索、多源对比、矛盾处理和 live 工具证据链。旧的强制长窗口入口已删除，避免把工作树重新固定成硬模板。
 
 `corepack pnpm eval:g4:provider-matrix:longform` 是单任务长样本入口：它暂时只聚焦一个更长的 coding-greenfield 任务，并在 `deepseek_direct / deepseek-v4-pro` 与 `longcat / LongCat-2.0-Preview` 上复跑，用于观察更高任务长度下的首响、完成质量与返工口径。
 

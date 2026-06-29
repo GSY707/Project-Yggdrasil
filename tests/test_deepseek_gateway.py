@@ -193,6 +193,45 @@ def test_invoke_model_normalizes_cache_token_usage(monkeypatch) -> None:
     }
 
 
+def test_invoke_model_prefers_nested_positive_cache_tokens_over_top_level_zero(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+
+    def _fake_urlopen(_request, timeout=90):
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "已完成。"},
+                    }
+                ],
+                "usage": {
+                    "effectiveCachedTokens": 34560,
+                    "prompt_tokens": 40782,
+                    "completion_tokens": 2970,
+                    "total_tokens": 43752,
+                    "prompt_tokens_details": {"cached_tokens": 34560},
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cached_tokens": 0,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="LongCat-2.0-Preview",
+        requested_provider="longcat",
+        messages=[{"role": "user", "content": "输出执行计划。"}],
+        allow_fallback=False,
+    )
+
+    assert result["usage"]["cacheHitInputTokens"] == 34560
+    assert result["usage"]["nonCacheInputTokens"] == 6222
+
+
 def test_assistant_tool_round_message_preserves_reasoning_content() -> None:
     message = _assistant_tool_round_message(
         {

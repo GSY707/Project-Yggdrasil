@@ -17,7 +17,23 @@ _MEMORY_WRITE_TAG_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _WORK_TREE_ACTION_TAG_PATTERN = re.compile(
-    r"<work-node-(?P<action>create|enter)(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-(?P=action)>",
+    r"<work-node-(?P<action>create|enter|complete|handoff|skip|prune)(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-(?P=action)>",
+    re.IGNORECASE | re.DOTALL,
+)
+_WORK_TREE_NATURAL_LANGUAGE_DIRECTIVE_CLAIM_PATTERN = re.compile(
+    r"("
+    r"创建\s*(?:并\s*)?进入\s*(?:leaf|叶子节点|叶节点|子节点)"
+    r"|进入\s*(?:leaf|叶子节点|叶节点|子节点)"
+    r"|切换(?:到|至)?\s*(?:leaf|叶子节点|叶节点|子节点)"
+    r"|转入\s*(?:leaf|叶子节点|叶节点|子节点)"
+    r"|(?:leaf|叶节点|子节点)\s*(?:handoff|交接|移交)"
+    r"|返回父节点|回到父节点|交给父节点"
+    r"|create(?:d|s|ing)?(?:\s+and\s+enter(?:ed|ing)?)?\s+(?:a\s+)?(?:child|leaf)\b"
+    r"|enter(?:ed|ing)?\s+(?:a\s+)?(?:child|leaf)\b"
+    r"|switch(?:ed|ing)?\s+(?:to\s+)?(?:a\s+)?(?:child|leaf)\b"
+    r"|leaf\s+handoff"
+    r"|return(?:ed|ing)?\s+to\s+parent"
+    r")",
     re.IGNORECASE | re.DOTALL,
 )
 _MEMORY_WRITE_ATTR_PATTERN = re.compile(

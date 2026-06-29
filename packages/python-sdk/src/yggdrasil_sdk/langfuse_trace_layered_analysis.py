@@ -37,11 +37,6 @@ _PROFILE_HINTS = {
         "effectivecontextwindow=64000",
         "g4-web-research-default-grid-storage-short64k",
     ),
-    "long24k": (
-        "work-tree focused long web-research run",
-        "effectivecontextwindow=24000",
-        "g4-web-research-work-tree-long-24k",
-    ),
 }
 _SELF_TALK_KEYS = {
     "analysis",

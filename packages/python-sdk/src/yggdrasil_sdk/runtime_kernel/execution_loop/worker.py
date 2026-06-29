@@ -1828,7 +1828,7 @@ def execute_main_agent_work_item(work_item: dict[str, Any]) -> dict[str, object]
                 request["takeoverProtocol"] = takeover_protocol.model_dump(by_alias=True, mode="json")
                 root_mount["takeoverProtocol"] = request["takeoverProtocol"]
                 _inject_work_tree_resolution(request, root_mount, takeover_protocol)
-            if assistant_work_tree_actions.get("applied"):
+            if assistant_work_tree_actions.get("applied") or assistant_work_tree_actions.get("directiveRequired"):
                 assistant_work_tree_transition = assistant_work_tree_actions
             runtime_timings["takeoverFinalizeMs"] = _elapsed_ms(takeover_finalize_started_at)
             memory_write_started_at = perf_counter()

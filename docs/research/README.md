@@ -6,8 +6,8 @@
 
 - `../new/世界树计划正式项目定义.md` - 当前最高层项目定义草稿与用户笔记：以 LLM 为核心，把代码定位为服务 LLM 的世界环境，并记录生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent 与项目分期。
 - `../new/元提示词.md` - 新 Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，不承载具体业务知识。
-- `../development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` - 当前 LLM 工作树使用口径：工作树是上下文卫生工具，不是必走流程；简单任务直接完成，噪声隔离、候选方向、重复项、局部实验和并行工作才按需建节点。
-- `../specs/work-tree-protocol-v0.2.md` - 当前工作树协议入口：定义运行时对象、硬边界、`dependsOn` 与 advisory hint 的分工，以及摘要回收语义。
+- `../development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` - 当前 LLM 工作树使用口径：工作树是上下文卫生工具，root/非叶子节点负责高层视角和流程控制，leaf 负责具体执行；执行噪声、候选方向、重复项、局部实验和并行工作按需进 child/leaf。
+- `../specs/work-tree-protocol-v0.2.md` - 当前工作树协议入口：定义运行时对象、硬边界、`dependsOn` 与 advisory hint 的分工，以及有用信息/证据/文件/记忆引用回收语义。
 - `../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` - 世界构建、初次苏醒与任务级工作状态读取实施文档，负责把新三阶段方案转成分阶段实现任务。
 
 当前重新定义项目时，应先读正式项目定义草稿和元提示词方案，再读工作树使用指南与 v0.2 协议；进入实现前以执行文档为任务拆分入口。其他研究文档只作为来源、证据或候选特性处理。

@@ -19,6 +19,7 @@ from .artifacts import (
     _tool_round_signature,
     _upsert_task_conversation_record,
 )
+from .behavior_recorder import persist_llm_behavior_record
 from .core import (
     FALLBACK_ROUTE_CANDIDATE,
     _DUPLICATE_TOOL_ROUND_THRESHOLD,
@@ -64,6 +65,121 @@ from .core import (
     write_json,
 )
 from ..tool_runtime import clarification_allows_read_only_tools, filter_read_only_tool_payloads
+
+_DEFAULT_TOOL_RESULT_REFLECTION_REMINDER = (
+    "Workflow control checkpoint: a tool batch has ended. Before continuing, re-evaluate the overall task objective, "
+    "the current work-tree node, and whether the just-finished search/fetch/read/command/edit work should be isolated "
+    "in a child/leaf node. Do not keep piling detailed execution work into root when a child/leaf is appropriate. "
+    "If the task still has an unfinished node or a next step required for completion, continue that work before final delivery."
+)
+_DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING = (
+    "警告：当前工作树节点已经超过本节点的 5 次 toolcall 机会。你应该进行工作流程上的安排："
+    "如果还需要更多具体工具工作，创建或进入子节点；如果当前 leaf 已经完成，返回父节点评估、调度或收束。"
+    "下次 toolcall 将被拒绝。"
+)
+
+
+def _coerce_tool_result_reflection_reminder(raw_value: Any) -> str | None:
+    if isinstance(raw_value, bool):
+        return _DEFAULT_TOOL_RESULT_REFLECTION_REMINDER if raw_value else None
+    if isinstance(raw_value, dict):
+        enabled = raw_value.get("enabled")
+        if enabled is not None and not bool(enabled):
+            return None
+        message = str(raw_value.get("message") or "").strip()
+        return message or _DEFAULT_TOOL_RESULT_REFLECTION_REMINDER
+    if raw_value is None:
+        return None
+    text = str(raw_value).strip()
+    if not text or text.lower() in {"0", "false", "no", "off", "disabled"}:
+        return None
+    if text.lower() in {"1", "true", "yes", "on", "enabled"}:
+        return _DEFAULT_TOOL_RESULT_REFLECTION_REMINDER
+    return text
+
+
+def _coerce_work_tree_node_tool_call_soft_limit(raw_value: Any) -> tuple[int, str] | None:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool):
+        return (5, _DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING) if raw_value else None
+    if isinstance(raw_value, int):
+        return (raw_value, _DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING) if raw_value > 0 else None
+    if isinstance(raw_value, dict):
+        enabled = raw_value.get("enabled")
+        if enabled is not None and not bool(enabled):
+            return None
+        raw_limit = raw_value.get("limit") or raw_value.get("toolCallLimit") or raw_value.get("maxToolCallsPerNode") or 5
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            limit = 5
+        if limit <= 0:
+            return None
+        warning = str(raw_value.get("warningMessage") or raw_value.get("message") or "").strip()
+        return limit, warning or _DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING
+    text = str(raw_value).strip()
+    if not text or text.lower() in {"0", "false", "no", "off", "disabled"}:
+        return None
+    try:
+        limit = int(text)
+    except ValueError:
+        return 5, text
+    return (limit, _DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING) if limit > 0 else None
+
+
+def _request_work_tree_node_id(request: dict[str, Any]) -> str:
+    direct = str(request.get("workTreeNodeId") or request.get("currentNodeId") or "").strip()
+    if direct:
+        return direct
+    memory_state = request.get("memoryRetrievalState") if isinstance(request.get("memoryRetrievalState"), dict) else {}
+    memory_node = str(memory_state.get("workTreeNodeId") or "").strip()
+    if memory_node:
+        return memory_node
+    protocol = request.get("takeoverProtocol") if isinstance(request.get("takeoverProtocol"), dict) else {}
+    work_tree = protocol.get("workTree") if isinstance(protocol.get("workTree"), dict) else {}
+    return str(work_tree.get("currentNodeId") or "").strip()
+
+
+def _tool_result_reflection_reminder_message(
+    request: dict[str, Any],
+    tool_calls: list[dict[str, Any]],
+    round_index: int,
+    *,
+    node_tool_call_count: int | None = None,
+) -> dict[str, str] | None:
+    reminder = _coerce_tool_result_reflection_reminder(request.get("toolResultReflectionReminder"))
+    tool_names = [
+        str(call.get("name") or "").strip()
+        for call in tool_calls
+        if isinstance(call, dict) and str(call.get("name") or "").strip()
+    ]
+    tool_summary = ", ".join(dict.fromkeys(tool_names)) or "unknown"
+    content_parts: list[str] = []
+    if reminder is not None:
+        content_parts.append(reminder)
+    soft_limit = _coerce_work_tree_node_tool_call_soft_limit(request.get("workTreeNodeToolCallSoftLimit"))
+    if soft_limit is not None and node_tool_call_count is not None:
+        limit, warning = soft_limit
+        previous_count = max(0, int(node_tool_call_count) - len(tool_names))
+        if previous_count <= limit < int(node_tool_call_count):
+            node_id = _request_work_tree_node_id(request) or "unknown"
+            content_parts.append(
+                f"{warning}\n\n"
+                f"[work-tree-node-toolcall-soft-limit] currentNodeId={node_id}; "
+                f"limit={limit}; usedInCurrentNode={node_tool_call_count}"
+            )
+    if not content_parts:
+        return None
+    content_body = "\n\n".join(content_parts)
+    return {
+        "role": "user",
+        "content": (
+            f"{content_body}\n\n"
+            f"[tool-batch-ended] roundIndex={round_index}; toolCount={len(tool_names)}; tools={tool_summary}"
+        ),
+    }
+
 
 def invoke_runtime_completion(
     session,
@@ -292,6 +408,7 @@ def invoke_runtime_completion(
             if isinstance(_resume_round_state.get("roundModes"), list):
                 round_modes = [str(m) for m in _resume_round_state["roundModes"]]
             _resume_starting_round = int(_resume_round_state.get("roundIndex", -1)) + 1 if _resume_tool_calls is not None else 0
+            node_tool_call_count = 0
 
             model_tool_loop_started_at = perf_counter()
 
@@ -310,6 +427,15 @@ def invoke_runtime_completion(
                     tool_name_aliases=tool_name_aliases,
                     allowed_tool_names=allowed_tool_names,
                 )
+                reminder_message = _tool_result_reflection_reminder_message(
+                    request,
+                    _resume_tool_calls,
+                    _resume_starting_round - 1,
+                    node_tool_call_count=len(_resume_tool_calls),
+                )
+                if reminder_message is not None:
+                    conversation_messages.append(reminder_message)
+                node_tool_call_count += len(_resume_tool_calls)
                 round_summaries.append({
                     "index": _resume_starting_round - 1,
                     "mode": "checkpoint-resume",
@@ -320,6 +446,7 @@ def invoke_runtime_completion(
                         for c in _resume_tool_calls
                         if isinstance(c, dict)
                     ],
+                    "toolResultReflectionReminder": reminder_message is not None,
                 })
                 round_modes.append("checkpoint-resume")
 
@@ -570,6 +697,16 @@ def invoke_runtime_completion(
                         }
                     )
                 round_summaries[-1]["toolFailures"] = round_tool_failures
+                node_tool_call_count += len(tool_calls)
+                reminder_message = _tool_result_reflection_reminder_message(
+                    request,
+                    tool_calls,
+                    round_index,
+                    node_tool_call_count=node_tool_call_count,
+                )
+                if reminder_message is not None:
+                    conversation_messages.append(reminder_message)
+                    round_summaries[-1]["toolResultReflectionReminder"] = True
 
             if final_result is None:
                 raise RuntimeError(f"Invocation {invocation.id} finished without a terminal model result.")
@@ -742,6 +879,34 @@ def invoke_runtime_completion(
             write_response_started_at = perf_counter()
             write_json(response_path, response_payload)
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+            behavior_record_result: dict[str, Any] | None = None
+            try:
+                write_behavior_record_started_at = perf_counter()
+                behavior_record_result = persist_llm_behavior_record(
+                    workspace_root=workspace_root,
+                    task=task,
+                    run=run,
+                    invocation=invocation.model_dump(by_alias=True, mode="json"),
+                    prompt_artifact_id=prompt_artifact.id,
+                    request_path=request_path,
+                    response_path=response_path,
+                    prompt_path=ensure_state_subdir("prompt/compiled", workspace_root) / f"{invocation.id}.json",
+                    status=invocation.status,
+                )
+                local_runtime_timings["writeBehaviorRecordMs"] = _elapsed_ms(write_behavior_record_started_at)
+            except Exception as behavior_exc:
+                record_log(
+                    service_name,
+                    "warning",
+                    "Failed to persist LLM behavior record.",
+                    attributes={
+                        "taskId": task.id,
+                        "agentRunId": run.id,
+                        "invocationId": invocation.id,
+                        "errorMessage": str(behavior_exc),
+                    },
+                    workspace_root=workspace_root,
+                )
 
             final_message = {
                 "role": "assistant",
@@ -765,6 +930,7 @@ def invoke_runtime_completion(
                 "conversationMessages": _to_serialized_messages([*conversation_messages, final_message]),
                 "assistantText": str(final_result.get("outputText") or ""),
                 "error": final_result.get("error"),
+                "behaviorRecord": behavior_record_result,
                 "endedAt": utc_now().isoformat(),
             }
             _upsert_task_conversation_record(
@@ -790,6 +956,7 @@ def invoke_runtime_completion(
                 "contextLengthObservations": list(context_length_observations),
                 "runtimeMetrics": dict(response_runtime_metrics),
                 "timings": dict(local_runtime_timings),
+                "behaviorRecord": behavior_record_result,
             }
     except Exception as exc:
         latency_ms = round((perf_counter() - started_counter) * 1000.0, 2)
@@ -865,6 +1032,34 @@ def invoke_runtime_completion(
                 ),
             )
             local_runtime_timings["writeResponseMs"] = _elapsed_ms(write_response_started_at)
+            failure_behavior_record_result: dict[str, Any] | None = None
+            try:
+                write_behavior_record_started_at = perf_counter()
+                failure_behavior_record_result = persist_llm_behavior_record(
+                    workspace_root=workspace_root,
+                    task=task,
+                    run=run,
+                    invocation={"id": invocation.id, "status": "failed"},
+                    prompt_artifact_id=str(failure_prompt_artifact_id or prompt_metadata.get("id") or ""),
+                    request_path=request_path,
+                    response_path=response_path,
+                    prompt_path=ensure_state_subdir("prompt/compiled", workspace_root) / f"{invocation.id}.json",
+                    status="failed",
+                )
+                local_runtime_timings["writeBehaviorRecordMs"] = _elapsed_ms(write_behavior_record_started_at)
+            except Exception as behavior_exc:
+                record_log(
+                    service_name,
+                    "warning",
+                    "Failed to persist LLM behavior record for failed invocation.",
+                    attributes={
+                        "taskId": task.id,
+                        "agentRunId": run.id,
+                        "invocationId": invocation.id,
+                        "errorMessage": str(behavior_exc),
+                    },
+                    workspace_root=workspace_root,
+                )
 
             failure_final_message = {
                 "role": "assistant",
@@ -892,6 +1087,7 @@ def invoke_runtime_completion(
                 "conversationMessages": _to_serialized_messages([*(failure_messages or []), failure_final_message]),
                 "assistantText": str(failure_result.get("outputText") or ""),
                 "error": str(exc),
+                "behaviorRecord": failure_behavior_record_result,
                 "endedAt": utc_now().isoformat(),
             }
             _upsert_task_conversation_record(

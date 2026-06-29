@@ -1,0 +1,93 @@
+{
+  "id": "evalsuite_g4_real_task_work_tree_tool_call_leaf_example_live",
+  "name": "G4 Real-Task Work-Tree Tool-Call Leaf Example Live",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Single live experiment: add a hard execution example where tool-backed work runs in leaf nodes, while only the parent/orchestrator evaluates child output and declares task completion.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": ["pass-rate", "tool-evidence", "work-tree-behavior"],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:work-tree:tool-call-leaf-example",
+  "cases": [
+    {
+      "id": "evalcase_g4_work_tree_tool_call_leaf_example_grid_storage_live",
+      "title": "G4 Work-Tree Tool-Call Leaf Example: Grid Storage Research",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-work-tree-tool-call-leaf-example-grid-storage",
+      "parityPairKey": "g4-work-tree-tool-call-leaf-example-grid-storage",
+      "parityRole": "tool-call-leaf-example",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
+      "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
+      "currentFocus": "g4-work-tree-tool-call-leaf-example-grid-storage",
+      "currentObjective": "Deliver a web-grounded comparison report with explicit source triangulation and contradiction handling.",
+      "currentContext": [
+        {
+          "id": "ctx_web_research_scope",
+          "title": "decision scope",
+          "content": "Target operator profile: peak load 3-6 GW, renewable share 45%-60%, procurement horizon to 2030. Decision criteria must include levelized storage cost range, safety risk profile, supply-chain risk, and implementation lead time.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_web_research_method",
+          "title": "research method",
+          "content": "You must perform network search and compare sources from multiple domains. At least one source should be policy/regulator, one should be industry report, and one should be academic or technical institution.",
+          "importance": 0.98
+        },
+        {
+          "id": "ctx_leaf_example",
+          "title": "hard leaf example",
+          "content": "Example to follow: The parent/orchestrator decides that policy evidence is needed, then outputs only <work-node-create title=\"policy evidence leaf\" questions=\"Which regulator or policy source constrains 2030 storage selection?\" evidence=\"policy-source-url\">Search regulator and policy sources for grid storage constraints.</work-node-create>. In the next window, while currentNodeId is that leaf, call the web search/fetch tools. A leaf must not declare the whole task complete and must not produce the final report. When the leaf has enough evidence, it outputs only a leaf handoff: useful findings, evidence refs, discarded routes, gaps, and risks, then stops. The parent/orchestrator must evaluate the child handoff against the delivery contract, decide whether another leaf is needed, and only the parent/orchestrator may write the final report or declare task completion. Do not perform concrete source search directly from root or a parent/orchestrator when a leaf has not been opened.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_web_research_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled. Build the report from verifiable web evidence. Include a source table and explicitly discuss at least one contradiction between sources and how you resolved it. Do not stop at a next-steps summary if the next step is still needed to satisfy the task.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "allowPaidModels": false,
+      "requireLive": true,
+      "expectedResultStatus": "completed",
+      "expectedTaskStatus": "completed",
+      "temperature": 0.1,
+      "maxTokens": 9000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 14.0,
+      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceMinSuccessfulToolExecutions": 1,
+      "acceptanceMinEvidenceLinks": 1,
+      "failOnAcceptanceViolation": false,
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: concrete tool-backed work belongs in leaf nodes, and parent/orchestrator nodes do workflow control. If you are at root or a parent/orchestrator and need to search/fetch/read/compute/edit, first create or enter a child leaf with <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter>, then stop the current window so the next window executes the tool from that leaf. A leaf may call tools and synthesize local evidence, but a leaf must not declare the whole task complete and must not produce the final report. After a leaf has enough evidence, output only a leaf handoff for the parent: useful findings, evidence refs, discarded routes, gaps, and risks; then stop. The parent/orchestrator must evaluate each child handoff against the delivery contract, decide whether another leaf is needed, and only the parent/orchestrator may write the final Markdown report or declare task completion. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
+      "restartMessage": "Window restart: preserve the leaf-executes-parent-evaluates rule. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, create or enter a child leaf first. If currentNodeId is a leaf, execute the needed tool batch, output only a leaf handoff, and stop. If currentNodeId is a parent/orchestrator and a child handoff is available, evaluate it against the delivery contract, choose the next leaf or final delivery, and only then declare task completion. Output Markdown only.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 0,
+      "maxToolRounds": 24,
+      "maxWindowCycles": 28,
+      "workspaceProfile": "g4-work-tree-tool-call-leaf-example-grid-storage",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "tags": ["g4", "real-task", "web-research", "work-tree", "tool-call-leaf-example"],
+      "difficulty": "hard"
+    }
+  ]
+}

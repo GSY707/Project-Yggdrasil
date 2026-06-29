@@ -681,12 +681,14 @@ def _load_invocation_artifacts(
     )
     metrics_path = state_dir / "runtime" / "metrics" / f"{invocation_id}.json"
     window_execution_path = state_dir / "runtime" / "window-executions" / "by-invocation" / f"{invocation_id}.json"
+    behavior_record_path = state_dir / "llm" / "behavior-records" / f"{invocation_id}.json"
 
     artifact_records = [
         _artifact_record("llm-request", request_path, workspace_root, task_id=task_id, run_id=run_id, invocation_id=invocation_id),
         _artifact_record("llm-response", response_path, workspace_root, task_id=task_id, run_id=run_id, invocation_id=invocation_id),
         _artifact_record("compiled-prompt", prompt_path, workspace_root, task_id=task_id, run_id=run_id, invocation_id=invocation_id),
         _artifact_record("runtime-metrics", metrics_path, workspace_root, task_id=task_id, run_id=run_id, invocation_id=invocation_id),
+        _artifact_record("llm-behavior-record", behavior_record_path, workspace_root, task_id=task_id, run_id=run_id, invocation_id=invocation_id),
     ]
     return {
         "requestPayload": read_json(request_path, None) if request_path is not None else None,
@@ -694,6 +696,7 @@ def _load_invocation_artifacts(
         "promptPayload": read_json(prompt_path, None) if prompt_path is not None else None,
         "metricsPayload": read_json(metrics_path, None),
         "windowExecutionPayload": read_json(window_execution_path, None),
+        "behaviorRecordPayload": read_json(behavior_record_path, None),
         "artifactRecords": artifact_records,
     }
 def _build_analysis_cache_summary(windows: list[dict[str, Any]]) -> dict[str, Any]:

@@ -545,6 +545,10 @@ def test_compile_runtime_prompt_injects_declared_few_shots_into_messages() -> No
         assert [message["role"] for message in compiled.messages] == ["system", "user"]
         assert "以下示例仅用于对齐执行风格，不代表当前用户真实发言：" in compiled.system_sections["few_shot_examples"]
         few_shot_payload = compiled.system_sections["few_shot_examples"]
+        assert "工作树使用案例 1（多方面任务）" in few_shot_payload
+        assert "父节点先确认总目标、交付标准和需要完成的方面" in few_shot_payload
+        assert "工作树使用案例 3（开放探索任务）" in few_shot_payload
+        assert "父节点定期重新审视目标" in few_shot_payload
         for marker in case["expected_markers"]:
             assert marker in few_shot_payload
 
@@ -593,7 +597,8 @@ def test_boot_behavior_constitution_is_stable_and_scene_specific_text_stays_outs
     assert "场景偏好与执行倾向" not in compiled.boot_sections["behavior_constitution"]
     assert "行为宪法" in compiled.boot_sections["behavior_constitution"]
     assert "工作树是上下文卫生工具，不是必走流程" in compiled.boot_sections["behavior_constitution"]
-    assert "短小、单步、上下文干净的任务直接完成" in compiled.boot_sections["behavior_constitution"]
+    assert "执行会产生过程噪声时优先把执行放进子节点或叶子节点" in compiled.boot_sections["behavior_constitution"]
+    assert "根节点和非叶子节点主要负责工作流程控制" in compiled.boot_sections["behavior_constitution"]
     assert "relationIds 与 runtime_hints 是信息线索" in compiled.boot_sections["behavior_constitution"]
     assert "场景偏好与执行倾向" in compiled.system_sections["scene_preferences"]
     assert "高风险或不可逆操作必须显式请求确认。" not in compiled.boot_sections["physical_interface"]
@@ -620,10 +625,16 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "只有在需要不中断当前回答、且修改足够轻量时，才使用 <memory-write>" in tool_policy
     assert "节点过宽、存在多个独立主题或冲突风险高时，先判断是否需要隔离噪声" in tool_policy
     assert "latestVersionId 冲突时，不要静默覆盖" in tool_policy
-    assert "简单任务直接完成" in response_requirements
+    assert "root/非叶子节点负责高层视角" in response_requirements
+    assert "不要把“不强制建树”理解成在父节点堆执行过程" in response_requirements
     assert "<work-node-create ...></work-node-create>" in response_requirements
     assert "<work-node-enter nodeId=\"...\"></work-node-enter>" in response_requirements
-    assert "只带回父节点需要的结论、证据、已废弃路线、风险和下一步" in response_requirements
+    assert '<work-node-complete status="completed">...</work-node-complete>' in response_requirements
+    assert "每个 LLM window 最多输出一个会改变当前节点的工作树 directive" in response_requirements
+    assert "带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线、风险和建议下一步" in response_requirements
+    assert "最终合成/撰写报告可以作为 child 执行并产出完整报告草稿" in response_requirements
+    assert "不能作为已经进入或完成 leaf 的证据" in response_requirements
+    assert "重新审视任务目标、当前工作树位置" in response_requirements
     assert "runtime_hints 是辅助线索，不是硬控制" in response_requirements
     assert "输出只保留用户任务需要的结果、证据/验证和必要风险" in response_requirements
     assert "记忆修改默认优先使用正式记忆工具" not in response_requirements
@@ -760,8 +771,9 @@ def test_compile_runtime_prompt_includes_soft_runtime_hints() -> None:
     assert "建议下一步: refine" in resolution_section
     assert "交付就绪度: not-ready" in resolution_section
     assert "工作树用于上下文卫生" in resolution_section
-    assert "短小、单步、上下文干净的任务可以直接完成" in resolution_section
-    assert "不回灌完整过程" in resolution_section
+    assert "执行会产生过程噪声时优先进入子节点或叶子节点" in resolution_section
+    assert "root/非叶子节点负责高层视角" in resolution_section
+    assert "有用信息、证据/文件/记忆引用" in resolution_section
     assert "可优先考虑的开放前沿" in resolution_section
     assert "Worker queue needs ack and reclaim semantics." in resolution_section
     assert "Resume state must be durable." in resolution_section

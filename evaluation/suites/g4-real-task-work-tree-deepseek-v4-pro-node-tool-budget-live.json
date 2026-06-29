@@ -1,0 +1,121 @@
+{
+  "id": "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_node_tool_budget_live",
+  "name": "G4 Real-Task Work-Tree DeepSeek V4 Pro Node Tool Budget Live",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Single live experiment: use auto-unfinished revision targeting plus a node-local 5 toolcall soft budget prompt and warning to test whether the LLM leaves root/parent nodes and returns to parent orchestration.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": ["pass-rate", "tool-evidence", "work-tree-behavior", "model-comparison"],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:work-tree:deepseek-v4-pro-node-tool-budget",
+  "cases": [
+    {
+      "id": "evalcase_g4_work_tree_deepseek_v4_pro_node_tool_budget_grid_storage_live",
+      "title": "G4 Work-Tree DeepSeek V4 Pro Node Tool Budget: Grid Storage Research",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-work-tree-deepseek-v4-pro-node-tool-budget-grid-storage",
+      "parityPairKey": "g4-work-tree-deepseek-v4-pro-node-tool-budget-grid-storage",
+      "parityRole": "deepseek-v4-pro-node-tool-budget",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
+      "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
+      "currentFocus": "g4-work-tree-deepseek-v4-pro-node-tool-budget-grid-storage",
+      "currentObjective": "Deliver a web-grounded comparison report while enforcing node-local workflow control and parent/leaf responsibility.",
+      "currentContext": [
+        {
+          "id": "ctx_web_research_scope",
+          "title": "decision scope",
+          "content": "Target operator profile: peak load 3-6 GW, renewable share 45%-60%, procurement horizon to 2030. Decision criteria must include levelized storage cost range, safety risk profile, supply-chain risk, and implementation lead time.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_node_tool_budget",
+          "title": "node-local toolcall budget",
+          "content": "Each work-tree node has only 5 toolcall opportunities. If more concrete search/fetch/read/compute/edit work is needed, create or enter a child leaf before continuing. Entering a new node refreshes the 5 toolcall opportunities for that node. If a leaf has enough evidence, stop tool work in the leaf and return a handoff for parent evaluation.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_leaf_example",
+          "title": "hard leaf example",
+          "content": "Example to follow: The parent/orchestrator decides that policy evidence is needed, then outputs only <work-node-create title=\"policy evidence leaf\" questions=\"Which regulator or policy source constrains 2030 storage selection?\" evidence=\"policy-source-url\">Search regulator and policy sources for grid storage constraints.</work-node-create>. In the next window, while currentNodeId is that leaf, call tools. A leaf must not declare the whole task complete and must not produce the final report. When the leaf has enough evidence, it outputs only a leaf handoff: useful findings, evidence refs, discarded routes, gaps, and risks, then stops. The parent/orchestrator evaluates the child handoff, decides whether another leaf is needed, and only the parent/orchestrator may write the final report or declare task completion.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_delivery_contract",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled. Build the report from verifiable web evidence. Include a source table and explicitly discuss at least one contradiction between sources and how it was resolved.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "deepseek_direct",
+      "requestedModel": "deepseek-v4-pro",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "allowPaidModels": true,
+      "requireLive": true,
+      "expectedResultStatus": "completed",
+      "expectedTaskStatus": "completed",
+      "temperature": 0.1,
+      "maxTokens": 9000,
+      "auditLevel": "strict",
+      "costBudgetTotal": 32.0,
+      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceMinSuccessfulToolExecutions": 1,
+      "acceptanceMinEvidenceLinks": 1,
+      "failOnAcceptanceViolation": false,
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: concrete tool-backed work belongs in leaf nodes, and parent/orchestrator nodes do workflow control. Each work-tree node has only 5 toolcall opportunities. If the current node needs more than 5 toolcalls, do not keep calling tools in the same node: create or enter a child leaf, then stop the current window so the next window executes from that leaf. Entering a new node refreshes the 5 toolcall opportunities for that node. A leaf may call tools and synthesize local evidence, but a leaf must not declare the whole task complete and must not produce the final report. After a leaf has enough evidence, output only a leaf handoff for the parent: useful findings, evidence refs, discarded routes, gaps, and risks; then stop. The parent/orchestrator must evaluate each child handoff against the delivery contract, decide whether another leaf is needed, and only the parent/orchestrator may write the final Markdown report or declare task completion. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
+      "restartMessage": "Window restart: preserve the node-local toolcall budget and leaf-executes-parent-evaluates rule. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, create or enter a child leaf before using tools. If currentNodeId is a leaf, use at most 5 toolcalls in that leaf, output a leaf handoff, and stop. If currentNodeId is a parent/orchestrator and a child handoff is available, evaluate it against the delivery contract, choose the next leaf or final delivery, and only then declare task completion. Output Markdown only.",
+      "toolResultReflectionReminder": "Workflow control checkpoint: after each tool batch, count the current node's toolcalls and reassess whether the next action should continue this leaf, create/enter a child node, return to parent evaluation, or deliver.",
+      "workTreeNodeToolCallSoftLimit": {
+        "limit": 5,
+        "warningMessage": "警告：当前工作树节点已经超过本节点的 5 次 toolcall 机会。你应该进行工作流程上的安排：如果还需要更多具体工具工作，创建或进入子节点；如果当前 leaf 已经完成，返回父节点评估、调度或收束。下次 toolcall 将被拒绝。"
+      },
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 0,
+      "maxToolRounds": 24,
+      "maxWindowCycles": 18,
+      "workspaceProfile": "g4-work-tree-deepseek-v4-pro-node-tool-budget-grid-storage",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "postCompletionActions": [
+        {
+          "id": "auto-unfinished-critique-continue",
+          "kind": "runtime-revision",
+          "nodeId": "auto-unfinished",
+          "userMessage": "这个任务还不能结束。harness 应该从未完成的位置继续：如果当前节点仍有未完成子节点，就在当前节点继续安排；如果当前节点完成但 sibling 未完成，就回父节点继续调度。先做任务控制分析，然后继续执行，不要只解释原因。",
+          "resumeMessage": "Revision after premature completion: first perform task-control analysis, then continue from the auto-selected unfinished work-tree position using node-local toolcall budget discipline.",
+          "currentFocus": "auto-unfinished-task-control-and-node-tool-budget",
+          "currentObjective": "Continue the unfinished work tree from the correct parent/leaf position, enforce the 5 toolcall per node workflow budget, and only deliver after all required storage routes and contradiction analysis are complete.",
+          "responseRequirements": "First output a concise 'Task Control Analysis' section that identifies currentNodeId, unfinished child or sibling nodes, parent-vs-leaf responsibility, missing routes/evidence, and the next node/action. Then continue the unfinished work. Each node has only 5 toolcall opportunities; if more tool work is needed, create or enter a child leaf, or return to parent orchestration. Do not stop at explanation. Complete Li-ion, sodium-ion, flow battery, and green hydrogen coverage, contradiction analysis, source table, and final recommendation. Output Markdown only.",
+          "toolResultReflectionReminder": "Workflow control checkpoint: after each tool batch, count the current node's toolcalls and reassess whether the next action should continue this leaf, create/enter a child node, return to parent evaluation, or deliver.",
+          "workTreeNodeToolCallSoftLimit": {
+            "limit": 5,
+            "warningMessage": "警告：当前工作树节点已经超过本节点的 5 次 toolcall 机会。你应该进行工作流程上的安排：如果还需要更多具体工具工作，创建或进入子节点；如果当前 leaf 已经完成，返回父节点评估、调度或收束。下次 toolcall 将被拒绝。"
+          },
+          "temperature": 0.1,
+          "maxTokens": 9000,
+          "maxToolRounds": 24,
+          "expectedResultStatus": "completed",
+          "maxWindowCycles": 18,
+          "maxWorkerWaitSeconds": 900
+        }
+      ],
+      "tags": ["g4", "real-task", "web-research", "work-tree", "deepseek-v4-pro", "node-tool-budget"],
+      "difficulty": "hard"
+    }
+  ]
+}

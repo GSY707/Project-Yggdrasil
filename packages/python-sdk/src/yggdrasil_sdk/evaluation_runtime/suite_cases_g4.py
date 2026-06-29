@@ -143,6 +143,432 @@ def _g4_response_text(result_payload: dict[str, Any], response_payload: dict[str
             if joined.strip():
                 return joined.strip()
     return ""
+def _g4_normalize_message_content(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            for key in ("text", "input_text", "output_text", "content"):
+                item_value = item.get(key)
+                if isinstance(item_value, str) and item_value.strip():
+                    parts.append(item_value)
+                    break
+        return "\n".join(parts)
+    return str(value or "")
+def _g4_compact_tool_message(content: str, *, max_chars: int) -> str:
+    raw = str(content or "").strip()
+    summary = raw
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        payload = None
+    if isinstance(payload, dict):
+        tool = payload.get("tool") if isinstance(payload.get("tool"), dict) else {}
+        result = tool.get("result") if isinstance(tool.get("result"), dict) else payload.get("result")
+        result_payload = result.get("result") if isinstance(result, dict) and isinstance(result.get("result"), dict) else result
+        args = tool.get("arguments") if isinstance(tool.get("arguments"), dict) else {}
+        parts = [
+            f"name={tool.get('name') or payload.get('name') or 'unknown'}",
+            f"arguments={normalize_excerpt(json.dumps(args, ensure_ascii=False), 220)}",
+        ]
+        if isinstance(result_payload, dict):
+            if result_payload.get("url") is not None:
+                parts.append(f"url={result_payload.get('url')}")
+            if result_payload.get("title") is not None:
+                parts.append(f"title={normalize_excerpt(str(result_payload.get('title') or ''), 160)}")
+            if result_payload.get("error") is not None:
+                parts.append(f"error={normalize_excerpt(str(result_payload.get('error') or ''), 220)}")
+            if result_payload.get("text") is not None:
+                parts.append(f"text={normalize_excerpt(str(result_payload.get('text') or ''), 220)}")
+            cache = result_payload.get("cache") if isinstance(result_payload.get("cache"), dict) else {}
+            if cache:
+                parts.append(f"cacheHit={bool(cache.get('hit'))}")
+        elif result_payload is not None:
+            parts.append(f"result={normalize_excerpt(str(result_payload), 240)}")
+        summary = "; ".join(parts)
+    return normalize_excerpt(summary, max(max_chars, 120))
+
+
+def _g4_runtime_snapshot_for_followup(
+    *,
+    request_payload: dict[str, Any],
+    response_payload: dict[str, Any],
+) -> dict[str, Any]:
+    request_protocol = request_payload.get("takeoverProtocol") if isinstance(request_payload.get("takeoverProtocol"), dict) else {}
+    response_protocol = response_payload.get("takeoverProtocol") if isinstance(response_payload.get("takeoverProtocol"), dict) else {}
+    request_work_tree = request_protocol.get("workTree") if isinstance(request_protocol.get("workTree"), dict) else {}
+    response_work_tree = response_protocol.get("workTree") if isinstance(response_protocol.get("workTree"), dict) else {}
+    window_artifact = response_payload.get("windowExecutionArtifact") if isinstance(response_payload.get("windowExecutionArtifact"), dict) else {}
+    window_record = window_artifact.get("record") if isinstance(window_artifact.get("record"), dict) else {}
+    queued_work_item = response_payload.get("queuedWorkItem") if isinstance(response_payload.get("queuedWorkItem"), dict) else {}
+    queued_payload = queued_work_item.get("payload") if isinstance(queued_work_item.get("payload"), dict) else {}
+    queued_inner_payload = queued_payload.get("payload") if isinstance(queued_payload.get("payload"), dict) else {}
+
+    def _node_summary(work_tree: dict[str, Any]) -> list[dict[str, Any]]:
+        nodes = work_tree.get("nodes") if isinstance(work_tree.get("nodes"), list) else []
+        summaries: list[dict[str, Any]] = []
+        for node in nodes[:12]:
+            if not isinstance(node, dict):
+                continue
+            summaries.append(
+                {
+                    "id": node.get("id"),
+                    "title": node.get("title"),
+                    "parentNodeId": node.get("parentNodeId"),
+                    "status": node.get("status"),
+                    "childNodeIds": node.get("childNodeIds") or [],
+                }
+            )
+        return summaries
+
+    return {
+        "requestCurrentNodeId": request_payload.get("currentNodeId") or request_work_tree.get("currentNodeId"),
+        "responseCurrentNodeId": response_work_tree.get("currentNodeId"),
+        "responseWorkTreeStatus": response_work_tree.get("status"),
+        "transitionOutcome": window_record.get("transitionOutcome") or response_payload.get("status"),
+        "queuedContinuationCurrentNodeId": queued_inner_payload.get("currentNodeId"),
+        "queuedContinuationFocus": queued_inner_payload.get("currentFocus"),
+        "runtimeMetrics": response_payload.get("runtimeMetrics") if isinstance(response_payload.get("runtimeMetrics"), dict) else {},
+        "requestNodes": _node_summary(request_work_tree),
+        "responseNodes": _node_summary(response_work_tree),
+    }
+def _g4_followup_conversation_messages(
+    *,
+    request_payload: dict[str, Any],
+    response_payload: dict[str, Any],
+    response_text: str,
+    user_message: str,
+    runtime_snapshot: dict[str, Any] | None = None,
+    max_tool_messages: int = 8,
+    max_tool_chars: int = 700,
+    max_message_chars: int = 6000,
+) -> list[dict[str, str]]:
+    raw_messages = response_payload.get("conversationMessages")
+    if not isinstance(raw_messages, list) or not raw_messages:
+        raw_messages = request_payload.get("conversationMessages")
+    if not isinstance(raw_messages, list) or not raw_messages:
+        raw_messages = request_payload.get("messages")
+    if not isinstance(raw_messages, list):
+        raw_messages = []
+
+    tool_message_positions = [
+        index
+        for index, item in enumerate(raw_messages)
+        if isinstance(item, dict) and str(item.get("role") or "").strip().lower() not in {"system", "user", "assistant"}
+    ]
+    kept_tool_positions = set(tool_message_positions[-max(max_tool_messages, 0) :])
+    dropped_tool_messages = max(len(tool_message_positions) - len(kept_tool_positions), 0)
+
+    messages: list[dict[str, str]] = []
+    for index, item in enumerate(raw_messages):
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "user").strip().lower()
+        content = _g4_normalize_message_content(item.get("content")).strip()
+        if not content:
+            continue
+        if role not in {"system", "user", "assistant"}:
+            if index not in kept_tool_positions:
+                continue
+            content = f"[{role} message]\n{_g4_compact_tool_message(content, max_chars=max_tool_chars)}"
+            role = "user"
+        else:
+            content = normalize_excerpt(content, max(max_message_chars, 240))
+        messages.append({"role": role, "content": content})
+
+    if dropped_tool_messages:
+        messages.append(
+            {
+                "role": "user",
+                "content": f"[tool message summary]\nDropped {dropped_tool_messages} earlier tool messages from the diagnostic follow-up context; full tool traces remain in the persisted invocation artifacts.",
+            }
+        )
+    if response_text.strip() and (not messages or messages[-1].get("role") != "assistant"):
+        messages.append({"role": "assistant", "content": normalize_excerpt(response_text.strip(), max(max_message_chars, 240))})
+    if isinstance(runtime_snapshot, dict) and runtime_snapshot:
+        messages.append(
+            {
+                "role": "user",
+                "content": "[runtime/work-tree snapshot]\n"
+                + normalize_excerpt(json.dumps(runtime_snapshot, ensure_ascii=False, indent=2), max(max_message_chars, 240)),
+            }
+        )
+    messages.append({"role": "user", "content": user_message})
+    return messages
+def _g4_post_completion_actions(case_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    actions = case_payload.get("postCompletionActions")
+    if not isinstance(actions, list):
+        return []
+    return [dict(item) for item in actions if isinstance(item, dict)]
+def _persist_g4_post_completion_action_artifact(
+    *,
+    case_payload: dict[str, Any],
+    action: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, str]:
+    matrix_key = _sanitize_file_token(str(case_payload.get("matrixKey") or case_payload.get("id") or "g4-case"), fallback="g4-case")
+    action_id = _sanitize_file_token(str(action.get("id") or action.get("kind") or "post-action"), fallback="post-action")
+    timestamp = utc_now().strftime("%Y%m%d-%H%M%S")
+    artifact_dir = ensure_state_subdir("evaluations/g4-post-completion-actions")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = artifact_dir / f"{timestamp}_{matrix_key}_{action_id}.json"
+    write_json(artifact_path, payload)
+    return {
+        "type": "file",
+        "locator": str(relative_workspace_path(artifact_path, resolve_workspace_root())),
+    }
+def _run_g4_diagnostic_followup_action(
+    *,
+    case_payload: dict[str, Any],
+    action: dict[str, Any],
+    request_payload: dict[str, Any],
+    response_payload: dict[str, Any],
+    response_text: str,
+    requested_provider: str,
+    requested_model: str,
+) -> dict[str, Any]:
+    action_id = str(action.get("id") or "diagnostic-followup")
+    user_message = str(action.get("userMessage") or action.get("message") or "").strip()
+    if not user_message:
+        return {
+            "id": action_id,
+            "kind": "diagnostic-followup",
+            "status": "skipped",
+            "error": "missing userMessage",
+        }
+    provider = str(action.get("requestedProvider") or requested_provider)
+    model = str(action.get("requestedModel") or requested_model)
+    max_tokens = max(_g4_int_metric(action.get("maxTokens"), 800), 1)
+    temperature = float(action.get("temperature") if action.get("temperature") is not None else case_payload.get("temperature") or 0.1)
+    max_tool_messages = max(_g4_int_metric(action.get("maxFollowupToolMessages"), 8), 0)
+    max_tool_chars = max(_g4_int_metric(action.get("maxFollowupToolChars"), 700), 120)
+    max_message_chars = max(_g4_int_metric(action.get("maxFollowupMessageChars"), 6000), 240)
+    runtime_snapshot = (
+        _g4_runtime_snapshot_for_followup(
+            request_payload=request_payload,
+            response_payload=response_payload,
+        )
+        if bool(action.get("includeRuntimeSnapshot", False))
+        else None
+    )
+    messages = _g4_followup_conversation_messages(
+        request_payload=request_payload,
+        response_payload=response_payload,
+        response_text=response_text,
+        user_message=user_message,
+        runtime_snapshot=runtime_snapshot,
+        max_tool_messages=max_tool_messages,
+        max_tool_chars=max_tool_chars,
+        max_message_chars=max_message_chars,
+    )
+    request_artifact = {
+        "actionId": action_id,
+        "kind": "diagnostic-followup",
+        "provider": provider,
+        "model": model,
+        "userMessage": user_message,
+        "messageCount": len(messages),
+        "maxFollowupToolMessages": max_tool_messages,
+        "maxFollowupToolChars": max_tool_chars,
+        "maxFollowupMessageChars": max_message_chars,
+        "runtimeSnapshotIncluded": runtime_snapshot is not None,
+        "runtimeSnapshot": runtime_snapshot,
+        "messages": messages,
+        "requestedAt": utc_now().isoformat(),
+    }
+
+    try:
+        from yggdrasil_model_providers import invoke_model
+
+        result = invoke_model(
+            requested_model=model,
+            requested_provider=provider,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            workspace_root=resolve_workspace_root(),
+            allow_fallback=bool(action.get("allowFallback", False)),
+        )
+        status = "completed" if str(result.get("mode") or "") != "fallback" or bool(action.get("allowFallback", False)) else "completed"
+        output_text = str(result.get("outputText") or "")
+        payload = {
+            **request_artifact,
+            "status": status,
+            "assistantText": output_text,
+            "outputText": output_text,
+            "response": result,
+            "completedAt": utc_now().isoformat(),
+        }
+        artifact_ref = _persist_g4_post_completion_action_artifact(
+            case_payload=case_payload,
+            action=action,
+            payload=payload,
+        )
+        return {
+            "id": action_id,
+            "kind": "diagnostic-followup",
+            "status": status,
+            "provider": str(result.get("provider") or provider),
+            "model": str(result.get("model") or model),
+            "messageCount": len(messages),
+            "userMessage": user_message,
+            "outputText": output_text,
+            "outputPreview": normalize_excerpt(output_text, 360),
+            "usage": dict(result.get("usage") or {}),
+            "costUsed": float(result.get("costUsed", 0.0) or 0.0),
+            "artifactRef": artifact_ref,
+        }
+    except Exception as exc:  # noqa: BLE001 - keep experiment evidence instead of hiding the failure
+        payload = {
+            **request_artifact,
+            "status": "failed",
+            "error": str(exc),
+            "failedAt": utc_now().isoformat(),
+        }
+        artifact_ref = _persist_g4_post_completion_action_artifact(
+            case_payload=case_payload,
+            action=action,
+            payload=payload,
+        )
+        if not bool(action.get("allowFailure", False)):
+            raise
+        return {
+            "id": action_id,
+            "kind": "diagnostic-followup",
+            "status": "failed",
+            "messageCount": len(messages),
+            "userMessage": user_message,
+            "error": str(exc),
+            "artifactRef": artifact_ref,
+        }
+def _run_g4_runtime_revision_action(
+    *,
+    client: Any,
+    task_id: str,
+    case_payload: dict[str, Any],
+    action: dict[str, Any],
+    expected_result_status: str,
+    max_window_cycles: int,
+    max_worker_wait_seconds: int,
+    run_worker_once_fn: Any,
+    recovery_handler_fn: Any,
+    candidate_models: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None, dict[str, Any] | None]:
+    action_id = str(action.get("id") or "runtime-revision")
+    user_message = str(action.get("userMessage") or action.get("message") or action.get("reason") or "").strip()
+    if not user_message:
+        return (
+            {
+                "id": action_id,
+                "kind": "runtime-revision",
+                "status": "skipped",
+                "error": "missing userMessage",
+            },
+            [],
+            None,
+            None,
+        )
+    revision_payload: dict[str, Any] = {
+        "reason": user_message,
+        "resumeMessage": str(action.get("resumeMessage") or user_message),
+        "requestedBy": action.get("requestedBy") or {"type": "evaluation", "id": "g4-post-completion-action"},
+    }
+    for key in (
+        "nodeId",
+        "currentFocus",
+        "currentObjective",
+        "taskObjective",
+        "responseRequirements",
+        "maxToolRounds",
+        "candidateModels",
+        "allowModelFallback",
+        "temperature",
+        "maxTokens",
+        "effectiveContextWindow",
+        "windowRestartRatio",
+        "windowRestartThreshold",
+        "activeCapabilities",
+        "toolNameAllowlist",
+        "toolNameDenylist",
+        "allowToolExecution",
+        "toolResultReflectionReminder",
+        "workTreeNodeToolCallSoftLimit",
+        "workTreeDirectiveRequired",
+        "workTreeDirectiveRequiredOnNaturalLanguage",
+        "workTreeChildScopeCheckpoint",
+    ):
+        if key in action:
+            revision_payload[key] = action[key]
+    if "candidateModels" not in revision_payload and candidate_models:
+        revision_payload["candidateModels"] = [dict(candidate) for candidate in candidate_models]
+
+    requested = client.post(f"/runtime/tasks/{task_id}/request-revision", json=revision_payload)
+    base_result = {
+        "id": action_id,
+        "kind": "runtime-revision",
+        "userMessage": user_message,
+        "requestPayload": revision_payload,
+        "httpStatusCode": int(getattr(requested, "status_code", 0) or 0),
+    }
+    if requested.status_code != 202:
+        result = {
+            **base_result,
+            "status": "failed",
+            "error": str(getattr(requested, "text", "")),
+        }
+        artifact_ref = _persist_g4_post_completion_action_artifact(
+            case_payload=case_payload,
+            action=action,
+            payload={**result, "completedAt": utc_now().isoformat()},
+        )
+        result["artifactRef"] = artifact_ref
+        if not bool(action.get("allowFailure", False)):
+            raise RuntimeError(f"g4 post-completion revision failed: {requested.text}")
+        return result, [], None, None
+
+    action_expected_result_status = str(action.get("expectedResultStatus") or expected_result_status)
+    action_max_window_cycles = max(_g4_int_metric(action.get("maxWindowCycles"), max_window_cycles), 1)
+    action_max_worker_wait_seconds = max(_g4_int_metric(action.get("maxWorkerWaitSeconds"), max_worker_wait_seconds), 30)
+    allow_manual_continue_on_max_cycles = bool(
+        action.get("allowManualContinueOnMaxWindowCycles")
+        if "allowManualContinueOnMaxWindowCycles" in action
+        else case_payload.get("allowManualContinueOnMaxWindowCycles")
+    )
+    processed_runs, processed, result_payload = _g4_wait_for_target_worker_result(
+        task_id=task_id,
+        expected_result_status=action_expected_result_status,
+        max_window_cycles=action_max_window_cycles,
+        max_worker_wait_seconds=action_max_worker_wait_seconds,
+        run_worker_once_fn=run_worker_once_fn,
+        recovery_handler_fn=recovery_handler_fn,
+        allow_manual_continue_on_max_window_cycles=allow_manual_continue_on_max_cycles,
+    )
+    manual_continue_required = str(result_payload.get("status") or "") == "manual-continue-required"
+    result = {
+        **base_result,
+        "status": "blocked" if manual_continue_required else "completed",
+        "expectedResultStatus": action_expected_result_status,
+        "workerResultStatus": str(result_payload.get("status") or ""),
+        "processedRunCount": len(processed_runs),
+        "responsePreview": normalize_excerpt(str(result_payload.get("assistantText") or ""), 360),
+    }
+    if manual_continue_required:
+        result["manualContinue"] = dict(result_payload.get("manualContinue") or {})
+    artifact_ref = _persist_g4_post_completion_action_artifact(
+        case_payload=case_payload,
+        action=action,
+        payload={
+            **result,
+            "revisionResponse": requested.json() if hasattr(requested, "json") else None,
+            "processedRuns": processed_runs,
+            "completedAt": utc_now().isoformat(),
+        },
+    )
+    result["artifactRef"] = artifact_ref
+    return result, processed_runs, processed, result_payload
 def _sanitize_file_token(value: str, *, fallback: str = "paper") -> str:
     token = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "")).strip("-")
     return token or fallback
@@ -237,7 +663,16 @@ def _g4_tool_execution_metrics(invocation_rows: list[dict[str, Any]]) -> dict[st
         response_payload = row.get("responsePayload") if isinstance(row, dict) else None
         if not isinstance(response_payload, dict):
             continue
-        for item in response_payload.get("toolExecutions") or []:
+        tool_items = [item for item in response_payload.get("toolExecutions") or [] if isinstance(item, dict)]
+        if not tool_items:
+            for round_item in response_payload.get("rounds") or []:
+                if not isinstance(round_item, dict):
+                    continue
+                for tool_name in round_item.get("toolCalls") or []:
+                    name = str(tool_name or "").strip()
+                    if name:
+                        tool_items.append({"tool": {"name": name}, "success": True, "observedFrom": "rounds.toolCalls"})
+        for item in tool_items:
             if not isinstance(item, dict):
                 continue
             records.append(item)
@@ -268,6 +703,32 @@ def _g4_tool_execution_metrics(invocation_rows: list[dict[str, Any]]) -> dict[st
         "toolCategories": sorted(categories),
         "memoryNodeCount": memory_node_count,
     }
+def _g4_tool_execution_names(invocation_rows: list[dict[str, Any]]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in invocation_rows:
+        response_payload = row.get("responsePayload") if isinstance(row, dict) else None
+        if not isinstance(response_payload, dict):
+            continue
+        tool_items = [item for item in response_payload.get("toolExecutions") or [] if isinstance(item, dict)]
+        if not tool_items:
+            for round_item in response_payload.get("rounds") or []:
+                if not isinstance(round_item, dict):
+                    continue
+                for tool_name in round_item.get("toolCalls") or []:
+                    name = str(tool_name or "").strip()
+                    if name:
+                        tool_items.append({"tool": {"name": name}, "observedFrom": "rounds.toolCalls"})
+        for item in tool_items:
+            if not isinstance(item, dict):
+                continue
+            tool = item.get("tool") if isinstance(item.get("tool"), dict) else {}
+            tool_name = str(tool.get("name") or item.get("toolName") or "").strip()
+            if not tool_name or tool_name in seen:
+                continue
+            seen.add(tool_name)
+            names.append(tool_name)
+    return names
 def _g4_tool_failure_summary(invocation_rows: list[dict[str, Any]], *, limit: int = 8) -> list[dict[str, Any]]:
     buckets: dict[tuple[str, str], int] = {}
     for row in invocation_rows:
@@ -656,6 +1117,7 @@ def _g4_contract_verification_results(
     min_cumulative_window_span_tokens = case_payload.get("acceptanceMinCumulativeWindowSpanTokens")
     min_work_tree_continuity = case_payload.get("acceptanceMinWorkTreeContinuity0_1")
     min_minimal_workset_ratio = case_payload.get("acceptanceMinMinimalWorksetRatio0_1")
+    min_window_execution_count = case_payload.get("acceptanceMinWindowExecutionCount")
     max_planning_stub_rate = case_payload.get("acceptanceMaxPlanningStubRate0_1")
     max_retrieval_drift_rate = case_payload.get("acceptanceMaxRetrievalDriftRate0_1")
     require_prefix_cache_key = bool(case_payload.get("acceptanceRequirePrefixCacheKey", False))
@@ -666,6 +1128,7 @@ def _g4_contract_verification_results(
     require_experiment_record = bool(case_payload.get("acceptanceRequireExperimentRecord", False))
     require_dispute_list = bool(case_payload.get("acceptanceRequireDisputeList", False))
     required_tool_categories = _g4_string_list(case_payload.get("acceptanceRequireToolCategories"))
+    required_observed_tool_categories = _g4_string_list(case_payload.get("acceptanceRequireObservedToolCategories"))
     min_successful_tool_executions = case_payload.get("acceptanceMinSuccessfulToolExecutions")
     required_academic_sections = _g4_string_list(case_payload.get("acceptanceRequiredAcademicSections"))
     min_citation_markers = case_payload.get("acceptanceMinCitationMarkers")
@@ -692,6 +1155,7 @@ def _g4_contract_verification_results(
             min_cumulative_window_span_tokens is not None,
             min_work_tree_continuity is not None,
             min_minimal_workset_ratio is not None,
+            min_window_execution_count is not None,
             max_planning_stub_rate is not None,
             max_retrieval_drift_rate is not None,
             require_prefix_cache_key,
@@ -702,6 +1166,7 @@ def _g4_contract_verification_results(
             require_experiment_record,
             require_dispute_list,
             bool(required_tool_categories),
+            bool(required_observed_tool_categories),
             min_successful_tool_executions is not None,
             bool(required_academic_sections),
             min_citation_markers is not None,
@@ -858,6 +1323,19 @@ def _g4_contract_verification_results(
         if actual < expected:
             issues.append(f"minimalWorksetRatio0_1 不足: actual={actual}, expected>={expected}")
 
+    if min_window_execution_count is not None:
+        expected = max(_g4_int_metric(min_window_execution_count), 0)
+        actual = max(_g4_int_metric(window_execution_metrics.get("windowExecutionCount"), 0), 0)
+        checks.append(
+            {
+                "command": "g4-min-window-execution-count",
+                "returncode": 0 if actual >= expected else 1,
+                "detail": f"windowExecutionCount={actual}, expected>={expected}",
+            }
+        )
+        if actual < expected:
+            issues.append(f"windowExecutionCount 不足: actual={actual}, expected>={expected}")
+
     if max_planning_stub_rate is not None:
         expected = max(float(max_planning_stub_rate), 0.0)
         actual = float(window_execution_metrics.get("planningStubRate0_1") or 0.0)
@@ -1002,6 +1480,20 @@ def _g4_contract_verification_results(
         )
         if missing_categories:
             issues.append("工具类别覆盖不足: " + ", ".join(missing_categories))
+
+    if required_observed_tool_categories:
+        actual_categories = set(str(item).lower() for item in tool_metrics.get("toolCategories") or [])
+        expected_categories = [str(item).lower() for item in required_observed_tool_categories]
+        missing_categories = [item for item in expected_categories if item not in actual_categories]
+        checks.append(
+            {
+                "command": "g4-require-observed-tool-categories",
+                "returncode": 1 if missing_categories else 0,
+                "detail": "missing observed tool categories: " + ", ".join(missing_categories) if missing_categories else "all required observed tool categories covered",
+            }
+        )
+        if missing_categories:
+            issues.append("实测工具类别覆盖不足: " + ", ".join(missing_categories))
 
     if min_successful_tool_executions is not None:
         expected = max(_g4_int_metric(min_successful_tool_executions), 0)
@@ -1546,6 +2038,76 @@ def _g4_bind_takeover_protocol(task_id: str, protocol_payload: dict[str, Any] | 
         updated_work_tree["taskId"] = task_id
         bound_protocol["workTree"] = updated_work_tree
     return bound_protocol
+
+
+def _g4_seed_awaiting_approval_for_revision(
+    *,
+    task_id: str,
+    case_payload: dict[str, Any],
+    requested_provider: str,
+    requested_model: str,
+) -> dict[str, Any]:
+    from ..contracts import TaskTakeoverProtocol
+    from ..runtime_kernel.takeover import persist_task_takeover_protocol
+
+    takeover_payload = _g4_bind_takeover_protocol(task_id, case_payload.get("takeoverProtocol"))
+    if takeover_payload is None:
+        raise RuntimeError("g4 seeded revision case requires takeoverProtocol")
+    protocol = TaskTakeoverProtocol.model_validate(takeover_payload)
+    if protocol.work_tree is None or protocol.work_tree.status != "awaiting-approval":
+        raise RuntimeError("g4 seeded revision takeoverProtocol must already be awaiting-approval")
+
+    run_id = str(case_payload.get("seededApprovalRunId") or new_id("run", task_id, "seeded-approval", stable=False))
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        task_repository = TaskRepository(session)
+        task = task_repository.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        task_repository.create_agent_run(
+            task.id,
+            {
+                "id": run_id,
+                "status": "completed",
+                "selectedModel": requested_model,
+                "selectedProvider": requested_provider,
+            },
+        )
+        persist_task_takeover_protocol(protocol, task_id=task.id, run_id=run_id)
+        task = task_repository.update_task(
+            task_id,
+            {
+                "status": "awaiting-approval",
+                "currentFocus": case_payload.get("seededApprovalFocus")
+                or case_payload.get("currentFocus")
+                or task.current_focus,
+                "currentObjective": case_payload.get("seededApprovalObjective")
+                or case_payload.get("currentObjective")
+                or task.current_objective,
+                "resumeMessage": case_payload.get("seededApprovalResumeMessage")
+                or case_payload.get("resumeMessage")
+                or task.resume_message,
+            },
+        )
+    return {
+        "status": "processed",
+        "payload": {
+            "taskId": task_id,
+            "payload": {
+                "takeoverProtocol": protocol.model_dump(by_alias=True, mode="json"),
+                "currentFocus": task.current_focus,
+                "currentObjective": task.current_objective,
+            },
+        },
+        "result": {
+            "status": "awaiting-approval",
+            "assistantText": str(case_payload.get("seededApprovalAssistantText") or ""),
+            "task": task.model_dump(by_alias=True, mode="json"),
+            "takeoverProtocol": protocol.model_dump(by_alias=True, mode="json"),
+        },
+    }
+
+
 def _g4_live_provider_matrix_start_payload(
     case_payload: dict[str, Any],
     task: dict[str, Any],
@@ -1593,6 +2155,16 @@ def _g4_live_provider_matrix_start_payload(
         start_payload["maxToolRounds"] = int(case_payload["maxToolRounds"])
     if case_payload.get("responseRequirements") is not None:
         start_payload["responseRequirements"] = str(case_payload["responseRequirements"])
+    if case_payload.get("toolResultReflectionReminder") is not None:
+        start_payload["toolResultReflectionReminder"] = case_payload["toolResultReflectionReminder"]
+    if case_payload.get("workTreeNodeToolCallSoftLimit") is not None:
+        start_payload["workTreeNodeToolCallSoftLimit"] = case_payload["workTreeNodeToolCallSoftLimit"]
+    if case_payload.get("workTreeDirectiveRequired") is not None:
+        start_payload["workTreeDirectiveRequired"] = case_payload["workTreeDirectiveRequired"]
+    if case_payload.get("workTreeDirectiveRequiredOnNaturalLanguage") is not None:
+        start_payload["workTreeDirectiveRequiredOnNaturalLanguage"] = case_payload["workTreeDirectiveRequiredOnNaturalLanguage"]
+    if case_payload.get("workTreeChildScopeCheckpoint") is not None:
+        start_payload["workTreeChildScopeCheckpoint"] = case_payload["workTreeChildScopeCheckpoint"]
     if case_payload.get("toolNameAllowlist") is not None:
         start_payload["toolNameAllowlist"] = [str(item) for item in case_payload.get("toolNameAllowlist") or []]
     if case_payload.get("toolNameDenylist") is not None:
@@ -1717,6 +2289,7 @@ def _g4_wait_for_target_worker_result(
     run_worker_once_fn,
     recovery_handler_fn=None,
     worker_poll_timeout_seconds: float | None = None,
+    allow_manual_continue_on_max_window_cycles: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     import queue
     import threading
@@ -1798,12 +2371,62 @@ def _g4_wait_for_target_worker_result(
         processed_runs.append(processed)
         if result_payload.get("status") in {"restarting", "continuing"}:
             if len(processed_runs) >= max_window_cycles:
+                if allow_manual_continue_on_max_window_cycles:
+                    manual_result_payload = {
+                        "status": "manual-continue-required",
+                        "reason": "max-window-cycles-reached",
+                        "maxWindowCycles": max_window_cycles,
+                        "processedRunCount": len(processed_runs),
+                        "lastResultStatus": result_payload.get("status"),
+                        "assistantText": result_payload.get("assistantText"),
+                        "task": result_payload.get("task"),
+                        "run": result_payload.get("run"),
+                        "queuedWorkItem": result_payload.get("queuedWorkItem"),
+                        "manualContinue": {
+                            "taskId": task_id,
+                            "queue": "agent-runtime",
+                            "maxWindowCycles": max_window_cycles,
+                            "processedRunCount": len(processed_runs),
+                            "lastResultStatus": result_payload.get("status"),
+                            "queuedWorkItem": result_payload.get("queuedWorkItem"),
+                            "message": (
+                                "The task still has a queued continuation after reaching maxWindowCycles. "
+                                "Preserve the sandbox/state root and continue the queued agent-runtime work item manually."
+                            ),
+                        },
+                    }
+                    return processed_runs, processed, manual_result_payload
                 raise RuntimeError(
                     f"g4 provider matrix exceeded maxWindowCycles={max_window_cycles}: {json.dumps(processed_runs[-1], ensure_ascii=False)}"
                 )
             continue
         if recovery_handler_fn is not None and recovery_handler_fn(processed_runs=processed_runs, processed=processed, result_payload=result_payload):
             if len(processed_runs) >= max_window_cycles:
+                if allow_manual_continue_on_max_window_cycles:
+                    manual_result_payload = {
+                        "status": "manual-continue-required",
+                        "reason": "max-window-cycles-reached-during-recovery",
+                        "maxWindowCycles": max_window_cycles,
+                        "processedRunCount": len(processed_runs),
+                        "lastResultStatus": result_payload.get("status"),
+                        "assistantText": result_payload.get("assistantText"),
+                        "task": result_payload.get("task"),
+                        "run": result_payload.get("run"),
+                        "queuedWorkItem": result_payload.get("queuedWorkItem"),
+                        "manualContinue": {
+                            "taskId": task_id,
+                            "queue": "agent-runtime",
+                            "maxWindowCycles": max_window_cycles,
+                            "processedRunCount": len(processed_runs),
+                            "lastResultStatus": result_payload.get("status"),
+                            "queuedWorkItem": result_payload.get("queuedWorkItem"),
+                            "message": (
+                                "Recovery queued more work after maxWindowCycles. "
+                                "Preserve the sandbox/state root and continue the queued agent-runtime work item manually."
+                            ),
+                        },
+                    }
+                    return processed_runs, processed, manual_result_payload
                 raise RuntimeError(
                     f"g4 provider matrix exceeded maxWindowCycles={max_window_cycles} during recovery: {json.dumps(processed_runs[-1], ensure_ascii=False)}"
                 )
@@ -1864,9 +2487,6 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         task_type=task_type,
         candidate_models=candidate_models,
     )
-    started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
-    if started.status_code != 202:
-        raise RuntimeError(f"g4 provider matrix start failed: {started.text}")
 
     max_window_cycles = max(int(case_payload.get("maxWindowCycles") or 12), int(case_payload.get("forcedWindowRestartBudget") or 0) + 4)
     max_worker_wait_seconds = max(
@@ -1874,20 +2494,63 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         30,
     )
     recovery_state = {"budgetTopUpAttempts": 0, "budgetRetryAttempts": 0}
-    processed_runs, processed, result_payload = _g4_wait_for_target_worker_result(
-        task_id=str(task["id"]),
-        expected_result_status=expected_result_status,
-        max_window_cycles=max_window_cycles,
-        max_worker_wait_seconds=max_worker_wait_seconds,
-        run_worker_once_fn=run_worker_once,
-        recovery_handler_fn=lambda **kwargs: _g4_recover_live_budget_pause_or_failure(
+    allow_manual_continue_on_max_cycles = bool(case_payload.get("allowManualContinueOnMaxWindowCycles", False))
+
+    def _recovery_handler(**kwargs: Any) -> bool:
+        return _g4_recover_live_budget_pause_or_failure(
             client=client,
             task_id=str(task["id"]),
             case_payload=case_payload,
             recovery_state=recovery_state,
             result_payload=dict(kwargs.get("result_payload") or {}),
-        ),
-    )
+        )
+
+    if bool(case_payload.get("seedAwaitingApprovalBeforePostActions", False)):
+        processed = _g4_seed_awaiting_approval_for_revision(
+            task_id=str(task["id"]),
+            case_payload=case_payload,
+            requested_provider=requested_provider,
+            requested_model=requested_model,
+        )
+        processed_runs = [processed]
+        result_payload = dict(processed.get("result") or {})
+    else:
+        started = client.post(f"/runtime/tasks/{task['id']}/start", json=start_payload)
+        if started.status_code != 202:
+            raise RuntimeError(f"g4 provider matrix start failed: {started.text}")
+        processed_runs, processed, result_payload = _g4_wait_for_target_worker_result(
+            task_id=str(task["id"]),
+            expected_result_status=expected_result_status,
+            max_window_cycles=max_window_cycles,
+            max_worker_wait_seconds=max_worker_wait_seconds,
+            run_worker_once_fn=run_worker_once,
+            recovery_handler_fn=_recovery_handler,
+            allow_manual_continue_on_max_window_cycles=allow_manual_continue_on_max_cycles,
+        )
+    post_completion_action_results: list[dict[str, Any]] = []
+    manual_continue_required = str(result_payload.get("status") or "") == "manual-continue-required"
+    for action in ([] if manual_continue_required else _g4_post_completion_actions(case_payload)):
+        action_kind = str(action.get("kind") or "").strip().lower()
+        if action_kind not in {"runtime-revision", "request-revision"}:
+            continue
+        action_result, action_processed_runs, action_processed, action_result_payload = _run_g4_runtime_revision_action(
+            client=client,
+            task_id=str(task["id"]),
+            case_payload=case_payload,
+            action=action,
+            expected_result_status=expected_result_status,
+            max_window_cycles=max_window_cycles,
+            max_worker_wait_seconds=max_worker_wait_seconds,
+            candidate_models=candidate_models,
+            run_worker_once_fn=run_worker_once,
+            recovery_handler_fn=_recovery_handler,
+        )
+        post_completion_action_results.append(action_result)
+        processed_runs.extend(action_processed_runs)
+        if action_processed is not None:
+            processed = action_processed
+        if action_result_payload is not None:
+            result_payload = action_result_payload
 
     runtime = get_persistence_runtime()
     with runtime.session_scope() as session:
@@ -1895,7 +2558,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         prompt_repository = PromptAssetRepository(session)
         runtime_repository = RuntimeRepository(session)
         persisted_task = task_repository.get_task(task["id"])
-        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=64)
+        invocations = runtime_repository.list_model_invocations(task_id=task["id"], limit=max(64, max_window_cycles * 2))
         if not invocations:
             raise RuntimeError("g4 provider matrix did not persist any model invocation")
         invocation_rows = []
@@ -1938,7 +2601,8 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     if expected_few_shot_refs and list(prompt_metadata.get("fewShotRefs") or []) != expected_few_shot_refs:
         raise RuntimeError("g4 provider matrix few-shot refs drifted from the official scene contract")
     final_task_status = str((persisted_task.status if persisted_task is not None else None) or result_payload.get("status") or "")
-    if final_task_status != expected_task_status:
+    manual_continue_required = manual_continue_required or str(result_payload.get("status") or "") == "manual-continue-required"
+    if not manual_continue_required and final_task_status != expected_task_status:
         raise RuntimeError(
             f"g4 provider matrix final task status drifted: expected {expected_task_status}, got {final_task_status or 'missing'}"
         )
@@ -1957,6 +2621,21 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         response_text,
         evaluation_workspace_root=os.environ.get("YGGDRASIL_EVAL_ACTIVE_WORKSPACE_ROOT"),
     )
+    for action in ([] if manual_continue_required else _g4_post_completion_actions(case_payload)):
+        action_kind = str(action.get("kind") or "").strip().lower()
+        if action_kind not in {"diagnostic-followup", "user-followup", "llm-followup"}:
+            continue
+        post_completion_action_results.append(
+            _run_g4_diagnostic_followup_action(
+                case_payload=case_payload,
+                action=action,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                response_text=response_text,
+                requested_provider=str(invocation.resolved_provider or requested_provider),
+                requested_model=str(invocation.resolved_model or requested_model),
+            )
+        )
     evaluation_sandbox = os.environ.get("YGGDRASIL_EVAL_ACTIVE_SANDBOX_ROOT")
     preserved_paper = _persist_g4_paper_output(
         case_payload=case_payload,
@@ -1984,6 +2663,8 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         processed_runs=processed_runs,
     )
     tool_failure_summary = _g4_tool_failure_summary(invocation_rows)
+    tool_execution_metrics = _g4_tool_execution_metrics(invocation_rows)
+    tool_execution_names = _g4_tool_execution_names(invocation_rows)
     verification_results = [{"command": "g4-live-guard", "returncode": 0}]
     verification_results.extend(contract_verification["checks"])
     execution = {
@@ -1997,7 +2678,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "issues": [{"type": "acceptance", "detail": issue} for issue in contract_verification["issues"]],
         "traceIds": [str(invocation.trace_id)] if invocation.trace_id else [],
         "taskWorkspace": str(resolve_workspace_root()),
-        "toolExecutionNames": _tool_execution_names(invocation_rows),
+        "toolExecutionNames": tool_execution_names,
         "firstTokenSeconds": first_token_seconds,
         "firstTokenAt": _format_timestamp(started_at + timedelta(seconds=first_token_seconds)) if started_at and first_token_seconds is not None else None,
         "firstUsefulOutputSeconds": first_useful_output_seconds,
@@ -2039,6 +2720,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
     sandbox_state_root = os.environ.get("YGGDRASIL_STATE_ROOT")
     audit_level = str(case_payload.get("auditLevel") or request_payload.get("auditLevel") or response_payload.get("auditLevel") or "default")
     provider_matrix_entry = {
+        "status": "blocked" if manual_continue_required else "completed",
         "matrixKey": str(case_payload.get("matrixKey") or case_payload.get("id") or task_id),
         "appId": app_id,
         "taskType": task_type,
@@ -2102,7 +2784,23 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "resultStatusAtExit": execution_status_audit.get("resultStatus"),
         "latestRunStatusAtExit": execution_status_audit.get("latestRunStatus"),
         "taskRunStatusMismatch0_1": 1 if execution_status_audit.get("taskRunStatusMismatch") else 0,
+        "toolExecutionMetrics": tool_execution_metrics,
+        "toolExecutionNames": tool_execution_names,
+        "totalToolExecutions": int(tool_execution_metrics.get("totalToolExecutions") or 0),
+        "successfulToolExecutions": int(tool_execution_metrics.get("successfulToolExecutions") or 0),
+        "failedToolExecutions": int(tool_execution_metrics.get("failedToolExecutions") or 0),
+        "toolCategories": list(tool_execution_metrics.get("toolCategories") or []),
         "topToolFailures": tool_failure_summary,
+        "postCompletionActionCount": len(post_completion_action_results),
+        "postCompletionActionStatuses": [
+            {
+                "id": str(item.get("id") or ""),
+                "kind": str(item.get("kind") or ""),
+                "status": str(item.get("status") or ""),
+            }
+            for item in post_completion_action_results
+            if isinstance(item, dict)
+        ],
         "preservedPaper": preserved_paper,
     }
     assistant_preview = normalize_excerpt(response_text or str(result_payload.get("assistantText") or ""), 240)
@@ -2128,6 +2826,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         )
     return {
         **provider_matrix_entry,
+        "manualContinue": dict(result_payload.get("manualContinue") or {}) if manual_continue_required else None,
         "liveScenario": {
             "taskId": task["id"],
             "invocationId": invocation.id,
@@ -2143,7 +2842,10 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
             "maxContextLengthTokens": max_context_length_tokens,
             "runtimeMetrics": runtime_metrics,
             "windowTransitionCount": max(len(processed_runs) - 1, 0),
+            "manualContinueRequired": manual_continue_required,
             "promptCompileArtifactId": invocation.prompt_compile_artifact_id,
+            "toolExecutionMetrics": tool_execution_metrics,
+            "toolExecutionNames": tool_execution_names,
         },
         "providerMatrixEntry": provider_matrix_entry,
         "scorecardRow": scorecard_row,
@@ -2177,6 +2879,7 @@ def _run_g4_live_provider_matrix_case(case: dict[str, Any] | None = None) -> dic
         "windowExecutionMetrics": window_execution_metrics,
         "executionStatusAudit": execution_status_audit,
         "toolFailureSummary": tool_failure_summary,
+        "postCompletionActions": post_completion_action_results,
         "processedRuns": [dict(item) for item in processed_runs],
         "assistantPreview": assistant_preview,
     }

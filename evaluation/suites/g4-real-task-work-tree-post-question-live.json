@@ -1,35 +1,30 @@
 {
-  "id": "evalsuite_g4_real_task_web_research_default",
-  "name": "G4 Real-Task Web Research Default",
+  "id": "evalsuite_g4_real_task_work_tree_post_question_live",
+  "name": "G4 Real-Task Work-Tree Post Question Live",
   "domain": "generic",
   "suiteRole": "real-task",
-  "suiteRoleNote": "Default current-stage real-task: web research with multi-source comparison and contradiction analysis.",
+  "suiteRoleNote": "Single live experiment: after the storage research task completes, append a user-role diagnostic question to the same serialized conversation.",
   "conventions": {
     "conformsTo": "real-task-test-conventions-v0.1",
     "violations": []
   },
-  "metricRefs": [
-    "pass-rate",
-    "restart-count",
-    "context-window-span",
-    "restart-success-rate"
-  ],
+  "metricRefs": ["pass-rate", "tool-evidence", "post-completion-action"],
   "subjectKind": "workflow",
-  "subjectRef": "g4:real-task:web-research-default",
+  "subjectRef": "g4:real-task:work-tree:post-question",
   "cases": [
     {
-      "id": "evalcase_g4_web_research_grid_storage_short64k",
-      "title": "G4 Web Research Default: Grid Storage LDES Comparison - Short 64k",
+      "id": "evalcase_g4_work_tree_post_question_grid_storage_live",
+      "title": "G4 Work-Tree Post Question: Grid Storage Research",
       "scenario": "g4.live_provider_matrix",
-      "matrixKey": "g4-web-research-default-grid-storage-short64k",
-      "parityPairKey": "g4-web-research-default-grid-storage",
-      "parityRole": "short",
+      "matrixKey": "g4-work-tree-post-question-grid-storage",
+      "parityPairKey": "g4-work-tree-post-question-grid-storage",
+      "parityRole": "diagnostic",
       "qualityDeltaThreshold0_100": 10.0,
       "appId": "yggdrasil.app.deep-research",
       "taskType": "research",
       "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
       "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
-      "currentFocus": "g4-web-research-default-grid-storage",
+      "currentFocus": "g4-work-tree-post-question-grid-storage",
       "currentObjective": "Deliver a web-grounded comparison report with explicit source triangulation and contradiction handling.",
       "currentContext": [
         {
@@ -56,12 +51,7 @@
       "requestedModel": "LongCat-2.0-Preview",
       "allowFallback": false,
       "allowToolExecution": true,
-      "activeCapabilities": [
-        "task-takeover",
-        "mcp-bridge",
-        "context-pruning",
-        "text-memory"
-      ],
+      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
       "allowPaidModels": false,
       "requireLive": true,
       "expectedResultStatus": "completed",
@@ -69,34 +59,11 @@
       "temperature": 0.1,
       "maxTokens": 8000,
       "auditLevel": "strict",
-      "costBudgetTotal": 8.0,
-      "acceptanceRequiredAnyPhrases": [
-        "http://",
-        "https://",
-        "来源",
-        "source",
-        "矛盾",
-        "contradiction"
-      ],
-      "acceptanceRejectPhrases": [
-        "我会先总结当前局势，再给出最稳妥的下一步",
-        "仅基于给定上下文",
-        "无法联网"
-      ],
-      "acceptanceMinRestartCount": 0,
-      "acceptanceMinWindowIndex": 1,
-      "acceptanceMinCumulativeWindowSpanTokens": 0,
-      "acceptanceMinWindowExecutionCount": 1,
-      "acceptanceMinWorkTreeContinuity0_1": 1.0,
-      "acceptanceMinMinimalWorksetRatio0_1": 0.2,
-      "acceptanceMaxPlanningStubRate0_1": 0.0,
-      "acceptanceMaxRetrievalDriftRate0_1": 0.0,
-      "acceptanceRequireObservedToolCategories": [
-        "web"
-      ],
-      "acceptanceMinSuccessfulToolExecutions": 6,
-      "acceptanceMinEvidenceLinks": 2,
-      "failOnAcceptanceViolation": true,
+      "costBudgetTotal": 12.0,
+      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceMinSuccessfulToolExecutions": 1,
+      "acceptanceMinEvidenceLinks": 1,
+      "failOnAcceptanceViolation": false,
       "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Use work-tree nodes only when they help isolate noisy source search, candidate routes, or local synthesis; do not create decomposition ceremony for clear steps. The run must leave auditable tool evidence, not just a polished report. Output Markdown only.",
       "restartMessage": "Window restart: continue the web-grounded comparison report, preserve source table, contradiction analysis, final recommendation, and auditable tool evidence. Output Markdown only.",
       "effectiveContextWindow": 64000,
@@ -104,7 +71,7 @@
       "forcedWindowRestartBudget": 0,
       "maxToolRounds": 24,
       "maxWindowCycles": 16,
-      "workspaceProfile": "g4-web-research-default-grid-storage",
+      "workspaceProfile": "g4-work-tree-post-question-grid-storage",
       "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
       "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
       "expectedCompiledFewShotRefs": [
@@ -113,13 +80,19 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "tags": [
-        "g4",
-        "real-task",
-        "web-research",
-        "default",
-        "multi-source-comparison"
+      "postCompletionActions": [
+        {
+          "id": "ask-why-no-work-tree",
+          "kind": "diagnostic-followup",
+          "userMessage": "为什么你刚才没有明显使用工作树？为什么主要在根节点完成？如果报告里写了下一步应该做什么，为什么没有继续做下一步？请基于你刚才的真实执行过程回答，不要泛泛解释。",
+          "maxTokens": 900,
+          "maxFollowupToolMessages": 8,
+          "maxFollowupToolChars": 700,
+          "maxFollowupMessageChars": 6000,
+          "allowFallback": false
+        }
       ],
+      "tags": ["g4", "real-task", "web-research", "work-tree", "post-question"],
       "difficulty": "hard"
     }
   ]

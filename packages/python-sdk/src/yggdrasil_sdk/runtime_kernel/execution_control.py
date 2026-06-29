@@ -735,6 +735,13 @@ def approve_task_completion(task_id: str, payload: dict[str, Any] | None = None)
     }
 
 
+def _takeover_protocol_has_unfinished_work_nodes(protocol: TaskTakeoverProtocol | None) -> bool:
+    if protocol is None or protocol.work_tree is None:
+        return False
+    unfinished_statuses = {"pending", "in-progress", "summarizing", "blocked", "failed"}
+    return any(str(node.status) in unfinished_statuses for node in protocol.work_tree.nodes)
+
+
 def request_task_revision(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
     request = dict(payload or {})
     runtime = get_persistence_runtime()
@@ -745,10 +752,11 @@ def request_task_revision(task_id: str, payload: dict[str, Any] | None = None) -
         task = task_repository.get_task(task_id)
         if task is None:
             raise KeyError(f"Task {task_id} not found.")
-        if task.status != "awaiting-approval":
+        latest_run, takeover_protocol = _latest_takeover_protocol(task_repository, task_id)
+        has_unfinished_work_tree = _takeover_protocol_has_unfinished_work_nodes(takeover_protocol)
+        if task.status != "awaiting-approval" and not (task.status == "completed" and has_unfinished_work_tree):
             raise ValueError(f"Task {task_id} is in state {task.status} and cannot be reopened for revision.")
 
-        latest_run, takeover_protocol = _latest_takeover_protocol(task_repository, task_id)
         if takeover_protocol is None:
             raise ValueError(f"Task {task_id} does not have a persisted takeover protocol to reopen.")
         revision_target_node_id = str(request.get("nodeId") or "").strip() or None

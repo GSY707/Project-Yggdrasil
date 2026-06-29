@@ -1,0 +1,93 @@
+{
+  "id": "evalsuite_g4_real_task_work_tree_leaf_self_talk_live",
+  "name": "G4 Real-Task Work-Tree Leaf Self-Talk Live",
+  "domain": "generic",
+  "suiteRole": "real-task",
+  "suiteRoleNote": "Single live experiment: require a concise visible workflow note that states leaf execution, post-tool judgment, and next-node choice.",
+  "conventions": {
+    "conformsTo": "real-task-test-conventions-v0.1",
+    "violations": []
+  },
+  "metricRefs": ["pass-rate", "tool-evidence", "work-tree-behavior"],
+  "subjectKind": "workflow",
+  "subjectRef": "g4:real-task:work-tree:leaf-self-talk",
+  "cases": [
+    {
+      "id": "evalcase_g4_work_tree_leaf_self_talk_grid_storage_live",
+      "title": "G4 Work-Tree Leaf Self-Talk: Grid Storage Research",
+      "scenario": "g4.live_provider_matrix",
+      "matrixKey": "g4-work-tree-leaf-self-talk-grid-storage",
+      "parityPairKey": "g4-work-tree-leaf-self-talk-grid-storage",
+      "parityRole": "leaf-self-talk",
+      "qualityDeltaThreshold0_100": 10.0,
+      "appId": "yggdrasil.app.deep-research",
+      "taskType": "research",
+      "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
+      "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
+      "currentFocus": "g4-work-tree-leaf-self-talk-grid-storage",
+      "currentObjective": "Deliver a web-grounded comparison report with explicit source triangulation and contradiction handling.",
+      "currentContext": [
+        {
+          "id": "ctx_web_research_scope",
+          "title": "decision scope",
+          "content": "Target operator profile: peak load 3-6 GW, renewable share 45%-60%, procurement horizon to 2030. Decision criteria must include levelized storage cost range, safety risk profile, supply-chain risk, and implementation lead time.",
+          "importance": 0.99
+        },
+        {
+          "id": "ctx_web_research_method",
+          "title": "research method",
+          "content": "You must perform network search and compare sources from multiple domains. At least one source should be policy/regulator, one should be industry report, and one should be academic or technical institution.",
+          "importance": 0.98
+        },
+        {
+          "id": "ctx_visible_workflow_note",
+          "title": "visible workflow note",
+          "content": "Use a short visible workflow note, not hidden chain-of-thought. The note should state: current node, why this is a leaf or parent decision, what the just-finished tool batch changed, whether evidence is sufficient, and what node/action comes next.",
+          "importance": 1.0
+        },
+        {
+          "id": "ctx_web_research_delivery",
+          "title": "delivery contract",
+          "content": "Tool execution is enabled. Build the report from verifiable web evidence. Include a source table and explicitly discuss at least one contradiction between sources and how you resolved it. Do not stop at a next-steps summary if the next step is still needed to satisfy the task.",
+          "importance": 1.0
+        }
+      ],
+      "currentContextFiles": [],
+      "requestedProvider": "longcat",
+      "requestedModel": "LongCat-2.0-Preview",
+      "allowFallback": false,
+      "allowToolExecution": true,
+      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "allowPaidModels": false,
+      "requireLive": true,
+      "expectedResultStatus": "completed",
+      "expectedTaskStatus": "completed",
+      "temperature": 0.1,
+      "maxTokens": 9500,
+      "auditLevel": "strict",
+      "costBudgetTotal": 14.0,
+      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceMinSuccessfulToolExecutions": 1,
+      "acceptanceMinEvidenceLinks": 1,
+      "failOnAcceptanceViolation": false,
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Visible workflow note rule: before a concrete tool-backed action, write a brief visible note in normal answer text if you need to create/enter a leaf; after each leaf tool batch, write a brief visible note that states currentNodeId, whether the leaf evidence is enough, whether to continue in the leaf, return to parent, open the next leaf, or deliver. Do not reveal hidden chain-of-thought; the note must be concise and operational. If you are at root and the next action is concrete source search/fetch/read/compute/edit, use <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter> before doing that detailed work. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
+      "restartMessage": "Window restart: continue with the visible workflow note rule. After each leaf tool batch, state the current node, evidence sufficiency, and next node/action before final delivery. Output Markdown only.",
+      "effectiveContextWindow": 64000,
+      "windowRestartRatio": 0.75,
+      "forcedWindowRestartBudget": 0,
+      "maxToolRounds": 24,
+      "maxWindowCycles": 28,
+      "workspaceProfile": "g4-work-tree-leaf-self-talk-grid-storage",
+      "expectedPromptProfileId": "yggdrasil.deep-research.main-agent",
+      "expectedSeedTemplateId": "yggdrasil.seed.research.deep",
+      "expectedCompiledFewShotRefs": [
+        "yggdrasil.fewshot.deep-research.claim-evidence-matrix.v1",
+        "yggdrasil.fewshot.deep-research.hypothesis-pivot.v1",
+        "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
+        "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
+      ],
+      "tags": ["g4", "real-task", "web-research", "work-tree", "leaf-self-talk"],
+      "difficulty": "hard"
+    }
+  ]
+}
