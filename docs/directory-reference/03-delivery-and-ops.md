@@ -182,9 +182,17 @@ evaluation/
                                     #   G4 live 行为实验：同题切换 deepseek_direct/deepseek-v4-pro，区分模型能力与工作树使用行为
     ├── g4-real-task-work-tree-deepseek-v4-pro-critique-continue-live.json
                                     #   G4 live 行为实验：DeepSeek leaf/父评估口径上叠加“批评后继续 + 先做任务控制分析”，验证 revision 是否能重开 completed+unfinished 工作树并继续正确调度
-    └── g4-real-task-work-tree-deepseek-v4-pro-node-tool-budget-live.json
+    ├── g4-real-task-work-tree-deepseek-v4-pro-node-tool-budget-live.json
                                     #   G4 live 行为实验：DeepSeek + auto-unfinished continuation + 每节点 5 次 toolcall 软预算，验证工具预算是否促成 leaf/父节点流程控制
+    ├── g4-real-task-work-tree-deepseek-v4-pro-finish-prune-live.json
+                                    #   G4 live 行为实验：DeepSeek V4 Pro + finish/prune 收束口径，验证父/root 停止条件与废旧节点清理
+    ├── g4-real-task-work-tree-deepseek-v4-flash-finish-prune-live.json
+                                    #   G4 live 行为实验：DeepSeek V4 Flash + finish/prune 收束口径，用于和 LongCat-2.0 对照默认工作树控制
+    └── g4-real-task-work-tree-longcat-finish-prune-live.json
+                                    #   G4 live 行为实验：LongCat-2.0 + finish/prune 收束口径，用于模型对照和默认工作树控制回归
 ```
+
+2026-06-30 更新：LongCat 活动入口已直接切到 `LongCat-2.0`；G4 official acceptance 的 preserved paper 选择已改为优先使用 workspace 中真实 report/output/deliverable Markdown，避免把最后 assistant 验收短文误当正式报告。证据链接门禁仍要求 `http(s)://`，不会把 `arXiv:...` 文本放宽为 evidence link。
 
 **评测命令映射：**
 
@@ -213,6 +221,9 @@ evaluation/
 | `eval:g4:work-tree:deepseek-v4-pro` | `suites/g4-real-task-work-tree-deepseek-v4-pro-live.json` |
 | `eval:g4:work-tree:deepseek-v4-pro-critique-continue` | `suites/g4-real-task-work-tree-deepseek-v4-pro-critique-continue-live.json` |
 | `eval:g4:work-tree:deepseek-v4-pro-node-tool-budget` | `suites/g4-real-task-work-tree-deepseek-v4-pro-node-tool-budget-live.json` |
+| `eval:g4:work-tree:deepseek-v4-pro-finish-prune` | `suites/g4-real-task-work-tree-deepseek-v4-pro-finish-prune-live.json` |
+| `eval:g4:work-tree:deepseek-v4-flash-finish-prune` | `suites/g4-real-task-work-tree-deepseek-v4-flash-finish-prune-live.json` |
+| `eval:g4:work-tree:longcat-finish-prune` | `suites/g4-real-task-work-tree-longcat-finish-prune-live.json` |
 | `eval:work-tree:fork-runtime-harness` | `suites/work-tree-fork-runtime-harness.json` |
 | `eval:work-tree:fork-runtime-live` | `suites/work-tree-fork-runtime-live-candidate.json` |
 | `eval:work-tree:fork-evaluation-tasks` | `suites/work-tree-fork-evaluation-tasks.json` |
@@ -456,5 +467,7 @@ bash scripts/smoke_test.sh         # 需要 docker compose，约 60 s
 | release-check | 手动 | 默认不跑 live provider smoke / G4 provider matrix（可选开启） | ~30-60 min |
 
 ---
+
+
 
 

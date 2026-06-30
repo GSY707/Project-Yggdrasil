@@ -45,7 +45,7 @@ def test_main_agent_start_with_current_work_node_uses_task_state_loaded_startup_
             "assistantText": "已沿当前工作节点继续执行。",
             "invocation": {
                 "id": "inv_start_resume_node_1",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_start_resume_node",

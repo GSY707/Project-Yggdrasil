@@ -27,6 +27,7 @@ _READ_ONLY_TOOL_PREFIXES = (
     "mcp.web.fetch_",
     "mcp.web.search_",
     "shared_memory.describe_",
+    "task_takeover.list_",
     "text_memory.read_",
     "text_memory.retrieve",
 )

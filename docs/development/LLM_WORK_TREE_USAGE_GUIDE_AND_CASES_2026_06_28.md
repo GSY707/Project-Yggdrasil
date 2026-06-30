@@ -25,6 +25,7 @@
 7. 对 LLM 的控制应尽量靠启发和案例，不靠厚规则、硬模板或状态堆叠。
 8. 安全、预算、不可逆操作、对外发布、真实付费调用仍是硬边界；普通规划、探索和局部状态优先交给 LLM 自主判断。
 9. 废旧节点、失败尝试和不再采用的路线要标明废弃原因，避免旧设计重新污染父节点。
+10. 父节点负责清理已经不再需要的子节点；多个 seed 占位子节点已被真实 completed child 覆盖时，应批量 skip/prune，不能让旧占位节点永久阻塞 root 收束。
 
 ## LLM 应理解的工作树功能
 
@@ -60,6 +61,13 @@ LLM 应在这些时点重新审视任务：
 - 哪些过程信息应留在 child，哪些有用信息要带回？
 - 哪些路线已经失败，后续 agent 不应再沿用？
 - 当前交付是否有真实工具/文件/来源证据支撑？
+- 是否存在已被真实 completed child 覆盖的 seed 占位子节点？如果有，父节点应清理它们。
+
+父节点在 child 完成后必须显式选择：
+
+1. 继续开 leaf：还有明确证据缺口、实现缺口或验证缺口。
+2. 关闭/清理 child：child 已完成、失败、重复、过时或已被其他 child 覆盖。
+3. 最终交付：所有 child 都是 terminal（completed / failed / skipped），交付合同已满足，且没有未命名 blocker。
 
 ## 什么时候应该使用工作树
 
@@ -232,6 +240,24 @@ root: 产出可引用报告
 - ...
 ```
 
+父节点清理废旧子节点时，优先使用这种结构：
+
+```text
+<work-node-prune nodeIds="seed-question,seed-constraints,seed-evidence">
+这些 seed 占位节点没有独立产出，且已经被 completed child report-synthesis 的报告、来源表和矛盾分析覆盖；保留它们只会阻塞 root 收束。
+</work-node-prune>
+```
+
+如果要清理的节点下面已经有 leaf，父节点必须先确认 leaf 的结果已被吸收，再清理父节点：
+
+```text
+<work-node-prune nodeId="obsolete-research-branch" confirmChildren="true">
+确认该分支下 leaf-a / leaf-b 的证据与失败原因已经进入父节点摘要和最终报告；该分支现在是过时路线，可以清理，避免继续污染父节点。
+</work-node-prune>
+```
+
+如果子树里还有未完成 leaf，不能清理；应先进入 leaf 完成、失败，或由父节点确认它被其他结果覆盖后再处理。
+
 父节点不需要：
 
 - 完整搜索过程。
@@ -250,6 +276,7 @@ root: 产出可引用报告
 | 子节点把所有搜索结果复制回父节点 | 父节点仍被污染 | 子节点带回有用信息和引用，原始过程留在子节点 |
 | 父节点同时追踪 5 个候选方向细节 | 候选路线互相污染 | 每个候选方向独立 child，父节点只比较 |
 | child 返回“建议下一步”并让父节点照做 | 父节点被局部视角带跑 | child 返回证据、风险和废弃路线；父节点重新审视后决策 |
+| seed 占位节点已被真实 child 覆盖但不清理 | 报告已经产出，root 仍因 pending child 无法收束 | 父节点用 `work-node-prune nodeIds="..."` 批量清理无后代占位节点；有 leaf 的子树需 `confirmChildren="true"` |
 | 为旧设计保留兼容解释 | 后续 agent 会继续走旧路线 | 标明旧设计废弃，删除或降级旧测试 |
 | 把 `runtime_hints` 当命令 | LLM 被控制器牵走 | 把 hints 当未解决主题摘要，结合任务现场判断 |
 | 用 Fork 替代语义拆分 | 并发槽变成任务设计 | 先由 LLM 决定拆分，再让 scheduler 管资源 |

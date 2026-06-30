@@ -29,6 +29,7 @@
     "eval:g4:work-tree:deepseek-v4-pro-directive-required": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_deepseek_v4_pro_directive_required_live",
     "eval:g4:work-tree:deepseek-v4-pro-parent-retention": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_deepseek_v4_pro_parent_retention_live",
     "eval:g4:work-tree:deepseek-v4-pro-finish-prune": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_deepseek_v4_pro_finish_prune_live",
+    "eval:g4:work-tree:deepseek-v4-flash-finish-prune": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_deepseek_v4_flash_finish_prune_live",
     "eval:g4:work-tree:longcat-finish-prune": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_real_task_work_tree_longcat_finish_prune_live",
     "eval:g4:graduate-ml:longcat2": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_graduate_ml_longcat2",
     "eval:g4:graduate-ml:deepseek-v4": "uv run python -m yggdrasil_sdk.evaluation_cli run --suite evalsuite_g4_graduate_ml_deepseek_v4",

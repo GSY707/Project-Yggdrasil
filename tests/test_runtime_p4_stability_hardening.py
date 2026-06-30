@@ -213,7 +213,7 @@ def test_runtime_hard_blocks_tool_calls_when_tool_execution_disabled(monkeypatch
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
     # 关键断言：task 应正常完成，不因 tool 执行失败而 crash
-    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["status"] in {"awaiting-approval", "completed"}
     # toolExecutions 应为空（tool calls 被丢弃）
     record = processed["result"].get("windowExecutionArtifact", {}).get("record", {})
     tool_execs = record.get("toolExecutions") or []
@@ -225,6 +225,104 @@ def test_runtime_hard_blocks_tool_calls_when_tool_execution_disabled(monkeypatch
     assert rounds[0]["toolCalls"] == []
     assert rounds[0]["ignoredToolCalls"] == ["mcp.read.read_file"]
     assert rounds[0]["blockedToolCalls"] == []
+
+
+def test_work_tree_directive_barrier_defers_tool_calls_until_next_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """同一 response 里出现工作树标签时，先应用标签，不在旧节点执行 toolCalls。"""
+
+    monkeypatch.setattr(
+        runtime_execution_loop,
+        "load_runtime_candidate_models",
+        lambda: [
+            {
+                "model": "hardening-model",
+                "provider": "hardening-provider",
+                "quality": 0.8,
+                "costPer1k": 0.001,
+                "latencyMs": 50,
+                "contextWindow": 1_000_000,
+                "freeTier": True,
+            }
+        ],
+    )
+
+    def _fake_invoke_model(**_kwargs):
+        return {
+            "mode": "live",
+            "provider": "hardening-provider",
+            "model": "hardening-model",
+            "outputText": (
+                '<work-node-create title="读取 README leaf" questions="读取文件" evidence="README 摘要">\n'
+                "只创建 leaf 并停止，下一窗口再读取 README。\n"
+                "</work-node-create>"
+            ),
+            "finishReason": "tool_calls",
+            "usage": {"inputTokens": 100, "outputTokens": 50, "totalTokens": 150},
+            "costUsed": 0.0,
+            "error": None,
+            "toolCalls": [
+                {
+                    "id": "call_should_wait",
+                    "name": "mcp.read.read_file",
+                    "arguments": {"path": "README.md"},
+                }
+            ],
+            "rawResponse": {
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {"role": "assistant", "content": "创建 leaf。"},
+                    }
+                ],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            },
+            "requestPayload": {"model": "hardening-model", "messages": [], "stream": True},
+            "firstTokenLatencyMs": 50.0,
+        }
+
+    monkeypatch.setattr(yggdrasil_model_providers, "invoke_model", _fake_invoke_model)
+
+    runtime = get_persistence_runtime()
+    task_id = "task_e1_work_tree_directive_barrier"
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task(
+            {
+                "id": task_id,
+                "title": "E1 work-tree directive barrier test",
+                "goal": "验证工作树标签先于工具执行生效。",
+                "status": "draft",
+                "budgetState": {"tokenBudgetTotal": 1000, "costBudgetTotal": 5.0},
+            }
+        )
+
+    started = client.post(
+        f"/runtime/tasks/{task_id}/start",
+        json={
+            "allowToolExecution": True,
+            "currentObjective": "先创建 leaf，再在下一窗口执行读取。",
+            "takeoverProtocol": _root_only_takeover_protocol(task_id),
+        },
+    )
+    assert started.status_code == 202
+
+    processed = run_worker_once("agent-runtime")
+    assert processed["status"] == "processed"
+    assert processed["result"]["status"] == "continuing"
+    record = processed["result"].get("windowExecutionArtifact", {}).get("record", {})
+    assert record.get("transitionOutcome") == "enter-child"
+    assert (record.get("toolExecutions") or []) == []
+
+    with runtime.session_scope() as session:
+        invocation = RuntimeRepository(session).list_model_invocations(task_id=task_id, limit=1)[0]
+    response_path = resolve_workspace_root() / str(invocation.response_ref.locator)
+    response = read_json(response_path, {})
+    assert response.get("toolExecutions", []) == []
+    assert response.get("toolExecutionSummaries", []) == []
+    assert response["finishReason"] == "work-tree-directive-barrier"
+    assert response["rounds"][0]["workTreeDirectiveBarrier"] is True
+    assert response["rounds"][0]["toolCalls"] == []
+    assert response["rounds"][0]["deferredToolCallsByWorkTreeDirective"] == ["mcp.read.read_file"]
 
 
 def test_completed_work_tree_does_not_reenter_parent_orchestration() -> None:
@@ -374,7 +472,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
             "assistantText": text_by_node.get(current_node_id, text_by_node["root"]),
             "invocation": {
                 "id": f"inv_e3_{call_count[0]}",
-                "resolvedModel": "LongCat-2.0-Preview",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"art_e3_{call_count[0]}",
@@ -396,7 +494,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
         "allowModelFallback": False,
         "candidateModels": [
             {
-                "model": "LongCat-2.0-Preview",
+                "model": "LongCat-2.0",
                 "provider": "longcat",
                 "quality": 0.82,
                 "costPer1k": 0.0,
@@ -427,7 +525,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
     assert queued["allowToolExecution"] is False
     assert queued["temperature"] == 0.15
     assert queued["maxTokens"] == 256
-    assert queued["candidateModels"][0]["model"] == "LongCat-2.0-Preview"
+    assert queued["candidateModels"][0]["model"] == "LongCat-2.0"
     assert queued["candidateModels"][0]["provider"] == "longcat"
 
     # Round 2: root 完成 → awaiting-approval

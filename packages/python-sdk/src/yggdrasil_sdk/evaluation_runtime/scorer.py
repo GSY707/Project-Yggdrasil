@@ -115,7 +115,7 @@ def _generate_strategy_answer(case: dict[str, Any], query: str, strategy_name: s
             ),
         },
     ]
-    requested_model = str(case.get("requestedModel") or "LongCat-2.0-Preview")
+    requested_model = str(case.get("requestedModel") or "LongCat-2.0")
     requested_provider = str(case.get("requestedProvider") or "longcat")
     workspace_root = resolve_workspace_root()
     temperature = float(case.get("temperature") or 0.1)
@@ -460,4 +460,5 @@ def _aggregate_case_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any
 
 
 __all__ = [name for name in globals() if not name.startswith('__')]
+
 

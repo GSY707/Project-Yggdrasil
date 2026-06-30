@@ -10,10 +10,7 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from yggdrasil_sdk.support import new_id, normalize_excerpt
-_DEEPSEEK_MODEL_ALIASES = {
-    "deepseek-chat": "deepseek-v4-flash",
-    "deepseek-reasoner": "deepseek-v4-pro",
-}
+_DEEPSEEK_DEPRECATED_MODEL_NAMES = {"deepseek-chat", "deepseek-reasoner"}
 _DEEPSEEK_REASONING_EFFORT_ALIASES = {
     "low": "high",
     "medium": "high",
@@ -54,30 +51,24 @@ class ProviderConfig:
 PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
     "longcat": {
         "base_url": "https://api.longcat.chat/openai/v1",
-        "default_model": "LongCat-2.0-Preview",
+        "default_model": "LongCat-2.0",
         "models": {
-            "LongCat-2.0-Preview": {
+            "LongCat-2.0": {
                 "quality": 0.82,
                 "cost_per_1k_input": 0.0,
                 "cost_per_1k_output": 0.0,
                 "latency_ms": 760,
-                "context_window": 128000,
+                "context_window": 1_000_000,
+                "max_output_tokens": 128000,
                 "priority": 101,
-            },
-            "LongCat-Flash-Lite": {
-                "quality": 0.78,
-                "cost_per_1k_input": 0.0,
-                "cost_per_1k_output": 0.0,
-                "latency_ms": 700,
-                "context_window": 128000,
-                "priority": 100,
             },
         },
         "quality": 0.82,
         "cost_per_1k_input": 0.0,
         "cost_per_1k_output": 0.0,
         "latency_ms": 760,
-        "context_window": 128000,
+        "context_window": 1_000_000,
+        "max_output_tokens": 128000,
         "free_tier": True,
         "priority": 100,
     },
@@ -102,6 +93,7 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
                 "cost_per_1k_output": 0.002,
                 "latency_ms": 850,
                 "context_window": 1_000_000,
+                "max_output_tokens": 384000,
                 "supports_thinking": True,
                 "thinking_enabled_by_default": True,
                 "priority": 35,
@@ -112,6 +104,7 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
                 "cost_per_1k_output": 0.006,
                 "latency_ms": 1350,
                 "context_window": 1_000_000,
+                "max_output_tokens": 384000,
                 "supports_thinking": True,
                 "thinking_enabled_by_default": True,
                 "priority": 34,
@@ -143,7 +136,11 @@ def _canonical_model_name(model: str | None) -> str | None:
     normalized = str(model).strip()
     if not normalized:
         return None
-    return _DEEPSEEK_MODEL_ALIASES.get(normalized.lower(), normalized)
+    if normalized.lower() in _DEEPSEEK_DEPRECATED_MODEL_NAMES:
+        raise ValueError(
+            f"DeepSeek model name {normalized!r} is deprecated; use 'deepseek-v4-flash' or 'deepseek-v4-pro'."
+        )
+    return normalized
 def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] | None:
     profile = PROVIDER_PROFILES.get(provider)
     if profile is None:
@@ -159,6 +156,7 @@ def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] 
             "cost_per_1k_output": float(profile["cost_per_1k_output"]),
             "latency_ms": int(profile["latency_ms"]),
             "context_window": int(profile["context_window"]),
+            "max_output_tokens": int(profile.get("max_output_tokens") or 0),
             "priority": int(profile["priority"]),
             "supports_thinking": False,
             "thinking_enabled_by_default": False,
@@ -176,6 +174,7 @@ def _provider_model_profile(provider: str, model: str | None) -> dict[str, Any] 
         "cost_per_1k_output": float(model_profile["cost_per_1k_output"]),
         "latency_ms": int(model_profile["latency_ms"]),
         "context_window": int(model_profile["context_window"]),
+        "max_output_tokens": int(model_profile.get("max_output_tokens") or 0),
         "priority": int(model_profile.get("priority", profile["priority"])),
         "supports_thinking": bool(model_profile.get("supports_thinking", False)),
         "thinking_enabled_by_default": bool(model_profile.get("thinking_enabled_by_default", False)),
@@ -299,6 +298,7 @@ def get_provider_catalog(workspace_root: Path | None = None) -> list[dict[str, A
                     "costPer1k": round(float(model_profile["cost_per_1k_input"]) + float(model_profile["cost_per_1k_output"]), 3),
                     "latencyMs": int(model_profile["latency_ms"]),
                     "contextWindow": int(model_profile["context_window"]),
+                    "maxOutputTokens": int(model_profile.get("max_output_tokens") or 0),
                     "freeTier": config.free_tier,
                     "_priority": int(model_profile["priority"]),
                 }
@@ -716,6 +716,7 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
     reasoning_parts: list[str] = []
     usage: dict[str, Any] | None = None
     tool_calls: dict[int, dict[str, Any]] = {}
+    stream_chunk_count = 0
 
     with urllib_request.urlopen(http_request, timeout=timeout_seconds) as response:
         while True:
@@ -736,6 +737,7 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
                 break
 
             chunk = json.loads(event_payload.decode("utf-8"))
+            stream_chunk_count += 1
             if response_id is None and chunk.get("id"):
                 response_id = str(chunk["id"])
             if response_model is None and chunk.get("model"):
@@ -792,6 +794,11 @@ def _assemble_stream_response(http_request, *, timeout_seconds: int) -> tuple[di
             ],
             "usage": usage or {},
             "stream": True,
+            "streamTelemetry": {
+                "chunkCount": stream_chunk_count,
+                "idleTimeoutSeconds": timeout_seconds,
+                "durationMs": round((time.perf_counter() - request_started_at) * 1000.0, 2),
+            },
         },
         first_token_latency_ms,
     )
@@ -927,7 +934,16 @@ def _retry_max_for_provider(provider: str) -> int:
     if provider == "deepseek_direct":
         return base + _deepseek_extra_retry_max()
     return base
+def _effective_max_tokens(max_tokens: int | None, model_profile: dict[str, Any]) -> int | None:
+    profile_max = int(model_profile.get("max_output_tokens") or 0)
+    if profile_max > 0:
+        return profile_max
+    if max_tokens is None:
+        return None
+    return max(1, int(max_tokens))
 def _is_retryable_transport_error(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError, ssl.SSLError)):
+        return True
     if isinstance(exc, urllib_error.URLError):
         reason = exc.reason
         if isinstance(reason, (ssl.SSLError, TimeoutError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
@@ -989,6 +1005,10 @@ def invoke_model(
         if allow_fallback:
             return _fallback_response(messages, "no-configured-free-provider", requested_model=requested_model, requested_provider=requested_provider)
         raise RuntimeError("No configured provider is available for model invocation.")
+    provider_idle_timeout_seconds = max(
+        int(os.environ.get("YGGDRASIL_LLM_STREAM_IDLE_TIMEOUT_SECONDS") or timeout_seconds),
+        1,
+    )
 
     normalized_requested_model = _canonical_model_name(requested_model)
     inferred_provider = _infer_provider_from_model(normalized_requested_model)
@@ -1010,13 +1030,18 @@ def invoke_model(
             thinking_type = "enabled"
         if thinking_type is not None:
             request_payload["thinking"] = {"type": thinking_type}
-        normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
+        normalized_reasoning_effort = _normalize_reasoning_effort(
+            reasoning_effort or os.environ.get("YGGDRASIL_LLM_DEEPSEEK_REASONING_EFFORT") or "max"
+        )
         if thinking_type != "disabled" and normalized_reasoning_effort is not None:
             request_payload["reasoning_effort"] = normalized_reasoning_effort
     if temperature is not None:
         request_payload["temperature"] = temperature
-    if max_tokens is not None:
-        request_payload["max_tokens"] = max_tokens
+    effective_max_tokens = _effective_max_tokens(max_tokens, model_profile)
+    if effective_max_tokens is not None:
+        request_payload["max_tokens"] = effective_max_tokens
+        if max_tokens is not None and int(max_tokens) != effective_max_tokens:
+            request_payload["yggdrasil_requested_max_tokens"] = int(max_tokens)
     prepared_tools, tool_name_aliases = _prepare_provider_tools(config.provider, tools)
     if prepared_tools:
         request_payload["tools"] = prepared_tools
@@ -1035,6 +1060,7 @@ def invoke_model(
     _backoff_base = _retry_backoff_base()
     _last_exc: Exception | None = None
     _raw_response: dict | None = None
+    _transport_retries: list[dict[str, Any]] = []
 
     for _attempt in range(_max_retries + 1):
         try:
@@ -1047,7 +1073,13 @@ def invoke_model(
                 attempt_headers["Connection"] = "close"
             attempt_encoded_payload = json.dumps(attempt_payload).encode("utf-8")
             http_request = urllib_request.Request(endpoint, data=attempt_encoded_payload, headers=attempt_headers, method="POST")
-            _raw_response, first_token_latency_ms = _assemble_stream_response(http_request, timeout_seconds=timeout_seconds)
+            _raw_response, first_token_latency_ms = _assemble_stream_response(
+                http_request,
+                timeout_seconds=provider_idle_timeout_seconds,
+            )
+            if _transport_retries:
+                _raw_response.setdefault("streamReconnect", {"attempts": len(_transport_retries)})
+                _raw_response["streamReconnect"]["events"] = list(_transport_retries)
             request_payload = attempt_payload
             break  # success
         except urllib_error.HTTPError as exc:
@@ -1069,10 +1101,19 @@ def invoke_model(
             raise RuntimeError(f"Model provider HTTP error: {exc.code}: {detail}") from exc
         except Exception as exc:
             _last_exc = exc
+            retry_event = {
+                "attempt": _attempt,
+                "stream": bool(attempt_payload.get("stream")),
+                "errorType": type(exc).__name__,
+                "error": normalize_excerpt(str(exc), 240),
+                "idleTimeoutSeconds": provider_idle_timeout_seconds,
+            }
             if _attempt < _max_retries and _is_retryable_transport_error(exc):
+                _transport_retries.append(retry_event)
                 time.sleep(min(_backoff_base ** _attempt, 60.0))
                 continue
             if _attempt < _max_retries:
+                _transport_retries.append(retry_event)
                 time.sleep(min(_backoff_base ** _attempt, 60.0))
                 continue
             break

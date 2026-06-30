@@ -243,7 +243,7 @@ def test_worker_fork_completion_merges_result_and_enqueues_next_batch(monkeypatc
             "assistantText": "# result\nchild-a finished.\n# evidence\nnode-child-a-result.\n# pending\nnone.\n# incomplete\nnone.",
             "invocation": {
                 "id": "inv_fork_merge_worker",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_fork_merge_worker",

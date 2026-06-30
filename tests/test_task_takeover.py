@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from yggdrasil_task_takeover.plugin import TaskTakeoverModule
+from yggdrasil_task_takeover.plugin import list_unfinished_work_nodes_tool
+from yggdrasil_sdk.tool_runtime import is_read_only_tool_payload
 
 
 def test_task_takeover_module_builds_coding_protocol() -> None:
@@ -69,6 +71,38 @@ def test_task_takeover_research_exploration_variant_is_stable_for_same_task() ->
 
     assert protocol_a["plan"][0]["title"] == protocol_b["plan"][0]["title"]
     assert protocol_a["plan"][0]["instructions"] == protocol_b["plan"][0]["instructions"]
+
+
+def test_task_takeover_registers_unfinished_work_node_tool() -> None:
+    plugin = TaskTakeoverModule()
+    tools = plugin.register_tools()
+
+    tool = next(item for item in tools if item["name"] == "task_takeover.list_unfinished_work_nodes")
+    assert tool["implementationRef"] == "yggdrasil_task_takeover.plugin:list_unfinished_work_nodes_tool"
+    assert is_read_only_tool_payload(tool)
+
+
+def test_list_unfinished_work_nodes_suggests_seeded_batch_prune() -> None:
+    result = list_unfinished_work_nodes_tool(
+        {
+            "workTree": {
+                "rootNodeId": "root",
+                "currentNodeId": "root",
+                "nodes": [
+                    {"id": "root", "title": "Task root", "status": "in-progress"},
+                    {"id": "seed-question", "parentNodeId": "root", "title": "固定研究问题", "status": "pending"},
+                    {"id": "seed-evidence", "parentNodeId": "root", "title": "校验证据", "status": "pending"},
+                    {"id": "real-report", "parentNodeId": "root", "title": "Final report leaf", "status": "completed"},
+                ],
+            }
+        }
+    )
+
+    assert result["unfinishedCount"] == 3
+    assert result["suggestedBatchPruneNodeIds"] == ["seed-question", "seed-evidence"]
+    assert 'nodeIds="seed-question,seed-evidence"' in result["suggestedBatchPruneDirective"]
+    root = next(item for item in result["unfinishedNodes"] if item["nodeId"] == "root")
+    assert root["suggestedAction"] == "complete-root-after-children-terminal"
 
 
 def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None:

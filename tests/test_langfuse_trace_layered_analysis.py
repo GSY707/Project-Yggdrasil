@@ -47,7 +47,7 @@ def test_split_window_contexts_preserves_initial_and_rehydrated_windows() -> Non
 def test_build_observation_evidence_reconstructs_window_transcript() -> None:
     observation = {
         "id": "obs_demo",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "metadata": {"trace": "demo"},
         "modelParameters": {"temperature": 0.1},
         "usageDetails": {"input": 12, "output": 34},
@@ -102,7 +102,7 @@ def test_build_observation_evidence_reconstructs_window_transcript() -> None:
 def test_build_observation_evidence_supports_chinese_runtime_labels() -> None:
     observation = {
         "id": "obs_demo_zh",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "input": {
             "messages": [
                 {"role": "system", "content": "系统提示"},
@@ -131,7 +131,7 @@ def test_build_observation_evidence_supports_chinese_runtime_labels() -> None:
 def test_window_execution_audit_marks_repeated_middle_windows() -> None:
     observation = {
         "id": "obs_repeat",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "metadata": {"traceId": "trace_repeat", "toolExecutionCount": 0},
         "input": {
             "messages": [
@@ -190,7 +190,7 @@ def test_window_execution_audit_marks_repeated_middle_windows() -> None:
 def test_window_execution_audit_uses_runtime_window_records_when_available() -> None:
     observation = {
         "id": "obs_runtime_records",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "metadata": {"traceId": "trace_runtime_records", "toolExecutionCount": 0},
         "input": {
             "taskId": "task_runtime_records",
@@ -326,7 +326,7 @@ def test_window_execution_audit_uses_runtime_window_records_when_available() -> 
 def test_text_review_markdown_hides_optimization_sections() -> None:
     observation = {
         "id": "obs_text_review",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "metadata": {"traceId": "trace_text_review", "toolExecutionCount": 0},
         "input": {
             "messages": [
@@ -362,7 +362,7 @@ def test_text_review_markdown_hides_optimization_sections() -> None:
         observations=[evidence],
         observation_audits=[audit],
         requested_provider="longcat",
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         langfuse_base_url="http://127.0.0.1:3100",
     )
 
@@ -376,7 +376,7 @@ def test_text_review_markdown_hides_optimization_sections() -> None:
 def test_execution_audit_payload_exposes_structured_windows() -> None:
     observation = {
         "id": "obs_payload",
-        "model": "LongCat-2.0-Preview",
+        "model": "LongCat-2.0",
         "metadata": {"traceId": "trace_payload", "toolExecutionCount": 0},
         "input": {
             "messages": [
@@ -405,7 +405,7 @@ def test_execution_audit_payload_exposes_structured_windows() -> None:
         observations=[evidence],
         observation_audits=[audit],
         requested_provider="longcat",
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         langfuse_base_url="http://127.0.0.1:3100",
     )
 

@@ -71,10 +71,10 @@ def test_isolated_evaluation_environment_can_allow_live_llm(monkeypatch) -> None
 def test_live_llm_cases_fail_on_missing_candidate_not_bad_import(monkeypatch) -> None:
     monkeypatch.setattr(sdk_llm_runtime, "load_runtime_candidate_models", lambda: [])
 
-    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-2.0-Preview"):
+    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-2.0"):
         _run_live_llm_task_case({"requireLive": True})
 
-    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-2.0-Preview"):
+    with pytest.raises(RuntimeError, match="requested live candidate is unavailable: longcat/LongCat-2.0"):
         _run_live_llm_tool_case({"requireLive": True})
 
 
@@ -331,7 +331,7 @@ def test_duplicate_tool_loop_short_circuit_stays_task_neutral() -> None:
         {
             "mode": "live",
             "provider": "longcat",
-            "model": "LongCat-2.0-Preview",
+            "model": "LongCat-2.0",
             "usage": {"inputTokens": 10, "outputTokens": 5, "totalTokens": 15},
             "costUsed": 0.0,
         },
@@ -351,7 +351,7 @@ def test_tool_round_limit_short_circuit_stays_task_neutral() -> None:
         {
             "mode": "live",
             "provider": "longcat",
-            "model": "LongCat-2.0-Preview",
+            "model": "LongCat-2.0",
             "usage": {"inputTokens": 30, "outputTokens": 12, "totalTokens": 42},
             "costUsed": 0.0,
         },

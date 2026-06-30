@@ -663,7 +663,7 @@ def run_real_user_live_task_pack(
     sandbox_root: Path,
     tasks: list[str] | None = None,
     provider: str = "longcat",
-    model: str = "LongCat-2.0-Preview",
+    model: str = "LongCat-2.0",
     scorecard_csv: Path | None = None,
     output_path: Path | None = None,
     batch_id: str | None = None,
@@ -774,3 +774,4 @@ def run_real_user_live_task_pack(
     return summary
 
 __all__ = [name for name in globals() if not name.startswith("__")]
+

@@ -174,7 +174,7 @@ def test_worker_consumes_fork_work_item_with_child_view(monkeypatch) -> None:
             "assistantText": "Fork child finished.",
             "invocation": {
                 "id": "inv_fork_worker_view",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_fork_worker_view",

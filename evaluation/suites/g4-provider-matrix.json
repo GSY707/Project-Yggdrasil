@@ -74,7 +74,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -158,7 +158,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -242,7 +242,7 @@
         }
       ],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": false,
       "requireLive": true,
@@ -268,3 +268,4 @@
   "suiteRole": "provider-matrix",
   "suiteRoleNote": "Provider capability comparison and parity verification."
 }
+

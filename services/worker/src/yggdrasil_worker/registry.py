@@ -46,13 +46,17 @@ def _register_shutdown_handlers() -> None:
 _register_shutdown_handlers()
 
 
+def _activity_timeout_ms(env_name: str, default_ms: int) -> int:
+    return max(int(os.environ.get(env_name) or default_ms), 1)
+
+
 CORE_ACTIVITIES = (
     WorkerActivityDescriptor(
         name="core.agent.main.execute",
         moduleId="kernel",
         description="Execute the main agent lifecycle step with route decision, write flush, safe-stop, and resume handling.",
         implementationRef="yggdrasil_worker.registry:core.agent.main.execute",
-        timeoutMs=60000,
+        timeoutMs=_activity_timeout_ms("YGGDRASIL_WORKER_MAIN_EXECUTE_TIMEOUT_MS", 600000),
         retryable=True,
     ),
     WorkerActivityDescriptor(
@@ -270,7 +274,8 @@ def run_worker_once(queue: str = AGENT_RUNTIME_QUEUE, timeout_seconds: int = 0) 
         if isinstance(result, dict):
             result.setdefault("durationMs", duration_ms)
             if activity_descriptor is not None and duration_ms > activity_descriptor.timeout_ms:
-                result["timeoutExceeded"] = True
+                result["slowExecutionExceeded"] = True
+                result["slowExecutionTimeoutMs"] = activity_descriptor.timeout_ms
         work_item_id = str(payload.get("workItemId") or "")
         if isinstance(result, dict) and result.get("status") == "locked" and work_item_id:
             with get_persistence_runtime().session_scope() as session:

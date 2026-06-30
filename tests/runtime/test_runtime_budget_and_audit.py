@@ -244,7 +244,7 @@ def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkey
         "load_runtime_candidate_models",
         lambda: [
             {
-                "model": "LongCat-2.0-Preview",
+                "model": "LongCat-2.0",
                 "provider": "longcat",
                 "quality": 0.9,
                 "costPer1k": 0.001,
@@ -259,7 +259,7 @@ def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkey
         return {
             "mode": "live",
             "provider": "longcat",
-            "model": "LongCat-2.0-Preview",
+            "model": "LongCat-2.0",
             "outputText": "## 结果\n完成\n## 证据\nhttp://example.com\n## 风险\n暂无\n## 已知问题\n暂无",
             "finishReason": "stop",
             "usage": {
@@ -287,7 +287,7 @@ def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkey
                 },
             },
             "requestPayload": {
-                "model": "LongCat-2.0-Preview",
+                "model": "LongCat-2.0",
                 "messages": [],
                 "stream": True,
             },
@@ -317,7 +317,7 @@ def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkey
         json={
             "effectiveContextWindow": 200000,
             "requestedProvider": "longcat",
-            "requestedModel": "LongCat-2.0-Preview",
+            "requestedModel": "LongCat-2.0",
             "currentContext": [
                 {
                     "id": "ctx_effective_ctx",
@@ -343,7 +343,7 @@ def test_runtime_effective_context_window_does_not_hard_filter_candidates(monkey
         assert task.current_focus is None or "No viable candidate model" not in (task.current_focus or "")
         routes = runtime_repository.list_model_route_decisions(task_id="task_effective_ctx_not_hard_filter")
         assert len(routes) == 1
-        assert routes[0].selected_model == "LongCat-2.0-Preview"
+        assert routes[0].selected_model == "LongCat-2.0"
 
 
 def test_runtime_audit_level_lean_writes_compact_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:

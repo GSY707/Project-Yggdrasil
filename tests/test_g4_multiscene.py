@@ -35,6 +35,26 @@ def test_g4_multiscene_suite_passes_official_scene_contracts() -> None:
         "evalcase_g4_research_recovery",
         "evalcase_g4_writing_recovery",
     }
+def test_g4_delivery_response_text_prefers_workspace_report(tmp_path: Path) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    report_text = (
+        "# Final Report\n\n"
+        "## 对比矩阵\n\n"
+        "Evidence: https://example.org/source-a\n\n"
+        + ("完整报告正文。\n" * 80)
+    )
+    (reports_dir / "final_report.md").write_text(report_text, encoding="utf-8")
+
+    selected = suite_cases_g4._g4_select_delivery_response_text(
+        {
+            "acceptanceRequiredDeliverables": ["对比矩阵"],
+        },
+        "最终验收通过，但这里不是正式报告。",
+        evaluation_workspace_root=str(tmp_path),
+    )
+
+    assert selected == report_text.strip()
 def test_g4_multiscene_suite_encodes_single_path_recovery_contracts() -> None:
     suites = {definition["id"]: definition for definition in list_evaluation_suite_definitions()}
 
@@ -137,6 +157,9 @@ def test_g4_work_tree_behavior_experiment_suites_are_single_case_and_separate() 
     deepseek_v4_pro_finish_prune = suites[
         "evalsuite_g4_real_task_work_tree_deepseek_v4_pro_finish_prune_live"
     ]["cases"]
+    deepseek_v4_flash_finish_prune = suites[
+        "evalsuite_g4_real_task_work_tree_deepseek_v4_flash_finish_prune_live"
+    ]["cases"]
     longcat_finish_prune = suites["evalsuite_g4_real_task_work_tree_longcat_finish_prune_live"]["cases"]
 
     assert len(post_question) == 1
@@ -151,6 +174,7 @@ def test_g4_work_tree_behavior_experiment_suites_are_single_case_and_separate() 
     assert len(deepseek_v4_pro_directive_required) == 1
     assert len(deepseek_v4_pro_parent_retention) == 1
     assert len(deepseek_v4_pro_finish_prune) == 1
+    assert len(deepseek_v4_flash_finish_prune) == 1
     assert len(longcat_finish_prune) == 1
     assert post_question[0]["postCompletionActions"][0]["kind"] == "diagnostic-followup"
     assert "current work-tree position" in step_reflection[0]["responseRequirements"]
@@ -164,8 +188,10 @@ def test_g4_work_tree_behavior_experiment_suites_are_single_case_and_separate() 
     assert "concrete tool-backed work belongs in leaf nodes" in tool_call_leaf_example[0]["responseRequirements"]
     assert "leaf must not declare the whole task complete" in tool_call_leaf_example[0]["responseRequirements"]
     assert "parent/orchestrator must evaluate each child handoff" in tool_call_leaf_example[0]["responseRequirements"]
+    assert "a leaf may only execute and summarize its own scope" in tool_call_leaf_example[0]["responseRequirements"]
     assert "Visible workflow note" in leaf_self_talk[0]["responseRequirements"]
     assert "after each leaf tool batch" in leaf_self_talk[0]["responseRequirements"]
+    assert "scope, stopping point, and return path" in leaf_self_talk[0]["responseRequirements"]
     assert deepseek_v4_pro[0]["requestedProvider"] == "deepseek_direct"
     assert deepseek_v4_pro[0]["requestedModel"] == "deepseek-v4-pro"
     assert "leaf must not declare the whole task complete" in deepseek_v4_pro[0]["responseRequirements"]
@@ -196,10 +222,17 @@ def test_g4_work_tree_behavior_experiment_suites_are_single_case_and_separate() 
     assert deepseek_v4_pro_finish_prune[0]["requestedProvider"] == "deepseek_direct"
     assert "<work-node-skip" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
     assert "<work-node-prune" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert 'nodeIds="id1,id2,id3"' in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert 'confirmChildren="true"' in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
     assert "Parent stopping condition" in deepseek_v4_pro_finish_prune[0]["responseRequirements"]
+    assert deepseek_v4_flash_finish_prune[0]["requestedProvider"] == "deepseek_direct"
+    assert deepseek_v4_flash_finish_prune[0]["requestedModel"] == "deepseek-v4-flash"
+    assert "<work-node-prune" in deepseek_v4_flash_finish_prune[0]["responseRequirements"]
+    assert deepseek_v4_flash_finish_prune[0]["postCompletionActions"][0]["nodeId"] == "auto-unfinished"
     assert longcat_finish_prune[0]["requestedProvider"] == "longcat"
-    assert longcat_finish_prune[0]["requestedModel"] == "LongCat-2.0-Preview"
+    assert longcat_finish_prune[0]["requestedModel"] == "LongCat-2.0"
     assert "<work-node-skip" in longcat_finish_prune[0]["responseRequirements"]
+    assert 'confirmChildren="true"' in longcat_finish_prune[0]["responseRequirements"]
 
 
 def test_g4_seeded_revision_case_persists_awaiting_approval_takeover() -> None:
@@ -220,7 +253,7 @@ def test_g4_seeded_revision_case_persists_awaiting_approval_takeover() -> None:
         task_id=task["id"],
         case_payload=case,
         requested_provider="longcat",
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
     )
 
     assert processed["result"]["status"] == "awaiting-approval"
@@ -251,7 +284,7 @@ def test_g4_live_provider_matrix_start_payload_keeps_web_research_unorchestrated
         {"id": "task_web_default", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
         app_id="yggdrasil.app.deep-research",
         task_type="research",
-        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0"}],
     )
 
     assert "takeoverProtocol" not in start_payload
@@ -357,7 +390,7 @@ def test_g4_live_provider_matrix_start_payload_pins_expected_prompt_contract() -
         {"id": "task_grad_contract", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
         app_id="yggdrasil.app.graduate-researcher",
         task_type="research",
-        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0"}],
     )
 
     assert start_payload["promptProfileId"] == "yggdrasil.graduate-researcher.main-agent"
@@ -376,7 +409,7 @@ def test_g4_live_provider_matrix_start_payload_passes_tool_name_policy() -> None
         {"id": "task_grad_policy", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
         app_id="yggdrasil.app.graduate-researcher",
         task_type="research",
-        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0"}],
     )
 
     assert start_payload["toolNameDenylist"] == ["mcp.read.*", "mcp.search.*"]
@@ -460,7 +493,7 @@ def test_g4_live_provider_matrix_start_payload_preserves_explicit_takeover_proto
         {"id": "task_live_debug", "currentFocus": "fallback-focus", "currentObjective": "fallback-objective"},
         app_id="yggdrasil.app.coding-greenfield",
         task_type="coding",
-        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0-Preview"}],
+        candidate_models=[{"provider": "longcat", "model": "LongCat-2.0"}],
     )
 
     assert start_payload["takeoverProtocol"]["taskId"] == "task_live_debug"
@@ -520,6 +553,54 @@ def test_g4_wait_for_target_worker_result_ignores_foreign_payloads() -> None:
     assert all(str((item.get("payload") or {}).get("taskId") or "") == "task_target" for item in processed_runs)
     assert str((processed.get("payload") or {}).get("taskId") or "") == "task_target"
     assert result_payload["status"] == "awaiting-approval"
+
+
+def test_g4_wait_for_target_worker_result_accepts_completed_work_tree_approval_stop() -> None:
+    result = {
+        "status": "awaiting-approval",
+        "executionStateAudit": {
+            "deliveryGateBlocked": False,
+            "blockedHardGates": [],
+            "continuationQueued": False,
+        },
+        "takeoverProtocol": {
+            "status": "verified",
+            "workTree": {
+                "status": "awaiting-approval",
+                "rootNodeId": "root",
+                "nodes": [
+                    {"id": "root", "status": "completed"},
+                    {"id": "child_1", "status": "completed"},
+                    {"id": "seed_1", "status": "skipped"},
+                ],
+            },
+        },
+    }
+    events = iter(
+        [
+            {
+                "status": "processed",
+                "payload": {"taskId": "task_target", "payload": {}},
+                "result": result,
+            }
+        ]
+    )
+
+    def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
+        assert timeout_seconds == 1
+        return next(events)
+
+    processed_runs, _processed, result_payload = suite_cases_g4._g4_wait_for_target_worker_result(
+        task_id="task_target",
+        expected_result_status="completed",
+        max_window_cycles=8,
+        max_worker_wait_seconds=30,
+        run_worker_once_fn=_run_worker_once,
+    )
+
+    assert len(processed_runs) == 1
+    assert result_payload["status"] == "awaiting-approval"
+    assert suite_cases_g4._g4_normalized_final_task_status("awaiting-approval", "completed", result_payload) == "completed"
 def test_g4_wait_for_target_worker_result_fails_fast_on_worker_poll_timeout() -> None:
     def _run_worker_once(_queue_name: str, timeout_seconds: int = 1) -> dict[str, object]:
         del timeout_seconds
@@ -1442,7 +1523,7 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "parityPairKey": "g4-web-research-default-grid-storage",
                         "parityRole": "short",
                         "provider": "longcat",
-                        "model": "LongCat-2.0-Preview",
+                        "model": "LongCat-2.0",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
                         "workTreeContinuity0_1": 1,
@@ -1462,7 +1543,7 @@ def test_g4_aggregate_case_metrics_splits_real_task_parity_by_provider_group() -
                         "parityPairKey": "g4-web-research-default-grid-storage",
                         "parityRole": "long",
                         "provider": "longcat",
-                        "model": "LongCat-2.0-Preview",
+                        "model": "LongCat-2.0",
                         "goalCompletion0_1": 1,
                         "deliveryCompletion0_1": 1,
                         "workTreeContinuity0_1": 1,
@@ -1648,3 +1729,4 @@ https://api.semanticscholar.org/graph/v1/paper/search
     assert result["enabled"] is True
     assert result["passed"] is True
     assert result["issues"] == []
+

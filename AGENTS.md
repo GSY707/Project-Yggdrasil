@@ -19,3 +19,5 @@ Always update  docs\DIRECTORY_REFERENCE.md file.
 本机安装了 docker desktop 有时需要手动启动，否则一些测试会挂。docker 路径："C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
 如果你对我的表述方式/文档有不理解的，应该询问，不能略过或简单总结。多问用户，你说的是不是xxx，为什么xxx。
+
+报告你的担忧，报告不确定的地方以及潜在的问题。

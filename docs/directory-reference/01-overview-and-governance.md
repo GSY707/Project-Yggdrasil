@@ -16,7 +16,7 @@
 | `docs/development/TASK_CHECKFLOW_AUDIT_AND_ALIGNMENT_2026_05_27.md` | 任务核对流程审计与对齐（2026-05-27）：冻结“理解任务 -> 形成计划 -> 向发起者核对 -> 再执行”的目标流程，并对照当前协议、提示词、运行时与测试缺口 |
 | `docs/development/LLM_WORK_ANALYZER.md` | LLM 工作分析器设计与使用说明：说明 run-first 分析器的数据源、粒度、持久化位置、API/CLI 入口与当前限制 |
 | `docs/development/LLM_LIVE_WORKFLOW_AND_WORK_TREE_RERUN_AUDIT_2026_06_28.md` | LLM live 工作流程与工作树复跑审计（2026-06-28）：固化储能 real-task 重跑，并补记完成后追问、每步反思、批评 revision 继续三组单独实验；确认 LLM 有真实工具调用但不主动拆工作树，批评可继续但仍 root-only，并同步 observed tool call 记录修复 |
-| `docs/development/LLM_WORK_TREE_HARD_PROMPT_EXPERIMENTS_2026_06_29.md` | LLM 工作树硬提示实验记录（2026-06-29）：记录工具末尾强提醒、工具调用即 leaf 示例、更明确 leaf 自言自语示例、DeepSeek V4 Pro、leaf 执行/父节点评估重跑、DeepSeek 批评后继续、auto-unfinished + 每节点 5 次 toolcall 软预算，以及 `work-node-complete` child 有效交付路径；结论是 continuation 位置和工具预算都有改善，`work-node-complete` 已补齐 leaf 完成后回父节点的 runtime 路径并被 live LLM 采用；2026-06-30 live 证明非根 hard gate 修正后可越过早期截断并产出报告，但仍暴露 seeded pending 节点未收束、纠偏 prompt 重复堆叠、同窗多 state directive 和最终报告自述/工具证据一致性问题；追加收束实验拆成 DeepSeek parent-retention、DeepSeek finish-prune、LongCat finish-prune 三组，并引入 `work-node-skip` / `work-node-prune` 清理废旧节点 |
+| `docs/development/LLM_WORK_TREE_HARD_PROMPT_EXPERIMENTS_2026_06_29.md` | LLM 工作树硬提示实验记录（2026-06-29）：记录工具末尾强提醒、工具调用即 leaf 示例、更明确 leaf 自言自语示例、DeepSeek V4 Pro、leaf 执行/父节点评估重跑、DeepSeek 批评后继续、auto-unfinished + 每节点 5 次 toolcall 软预算，以及 `work-node-complete` child 有效交付路径；结论是 continuation 位置和工具预算都有改善，`work-node-complete` 已补齐 leaf 完成后回父节点的 runtime 路径并被 live LLM 采用；2026-06-30 live 证明非根 hard gate 修正后可越过早期截断并产出报告，但仍暴露 seeded pending 节点未收束、纠偏 prompt 重复堆叠、同窗多 state directive 和最终报告自述/工具证据一致性问题；追加收束实验拆成 DeepSeek parent-retention、DeepSeek finish-prune、LongCat-2.0 finish-prune 三组，并引入 `work-node-skip` / `work-node-prune` 清理废旧节点；真实结果显示 skip/prune 可被采用；当前已补批量 `work-node-prune nodeIds="..."`、`confirmChildren="true"` 子树确认、父/子边界强化，且已把 `workTreeDirectiveRequired` 和批评式 revision 控制分析固化为默认 runtime 行为 |
 | `docs/architecture/runtime-principles-for-newcomers.md` | 项目运行原理（新人版）：纯设计视角说明世界层/任务层/窗口层、工作树上下文卫生、父节点回收有用信息与引用、续跑语义与审批收口 |
 | `docs/LLM_WORK_ANALYZER_USER_GUIDE.md` | LLM 工作分析器用户手册：面向任务操作者和评测/排障同学，说明 Web、CLI、API 入口与常见排查流程；当前已补齐 work-tree debug 摘要卡、时间线、cache trace、child bubble 与 mixed outcome 的固定读法 |
 | `docs/development/REAL_TASK_TEST_CONVENTIONS_AND_WORK_TREE_BACKLOG_2026_05_25.md` | 真实任务测试约定与工作树后续任务拆分（2026-05-25）：冻结“默认真实任务应单目标、弱项目内生化、由 agent 自主规划”的出题约定，并记录 P1/P2/P3/P5 本轮收口状态 |
@@ -178,6 +178,8 @@
 - 外部协作者从 README、贡献、安全、治理和 RFC 流程即可完成首轮参与；更深的工程实现仍以中文开发文档和协议文档为主。
 
 ---
+
+
 
 
 

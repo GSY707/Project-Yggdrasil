@@ -86,7 +86,7 @@
       ],
       "topK": 4,
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0",
       "tags": [
         "m8",
         "benchmark",
@@ -112,7 +112,7 @@
       ],
       "topK": 5,
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0",
       "tags": [
         "m8",
         "benchmark",

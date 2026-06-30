@@ -626,13 +626,19 @@ def test_compile_runtime_prompt_prefers_formal_memory_tools_over_memory_write_ta
     assert "节点过宽、存在多个独立主题或冲突风险高时，先判断是否需要隔离噪声" in tool_policy
     assert "latestVersionId 冲突时，不要静默覆盖" in tool_policy
     assert "root/非叶子节点负责高层视角" in response_requirements
+    assert "叶子节点只负责自己边界内的具体执行，不能宣告全局任务完成" in response_requirements
     assert "不要把“不强制建树”理解成在父节点堆执行过程" in response_requirements
+    assert "scope/stopping point/return path" in response_requirements
     assert "<work-node-create ...></work-node-create>" in response_requirements
     assert "<work-node-enter nodeId=\"...\"></work-node-enter>" in response_requirements
     assert '<work-node-complete status="completed">...</work-node-complete>' in response_requirements
+    assert '<work-node-prune nodeIds="id1,id2">' in response_requirements
+    assert "task_takeover.list_unfinished_work_nodes" in response_requirements
+    assert 'confirmChildren="true"' in response_requirements
     assert "每个 LLM window 最多输出一个会改变当前节点的工作树 directive" in response_requirements
     assert "带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线、风险和建议下一步" in response_requirements
     assert "最终合成/撰写报告可以作为 child 执行并产出完整报告草稿" in response_requirements
+    assert "由父节点评估并显式选择" in response_requirements
     assert "不能作为已经进入或完成 leaf 的证据" in response_requirements
     assert "重新审视任务目标、当前工作树位置" in response_requirements
     assert "runtime_hints 是辅助线索，不是硬控制" in response_requirements
@@ -755,7 +761,7 @@ def test_compile_runtime_prompt_includes_soft_runtime_hints() -> None:
                 ],
                 "deliveryReadiness": {
                     "ready": False,
-                    "blockers": ["open-frontier-pressure", "target-not-summarized"],
+                    "blockers": ["open-frontier-pressure", "unresolved-children", "target-not-summarized"],
                 },
                 "reasons": ["frontier-pressure-above-refine-threshold"],
             },
@@ -784,6 +790,8 @@ def test_compile_runtime_prompt_includes_soft_runtime_hints() -> None:
     assert "允许按现场调整" in resolution_section
     assert "当前建议动作是 refine" in response_requirements
     assert "不要把阶段摘要包装成整任务完成" in response_requirements
+    assert "task_takeover.list_unfinished_work_nodes" in response_requirements
+    assert "suggestedBatchPruneNodeIds" in response_requirements
     assert user_message.index("<runtime_hints>") < user_message.index("<response_requirements>")
 
 

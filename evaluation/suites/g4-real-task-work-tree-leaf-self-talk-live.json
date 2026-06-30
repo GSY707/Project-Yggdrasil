@@ -8,7 +8,11 @@
     "conformsTo": "real-task-test-conventions-v0.1",
     "violations": []
   },
-  "metricRefs": ["pass-rate", "tool-evidence", "work-tree-behavior"],
+  "metricRefs": [
+    "pass-rate",
+    "tool-evidence",
+    "work-tree-behavior"
+  ],
   "subjectKind": "workflow",
   "subjectRef": "g4:real-task:work-tree:leaf-self-talk",
   "cases": [
@@ -54,10 +58,15 @@
       ],
       "currentContextFiles": [],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": true,
-      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "activeCapabilities": [
+        "task-takeover",
+        "mcp-bridge",
+        "context-pruning",
+        "text-memory"
+      ],
       "allowPaidModels": false,
       "requireLive": true,
       "expectedResultStatus": "completed",
@@ -66,12 +75,14 @@
       "maxTokens": 9500,
       "auditLevel": "strict",
       "costBudgetTotal": 14.0,
-      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceRequireObservedToolCategories": [
+        "web"
+      ],
       "acceptanceMinSuccessfulToolExecutions": 1,
       "acceptanceMinEvidenceLinks": 1,
       "failOnAcceptanceViolation": false,
-      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Visible workflow note rule: before a concrete tool-backed action, write a brief visible note in normal answer text if you need to create/enter a leaf; after each leaf tool batch, write a brief visible note that states currentNodeId, whether the leaf evidence is enough, whether to continue in the leaf, return to parent, open the next leaf, or deliver. Do not reveal hidden chain-of-thought; the note must be concise and operational. If you are at root and the next action is concrete source search/fetch/read/compute/edit, use <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter> before doing that detailed work. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
-      "restartMessage": "Window restart: continue with the visible workflow note rule. After each leaf tool batch, state the current node, evidence sufficiency, and next node/action before final delivery. Output Markdown only.",
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Visible workflow note rule: before a concrete tool-backed action, write a brief visible note in normal answer text if you need to create/enter a leaf; after each leaf tool batch, write a brief visible note that states currentNodeId, whether the leaf evidence is enough, whether to continue in the leaf, return to parent, open the next leaf, or deliver. Do not reveal hidden chain-of-thought; the note must be concise and operational. If you are at root and the next action is concrete source search/fetch/read/compute/edit, use <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter> before doing that detailed work. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only. Boundary reinforcement: every leaf self-talk block must state scope, stopping point, and return path; the leaf cannot close the global task. Parent/orchestrator owns acceptance, pruning obsolete children, and final delivery.",
+      "restartMessage": "Window restart: continue with the visible workflow note rule. After each leaf tool batch, state the current node, evidence sufficiency, and next node/action before final delivery. Output Markdown only. Boundary reinforcement: every leaf self-talk block must state scope, stopping point, and return path; the leaf cannot close the global task. Parent/orchestrator owns acceptance, pruning obsolete children, and final delivery.",
       "effectiveContextWindow": 64000,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 0,
@@ -86,8 +97,15 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "tags": ["g4", "real-task", "web-research", "work-tree", "leaf-self-talk"],
+      "tags": [
+        "g4",
+        "real-task",
+        "web-research",
+        "work-tree",
+        "leaf-self-talk"
+      ],
       "difficulty": "hard"
     }
   ]
 }
+

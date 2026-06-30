@@ -1,9 +1,9 @@
 {
   "id": "evalsuite_g4_real_task_work_tree_longcat_finish_prune_live",
-  "name": "G4 Real-Task Work-Tree LongCat Finish Prune Live",
+  "name": "G4 Real-Task Work-Tree LongCat-2.0 Finish Prune Live",
   "domain": "generic",
   "suiteRole": "real-task",
-  "suiteRoleNote": "Single live experiment: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat as the live model.",
+  "suiteRoleNote": "Single live experiment: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat-2.0 as the live model.",
   "conventions": {
     "conformsTo": "real-task-test-conventions-v0.1",
     "violations": []
@@ -19,7 +19,7 @@
   "cases": [
     {
       "id": "evalcase_g4_real_task_work_tree_longcat_finish_prune_live_grid_storage_live",
-      "title": "G4 Real-Task Work-Tree LongCat Finish Prune Live: Grid Storage Research",
+      "title": "G4 Real-Task Work-Tree LongCat-2.0 Finish Prune Live: Grid Storage Research",
       "scenario": "g4.live_provider_matrix",
       "matrixKey": "longcat-finish-prune-grid-storage",
       "parityPairKey": "longcat-finish-prune-grid-storage",
@@ -30,7 +30,7 @@
       "taskTitle": "Long-Duration Energy Storage Route Selection (2030)",
       "taskGoal": "Use network search to compare at least four long-duration energy storage routes for 2030 grid balancing (Li-ion, sodium-ion, flow battery, and green hydrogen), then produce a recommendation for a mid-size grid operator under cost, safety, and deployment-speed constraints.",
       "currentFocus": "longcat-finish-prune-grid-storage",
-      "currentObjective": "Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat as the live model",
+      "currentObjective": "Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat-2.0 as the live model",
       "currentContext": [
         {
           "id": "ctx_web_research_scope",
@@ -65,7 +65,7 @@
       ],
       "currentContextFiles": [],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": true,
       "activeCapabilities": [
@@ -88,8 +88,8 @@
       "acceptanceMinSuccessfulToolExecutions": 1,
       "acceptanceMinEvidenceLinks": 1,
       "failOnAcceptanceViolation": false,
-      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: 换工作节点、完成 child/leaf、删除废旧节点都必须操作工作树，自然语言无效；create with <work-node-create ...></work-node-create>, enter with <work-node-enter nodeId=\"...\"></work-node-enter>, complete current node with <work-node-complete status=\"completed\">...</work-node-complete>. If a pending/in-progress child is obsolete, duplicate, superseded, or only a seeded planning placeholder already covered by completed real work, emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or <work-node-prune nodeId=\"...\">reason</work-node-prune> and stop. Each LLM window may emit at most one current-node-changing work-tree directive; after emitting it, stop and let the next window continue in the runtime-updated node. Parent stopping condition: all child nodes are terminal (completed, failed, or skipped), the delivery contract is satisfied, and no named unresolved blocker remains. Required delivery artifacts are final report, comparison matrix, source table, contradiction analysis, and residual risks. Parent/orchestrator nodes must evaluate child completions and either create the next leaf, skip obsolete children, or declare completion; a child/leaf must not declare the whole task complete. Correct parent completion example: <work-node-complete status=\"completed\">Result: accepted child report and evidence. Evidence: report path, source table, completed child summaries. Skipped: obsolete seeded placeholders covered by completed children. Parent next: root can declare task complete.</work-node-complete>. Correct root completion example: <work-node-complete status=\"completed\">Result: whole task complete. Evidence: final parent completed, final report/source table/contradiction analysis present. Skipped: obsolete planning nodes. No unresolved blockers.</work-node-complete>. Do not create a new leaf just because a prior report exists; first read/evaluate the report and child summaries, then prune obsolete nodes or complete. Before concrete tool work in any child/leaf, confirm node scope, stopping point, and return path to parent. Each node has only 5 toolcall opportunities; if more tool work is needed, create/enter a child leaf; if the leaf is done, complete it with work-node-complete. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
-      "restartMessage": "Window restart: preserve the runtime directive rule. Natural-language claims do not switch currentNodeId or complete a leaf. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, first emit a valid work-node directive. If currentNodeId is a leaf, confirm scope/stopping point/return path before tool work, use at most 5 toolcalls, then output exactly one <work-node-complete status=\"completed\">...</work-node-complete> directive and stop. Output Markdown only. Preserve this experiment rule: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat as the live model",
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: 换工作节点、完成 child/leaf、删除废旧节点都必须操作工作树，自然语言无效；create with <work-node-create ...></work-node-create>, enter with <work-node-enter nodeId=\"...\"></work-node-enter>, complete current node with <work-node-complete status=\"completed\">...</work-node-complete>. If a pending/in-progress child is obsolete, duplicate, superseded, or only a seeded planning placeholder already covered by completed real work, emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or <work-node-prune nodeId=\"...\">reason</work-node-prune> and stop. Each LLM window may emit at most one current-node-changing work-tree directive; after emitting it, stop and let the next window continue in the runtime-updated node. Parent stopping condition: all child nodes are terminal (completed, failed, or skipped), the delivery contract is satisfied, and no named unresolved blocker remains. Required delivery artifacts are final report, comparison matrix, source table, contradiction analysis, and residual risks. Parent/orchestrator nodes must evaluate child completions and either create the next leaf, skip obsolete children, or declare completion; a child/leaf must not declare the whole task complete. Correct parent completion example: <work-node-complete status=\"completed\">Result: accepted child report and evidence. Evidence: report path, source table, completed child summaries. Skipped: obsolete seeded placeholders covered by completed children. Parent next: root can declare task complete.</work-node-complete>. Correct root completion example: <work-node-complete status=\"completed\">Result: whole task complete. Evidence: final parent completed, final report/source table/contradiction analysis present. Skipped: obsolete planning nodes. No unresolved blockers.</work-node-complete>. Do not create a new leaf just because a prior report exists; first read/evaluate the report and child summaries, then prune obsolete nodes or complete. Before concrete tool work in any child/leaf, confirm node scope, stopping point, and return path to parent. Each node has only 5 toolcall opportunities; if more tool work is needed, create/enter a child leaf; if the leaf is done, complete it with work-node-complete. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only. Batch prune example: if several seed placeholders are covered, emit <work-node-prune nodeIds=\"id1,id2,id3\">reason</work-node-prune>. If pruning a node that has terminal leaf children, first confirm their results are absorbed, then emit <work-node-prune nodeId=\"branch\" confirmChildren=\"true\">reason</work-node-prune>. Do not prune nodes with unfinished descendants.",
+      "restartMessage": "Window restart: preserve the runtime directive rule. Natural-language claims do not switch currentNodeId or complete a leaf. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, first emit a valid work-node directive. If currentNodeId is a leaf, confirm scope/stopping point/return path before tool work, use at most 5 toolcalls, then output exactly one <work-node-complete status=\"completed\">...</work-node-complete> directive and stop. Output Markdown only. Preserve this experiment rule: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat-2.0 as the live model Batch prune example: if several seed placeholders are covered, emit <work-node-prune nodeIds=\"id1,id2,id3\">reason</work-node-prune>. If pruning a node that has terminal leaf children, first confirm their results are absorbed, then emit <work-node-prune nodeId=\"branch\" confirmChildren=\"true\">reason</work-node-prune>. Do not prune nodes with unfinished descendants.",
       "toolResultReflectionReminder": "Workflow control checkpoint: after each tool batch, count the current node's toolcalls and reassess whether the next action should continue this leaf, create/enter a child node with a real directive, return to parent evaluation, or deliver.",
       "workTreeDirectiveRequired": true,
       "workTreeChildScopeCheckpoint": true,
@@ -120,8 +120,8 @@
           "userMessage": "这个任务还不能只靠报告结束。先做任务控制分析：对照工作树快照、currentNodeId、未完成 child/sibling、leaf handoff 和父节点职责，判断是否需要回滚到父节点或进入 leaf。然后继续执行，不要只解释原因。",
           "resumeMessage": "Revision after possible workflow drift: first perform task-control analysis, then continue from the auto-selected unfinished work-tree position. Node switching requires real work-tree directives; natural language does not change currentNodeId.",
           "currentFocus": "auto-unfinished-longcat-finish-prune-task-control",
-          "currentObjective": "Continue from the correct work-tree position and enforce this experiment rule: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat as the live model",
-          "responseRequirements": "First output a concise Task Control Analysis identifying currentNodeId, runtime work-tree state, unfinished child/sibling nodes, completed child summaries, report/source-table artifacts, and whether any child is obsolete or duplicate. If an unfinished child is obsolete or already covered by completed real work, emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or <work-node-prune nodeId=\"...\">reason</work-node-prune> and stop. If all children are terminal and delivery artifacts are present, emit exactly one <work-node-complete status=\"completed\">...</work-node-complete> from the current parent/root. If more work is genuinely needed, emit exactly one create/enter directive and stop. Do not emit multiple state directives in one window. Output Markdown only.",
+          "currentObjective": "Continue from the correct work-tree position and enforce this experiment rule: Parent/root finish conditions are explicit and obsolete children can be skipped/pruned through runtime directives, with LongCat-2.0 as the live model",
+          "responseRequirements": "First output a concise Task Control Analysis identifying currentNodeId, runtime work-tree state, unfinished child/sibling nodes, completed child summaries, report/source-table artifacts, and whether any child is obsolete or duplicate. If an unfinished child is obsolete or already covered by completed real work, emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or <work-node-prune nodeId=\"...\">reason</work-node-prune> and stop. If all children are terminal and delivery artifacts are present, emit exactly one <work-node-complete status=\"completed\">...</work-node-complete> from the current parent/root. If more work is genuinely needed, emit exactly one create/enter directive and stop. Do not emit multiple state directives in one window. Output Markdown only. Batch prune example: if several seed placeholders are covered, emit <work-node-prune nodeIds=\"id1,id2,id3\">reason</work-node-prune>. If pruning a node that has terminal leaf children, first confirm their results are absorbed, then emit <work-node-prune nodeId=\"branch\" confirmChildren=\"true\">reason</work-node-prune>. Do not prune nodes with unfinished descendants.",
           "toolResultReflectionReminder": "Workflow control checkpoint: after each tool batch, reassess currentNodeId, unfinished nodes, and whether the next action requires a real work-tree directive.",
           "workTreeDirectiveRequired": true,
           "workTreeChildScopeCheckpoint": true,
@@ -143,7 +143,7 @@
           "includeRuntimeSnapshot": true,
           "userMessage": "侧信道工作状态诊断：请只分析刚才这轮任务，不要补报告。根据 runtime/work-tree snapshot、对话和工具痕迹回答：1 当前 runtime 认为你在哪个 currentNodeId，与你自述的 leaf/parent 位置是否一致？2 如果主线已经脱离工作树控制，应回滚到哪个节点/哪一步继续？3 你任务飘逸的原因是什么，是没有发 directive、父节点做了 leaf 工作、leaf 宣告整体完成，还是别的？4 下一次 continuation 第一条应该输出什么 directive 或控制动作？",
           "requestedProvider": "longcat",
-          "requestedModel": "LongCat-2.0-Preview",
+          "requestedModel": "LongCat-2.0",
           "temperature": 0.1,
           "maxTokens": 1800,
           "maxFollowupToolMessages": 12,
@@ -163,3 +163,5 @@
     }
   ]
 }
+
+

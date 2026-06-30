@@ -958,6 +958,188 @@ def _node_children_terminal(work_tree: WorkTreeProtocol, node_id: str) -> bool:
         for child_id in child_ids
         if child_id in node_by_id
     )
+
+
+def _node_descendant_ids(work_tree: WorkTreeProtocol, node_id: str) -> list[str]:
+    node_by_id = _work_tree_node_index(work_tree)
+    ordered: list[str] = []
+    stack = list(node_by_id.get(node_id).child_node_ids or []) if node_by_id.get(node_id) is not None else []
+    if not stack:
+        stack = [item.id for item in work_tree.nodes if item.parent_node_id == node_id]
+    while stack:
+        child_id = stack.pop(0)
+        if child_id in ordered:
+            continue
+        ordered.append(child_id)
+        child = node_by_id.get(child_id)
+        if child is None:
+            continue
+        nested = child.child_node_ids or [item.id for item in work_tree.nodes if item.parent_node_id == child.id]
+        stack.extend(nested)
+    return ordered
+
+
+def _node_unfinished_descendant_ids(work_tree: WorkTreeProtocol, node_id: str) -> list[str]:
+    node_by_id = _work_tree_node_index(work_tree)
+    unfinished: list[str] = []
+    for descendant_id in _node_descendant_ids(work_tree, node_id):
+        node = node_by_id.get(descendant_id)
+        if node is not None and node.status not in {"completed", "failed", "skipped"}:
+            unfinished.append(descendant_id)
+    return unfinished
+
+
+def _node_terminal_descendant_ids(work_tree: WorkTreeProtocol, node_id: str) -> list[str]:
+    node_by_id = _work_tree_node_index(work_tree)
+    terminal: list[str] = []
+    for descendant_id in _node_descendant_ids(work_tree, node_id):
+        node = node_by_id.get(descendant_id)
+        if node is not None and node.status in {"completed", "failed", "skipped"}:
+            terminal.append(descendant_id)
+    return terminal
+
+
+def skip_work_tree_nodes(
+    protocol: TaskTakeoverProtocol,
+    *,
+    task_id: str,
+    agent_run_id: str,
+    node_ids: list[str],
+    reason: str,
+    work_context_stack: WorkContextStack | dict[str, Any] | None = None,
+    confirm_children: bool = False,
+) -> tuple[TaskTakeoverProtocol, WorkContextStack, dict[str, Any]]:
+    if protocol.work_tree is None:
+        raise ValueError("Takeover protocol does not have a work tree.")
+    normalized_reason = normalize_excerpt(str(reason or "").strip(), 240)
+    if not normalized_reason:
+        raise ValueError("Skipped work-tree nodes require a non-empty reason.")
+
+    work_tree = protocol.work_tree
+    root_node_id = work_tree.root_node_id
+    node_by_id = _work_tree_node_index(work_tree)
+    ordered_node_ids: list[str] = []
+    for raw_node_id in node_ids:
+        node_id = str(raw_node_id or "").strip()
+        if node_id and node_id not in ordered_node_ids:
+            ordered_node_ids.append(node_id)
+    if not ordered_node_ids:
+        raise ValueError("At least one work-tree node id is required.")
+
+    unknown_node_ids = [node_id for node_id in ordered_node_ids if node_id not in node_by_id]
+    if unknown_node_ids:
+        raise KeyError(f"Unknown work-tree node: {unknown_node_ids[0]}")
+    if root_node_id in ordered_node_ids:
+        raise ValueError("Root work-tree node cannot be skipped.")
+
+    confirm_required: list[dict[str, Any]] = []
+    node_ids_to_skip: list[str] = []
+    for node_id in ordered_node_ids:
+        unfinished_descendants = _node_unfinished_descendant_ids(work_tree, node_id)
+        terminal_descendants = _node_terminal_descendant_ids(work_tree, node_id)
+        if unfinished_descendants:
+            confirm_required.append(
+                {
+                    "nodeId": node_id,
+                    "reason": "unfinished-descendants",
+                    "descendantNodeIds": unfinished_descendants,
+                }
+            )
+            continue
+        if terminal_descendants and not confirm_children:
+            confirm_required.append(
+                {
+                    "nodeId": node_id,
+                    "reason": "terminal-descendants-confirmation-required",
+                    "descendantNodeIds": terminal_descendants,
+                }
+            )
+            continue
+        node_ids_to_skip.append(node_id)
+
+    if confirm_required:
+        normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+            protocol,
+            task_id=task_id,
+            agent_run_id=agent_run_id,
+            work_context_stack=work_context_stack,
+        )
+        if normalized_protocol is None or normalized_stack is None:
+            raise ValueError("Failed to normalize work-tree skip confirmation state.")
+        return normalized_protocol, normalized_stack, {
+            "transition": "work-tree-prune-confirm-required",
+            "requiresContinuation": True,
+            "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
+            "currentFocus": "work-tree-prune-confirm-required",
+            "requestedNodeIds": ordered_node_ids,
+            "confirmRequired": confirm_required,
+            "reason": "child-confirmation-required",
+            "message": (
+                "目标节点包含子节点；父节点必须先确认这些子节点已经被真实完成工作覆盖，"
+                "再用 confirmChildren=\"true\" 批量 skip/prune。未完成 descendants 不能被清理。"
+            ),
+        }
+
+    now = utc_now()
+    updated_nodes: list[dict[str, Any]] = []
+    for node in work_tree.nodes:
+        payload = node.model_dump(by_alias=True, mode="json")
+        if node.id in node_ids_to_skip:
+            payload.update(
+                {
+                    "status": "skipped",
+                    "failureSummary": normalized_reason,
+                    "updatedAt": now,
+                }
+            )
+        updated_nodes.append(payload)
+
+    current_node_id = work_tree.current_node_id
+    if current_node_id in node_ids_to_skip:
+        skipped_current = node_by_id.get(current_node_id)
+        current_node_id = skipped_current.parent_node_id if skipped_current is not None else work_tree.root_node_id
+    current_node_id = current_node_id or work_tree.root_node_id
+    updated_protocol = TaskTakeoverProtocol.model_validate(
+        {
+            **protocol.model_dump(by_alias=True, mode="json"),
+            "status": "executing",
+            "currentPhase": "execute",
+            "workTree": {
+                **work_tree.model_dump(by_alias=True, mode="json"),
+                "nodes": updated_nodes,
+                "currentNodeId": current_node_id,
+                "activePathNodeIds": _work_tree_active_path_node_ids(work_tree, current_node_id=current_node_id),
+                "pcMemo": normalize_excerpt(f"pruned:{','.join(node_ids_to_skip)}", 160),
+                "status": "active",
+                "versionCounter": int(work_tree.version_counter) + 1,
+                "updatedAt": now,
+            },
+        }
+    )
+    normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+        updated_protocol,
+        task_id=task_id,
+        agent_run_id=agent_run_id,
+        work_context_stack=work_context_stack,
+    )
+    if normalized_protocol is None or normalized_protocol.work_tree is None or normalized_stack is None:
+        raise ValueError("Failed to normalize skipped work-tree state.")
+    if current_node_id is not None:
+        normalized_stack = update_cursor_state(
+            normalized_stack,
+            node_id=current_node_id,
+            cursor_state=normalize_excerpt(f"pruned-obsolete-children:{len(node_ids_to_skip)}", 96),
+        )
+    return normalized_protocol, normalized_stack, {
+        "transition": "work-tree-skip",
+        "requiresContinuation": True,
+        "currentNodeId": normalized_protocol.work_tree.current_node_id,
+        "currentFocus": _work_tree_focus_label(normalized_protocol),
+        "skippedNodeIds": node_ids_to_skip,
+        "reason": normalized_reason,
+    }
+
+
 def complete_current_work_node(
     protocol: TaskTakeoverProtocol,
     *,
@@ -1194,70 +1376,20 @@ def skip_work_tree_node(
     reason: str,
     work_context_stack: WorkContextStack | dict[str, Any] | None = None,
 ) -> tuple[TaskTakeoverProtocol, WorkContextStack, dict[str, Any]]:
-    if protocol.work_tree is None:
-        raise ValueError("Takeover protocol does not have a work tree.")
     target_node_id = str(node_id or "").strip()
     if not target_node_id:
         raise ValueError("Work-tree skip requires a node id.")
-    skip_reason = normalize_excerpt(str(reason or "").strip(), 240)
-    if not skip_reason:
-        raise ValueError("Work-tree skip requires a non-empty reason.")
-    work_tree = protocol.work_tree
-    if target_node_id == str(work_tree.root_node_id or ""):
-        raise ValueError("Cannot skip the root work-tree node.")
-    node_by_id = _work_tree_node_index(work_tree)
-    target_node = node_by_id.get(target_node_id)
-    if target_node is None:
-        raise ValueError(f"Work-tree node {target_node_id} does not exist.")
-    if target_node.child_node_ids and not _node_children_terminal(work_tree, target_node.id):
-        raise ValueError(f"Work-tree node {target_node_id} still has unfinished child nodes.")
-
-    now = utc_now()
-    updated_nodes: list[dict[str, Any]] = []
-    for node in work_tree.nodes:
-        payload = node.model_dump(by_alias=True, mode="json")
-        if node.id == target_node.id:
-            payload.update(
-                {
-                    "status": "skipped",
-                    "failureSummary": skip_reason,
-                    "updatedAt": now,
-                }
-            )
-        updated_nodes.append(payload)
-
-    current_node_id = str(work_tree.current_node_id or "")
-    if current_node_id == target_node.id:
-        current_node_id = str(target_node.parent_node_id or work_tree.root_node_id or "")
-    updated_protocol = TaskTakeoverProtocol.model_validate(
-        {
-            **protocol.model_dump(by_alias=True, mode="json"),
-            "status": "executing",
-            "currentPhase": "execute",
-            "workTree": {
-                **work_tree.model_dump(by_alias=True, mode="json"),
-                "nodes": updated_nodes,
-                "currentNodeId": current_node_id or work_tree.current_node_id,
-                "status": "active",
-                "updatedAt": now,
-            },
-        }
-    )
-    normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
-        updated_protocol,
+    normalized_protocol, normalized_stack, transition = skip_work_tree_nodes(
+        protocol,
         task_id=task_id,
         agent_run_id=agent_run_id,
+        node_ids=[target_node_id],
+        reason=reason,
         work_context_stack=work_context_stack,
     )
-    if normalized_protocol is None or normalized_stack is None:
-        raise ValueError("Failed to normalize skipped work-tree state.")
-    return normalized_protocol, normalized_stack, {
-        "transition": "work-tree-skip",
-        "requiresContinuation": True,
-        "currentNodeId": normalized_protocol.work_tree.current_node_id if normalized_protocol.work_tree is not None else None,
-        "skippedNodeId": target_node.id,
-        "currentFocus": _work_tree_focus_label(normalized_protocol),
-    }
+    if transition.get("skippedNodeIds"):
+        transition["skippedNodeId"] = transition["skippedNodeIds"][0]
+    return normalized_protocol, normalized_stack, transition
 def _check_delivery_hard_gates(protocol: TaskTakeoverProtocol) -> bool:
     """检查 hard gate 类型的 verification item 是否全部 passed。"""
     for item in protocol.verification_items:

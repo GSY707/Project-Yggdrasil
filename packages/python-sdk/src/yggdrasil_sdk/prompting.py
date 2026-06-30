@@ -1071,13 +1071,14 @@ def _format_response_requirements(
         else {}
     )
     lines = [
-        "1. 先确认总任务目标、当前节点职责和是否需要拆分：root/非叶子节点负责高层视角、流程控制、方向重估和信息合并；叶子节点负责具体执行。",
-        "2. 执行会产生搜索记录、编辑过程、命令输出、失败尝试、重复项或候选路线时，依据 currentNodeId、Working_Node 和 WorkContextStack 创建/进入合适工作节点；不要把“不强制建树”理解成在父节点堆执行过程。",
+        "1. 先确认总任务目标、当前节点职责和是否需要拆分：root/非叶子节点负责高层视角、流程控制、方向重估、信息合并和最终完成判断；叶子节点只负责自己边界内的具体执行，不能宣告全局任务完成。",
+        "2. 执行会产生搜索记录、编辑过程、命令输出、失败尝试、重复项或候选路线时，依据 currentNodeId、Working_Node 和 WorkContextStack 创建/进入合适工作节点；不要把“不强制建树”理解成在父节点堆执行过程。子节点开始前必须说清 scope/stopping point/return path，停止点达到后只交付本节点结果给父节点。",
         "3. 换工作节点和结束 child/leaf 都必须操作工作树：需要拆分时用 <work-node-create ...></work-node-create>，进入已有节点用 <work-node-enter nodeId=\"...\"></work-node-enter>，当前 child/leaf 到停止点时用 <work-node-complete status=\"completed\">...</work-node-complete>；每个 LLM window 最多输出一个会改变当前节点的工作树 directive，输出后停止，等下一窗口在新节点继续；自然语言说“我创建/进入/切换/返回 leaf”不会改变 runtime 当前节点，也不能作为已经进入或完成 leaf 的证据。",
-        "4. 子节点/leaf 开始具体工具工作前，先确认本节点工作范围、停止点和完成后返回父节点的方式；最终合成/撰写报告可以作为 child 执行并产出完整报告草稿，但结束时必须在 work-node-complete 正文里带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线、风险和建议下一步，由父节点认可并宣告整体完成。",
-        "5. 每轮重要证据、工具批次或准备交付前，重新审视任务目标、当前工作树位置、未闭合问题和是否需要新增/进入/回收子节点。",
-        "6. runtime_hints 是辅助线索，不是硬控制；若交付未就绪，把草稿当阶段材料，继续推进最有价值的前沿或子节点。",
-        f"7. 输出只保留用户任务需要的结果、证据/验证和必要风险；证据不足要明说，不补空白；危险、不可逆、付费或对外发布动作先请求确认；默认采用 {localized_style} 风格。",
+        "4. 子节点/leaf 开始具体工具工作前，先确认本节点工作范围、停止点和完成后返回父节点的方式；最终合成/撰写报告可以作为 child 执行并产出完整报告草稿，但结束时必须在 work-node-complete 正文里带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线、风险和建议下一步，由父节点评估并显式选择：继续开 leaf、关闭/清理 child，或最终交付。",
+        "5. 父节点发现 pending/in-progress child 已过时、重复或已被 completed child 覆盖时，先用只读工具 task_takeover.list_unfinished_work_nodes 列出未完成节点和 suggestedBatchPruneNodeIds；然后用 <work-node-skip nodeId=\"...\">reason</work-node-skip> 或 <work-node-prune nodeIds=\"id1,id2\">reason</work-node-prune> 清理；批量清理只用于无未完成后代的占位子节点，若目标节点下已有 leaf，必须先确认这些 leaf 的结果已被父节点吸收，再用 confirmChildren=\"true\" 清理父节点。",
+        "6. 每轮重要证据、工具批次或准备交付前，重新审视任务目标、当前工作树位置、未闭合问题和是否需要新增/进入/回收子节点。",
+        "7. runtime_hints 是辅助线索，不是硬控制；若交付未就绪，把草稿当阶段材料，继续推进最有价值的前沿或子节点。",
+        f"8. 输出只保留用户任务需要的结果、证据/验证和必要风险；证据不足要明说，不补空白；危险、不可逆、付费或对外发布动作先请求确认；默认采用 {localized_style} 风格。",
     ]
     if work_tree_resolution:
         lines.append(
@@ -1089,6 +1090,10 @@ def _format_response_requirements(
             lines.append(
                 f"{len(lines) + 1}. 交付暂未就绪（{blockers or 'open-frontier'}）：优先推进一个能提高分辨率或证据强度的下一步。"
             )
+            if any(str(item) == "unresolved-children" for item in delivery_readiness.get("blockers") or []):
+                lines.append(
+                    f"{len(lines) + 1}. runtime 提示存在 unresolved children：先调用 task_takeover.list_unfinished_work_nodes 获取未完成节点清单和 suggestedBatchPruneNodeIds；不要靠手工阅读整棵 workTree 猜测哪些 seeded child 还没收束。"
+                )
     if resume_path:
         lines.append(f"{len(lines) + 1}. 恢复态只接续当前现场，不需要重述完整启动规划。")
     if takeover_status == "needs-clarification" and not bool(request.get("takeoverAutoConfirm")):

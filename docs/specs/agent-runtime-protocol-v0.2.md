@@ -797,6 +797,8 @@ v0.2 必须预留事件：
 | `work-tree.node.completed` | 完成节点 |
 | `work-tree.node.failed` | 节点失败 |
 | `work-tree.node.blocked` | 节点阻塞 |
+| `work-tree.node.skipped` | 父节点确认节点不再需要执行 |
+| `work-tree.node.pruned` | 父节点批量清理废旧或已覆盖的子节点 |
 | `work-tree.pc-memo.updated` | 更新程序计数器备忘录 |
 | `task.approval.requested` | 根节点完成等待批准 |
 | `task.completion.approved` | 批准完成 |

@@ -295,7 +295,7 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
             ),
             "invocation": {
                 "id": "inv_memory_tag_write",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_memory_tag_write",

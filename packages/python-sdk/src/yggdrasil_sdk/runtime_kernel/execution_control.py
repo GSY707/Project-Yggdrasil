@@ -217,7 +217,8 @@ def post_task_mailbox_message(task_id: str, payload: dict[str, Any] | None = Non
     }
 
 def queue_main_agent_execution(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
-    request = payload or {}
+    request = dict(payload or {})
+    request.setdefault("workTreeDirectiveRequired", True)
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
     command = str(request.get("command") or "start")
@@ -742,8 +743,56 @@ def _takeover_protocol_has_unfinished_work_nodes(protocol: TaskTakeoverProtocol 
     return any(str(node.status) in unfinished_statuses for node in protocol.work_tree.nodes)
 
 
+_DEFAULT_REVISION_CONTROL_ANALYSIS_MESSAGE = (
+    "这个任务还不能只靠报告或上一轮回答结束。先做任务控制分析：对照工作树快照、currentNodeId、"
+    "未完成 child/sibling、已完成 child summary、报告/证据产物和父节点职责；优先调用只读工具 "
+    "task_takeover.list_unfinished_work_nodes 取得未完成节点清单和 suggestedBatchPruneNodeIds，判断应该回到父节点评估、"
+    "进入/创建 leaf、清理废旧节点，还是宣告当前节点完成。然后继续执行，不要只解释原因。"
+)
+_DEFAULT_REVISION_RESPONSE_REQUIREMENTS = (
+    "Revision control requirement: first output a concise Task Control Analysis identifying currentNodeId, "
+    "runtime work-tree state, unfinished child/sibling nodes, completed child summaries, existing report/evidence artifacts, "
+    "using task_takeover.list_unfinished_work_nodes first when available instead of manually scanning the whole workTree JSON. "
+    "and whether any child is obsolete or duplicate. If an unfinished child is obsolete or already covered by completed real work, "
+    "emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or "
+    "<work-node-prune nodeIds=\"id1,id2\">reason</work-node-prune> and stop. "
+    "If all children are terminal and delivery artifacts are present, emit exactly one "
+    "<work-node-complete status=\"completed\">...</work-node-complete> from the current parent/root. "
+    "If more work is genuinely needed, emit exactly one <work-node-create ...></work-node-create> or "
+    "<work-node-enter nodeId=\"...\"></work-node-enter> directive and stop. "
+    "Do not emit multiple current-node-changing work-tree directives in one window; natural language never changes currentNodeId."
+)
+
+
+def _append_unique_text(existing: Any, addition: str) -> str:
+    existing_text = str(existing or "").strip()
+    addition_text = str(addition or "").strip()
+    if not addition_text:
+        return existing_text
+    if addition_text in existing_text:
+        return existing_text
+    if not existing_text:
+        return addition_text
+    return existing_text + "\n\n" + addition_text
+
+
+def _apply_default_revision_control_request(request: dict[str, Any]) -> dict[str, Any]:
+    request.setdefault("nodeId", "auto-unfinished")
+    request.setdefault("workTreeDirectiveRequired", True)
+    request.setdefault("resumeMessage", _DEFAULT_REVISION_CONTROL_ANALYSIS_MESSAGE)
+    if not str(request.get("reason") or "").strip():
+        request["reason"] = str(request.get("userMessage") or request.get("resumeMessage") or _DEFAULT_REVISION_CONTROL_ANALYSIS_MESSAGE)
+    if str(request.get("userMessage") or "").strip():
+        request["resumeMessage"] = _append_unique_text(request.get("resumeMessage"), str(request["userMessage"]))
+    request["responseRequirements"] = _append_unique_text(
+        request.get("responseRequirements"),
+        _DEFAULT_REVISION_RESPONSE_REQUIREMENTS,
+    )
+    return request
+
+
 def request_task_revision(task_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
-    request = dict(payload or {})
+    request = _apply_default_revision_control_request(dict(payload or {}))
     runtime = get_persistence_runtime()
     coordinator = RedisCoordinator(runtime.settings)
     with runtime.session_scope() as session:

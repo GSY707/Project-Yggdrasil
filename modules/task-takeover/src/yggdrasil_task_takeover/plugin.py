@@ -371,6 +371,136 @@ def _is_continuation_window(payload: dict[str, object]) -> bool:
     return False
 
 
+_TERMINAL_WORK_NODE_STATUSES = {"completed", "failed", "skipped", "cancelled", "canceled"}
+_SEEDED_PLACEHOLDER_TITLES = {
+    "固定研究问题",
+    "抽取约束",
+    "收集与归纳",
+    "校验证据",
+    "交付结论",
+    "固定目标",
+    "定位实现面",
+    "实施改动",
+    "验证行为",
+    "交付结果",
+    "抽取约束",
+    "形成计划",
+    "验证输出",
+}
+
+
+def _work_tree_from_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+    context = arguments.get("executionContext") if isinstance(arguments.get("executionContext"), dict) else {}
+    root_mount = context.get("rootMount") if isinstance(context.get("rootMount"), dict) else {}
+    protocol = root_mount.get("takeoverProtocol") if isinstance(root_mount.get("takeoverProtocol"), dict) else {}
+    work_tree = protocol.get("workTree") if isinstance(protocol.get("workTree"), dict) else {}
+    override = arguments.get("workTree") if isinstance(arguments.get("workTree"), dict) else {}
+    return override or work_tree
+
+
+def _node_id(node: dict[str, Any]) -> str:
+    return str(node.get("id") or node.get("nodeId") or "").strip()
+
+
+def _parent_node_id(node: dict[str, Any]) -> str:
+    return str(node.get("parentNodeId") or node.get("parentId") or "").strip()
+
+
+def _node_status(node: dict[str, Any]) -> str:
+    return str(node.get("status") or "unknown").strip().lower()
+
+
+def _node_title(node: dict[str, Any]) -> str:
+    return str(node.get("title") or node.get("localGoal") or node.get("nodeText") or _node_id(node)).strip()
+
+
+def _unfinished_work_nodes(work_tree: dict[str, Any]) -> dict[str, Any]:
+    nodes = [node for node in work_tree.get("nodes") or [] if isinstance(node, dict)]
+    root_node_id = str(work_tree.get("rootNodeId") or "").strip()
+    current_node_id = str(work_tree.get("currentNodeId") or "").strip()
+    by_id = {_node_id(node): node for node in nodes if _node_id(node)}
+    children_by_parent: dict[str, list[str]] = {}
+    for node in nodes:
+        parent_id = _parent_node_id(node)
+        if parent_id:
+            children_by_parent.setdefault(parent_id, []).append(_node_id(node))
+
+    unfinished: list[dict[str, Any]] = []
+    suggested_batch_prune: list[str] = []
+    for node in nodes:
+        node_id = _node_id(node)
+        status = _node_status(node)
+        if not node_id or status in _TERMINAL_WORK_NODE_STATUSES:
+            continue
+        parent_id = _parent_node_id(node)
+        child_ids = [item for item in children_by_parent.get(node_id, []) if item]
+        unfinished_child_ids = [
+            child_id
+            for child_id in child_ids
+            if _node_status(by_id.get(child_id, {})) not in _TERMINAL_WORK_NODE_STATUSES
+        ]
+        title = _node_title(node)
+        is_root = node_id == root_node_id
+        seeded_placeholder_likely = (
+            not is_root
+            and parent_id == root_node_id
+            and not child_ids
+            and title in _SEEDED_PLACEHOLDER_TITLES
+        )
+        reason: str
+        if is_root:
+            reason = "root is still not completed; inspect unfinished children before final completion"
+        elif unfinished_child_ids:
+            reason = "node has unfinished descendants and cannot be pruned until they are resolved"
+        elif seeded_placeholder_likely:
+            reason = "root-level seeded planning placeholder with no descendants; if covered by completed real work, batch prune/skip it"
+            suggested_batch_prune.append(node_id)
+        else:
+            reason = "non-terminal work node; complete it, enter it, or skip/prune it if obsolete"
+        unfinished.append(
+            {
+                "nodeId": node_id,
+                "title": title,
+                "status": status,
+                "parentNodeId": parent_id or None,
+                "isRoot": is_root,
+                "isCurrent": node_id == current_node_id,
+                "childNodeIds": child_ids,
+                "unfinishedChildNodeIds": unfinished_child_ids,
+                "seededPlaceholderLikely": seeded_placeholder_likely,
+                "suggestedAction": "complete-root-after-children-terminal" if is_root else ("batch-prune-if-covered" if seeded_placeholder_likely else "resolve-node"),
+                "reason": reason,
+            }
+        )
+
+    return {
+        "rootNodeId": root_node_id or None,
+        "currentNodeId": current_node_id or None,
+        "unfinishedCount": len(unfinished),
+        "unfinishedNodes": unfinished,
+        "suggestedBatchPruneNodeIds": suggested_batch_prune,
+        "suggestedBatchPruneDirective": (
+            f'<work-node-prune nodeIds="{",".join(suggested_batch_prune)}">seeded planning placeholders covered by completed real work</work-node-prune>'
+            if suggested_batch_prune
+            else None
+        ),
+        "completionHint": (
+            "After all non-root unfinished nodes are completed/skipped/pruned, the parent/root must emit <work-node-complete status=\"completed\">...</work-node-complete>."
+            if unfinished
+            else "All work nodes are terminal; root completion may proceed if delivery evidence is accepted."
+        ),
+    }
+
+
+def list_unfinished_work_nodes_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    work_tree = _work_tree_from_tool_arguments(arguments)
+    result = _unfinished_work_nodes(work_tree)
+    return {
+        "status": "ok",
+        **result,
+    }
+
+
 class TaskTakeoverModule(BaseModulePlugin):
     module_id = "task-takeover"
 
@@ -386,7 +516,35 @@ class TaskTakeoverModule(BaseModulePlugin):
             HookRegistration(name=HookNames.TASK_TAKEOVER_GENERATE_PLAN, handler=self.generate_plan),
             HookRegistration(name=HookNames.TASK_TAKEOVER_VERIFY_DELIVERY, handler=self.verify_delivery),
             HookRegistration(name=HookNames.TASK_TAKEOVER_FORMAT_OUTPUT, handler=self.format_output),
+            HookRegistration(name=HookNames.AGENT_TOOLS_REGISTER, handler=self.register_tools_hook),
         )
+
+    def register_tools(self) -> tuple[dict[str, object], ...]:
+        return (
+            {
+                "name": "task_takeover.list_unfinished_work_nodes",
+                "displayName": "List unfinished work-tree nodes",
+                "description": "List all non-terminal work-tree nodes from the current task state and suggest batch prune candidates for seeded planning placeholders.",
+                "permissionRequired": ["runtime.read"],
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workTree": {
+                            "type": "object",
+                            "description": "Optional workTree snapshot override. Omit to inspect the current runtime takeoverProtocol workTree.",
+                            "additionalProperties": True,
+                        }
+                    },
+                    "additionalProperties": False,
+                },
+                "implementationRef": "yggdrasil_task_takeover.plugin:list_unfinished_work_nodes_tool",
+                "executionMode": "sync",
+                "timeoutMs": 5000,
+            },
+        )
+
+    def register_tools_hook(self, payload: dict[str, object]) -> dict[str, object]:
+        return {"tools": list(self.register_tools()), "toolCount": len(self.register_tools())}
 
     def enable_preflight(self, payload: dict[str, object]) -> dict[str, object]:
         return {"status": "ok", "summary": "Task Takeover preflight passed."}

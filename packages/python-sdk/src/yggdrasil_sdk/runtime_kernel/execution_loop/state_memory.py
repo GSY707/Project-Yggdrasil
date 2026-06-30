@@ -302,6 +302,14 @@ def _split_structured_tag_values(value: str | None, *, fallback: list[str] | Non
     return [item for item in (fallback or []) if str(item).strip()]
 
 
+def _split_work_tree_node_ids(value: str | None) -> list[str]:
+    return [
+        normalize_excerpt(str(item).strip(), 120)
+        for item in re.split(r"[,|;\n]+", str(value or ""))
+        if str(item).strip()
+    ]
+
+
 def _coerce_work_tree_directive_required_config(request: dict[str, Any]) -> dict[str, Any]:
     raw_value = None
     for key in ("workTreeDirectiveRequired", "workTreeDirectiveRequiredOnNaturalLanguage"):
@@ -309,7 +317,7 @@ def _coerce_work_tree_directive_required_config(request: dict[str, Any]) -> dict
             raw_value = request.get(key)
             break
     if raw_value is None:
-        return {"enabled": False}
+        return {"enabled": True}
     if isinstance(raw_value, bool):
         return {"enabled": raw_value}
     if isinstance(raw_value, dict):
@@ -448,8 +456,17 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
         attributes = _parse_memory_write_tag_attributes(str(match.group("attrs") or ""))
         if action_name in {"skip", "prune"}:
             node_id = str(attributes.get("nodeid") or "").strip()
+            node_ids = _split_work_tree_node_ids(attributes.get("nodeids"))
+            if node_id and node_id not in node_ids:
+                node_ids.insert(0, node_id)
             reason = str(match.group("content") or attributes.get("reason") or "").strip()
-            if not node_id:
+            confirm_children = str(attributes.get("confirmchildren") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "confirmed",
+            }
+            if not node_ids:
                 blocked.append(
                     {
                         "status": "blocked",
@@ -471,8 +488,10 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
                 {
                     "action": "skip",
                     "rawTag": raw_tag,
-                    "nodeId": node_id,
+                    "nodeId": node_ids[0],
+                    "nodeIds": node_ids,
                     "reason": reason,
+                    "confirmChildren": confirm_children,
                 }
             )
             return ""
@@ -661,23 +680,30 @@ def _apply_parsed_assistant_work_tree_actions(
                     }
                 )
             elif action_kind == "skip":
-                target_node_id = str(action.get("nodeId") or "").strip()
-                if not target_node_id:
+                target_node_ids = [
+                    str(item).strip()
+                    for item in action.get("nodeIds") or [action.get("nodeId")]
+                    if str(item).strip()
+                ]
+                if not target_node_ids:
                     raise ValueError("Missing target work-tree node id.")
-                updated_protocol, updated_stack, action_transition = skip_work_tree_node(
+                updated_protocol, updated_stack, action_transition = skip_work_tree_nodes(
                     updated_protocol,
                     task_id=task_id,
                     agent_run_id=agent_run_id,
-                    node_id=target_node_id,
+                    node_ids=target_node_ids,
                     reason=str(action.get("reason") or "").strip(),
                     work_context_stack=updated_stack,
+                    confirm_children=bool(action.get("confirmChildren")),
                 )
                 applied.append(
                     {
                         "status": "applied",
                         "action": "skip",
-                        "nodeId": target_node_id,
+                        "nodeId": target_node_ids[0],
+                        "nodeIds": target_node_ids,
                         "summary": normalize_excerpt(str(action.get("reason") or ""), 160),
+                        "confirmChildren": bool(action.get("confirmChildren")),
                         "activated": False,
                     }
                 )
@@ -825,9 +851,17 @@ def _apply_parsed_assistant_work_tree_actions(
         {
             "createdNodeIds": [item["childNodeId"] for item in applied if item.get("action") == "create" and item.get("childNodeId")],
             "enteredNodeIds": [item["nodeId"] for item in applied if item.get("action") == "enter" and item.get("nodeId")],
-            "skippedNodeIds": [item["nodeId"] for item in applied if item.get("action") == "skip" and item.get("nodeId")],
+            "skippedNodeIds": [
+                node_id
+                for item in applied
+                if item.get("action") == "skip"
+                for node_id in (item.get("nodeIds") or [item.get("nodeId")])
+                if node_id
+            ],
         }
     )
+    if len(transition.get("skippedNodeIds") or []) == 1:
+        transition.setdefault("skippedNodeId", transition["skippedNodeIds"][0])
     return updated_protocol, updated_stack, {
         "detectedCount": int(action_payload.get("detectedCount") or (len(applied) + len(blocked))),
         "cleanAssistantText": str(action_payload.get("cleanAssistantText") or ""),

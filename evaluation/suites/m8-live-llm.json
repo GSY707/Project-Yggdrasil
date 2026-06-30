@@ -13,10 +13,10 @@
   "cases": [
     {
       "id": "evalcase_m8_live_longcat",
-      "title": "LongCat-2.0-Preview 真实场景主链路联调",
+      "title": "LongCat-2.0 真实场景主链路联调",
       "scenario": "m8.live_llm_task_execution",
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": true,
       "auditLevel": "strict",
@@ -41,10 +41,10 @@
     },
     {
       "id": "evalcase_m8_live_tool_task_longcat",
-      "title": "LongCat-Flash-Lite 真实任务型工具闭环（对照）",
+      "title": "LongCat-2.0 真实任务型工具闭环（对照）",
       "scenario": "m8.live_llm_tool_task",
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-Flash-Lite",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": true,
       "auditLevel": "strict",

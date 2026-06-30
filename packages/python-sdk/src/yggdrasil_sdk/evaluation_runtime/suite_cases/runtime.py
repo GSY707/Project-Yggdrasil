@@ -203,7 +203,7 @@ def _run_live_llm_task_case(case: dict[str, Any] | None = None) -> dict[str, Any
     case_payload = dict(case or {})
     task_id = str(case_payload.get("taskId") or new_id("task", "m8-live-evaluation", stable=False))
     requested_provider = str(case_payload.get("requestedProvider") or "longcat")
-    requested_model = str(case_payload.get("requestedModel") or "LongCat-2.0-Preview")
+    requested_model = str(case_payload.get("requestedModel") or "LongCat-2.0")
     candidate_models = [
         dict(candidate)
         for candidate in load_runtime_candidate_models() or []
@@ -507,7 +507,7 @@ def _run_live_llm_tool_case(case: dict[str, Any] | None = None) -> dict[str, Any
     case_payload = dict(case or {})
     task_id = str(case_payload.get("taskId") or new_id("task", "m8-live-tool-evaluation", stable=False))
     requested_provider = str(case_payload.get("requestedProvider") or "longcat")
-    requested_model = str(case_payload.get("requestedModel") or "LongCat-2.0-Preview")
+    requested_model = str(case_payload.get("requestedModel") or "LongCat-2.0")
     candidate_models = [
         dict(candidate)
         for candidate in load_runtime_candidate_models() or []
@@ -885,3 +885,4 @@ def _run_fork_runtime_live_candidate_case(case: dict[str, Any] | None = None) ->
     )
 
 __all__ = [name for name in globals() if not name.startswith("__")]
+

@@ -1717,7 +1717,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a Langfuse real-task trace into a deterministic execution audit report.")
     parser.add_argument("--trace-id", required=True)
     parser.add_argument("--analysis-provider", default="longcat")
-    parser.add_argument("--analysis-model", default="LongCat-2.0-Preview")
+    parser.add_argument("--analysis-model", default="LongCat-2.0")
     parser.add_argument(
         "--output",
         type=Path,
@@ -1744,3 +1744,4 @@ def main() -> None:
     print(report)
 if __name__ == "__main__":
     main()
+

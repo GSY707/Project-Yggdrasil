@@ -124,6 +124,13 @@ def test_worker_report_collects_core_and_module_activities() -> None:
     assert report["totalActivities"] >= 5
 
 
+def test_main_agent_worker_timeout_allows_long_llm_generations() -> None:
+    report = build_worker_report()
+    activities = {item["name"]: item for item in report["activities"]}
+
+    assert activities["core.agent.main.execute"]["timeoutMs"] >= 600000
+
+
 def test_worker_queue_operations_return_structured_status() -> None:
     enqueued = enqueue_work_item("activity", {"activity": "core.memory.import.materialize", "taskId": "task_alpha"})
     assert enqueued["status"] in {"enqueued", "error"}
@@ -192,6 +199,43 @@ def test_run_worker_once_requeues_retryable_failed_activity(monkeypatch) -> None
     assert captured["queue"] == "agent-runtime"
     assert captured["payload"]["attempt"] == 2
     assert result["result"]["status"] == "failed"
+
+
+def test_run_worker_once_marks_slow_completed_activity_without_timeout(monkeypatch) -> None:
+    monkeypatch.setattr(
+        worker_registry,
+        "pop_work_item",
+        lambda queue, timeout_seconds=0: {
+            "status": "received",
+            "queue": queue,
+            "payload": {"activity": "core.agent.main.execute", "taskId": "task_slow", "attempt": 1},
+        },
+    )
+    monkeypatch.setattr(
+        worker_registry,
+        "discover_worker_activities",
+        lambda: [
+            WorkerActivityDescriptor(
+                name="core.agent.main.execute",
+                moduleId="kernel",
+                description="slow completed test",
+                implementationRef="tests",
+                timeoutMs=1,
+                retryable=True,
+            )
+        ],
+    )
+    monkeypatch.setattr(worker_registry, "dispatch_work_item", lambda payload: {"status": "awaiting-approval"})
+    ticks = iter([0.0, 0.5])
+    monkeypatch.setattr(worker_registry, "perf_counter", lambda: next(ticks))
+
+    result = run_worker_once()
+
+    assert result["status"] == "processed"
+    assert result["result"]["status"] == "awaiting-approval"
+    assert result["result"]["slowExecutionExceeded"] is True
+    assert result["result"]["slowExecutionTimeoutMs"] == 1
+    assert "timeoutExceeded" not in result["result"]
 
 
 @DEBUG_PLAN_SKIP
@@ -339,7 +383,7 @@ def test_subagent_completion_merges_into_parent_work_tree_and_wakes_parent(monke
             ),
             "invocation": {
                 "id": f"inv_subagent_parent_{len(invoke_calls)}",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"artifact_subagent_parent_{len(invoke_calls)}",

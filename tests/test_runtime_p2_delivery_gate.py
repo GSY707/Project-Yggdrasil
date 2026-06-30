@@ -164,7 +164,7 @@ def _seed_awaiting_approval_task(task_id: str, run_id: str) -> None:
             {
                 "id": run_id,
                 "status": "completed",
-                "selectedModel": "LongCat-Flash-Lite",
+                "selectedModel": "LongCat-2.0",
                 "selectedProvider": "longcat",
             },
         )
@@ -300,7 +300,7 @@ def _seed_completed_task_with_protocol(task_id: str, run_id: str, protocol_paylo
             {
                 "id": run_id,
                 "status": "completed",
-                "selectedModel": "LongCat-Flash-Lite",
+                "selectedModel": "LongCat-2.0",
                 "selectedProvider": "longcat",
             },
         )
@@ -404,7 +404,7 @@ def _fake_completion_factory(text: str = "结果：完成。\n证据：通过。
             "assistantText": text,
             "invocation": {
                 "id": "inv_p2_test",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p2_test",
@@ -442,7 +442,7 @@ def test_request_task_revision_reopens_and_requeues(monkeypatch: pytest.MonkeyPa
             "assistantText": "结果：完成。\n证据：通过。",
             "invocation": {
                 "id": f"inv_p2_revision_{call_count[0]}",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"artifact_p2_revision_{call_count[0]}",
@@ -538,6 +538,27 @@ def test_request_task_revision_auto_unfinished_bubbles_to_parent_when_sibling_un
     assert work_tree["activePathNodeIds"] == [root_id]
 
 
+def test_request_task_revision_defaults_to_control_analysis_and_auto_unfinished() -> None:
+    task_id = "task_p2_default_control_revision"
+    root_id = f"work-tree-{task_id}-root"
+    _seed_completed_task_with_protocol(
+        task_id,
+        "run_p2_default_control_revision",
+        _completed_with_unfinished_child_protocol(task_id),
+    )
+
+    result = request_task_revision(task_id, {})
+
+    queued_payload = result["workItem"]["payload"]["payload"]
+    work_tree = result["takeoverProtocol"]["workTree"]
+    assert result["status"] == "queued"
+    assert work_tree["currentNodeId"] == root_id
+    assert queued_payload["workTreeDirectiveRequired"] is True
+    assert "先做任务控制分析" in queued_payload["resumeMessage"]
+    assert "Task Control Analysis" in queued_payload["responseRequirements"]
+    assert "natural language never changes currentNodeId" in queued_payload["responseRequirements"]
+
+
 def test_request_task_revision_rejects_completed_task_with_clean_work_tree() -> None:
     task_id = "task_p2_completed_clean_revision_reject"
     protocol = _awaiting_approval_root_protocol(task_id)
@@ -602,7 +623,7 @@ def test_work_tree_directive_required_requeues_natural_language_leaf_switch(monk
             "assistantText": "现在创建并进入 leaf 2 做钠离子电池研究，然后给父节点 handoff。",
             "invocation": {
                 "id": "inv_p2_work_tree_directive_required",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p2_work_tree_directive_required",
@@ -646,6 +667,56 @@ def test_work_tree_directive_required_requeues_natural_language_leaf_switch(monk
     assert queued_payload["currentNodeId"] == "root"
     assert "工作树流程漂移提醒" in queued_payload["responseRequirements"]
     assert "workTreeDirectiveRequired" in queued_payload
+
+
+def test_work_tree_directive_required_is_default_for_natural_language_leaf_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake(*args, **kwargs):
+        return {
+            "assistantText": "现在创建并进入 leaf 2 做钠离子电池研究，然后给父节点 handoff。",
+            "invocation": {
+                "id": "inv_p2_work_tree_directive_required_default",
+                "resolvedModel": "LongCat-2.0",
+                "resolvedProvider": "longcat",
+                "status": "completed",
+                "promptCompileArtifactId": "artifact_p2_work_tree_directive_required_default",
+                "traceId": "trace_p2_work_tree_directive_required_default",
+            },
+            "usage": {"inputTokens": 64, "outputTokens": 32, "totalTokens": 96},
+            "costUsed": 0.0,
+            "toolExecutions": [],
+            "timings": {"compilePromptMs": 0.0, "modelToolLoopMs": 0.0},
+            "contextLengthObservations": [],
+        }
+
+    monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
+
+    runtime = get_persistence_runtime()
+    with runtime.session_scope() as session:
+        WorkspaceBootstrapRepository(session).ensure_default_workspace()
+        TaskRepository(session).create_task({
+            "id": "task_p2_work_tree_directive_required_default",
+            "title": "P2 default work-tree directive required",
+            "goal": "验证自然语言换节点默认会被 runtime 纠偏。",
+            "status": "draft",
+        })
+
+    started = client.post(
+        "/runtime/tasks/task_p2_work_tree_directive_required_default/start",
+        json={
+            "currentObjective": "先在父节点调度，再进入 leaf 执行。",
+            "takeoverProtocol": _simple_root_protocol("task_p2_work_tree_directive_required_default"),
+        },
+    )
+    assert started.status_code == 202
+
+    first = run_worker_once("agent-runtime")
+    result = first["result"]
+    assert result["status"] == "continuing"
+    assert result["windowExecutionArtifact"]["record"]["transitionOutcome"] == "work-tree-directive-required"
+    queued_payload = result["queuedWorkItem"]["payload"]["payload"]
+    assert queued_payload["currentNodeId"] == "root"
+    assert queued_payload["workTreeDirectiveRequired"] is True
+    assert "工作树流程漂移提醒" in queued_payload["responseRequirements"]
 
 
 def test_work_tree_directive_required_also_catches_leaf_handoff_without_enter_parent() -> None:
@@ -787,6 +858,114 @@ def test_work_node_skip_directive_marks_obsolete_pending_child_skipped() -> None
     assert "Obsolete" in (nodes["child-2"].failure_summary or "")
 
 
+def test_work_node_prune_directive_can_batch_skip_obsolete_placeholders() -> None:
+    task_id = "task_p2_batch_prune_obsolete_placeholders"
+    protocol = TaskTakeoverProtocol.model_validate(_nested_work_tree_protocol(task_id))
+    actions = _extract_assistant_work_tree_actions(
+        (
+            '<work-node-prune nodeIds="child-1,child-2">\n'
+            "Both seeded placeholders are covered by the completed synthesis child and should not block root completion.\n"
+            "</work-node-prune>"
+        ),
+        enabled=True,
+    )
+
+    updated_protocol, stack, result = _apply_parsed_assistant_work_tree_actions(
+        task_id=task_id,
+        agent_run_id="run_p2_batch_prune_obsolete_placeholders",
+        request={"workTreeDirectiveRequired": True},
+        root_mount={},
+        takeover_protocol=protocol,
+        parsed_actions=actions,
+    )
+
+    assert updated_protocol is not None
+    assert updated_protocol.work_tree is not None
+    assert stack is not None
+    assert result["transition"] == "work-tree-skip"
+    assert result["skippedNodeIds"] == ["child-1", "child-2"]
+    nodes = {node.id: node for node in updated_protocol.work_tree.nodes}
+    assert nodes["child-1"].status == "skipped"
+    assert nodes["child-2"].status == "skipped"
+
+
+def test_work_node_prune_parent_with_leaf_requires_confirmation_before_skip() -> None:
+    task_id = "task_p2_prune_parent_with_leaf_requires_confirmation"
+    protocol_payload = _nested_work_tree_protocol(task_id)
+    work_tree = protocol_payload["workTree"]
+    assert isinstance(work_tree, dict)
+    nodes = work_tree["nodes"]
+    assert isinstance(nodes, list)
+    child_2 = next(node for node in nodes if isinstance(node, dict) and node.get("id") == "child-2")
+    child_2["childNodeIds"] = ["child-2-leaf"]
+    nodes.append(
+        {
+            "id": "child-2-leaf",
+            "title": "已完成叶子",
+            "parentNodeId": "child-2",
+            "questionsItAnswers": ["占位节点是否已覆盖"],
+            "nodeText": "已完成的叶子节点。",
+            "localGoal": "证明父节点可以清理已覆盖子树。",
+            "workingNodeAnnotation": "<Working_Node: child-2-leaf>",
+            "phase": "executing",
+            "status": "completed",
+            "executionSummary": "叶子已经完成，父节点确认后可清理占位父节点。",
+            "childNodeIds": [],
+            "detailLevel": 2,
+            "recoveryAnchor": "resume:child-2-leaf",
+        }
+    )
+    protocol = TaskTakeoverProtocol.model_validate(protocol_payload)
+
+    first_actions = _extract_assistant_work_tree_actions(
+        (
+            '<work-node-prune nodeId="child-2">\n'
+            "child-2 is an obsolete seeded placeholder covered by the final synthesis.\n"
+            "</work-node-prune>"
+        ),
+        enabled=True,
+    )
+    first_protocol, _stack, first = _apply_parsed_assistant_work_tree_actions(
+        task_id=task_id,
+        agent_run_id="run_p2_prune_parent_with_leaf_requires_confirmation",
+        request={"workTreeDirectiveRequired": True},
+        root_mount={},
+        takeover_protocol=protocol,
+        parsed_actions=first_actions,
+    )
+
+    assert first_protocol is not None
+    assert first["transition"] == "work-tree-prune-confirm-required"
+    assert first["confirmRequired"][0]["nodeId"] == "child-2"
+    assert first["confirmRequired"][0]["reason"] == "terminal-descendants-confirmation-required"
+    nodes_after_first = {node.id: node for node in first_protocol.work_tree.nodes}
+    assert nodes_after_first["child-2"].status == "pending"
+
+    confirmed_actions = _extract_assistant_work_tree_actions(
+        (
+            '<work-node-prune nodeId="child-2" confirmChildren="true">\n'
+            "Confirmed by parent: child-2 leaf output is covered by final synthesis, so this subtree is obsolete.\n"
+            "</work-node-prune>"
+        ),
+        enabled=True,
+    )
+    confirmed_protocol, _stack, confirmed = _apply_parsed_assistant_work_tree_actions(
+        task_id=task_id,
+        agent_run_id="run_p2_prune_parent_with_leaf_confirmed",
+        request={"workTreeDirectiveRequired": True},
+        root_mount={},
+        takeover_protocol=first_protocol,
+        parsed_actions=confirmed_actions,
+    )
+
+    assert confirmed_protocol is not None
+    assert confirmed["transition"] == "work-tree-skip"
+    assert confirmed["skippedNodeIds"] == ["child-2"]
+    nodes_after_confirm = {node.id: node for node in confirmed_protocol.work_tree.nodes}
+    assert nodes_after_confirm["child-2"].status == "skipped"
+    assert nodes_after_confirm["child-2-leaf"].status == "completed"
+
+
 def test_delivery_gate_does_not_force_retry_for_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     call_count = [0]
 
@@ -801,7 +980,7 @@ def test_delivery_gate_does_not_force_retry_for_optional_sections(monkeypatch: p
             "assistantText": assistant_text,
             "invocation": {
                 "id": f"inv_p2_gate_retry_{call_count[0]}",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"artifact_p2_gate_retry_{call_count[0]}",
@@ -849,7 +1028,7 @@ def test_child_completion_with_missing_web_evidence_bubbles_to_parent(monkeypatc
             "assistantText": "结果：child-1 已完成初步资料归纳。\n证据：只有本轮摘要，缺少可验证 URL，需要父节点改派补证。",
             "invocation": {
                 "id": "inv_p2_child_web_gap",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p2_child_web_gap",
@@ -922,7 +1101,7 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
             "assistantText": assistant_text,
             "invocation": {
                 "id": f"inv_p2_multinode_{current_node_id}",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"artifact_p2_multinode_{current_node_id}",

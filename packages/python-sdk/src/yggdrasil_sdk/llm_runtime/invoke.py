@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from time import perf_counter
 from typing import Any
 
@@ -77,6 +78,23 @@ _DEFAULT_WORK_TREE_NODE_TOOL_CALL_WARNING = (
     "如果还需要更多具体工具工作，创建或进入子节点；如果当前 leaf 已经完成，返回父节点评估、调度或收束。"
     "下次 toolcall 将被拒绝。"
 )
+_WORK_TREE_DIRECTIVE_BARRIER_PATTERN = re.compile(
+    r"<work-node-(create|enter|complete|handoff|skip|prune)\b[^>]*>.*?</work-node-\1>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _work_tree_directive_barrier_enabled(request: dict[str, Any]) -> bool:
+    raw = request.get("workTreeDirectiveBarrier")
+    if raw is None:
+        return True
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() not in {"0", "false", "no", "off", "disabled"}
+
+
+def _assistant_has_work_tree_directive(text: Any) -> bool:
+    return bool(_WORK_TREE_DIRECTIVE_BARRIER_PATTERN.search(str(text or "")))
 
 
 def _coerce_tool_result_reflection_reminder(raw_value: Any) -> str | None:
@@ -586,6 +604,23 @@ def invoke_runtime_completion(
                         "outputText": "Task execution halted: post-invocation budget overrun.",
                         "toolCalls": [],
                         "error": "post-invocation-budget-overrun",
+                    }
+                    break
+                if (
+                    tool_calls
+                    and _work_tree_directive_barrier_enabled(request)
+                    and _assistant_has_work_tree_directive(result.get("outputText"))
+                ):
+                    deferred_tool_calls = [str(call.get("name")) for call in tool_calls]
+                    round_summaries[-1]["finishReason"] = "work-tree-directive-barrier"
+                    round_summaries[-1]["workTreeDirectiveBarrier"] = True
+                    round_summaries[-1]["deferredToolCallsByWorkTreeDirective"] = deferred_tool_calls
+                    round_summaries[-1]["toolCalls"] = []
+                    final_result = {
+                        **result,
+                        "finishReason": "work-tree-directive-barrier",
+                        "toolCalls": [],
+                        "deferredToolCallsByWorkTreeDirective": deferred_tool_calls,
                     }
                     break
                 if not tool_calls:

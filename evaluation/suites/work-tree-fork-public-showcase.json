@@ -90,7 +90,7 @@
       "allowFallback": false,
       "allowToolExecution": false,
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "tokenBudgetTotal": 200000,
       "costBudgetTotal": 5.0,
       "maxTokens": 2200,

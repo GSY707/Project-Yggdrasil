@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import ssl
 
+import pytest
+
 from yggdrasil_model_providers import gateway
 from yggdrasil_sdk.llm_runtime import _assistant_tool_round_message
 
@@ -53,6 +55,20 @@ class _FakeStreamingResponse:
         return None
 
 
+class _BrokenStreamingResponse:
+    def readline(self) -> bytes:
+        raise TimeoutError("provider stream stopped producing bytes")
+
+    def read(self) -> bytes:
+        return b""
+
+    def __enter__(self) -> _BrokenStreamingResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
 def test_get_provider_catalog_exposes_deepseek_v4_candidates(monkeypatch) -> None:
     monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
     monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
@@ -67,7 +83,9 @@ def test_get_provider_catalog_exposes_deepseek_v4_candidates(monkeypatch) -> Non
 
     assert [candidate["model"] for candidate in candidates] == ["deepseek-v4-flash", "deepseek-v4-pro"]
     assert candidates[0]["contextWindow"] == 1_000_000
+    assert candidates[0]["maxOutputTokens"] == 384000
     assert candidates[0]["costPer1k"] == 0.003
+    assert candidates[1]["maxOutputTokens"] == 384000
     assert candidates[1]["costPer1k"] == 0.009
 
 
@@ -115,7 +133,7 @@ def test_invoke_model_includes_deepseek_thinking_and_returns_reasoning_content(m
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="deepseek-reasoner",
+        requested_model="deepseek-v4-pro",
         requested_provider="deepseek_direct",
         messages=[{"role": "user", "content": "杭州明天天气如何？"}],
         tools=[
@@ -128,14 +146,14 @@ def test_invoke_model_includes_deepseek_thinking_and_returns_reasoning_content(m
                 },
             }
         ],
-        reasoning_effort="medium",
         allow_fallback=False,
     )
 
     request_payload = captured["payload"]
     assert request_payload["model"] == "deepseek-v4-pro"
+    assert request_payload["max_tokens"] == 384000
     assert request_payload["thinking"] == {"type": "enabled"}
-    assert request_payload["reasoning_effort"] == "high"
+    assert request_payload["reasoning_effort"] == "max"
     assert request_payload["tools"][0]["function"]["name"] == "deepseek_tool_1_text_memory_retrieve"
     assert result["model"] == "deepseek-v4-pro"
     assert result["reasoningContent"] == "先获取时间，再查询天气。"
@@ -147,11 +165,27 @@ def test_invoke_model_includes_deepseek_thinking_and_returns_reasoning_content(m
     assert result["usage"]["reasoningTokens"] == 120
 
 
+def test_invoke_model_rejects_deprecated_deepseek_model_names(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+
+    with pytest.raises(ValueError, match="deprecated"):
+        gateway.invoke_model(
+            requested_model="deepseek-reasoner",
+            requested_provider="deepseek_direct",
+            messages=[{"role": "user", "content": "test"}],
+            allow_fallback=False,
+        )
+
+
 def test_invoke_model_normalizes_cache_token_usage(monkeypatch) -> None:
     monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
     monkeypatch.setenv("LONGCAT_API_KEY", "test-longcat")
+    captured: dict[str, object] = {}
 
-    def _fake_urlopen(_request, timeout=90):
+    def _fake_urlopen(request, timeout=90):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
         return _FakeResponse(
             {
                 "choices": [
@@ -176,12 +210,13 @@ def test_invoke_model_normalizes_cache_token_usage(monkeypatch) -> None:
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-Flash-Lite",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "输出执行计划。"}],
         allow_fallback=False,
     )
 
+    assert captured["payload"]["max_tokens"] == 128000
     assert result["usage"] == {
         "inputTokens": 3200,
         "outputTokens": 400,
@@ -222,7 +257,7 @@ def test_invoke_model_prefers_nested_positive_cache_tokens_over_top_level_zero(m
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "输出执行计划。"}],
         allow_fallback=False,
@@ -290,7 +325,7 @@ def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> Non
                 {
                     "id": "chatcmpl-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-Flash-Lite",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -302,7 +337,7 @@ def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> Non
                 {
                     "id": "chatcmpl-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-Flash-Lite",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -322,7 +357,7 @@ def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> Non
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-Flash-Lite",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "打个招呼"}],
         allow_fallback=False,
@@ -335,6 +370,97 @@ def test_invoke_model_streaming_captures_first_token_latency(monkeypatch) -> Non
     assert result["firstTokenLatencyMs"] >= 0
     assert result["rawResponse"]["stream"] is True
     assert result["usage"]["totalTokens"] == 20
+
+
+def test_invoke_model_retries_stalled_deepseek_stream_with_reconnect_telemetry(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+    monkeypatch.setenv("YGGDRASIL_LLM_RETRY_BACKOFF_BASE", "0")
+    monkeypatch.setenv("YGGDRASIL_LLM_STREAM_IDLE_TIMEOUT_SECONDS", "7")
+
+    captured_payloads: list[dict[str, object]] = []
+    captured_timeouts: list[int] = []
+
+    def _fake_urlopen(request, timeout=90):
+        captured_payloads.append(json.loads(request.data.decode("utf-8")))
+        captured_timeouts.append(timeout)
+        if len(captured_payloads) == 1:
+            return _BrokenStreamingResponse()
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "恢复成功。"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 40,
+                    "completion_tokens": 10,
+                    "total_tokens": 50,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-flash",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "测试流式断开后重连"}],
+        allow_fallback=False,
+    )
+
+    assert captured_payloads[0]["stream"] is True
+    assert captured_payloads[1]["stream"] is False
+    assert captured_timeouts == [7, 7]
+    assert result["outputText"] == "恢复成功。"
+    assert result["rawResponse"]["streamReconnect"]["attempts"] == 1
+    retry_event = result["rawResponse"]["streamReconnect"]["events"][0]
+    assert retry_event["stream"] is True
+    assert retry_event["errorType"] == "TimeoutError"
+    assert retry_event["idleTimeoutSeconds"] == 7
+
+
+def test_invoke_model_raises_smaller_runtime_max_tokens_to_model_limit(monkeypatch) -> None:
+    monkeypatch.delenv("YGGDRASIL_DISABLE_LIVE_LLM", raising=False)
+    monkeypatch.setenv("YGGDRASIL_ALLOW_PAID_MODELS", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek")
+
+    captured: dict[str, object] = {}
+
+    def _fake_urlopen(request, timeout=90):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return _FakeResponse(
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "已完成。"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 8,
+                    "total_tokens": 28,
+                },
+            }
+        )
+
+    monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
+
+    result = gateway.invoke_model(
+        requested_model="deepseek-v4-flash",
+        requested_provider="deepseek_direct",
+        messages=[{"role": "user", "content": "测试 max_tokens"}],
+        max_tokens=9000,
+        allow_fallback=False,
+    )
+
+    assert result["outputText"] == "已完成。"
+    assert captured["payload"]["max_tokens"] == 384000
+    assert captured["payload"]["yggdrasil_requested_max_tokens"] == 9000
 
 
 def test_invoke_model_extracts_output_text_from_block_content(monkeypatch) -> None:
@@ -367,7 +493,7 @@ def test_invoke_model_extracts_output_text_from_block_content(monkeypatch) -> No
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "给出最终结论。"}],
         allow_fallback=False,
@@ -468,7 +594,7 @@ def test_invoke_model_streaming_extracts_block_content_and_tool_calls(monkeypatc
                 {
                     "id": "chatcmpl-block-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-2.0-Preview",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -482,7 +608,7 @@ def test_invoke_model_streaming_extracts_block_content_and_tool_calls(monkeypatc
                 {
                     "id": "chatcmpl-block-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-2.0-Preview",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -511,7 +637,7 @@ def test_invoke_model_streaming_extracts_block_content_and_tool_calls(monkeypatc
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "先读目录说明，再回答。"}],
         allow_fallback=False,
@@ -532,7 +658,7 @@ def test_invoke_model_streaming_merges_split_tool_call_arguments(monkeypatch) ->
                 {
                     "id": "chatcmpl-split-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-2.0-Preview",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -555,7 +681,7 @@ def test_invoke_model_streaming_merges_split_tool_call_arguments(monkeypatch) ->
                 {
                     "id": "chatcmpl-split-1",
                     "object": "chat.completion.chunk",
-                    "model": "LongCat-2.0-Preview",
+                    "model": "LongCat-2.0",
                     "choices": [
                         {
                             "index": 0,
@@ -584,7 +710,7 @@ def test_invoke_model_streaming_merges_split_tool_call_arguments(monkeypatch) ->
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "先检索 double descent 的最新综述。"}],
         allow_fallback=False,
@@ -627,7 +753,7 @@ def test_invoke_model_extracts_longcat_tagged_tool_calls(monkeypatch) -> None:
     monkeypatch.setattr(gateway.urllib_request, "urlopen", _fake_urlopen)
 
     result = gateway.invoke_model(
-        requested_model="LongCat-2.0-Preview",
+        requested_model="LongCat-2.0",
         requested_provider="longcat",
         messages=[{"role": "user", "content": "先读证据再回答。"}],
         allow_fallback=False,

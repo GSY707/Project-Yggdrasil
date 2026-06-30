@@ -577,7 +577,7 @@ def test_runtime_single_path_moves_root_delivery_to_awaiting_approval(monkeypatc
             "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_awaiting_approval_1",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p4_awaiting_approval",
@@ -647,7 +647,7 @@ def test_runtime_default_mode_moves_root_delivery_to_awaiting_approval(monkeypat
             "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_default_mode_awaiting_approval_1",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p4_default_mode_awaiting_approval",
@@ -729,7 +729,7 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
             "assistantText": assistant_text,
             "invocation": {
                 "id": f"inv_{current_node_id}",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": f"artifact_{current_node_id}",
@@ -838,7 +838,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
                 ),
                 "invocation": {
                     "id": "inv_p4_dynamic_child_root_expand",
-                    "resolvedModel": "LongCat-Flash-Lite",
+                    "resolvedModel": "LongCat-2.0",
                     "resolvedProvider": "longcat",
                     "status": "completed",
                     "promptCompileArtifactId": "artifact_p4_dynamic_child_root_expand",
@@ -855,7 +855,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
                 "assistantText": "# result\n子节点证据已整理完成。\n# evidence\n已形成证据摘要。\n# pending\n汇总 root。\n# incomplete\n无。",
                 "invocation": {
                     "id": "inv_p4_dynamic_child_leaf",
-                    "resolvedModel": "LongCat-Flash-Lite",
+                    "resolvedModel": "LongCat-2.0",
                     "resolvedProvider": "longcat",
                     "status": "completed",
                     "promptCompileArtifactId": "artifact_p4_dynamic_child_leaf",
@@ -871,7 +871,7 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
             "assistantText": "# result\n根节点已整合子节点摘要并等待批准。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
             "invocation": {
                 "id": "inv_p4_dynamic_child_root_finalize",
-                "resolvedModel": "LongCat-Flash-Lite",
+                "resolvedModel": "LongCat-2.0",
                 "resolvedProvider": "longcat",
                 "status": "completed",
                 "promptCompileArtifactId": "artifact_p4_dynamic_child_root_finalize",
@@ -1002,7 +1002,7 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
             "maxTokens": 256,
             "candidateModels": [
                 {
-                    "model": "LongCat-2.0-Preview",
+                    "model": "LongCat-2.0",
                     "provider": "longcat",
                     "quality": 0.82,
                     "costPer1k": 0.0,
@@ -1026,7 +1026,7 @@ def test_runtime_window_overflow_bubbles_failed_leaf_to_parent_and_preserves_con
     assert queued_payload["temperature"] == 0.1
     assert queued_payload["maxTokens"] == 256
     assert queued_payload["candidateModels"][0]["provider"] == "longcat"
-    assert queued_payload["candidateModels"][0]["model"] == "LongCat-2.0-Preview"
+    assert queued_payload["candidateModels"][0]["model"] == "LongCat-2.0"
 
     queued_protocol = queued_payload["takeoverProtocol"]
     failed_child = next(node for node in queued_protocol["workTree"]["nodes"] if node["id"] == "child-1")

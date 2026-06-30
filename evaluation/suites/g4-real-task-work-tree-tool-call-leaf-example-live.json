@@ -8,7 +8,11 @@
     "conformsTo": "real-task-test-conventions-v0.1",
     "violations": []
   },
-  "metricRefs": ["pass-rate", "tool-evidence", "work-tree-behavior"],
+  "metricRefs": [
+    "pass-rate",
+    "tool-evidence",
+    "work-tree-behavior"
+  ],
   "subjectKind": "workflow",
   "subjectRef": "g4:real-task:work-tree:tool-call-leaf-example",
   "cases": [
@@ -54,10 +58,15 @@
       ],
       "currentContextFiles": [],
       "requestedProvider": "longcat",
-      "requestedModel": "LongCat-2.0-Preview",
+      "requestedModel": "LongCat-2.0",
       "allowFallback": false,
       "allowToolExecution": true,
-      "activeCapabilities": ["task-takeover", "mcp-bridge", "context-pruning", "text-memory"],
+      "activeCapabilities": [
+        "task-takeover",
+        "mcp-bridge",
+        "context-pruning",
+        "text-memory"
+      ],
       "allowPaidModels": false,
       "requireLive": true,
       "expectedResultStatus": "completed",
@@ -66,12 +75,14 @@
       "maxTokens": 9000,
       "auditLevel": "strict",
       "costBudgetTotal": 14.0,
-      "acceptanceRequireObservedToolCategories": ["web"],
+      "acceptanceRequireObservedToolCategories": [
+        "web"
+      ],
       "acceptanceMinSuccessfulToolExecutions": 1,
       "acceptanceMinEvidenceLinks": 1,
       "failOnAcceptanceViolation": false,
-      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: concrete tool-backed work belongs in leaf nodes, and parent/orchestrator nodes do workflow control. If you are at root or a parent/orchestrator and need to search/fetch/read/compute/edit, first create or enter a child leaf with <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter>, then stop the current window so the next window executes the tool from that leaf. A leaf may call tools and synthesize local evidence, but a leaf must not declare the whole task complete and must not produce the final report. After a leaf has enough evidence, output only a leaf handoff for the parent: useful findings, evidence refs, discarded routes, gaps, and risks; then stop. The parent/orchestrator must evaluate each child handoff against the delivery contract, decide whether another leaf is needed, and only the parent/orchestrator may write the final Markdown report or declare task completion. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only.",
-      "restartMessage": "Window restart: preserve the leaf-executes-parent-evaluates rule. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, create or enter a child leaf first. If currentNodeId is a leaf, execute the needed tool batch, output only a leaf handoff, and stop. If currentNodeId is a parent/orchestrator and a child handoff is available, evaluate it against the delivery contract, choose the next leaf or final delivery, and only then declare task completion. Output Markdown only.",
+      "responseRequirements": "Use network search and deliver a complete comparison report in Markdown. Hard work-tree rule: concrete tool-backed work belongs in leaf nodes, and parent/orchestrator nodes do workflow control. If you are at root or a parent/orchestrator and need to search/fetch/read/compute/edit, first create or enter a child leaf with <work-node-create ...></work-node-create> or <work-node-enter nodeId=\"...\"></work-node-enter>, then stop the current window so the next window executes the tool from that leaf. A leaf may call tools and synthesize local evidence, but a leaf must not declare the whole task complete and must not produce the final report. After a leaf has enough evidence, output only a leaf handoff for the parent: useful findings, evidence refs, discarded routes, gaps, and risks; then stop. The parent/orchestrator must evaluate each child handoff against the delivery contract, decide whether another leaf is needed, and only the parent/orchestrator may write the final Markdown report or declare task completion. Include: (1) comparison matrix across Li-ion, sodium-ion, flow battery, green hydrogen; (2) explicit contradiction analysis with resolution rationale; (3) source table with URL/domain/published date/key claim. Output Markdown only. Boundary reinforcement: a leaf may only execute and summarize its own scope; it must not declare whole-task completion. After a leaf completes, the parent/orchestrator must evaluate the child result and explicitly choose continue leaf, prune/skip obsolete child, or final delivery.",
+      "restartMessage": "Window restart: preserve the leaf-executes-parent-evaluates rule. If currentNodeId is root or a parent/orchestrator and concrete tool work is needed, create or enter a child leaf first. If currentNodeId is a leaf, execute the needed tool batch, output only a leaf handoff, and stop. If currentNodeId is a parent/orchestrator and a child handoff is available, evaluate it against the delivery contract, choose the next leaf or final delivery, and only then declare task completion. Output Markdown only. Boundary reinforcement: a leaf may only execute and summarize its own scope; it must not declare whole-task completion. After a leaf completes, the parent/orchestrator must evaluate the child result and explicitly choose continue leaf, prune/skip obsolete child, or final delivery.",
       "effectiveContextWindow": 64000,
       "windowRestartRatio": 0.75,
       "forcedWindowRestartBudget": 0,
@@ -86,7 +97,13 @@
         "yggdrasil.fewshot.scene-research-deep.source-triangulation.v1",
         "yggdrasil.fewshot.scene-research-deep.direction-recalibration.v1"
       ],
-      "tags": ["g4", "real-task", "web-research", "work-tree", "tool-call-leaf-example"],
+      "tags": [
+        "g4",
+        "real-task",
+        "web-research",
+        "work-tree",
+        "tool-call-leaf-example"
+      ],
       "difficulty": "hard"
     }
   ]

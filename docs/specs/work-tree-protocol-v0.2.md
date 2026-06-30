@@ -2,7 +2,7 @@
 
 - 文档状态：Accepted as current work-tree runtime protocol
 - 版本：v0.2
-- 日期：2026-05-23，2026-06-28 更新 LLM 使用口径
+- 日期：2026-05-23，2026-06-28 更新 LLM 使用口径，2026-06-30 更新工作树标签执行顺序
 - 取代范围：v0.2 为当前工作树数据协议；LLM 使用口径以 2026-06-28 的上下文卫生规则为准。
 - 设计来源：
   - [新 Boot Prompt 方案](../new/元提示词.md)
@@ -26,6 +26,7 @@ v0.2 的核心变化：
 4. LLM 负责判断当前节点职责和拆分方式：root/非叶子节点保留高层视角，叶子节点负责具体执行；高噪声、多方向、重复性或需要隔离实验的工作进入 child/leaf。
 5. child 完成或失败后，应把父节点真正需要的有用信息、证据/文件/记忆引用、失败经验、废弃路线和风险带回；下一步由父节点结合任务现场、工具证据、用户要求、`dependsOn` 硬依赖和 LLM 判断重新决定。
 6. 上下文窗口以当前工作切片为主；长期状态仍应写入工作树、记忆树或正式工件。
+7. 含 `work-node-create` / `work-node-enter` / `work-node-complete` / `work-node-handoff` / `work-node-skip` / `work-node-prune` 的 assistant response 是工作树状态变更边界：如果同一 response 还带 provider toolCalls，runtime 必须先阻断这些 toolCalls，把工作树 directive 交给 worker 应用，并在下一窗口按新的 `currentNodeId` 重新编译 prompt 后再允许工具执行。
 
 ## 2. 与 v0.1 的决策差异
 
@@ -427,6 +428,8 @@ WorkTreeNode.workingNodeAnnotation == WorkContextStack.topFrame.workingNodeAnnot
 | `blocked` | 需要外部输入、权限或前置节点 | 明确 blocker | blocker 解除后回 `in-progress` |
 | `skipped` | 节点被证明确认不需要执行 | 写明跳过原因 | 不再执行 |
 
+`skipped` 用于父节点清理废旧、重复、过时或已被其他 completed child 覆盖的节点。父节点可以批量清理多个无后代占位节点；如果目标节点下面已有 leaf，必须先确认 leaf 的结果、失败原因或证据已经被父节点吸收，再允许清理父节点。存在未完成后代时不得直接清理整棵子树。
+
 ### 7.3 核心迁移
 
 ```text
@@ -509,7 +512,28 @@ nextRecommendation: string|null
 3. 完成子节点后，系统记录可合并摘要；下一步由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
 4. 完成根节点后，工作树可进入 `awaiting-approval` 或直接交付路径，具体取决于当前应用的审批配置。
 
-### 8.5 fail_node
+### 8.5 skip/prune_node
+
+用途：父节点清理不再需要的 child，避免 seed 占位、重复路线或过时分支阻塞收束。
+
+输入：
+
+```yaml
+nodeIds: string[]
+reason: string
+confirmChildren: boolean = false
+```
+
+约束：
+
+1. root 节点不得 skip/prune。
+2. `reason` 必填，写入目标节点 `failureSummary`，作为审计摘要。
+3. 多个无后代占位子节点可一次批量 skip/prune。
+4. 目标节点存在未完成后代时，runtime 返回 `work-tree-prune-confirm-required`，不得清理。
+5. 目标节点存在已终态后代时，父节点必须确认这些后代已被吸收；确认后用 `confirmChildren=true` 清理父节点，但不改写已完成 leaf 的原状态。
+6. `skipped` 是 terminal 状态，父节点收束时与 `completed` / `failed` 一起计入 child terminal。
+
+### 8.6 fail_node
 
 用途：正式记录节点失败。
 
@@ -519,7 +543,7 @@ nextRecommendation: string|null
 2. 失败摘要只带回可复用避坑经验、证据和剩余风险，不带回完整失败过程。
 3. 后续路径由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
 
-### 8.6 append_relation
+### 8.7 append_relation
 
 用途：连接工作节点和记忆节点、证据节点或其他工作节点。
 
@@ -530,7 +554,7 @@ nextRecommendation: string|null
 3. 信息流关系写入 `relationIds`。
 4. 低置信关系可先写入 relation proposal，不直接污染正式边。
 
-### 8.7 push_frame
+### 8.8 push_frame
 
 用途：进入子节点时，把子节点上下文追加到栈顶，并尽量保留父级 prompt 前缀缓存。
 
@@ -550,7 +574,7 @@ cursorState: string|null
 4. 父帧不得被丢弃，只能进入 `suspended` 或保持在 active path。
 5. 如果当前窗口 token 仍可容纳，push 不得触发 window restart。
 
-### 8.8 pop_frame
+### 8.9 pop_frame
 
 用途：子节点完成、失败或阻塞后，返回父级上下文帧，并把子节点结果以摘要形式写回父帧。
 

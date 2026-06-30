@@ -110,13 +110,79 @@ Parent next: 请父节点评估后决定继续开 leaf、补证据或收束最�
 
 1. `evalsuite_g4_real_task_work_tree_deepseek_v4_pro_parent_retention_live`：DeepSeek V4 Pro，要求父节点在开新 leaf 前读取 `childCompletionSummaries`、已完成节点摘要、报告文件和工具证据，并写 `Parent Evidence Inventory`。如果已存在最终报告、source table 和 contradiction analysis，父节点应停止开 leaf 并完成自身/root。这个实验验证“实际干了但父节点感觉没干”的信息保留路径。
 2. `evalsuite_g4_real_task_work_tree_deepseek_v4_pro_finish_prune_live`：DeepSeek V4 Pro，明确父节点停止条件和正确交付案例，同时新增废旧节点清理 directive：`<work-node-skip nodeId="...">reason</work-node-skip>` / `<work-node-prune nodeId="...">reason</work-node-prune>`。pending/in-progress child 如果是重复、过时、被真实 completed child 覆盖的 seeded placeholder，应被标为 `skipped`，而不是永久残留阻塞 root 收束。
-3. `evalsuite_g4_real_task_work_tree_longcat_finish_prune_live`：LongCat-2.0-Preview，沿用第二个实验的结束/清理口径，只替换模型，验证失败是否主要来自代码/案例路径，而不是 DeepSeek 本身。
+3. `evalsuite_g4_real_task_work_tree_longcat_finish_prune_live`：LongCat-2.0，沿用第二个实验的结束/清理口径，只替换模型，验证失败是否主要来自代码/案例路径，而不是 DeepSeek 本身。
 
 运行时语义：`work-node-skip` 与 `work-node-prune` 等价，都是可审计的废旧节点清理动作。它们只能作用于非 root 节点，必须带 reason，且目标节点不能还有未完成 child；成功后目标节点状态变为 `skipped`，`failureSummary` 保存清理理由，当前节点如果正好是被 skip 的节点则回到父节点。`skipped` 已是终态，父节点收束时与 `completed` / `failed` 一起视为 child terminal。
 
+| 运行 | 证据 | 行为记录 | 结论 |
+|------|------|----------|------|
+| 16. DeepSeek parent-retention | metrics：`.yggdrasil/state/evaluations/evalrun_7947386eb44f480cad96.json`；sandbox：`.yggdrasil/state/evaluation-sandboxes/evalsandbox_de331431d9ad49e2ba07/`；分析：`tmp/live-work-tree-convergence-20260630/convergence-analysis.md` | 44 个 window，152 次工具执行（144 成功），assistant text 中 22 次 create、24 次 complete、1 次 enter。detail 层 `pass=false`、`deliveryCompletion0_1=0`、`workTreeContinuity0_1=0`，但 harness 外层仍显示 case passed。最终 work tree 23 节点：17 completed、1 in-progress、5 pending、0 skipped；root 仍 in-progress，5 个 seeded 高层节点仍 pending。 | 父节点信息保留提示能让模型多次写 `Parent Evidence Inventory` 并识别“不是父子信息丢失，而是工具/证据通道问题”，但不能清掉 seeded pending，也不能让 root 干净收束。这个方向不能单独解决“实际干了但感觉没干”。 |
+| 17. DeepSeek finish-prune | metrics：`.yggdrasil/state/evaluations/evalrun_4c35306b3677410f9325.json`；sandbox：`.yggdrasil/state/evaluation-sandboxes/evalsandbox_b492d883ee2f44039695/`；分析：`tmp/live-work-tree-convergence-20260630/convergence-analysis.md` | 64 个 window 后 `manual-continue-required`，124 次工具执行（112 成功），assistant text 中 18 次 create、40 次 complete、1 次 enter、7 次 prune、5 次 skip，5 个多 directive window。最终 work tree 21 节点：14 completed、1 failed、1 skipped、1 in-progress、4 pending。产物 `workspace/ldes_comparison_report_2030.md` 已写入。 | 新 `skip/prune` 路径真实生效：至少 1 个废旧 seeded 节点被标为 `skipped`，说明允许删除/跳过是可行的。但模型只清掉一部分，仍留下 root in-progress 和 4 个 seeded pending；停止条件仍需要 runtime 层自动收束或更明确地批量处理兄弟占位节点。 |
+| 18. LongCat-2.0 finish-prune | metrics：`.yggdrasil/state/evaluations/evalrun_73b271ede5694e61b1b0.json`；sandbox：`.yggdrasil/state/evaluation-sandboxes/evalsandbox_077fc08d68fa4605ba51/`；报告产物：`workspace/reports/LDES_2030_comparison_report.md` | 64 个 window 后 `blocked/manual-continue-required`，197 次工具执行（195 成功、2 次 `text_memory.append_memory_log` KeyError），`workTreeContinuity0_1=1`，tokens：input 29709、output 1165、cache hit 20736、non-cache 8973。最终 work tree 中 root 仍 `in-progress`，5 个 seeded 高层节点仍 `pending`，2 个节点 `skipped`，多个真实执行 leaf 已 `completed`。正式报告文件已写入，但报告来源表只写 `arXiv:...` 与领域来源，没有落 `http(s)://` 证据链接；official acceptance 因 `evidenceLinks=0` 失败。 | `LongCat-2.0` 模型名已可真实调用，且默认 `workTreeDirectiveRequired` / 批评式 revision 控制没有阻断工具执行；工作树连续性比旧结果好。但父/root 收束仍失败，模型会写“所有子节点均已终止”的验收自述，而 runtime 仍有 root/seeded pending。报告没有把工具证据 URL 落入最终文件，说明“真的查了资料”还需要交付物级证据链接门禁，不能只看工具调用数。 |
+
+本轮还修复了一个评测器缺口：`suite_cases_g4.py` 以前会把最后 assistant 的验收短文保存为 `preservedPaper` 并用于 official acceptance，导致真实写入 workspace 的报告文件被旁路。现在评测会优先选择 `workspace/reports` / `output(s)` / `deliverables` 下更像正式交付物的 Markdown 正文；如果正式报告仍没有 `http(s)://` 证据链接，`g4-min-evidence-links` 仍保持失败，不放宽为 `arXiv:...` 文本。
+
+## 当前测试与默认化状态
+
+已执行 / 已保留入口的工作树 live 实验：
+
+| 实验入口 | 主要变量 | 当前定位 |
+| --- | --- | --- |
+| `eval:g4:work-tree:post-question` | completed 后用 user 追问“为什么不用工作树”等 | 诊断用；不默认 |
+| `eval:g4:work-tree:step-reflection` | 每步后反思当前工作树位置 | 诊断用；不默认 |
+| `eval:g4:work-tree:critique-continue` | 批评式 revision 继续 | 补救入口；不默认 |
+| `eval:g4:work-tree:tool-end-reminder` | 工具结果末尾提醒流程控制 | suite-only；不默认 |
+| `eval:g4:work-tree:tool-call-leaf-example` | 强 leaf 示例 | suite-only；案例已强化父/子边界 |
+| `eval:g4:work-tree:leaf-self-talk` | leaf 内自言自语确认 scope / stopping point / return path | suite-only；不默认 |
+| `eval:g4:work-tree:deepseek-v4-pro` | 换 DeepSeek V4 Pro | 模型对照 |
+| `eval:g4:work-tree:deepseek-v4-pro-critique-continue` | DeepSeek + 批评继续 | 模型 + 补救对照 |
+| `eval:g4:work-tree:deepseek-v4-pro-node-tool-budget` | auto-unfinished + 每节点 5 次 toolcall 软预算 | suite-only；`auto-unfinished` runtime 能力保留 |
+| `eval:g4:work-tree:deepseek-v4-pro-directive-required` | 自然语言换节点无效 + runtime directive-required + complete | 高强度协议实验；不全局默认 |
+| `eval:g4:work-tree:deepseek-v4-pro-parent-retention` | 父节点读取 child summaries / artifacts 后再开 leaf | 诊断父子信息丢失；不默认 |
+| `eval:g4:work-tree:deepseek-v4-pro-finish-prune` | DeepSeek + 停止条件 + skip/prune | 收束实验；skip/prune runtime 能力保留 |
+| `eval:g4:work-tree:deepseek-v4-flash-finish-prune` | DeepSeek V4 Flash + 同一 finish/prune 口径 | 模型对照；用于测试默认 directive-required / revision control |
+| `eval:g4:work-tree:longcat-finish-prune` | LongCat-2.0 + 同一 finish/prune 口径 | 模型对照；skip/prune runtime 能力保留 |
+
+DeepSeek V4 Flash 补充归因（`evalrun_94a007f1e8a74d338d58` / `evalsandbox_bbef81c7e0d9411e86fe`）：这轮不是“报告质量差”导致的工作树结论，而是工作树链路本身没有推进。8 个 window 的 takeover 快照显示 currentNodeId 始终在 root，root 始终 `in-progress`；5 个 root-level seeded 节点（固定研究问题、抽取约束、收集与归纳、校验证据、交付结论）从头到尾保持 `pending`；模型只把第一个 seeded 探索节点从 completed/active 清成 `skipped`，没有创建真实执行 leaf，也没有进入“列出全部 pending seeded child -> 批量 prune/skip -> root complete”的父节点核账流程。因此 `workTreeContinuity0_1=0` 的含义是：窗口连续执行存在，但工作树没有形成有效的节点推进/收束连续性，仍停留在 root + seeded pending 结构。
+
+DeepSeek V4 Flash directive-required 机制复核：同一旧 run 中，compiled prompt 已包含“自然语言不会切换 currentNodeId / complete leaf”的规则，post-completion action `auto-unfinished-directive-required-continue` 也进入 `currentFocus=work-tree-directive-required`。机制本身生效；失败点是模型多次输出错误标签 `<work-tree-node-create ...>`，而 runtime 支持的是 `<work-node-create ...>` / `<work-node-enter ...>` / `<work-node-complete ...>` 等 `work-node-*` directive，因此没有可应用的状态变更。
+
+新增未完成节点工具后的复跑：
+
+| 编号 | 证据 | 关键行为 | 结论 |
+| --- | --- | --- | --- |
+| 19. DeepSeek V4 Flash + `list_unfinished_work_nodes` | metrics：`.yggdrasil/state/evaluations/evalrun_7d736ac1c0a04621893c.json`；sandbox：`.yggdrasil/state/evaluation-sandboxes/evalsandbox_60a26e8edf4d49b69d3d/`；报告：`workspace/long_duration_storage_comparison_report.md` | suite 外层 `failed`，错误来自 worker `timeoutExceeded=true` / `awaiting-approval` 口径；但最终 takeover 已 `verified`，work tree 为 root `completed`、3 个真实 child `completed`、5 个 seeded child `skipped`。本轮调用了 `task_takeover.list_unfinished_work_nodes`，并完成“查未完成节点 -> 清 seeded 占位 -> 开真实 child -> child complete -> root complete”的链路。 | 工作树链路这次是成功样本；失败不应解读为 root/seeded pending 未收束，而是 evaluation worker 对 `awaiting-approval` / timeout 的完成态判定还没有和 work tree completed 对齐。 |
+| 20. LongCat-2.0 + `list_unfinished_work_nodes` | metrics：`.yggdrasil/state/evaluations/evalrun_c0993760679040ec8fce.json`；sandbox：`.yggdrasil/state/evaluation-sandboxes/evalsandbox_4d8871c3a55644708668/`；报告：`workspace/LDES_Route_Selection_Report_2030.md` | suite 外层 `failed`，但最终 takeover 已 `verified`，work tree 为 root `completed`、3 个真实 child `completed`、5 个 seeded child `skipped`。`llm_08837077201346dcad61` 调用了 `task_takeover.list_unfinished_work_nodes`，先识别 seeded pending，再清理占位节点；后续两个真实 child 分别完成文献采集和报告编制，最后 root 完成。报告仍有来源 URL/DOI 不足的质量缺口。 | LongCat 也能采用新工具和清理路径。当前主要缺口从“模型不会收束工作树”转成两个后续问题：外层 evaluation 不接受 awaiting-approval completed work tree；交付物质量门禁需要继续要求 URL/DOI 级证据。 |
+
+当前已经默认进入 runtime / prompt 的特性：
+
+1. 默认 prompt 说明 root/非叶子节点负责高层视角、流程控制、方向重估、信息合并和最终完成判断；leaf 只负责自己边界内的具体执行，不能宣告全局任务完成。
+2. 默认 prompt 说明 child/leaf 开始前要确认 scope、stopping point、return path；完成后用 `work-node-complete` 把结果交回父节点，由父节点选择继续开 leaf、关闭/清理 child 或最终交付。
+3. `work-node-create` / `work-node-enter` / `work-node-complete` / `work-node-handoff` / `work-node-skip` / `work-node-prune` 的解析和行为记录已进入代码路径。
+4. `work-node-complete` 默认 bubble 回父节点，把 child summary 写入父 frame；子节点不能直接替 root 完成全局任务。
+5. `work-node-skip` / `work-node-prune` 支持批量清理无后代占位子节点；清理有终态 leaf 的父节点需要 `confirmChildren="true"`；有未完成后代时返回 `work-tree-prune-confirm-required`。
+6. `auto-unfinished` revision 选择逻辑仍在 runtime 中：当前节点有未完成 child 时在当前节点继续；当前节点完成但 sibling 未完成时回父节点继续；否则回到第一个未完成节点的父节点。后续实验看起来“丢了”是因为部分 suite 满 64 轮后直接 `manual-continue-required`，没有进入 post-completion revision。
+7. `manual-continue-required` 已是长任务满轮后的保留现场机制。
+8. 行为记录器默认记录 assistant work-tree directive、自然语言声明与真实工具行为，用于审计“报告自述”和“真实做过什么”的差异。
+9. `llm_runtime/invoke.py` 默认启用工作树 directive barrier：同一 assistant response 里只要出现会改变当前节点的 `work-node-*` 标签，runtime 会先延后本轮 provider toolCalls，把标签交给 worker 应用；下一窗口在新的 `currentNodeId` 下重新编译 prompt 后再执行工具。
+10. `workTreeDirectiveRequired` 已默认启用：模型用自然语言声称创建/进入/切换节点、Leaf Handoff 或返回父节点但没有可应用 directive 时，runtime 会触发 `work-tree-directive-required` continuation，要求先补真实 `work-node-*` 标签。
+11. `request_task_revision()` 默认采用批评式任务控制继续：未显式指定时选择 `nodeId=auto-unfinished`，在 `resumeMessage/responseRequirements` 中要求先做 Task Control Analysis，再选择真实 work-tree directive、清理废旧节点、进入 leaf 或完成当前父/root。
+12. `task_takeover.list_unfinished_work_nodes` 已注册为只读 agent tool：从当前 `takeoverProtocol.workTree` 列出所有非终态节点，标记 root、current node、未完成 child、可能的 seeded planning placeholder，并直接给出 `suggestedBatchPruneNodeIds` 与批量 `<work-node-prune nodeIds="...">...</work-node-prune>` 示例。默认 prompt 和 revision 提示在 unresolved children 场景要求优先使用该工具，避免模型手工扫描整棵 workTree JSON。
+13. provider 调用默认使用流式响应；`YGGDRASIL_LLM_STREAM_IDLE_TIMEOUT_SECONDS` 只表示连续无字节返回的 idle timeout，不再把 provider 持续输出的长生成误判成总时长超时。流式断开会进入 retry，并在成功响应的 `rawResponse.streamReconnect` 中记录重连事件；DeepSeek 重试仍可切到非 stream + `Connection: close` 作为保底。provider profile 已记录模型最大输出上限：DeepSeek V4 Flash/Pro 384000、LongCat-2.0 128000；网关会把较小 runtime `maxTokens` 提升到模型支持上限，并用 `yggdrasil_requested_max_tokens` 留下原始请求值。
+
+仍是 suite-only / 未默认化的特性：
+
+1. `toolResultReflectionReminder` 工具末尾强提醒。
+2. 每节点 5 次 toolcall 软预算和第 6 次警告。
+3. diagnostic follow-up 侧信道追问。
+
+下一步代码方向：
+
+1. runtime 收束语义继续加强：父节点在所有 child terminal 且交付物存在时，应有稳定路径批量 prune 被覆盖 seeded child，并完成 root；`task_takeover.list_unfinished_work_nodes` 先缩短了模型链路，但仍不是自动收束。
+
 ## 关键观察
 
-1. 运行时的工作树标签是在一个 LLM window 结束后解析并应用的。模型如果在同一轮一边创建 leaf 一边继续调用工具，工具仍不会进入新 leaf。有效模式必须是：根/父节点先输出 `work-node-create` 并停止，下一窗口再在新节点里执行工具。
+1. 工作树标签已经成为工具执行前的 runtime barrier。模型如果在同一 response 一边创建/进入/完成节点一边返回 provider toolCalls，runtime 会把 toolCalls 记录为 `deferredToolCallsByWorkTreeDirective`，不在旧节点执行；worker 先应用工作树 directive 并排下一窗口，让工具工作落到新的当前节点。
 2. `toolResultReflectionReminder` 是低侵入硬提醒，能让模型在每次工具批次后看到流程控制提示，但 LongCat 仍倾向直接把任务做完，不主动发工作树标签。
 3. “每个工具调用为一个 leaf”的示例过硬时，确实能促成 child/leaf；但必须同时规定父节点职责，否则 leaf 会自称完成整体任务，或者 runtime 会在 leaf 输出后直接把任务标 completed。
 4. DeepSeek V4 Pro 在同题中通过严格验收，缓存命中与非缓存 token 都有记录，工具证据充分；加入实验 2 的强 leaf 方法后，它能先开 leaf 并在 leaf 内执行工具，但仍不会自动完成“父节点评估 -> 下一 leaf -> 最终交付”的全流程。
@@ -128,17 +194,18 @@ Parent next: 请父节点评估后决定继续开 leaf、补证据或收束最�
 10. 只靠 `create/enter` 两类 directive 不够。leaf 结束需要一个可验证的完成/交接动作；本轮新增的 `work-node-complete` 解决运行时路径问题，后续实验要观察 LLM 是否会按正确案例稳定使用它，而不是继续写自然语言 handoff。
 11. 长链 continuation 的 prompt 去重是工作树控制的一部分。否则即使协议正确，重复 checkpoint 也会把模型推向“继续补 leaf/补证据”的惯性，削弱父节点最终评估与收束。
 12. `delivery.web-grounded-evidence` 这种最终交付 hard gate 不能在 child/leaf handoff 窗口直接截断整棵工作树。leaf 的证据缺口必须先作为交付摘要返回父节点，由父节点决定补证、换路线或最终判定；只有 root 最终交付才应被 hard gate 阻断。
-13. 门禁修正后，真实任务能越过早期截断并长时间使用工作树，但还没有“稳定完成”。现在的失败更接近工作树收束和 prompt 污染问题：父节点/根节点没有统一处理 seeded pending 节点和最终完成宣告，纠偏文本也会按不同 Scope 重复堆叠。
+13. 门禁修正后，真实任务能越过早期截断并长时间使用工作树。新增 `list_unfinished_work_nodes` 后，DeepSeek V4 Flash 与 LongCat-2.0 均出现 root completed + seeded skipped 的成功轨迹；但 DeepSeek V4 Flash `evalrun_7bf1bde2dcb54e769560` 又暴露出新缺口：suite 外层 completed/passed 时，最终 takeover 仍可能保留 root 和深层节点 `in-progress`。因此“外层完成态”和“工作树节点干净收束”必须分开验收。
 14. 如果允许 seeded placeholder 存在，就必须允许父节点审计后删除或跳过它们。否则模型即使已经完成真实工作，也会被旧规划节点拖住，表现成“报告产出但任务不结束”。
+15. DeepSeek V4 Flash 手动 revision 继续 `run_3858cfd93790449c9d9c` 不是 provider timeout：LLM 调用了 `task_takeover.list_unfinished_work_nodes`、记忆和文件搜索工具，最后以 `finishReason=length` 截断且无 final assistant directive，runtime 排了下一轮 continuation。继续消费到 `run_48824ae64a294af2b734` 后，runtime 仍返回 `parent-orchestration-required`，未完成节点仍是 root -> 探索样本池 -> 系统采集 -> matrix parent -> web/paper leaf 五层 `in-progress`。后续已把 provider 请求上限提升到模型支持最大值；若仍出现循环，就应归因于父节点调度/收束，而不是输出 token 上限。
 
 ## 暂不切成默认行为的原因
 
 1. 工具末尾提醒没有显著改善 leaf 使用，默认开启会增加上下文噪声。
 2. 强 leaf 示例能改善执行位置，但会放大父节点完成态问题；如果 runtime 不保证 leaf handoff 后回父节点，强示例会制造“leaf 写完即 completed”的假完成。
 3. DeepSeek 结果证明高质量模型可以提升最终报告可信度，但不能替代工作树协议修复。
-4. 批评式 revision 可保留为低成本补救手段，但不应被当成工作树正确性的主修复；它需要 runtime 给出明确的未完成节点目标和父节点收束机制。
+4. 批评式 revision 已固化为默认补救入口，但仍不能替代工作树正确性本身；它的作用是把继续位置、任务控制分析和真实 directive 要求写入 continuation，让 LLM 回到未完成节点继续。
 5. 节点工具调用软预算适合作为实验开关，不适合直接默认开启；否则模型可能为遵守 5 次限制而过早交接、降低证据质量。
-6. `work-tree-directive-required` 仍不应直接默认开启到所有任务：虽然 `work-node-complete` 已在真实任务中被采用，24 轮 live 尚未跑完最终合成 child 与父节点认可链路；默认化前应先用更足轮次和手动继续确认完整闭环。
+6. `work-tree-directive-required` 已默认开启；后续风险重点从“是否开启”转为“纠偏文本是否过度重复、是否会在无工作树任务中制造噪声”。
 
 ## 后续建议
 
@@ -149,3 +216,5 @@ Parent next: 请父节点评估后决定继续开 leaf、补证据或收束最�
 5. 下一步应重跑 64 轮 live：允许“最终合成 / 撰写报告 / 交付结论”作为 child 执行；验收重点改为该 child 是否用 `work-node-complete` 交回父节点、父节点是否认可并完成整体任务。若 64 轮仍不够，使用 `manual-continue-required` 现场继续。
 6. 对真实任务验收同时看两类指标：交付质量指标（`pass/officialAcceptance`）和工作树行为指标（directive、current node、node status、window execution）。
 7. DeepSeek V4 Pro 可作为高质量真实任务基线，也可作为“模型能服从 leaf 入口规则”的基线；但在父节点自动收束修复前，不能作为完整工作树使用成功的证据。
+
+
