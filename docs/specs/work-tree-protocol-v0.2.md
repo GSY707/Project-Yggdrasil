@@ -509,8 +509,10 @@ nextRecommendation: string|null
 
 1. 当前节点若有父节点合并、后续复用或跨窗口恢复需求，应已有 `executionSummary`。
 2. 当前节点 `expectedEvidence` 若非空，应有对应 `producedEvidenceRefs` 或明确说明不适用。
-3. 完成子节点后，系统记录可合并摘要；下一步由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
-4. 完成根节点后，工作树可进入 `awaiting-approval` 或直接交付路径，具体取决于当前应用的审批配置。
+3. 当前节点存在未终态后代时，runtime 必须先提醒：这是“节点未被标记完成”的状态信号，不等于实际工作一定没完成。
+4. LLM 核查交付物、child summary 和证据后，如果确认整棵子树真实工作已被吸收，可用 `confirmChildren=true` 完成当前节点；runtime 会把当前节点及其非终态后代递归标为 `completed`。
+5. 完成子节点后，系统记录可合并摘要；下一步由当前任务现场、工具证据、用户要求、硬依赖和 LLM 判断共同决定。
+6. 完成根节点后，工作树可进入 `awaiting-approval` 或直接交付路径，具体取决于当前应用的审批配置。
 
 ### 8.5 skip/prune_node
 

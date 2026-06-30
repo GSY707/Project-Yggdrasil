@@ -744,18 +744,22 @@ def _takeover_protocol_has_unfinished_work_nodes(protocol: TaskTakeoverProtocol 
 
 
 _DEFAULT_REVISION_CONTROL_ANALYSIS_MESSAGE = (
-    "这个任务还不能只靠报告或上一轮回答结束。先做任务控制分析：对照工作树快照、currentNodeId、"
-    "未完成 child/sibling、已完成 child summary、报告/证据产物和父节点职责；优先调用只读工具 "
+    "程序检测到工作树仍有未标记为终态的节点；这只是 runtime 状态信号，不代表实际工作一定没完成。"
+    "先做任务控制分析：对照工作树快照、currentNodeId、未终态 child/sibling、已完成 child summary、"
+    "报告/证据产物和父节点职责；优先调用只读工具 "
     "task_takeover.list_unfinished_work_nodes 取得未完成节点清单和 suggestedBatchPruneNodeIds，判断应该回到父节点评估、"
-    "进入/创建 leaf、清理废旧节点，还是宣告当前节点完成。然后继续执行，不要只解释原因。"
+    "进入/创建 leaf、清理废旧节点、用 confirmChildren=\"true\" 确认关闭已吸收的子树，还是宣告当前节点完成。然后继续执行，不要只解释原因。"
 )
 _DEFAULT_REVISION_RESPONSE_REQUIREMENTS = (
     "Revision control requirement: first output a concise Task Control Analysis identifying currentNodeId, "
-    "runtime work-tree state, unfinished child/sibling nodes, completed child summaries, existing report/evidence artifacts, "
+    "runtime work-tree state, non-terminal child/sibling nodes, completed child summaries, existing report/evidence artifacts, "
+    "and whether the runtime signal is only bookkeeping for nodes not marked terminal rather than actual unfinished work, "
     "using task_takeover.list_unfinished_work_nodes first when available instead of manually scanning the whole workTree JSON. "
     "and whether any child is obsolete or duplicate. If an unfinished child is obsolete or already covered by completed real work, "
     "emit exactly one <work-node-skip nodeId=\"...\">reason</work-node-skip> or "
     "<work-node-prune nodeIds=\"id1,id2\">reason</work-node-prune> and stop. "
+    "If the current node's subtree is already absorbed but descendants remain non-terminal in runtime state, emit exactly one "
+    "<work-node-complete status=\"completed\" confirmChildren=\"true\">...</work-node-complete> and stop. "
     "If all children are terminal and delivery artifacts are present, emit exactly one "
     "<work-node-complete status=\"completed\">...</work-node-complete> from the current parent/root. "
     "If more work is genuinely needed, emit exactly one <work-node-create ...></work-node-create> or "

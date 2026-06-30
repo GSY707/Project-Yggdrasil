@@ -466,6 +466,46 @@ def test_work_tree_reducer_returns_parent_for_reorchestration_and_waits_for_appr
     assert stack.top_frame_id == "frame-root"
 
 
+def test_work_tree_complete_requires_confirmation_for_unfinished_subtree() -> None:
+    protocol = TaskTakeoverProtocol.model_validate(_nested_takeover_protocol("task_p4_complete_subtree_confirm"))
+    protocol_payload = protocol.model_dump(by_alias=True, mode="json")
+    work_tree = protocol_payload["workTree"]
+    work_tree["currentNodeId"] = "root"
+    protocol = TaskTakeoverProtocol.model_validate(protocol_payload)
+    protocol, stack = runtime_takeover.normalize_takeover_runtime_state(
+        protocol,
+        task_id="task_p4_complete_subtree_confirm",
+        agent_run_id="run_p4_complete_subtree_confirm",
+    )
+
+    assert protocol is not None
+    assert stack is not None
+    with pytest.raises(ValueError, match="confirmChildren"):
+        runtime_takeover.complete_current_work_node(
+            protocol,
+            task_id="task_p4_complete_subtree_confirm",
+            agent_run_id="run_p4_complete_subtree_confirm",
+            execution_summary="父节点已经核查交付物，确认子树工作已吸收。",
+            work_context_stack=stack,
+        )
+
+    protocol, stack, transition = runtime_takeover.complete_current_work_node(
+        protocol,
+        task_id="task_p4_complete_subtree_confirm",
+        agent_run_id="run_p4_complete_subtree_confirm",
+        execution_summary="父节点已经核查交付物，确认子树工作已吸收。",
+        work_context_stack=stack,
+        confirm_children=True,
+    )
+
+    assert transition["transition"] == "awaiting-approval"
+    assert transition["confirmedCompletedDescendantNodeIds"] == ["child-1", "child-2"]
+    assert protocol.work_tree is not None
+    assert protocol.work_tree.status == "awaiting-approval"
+    statuses = {node.id: node.status for node in protocol.work_tree.nodes}
+    assert statuses == {"root": "completed", "child-1": "completed", "child-2": "completed"}
+
+
 def test_work_tree_reducer_continues_next_sibling_after_failed_leaf() -> None:
     protocol = TaskTakeoverProtocol.model_validate(_nested_takeover_protocol("task_p4_failed_leaf_reducer"))
     protocol, stack = runtime_takeover.normalize_takeover_runtime_state(
@@ -574,7 +614,10 @@ def test_runtime_single_path_moves_root_delivery_to_awaiting_approval(monkeypatc
 
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         return {
-            "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
+            "assistantText": (
+                "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">已完成最终交付，证据齐全，无待办。</work-node-complete>'
+            ),
             "invocation": {
                 "id": "inv_p4_awaiting_approval_1",
                 "resolvedModel": "LongCat-2.0",
@@ -644,7 +687,10 @@ def test_runtime_default_mode_moves_root_delivery_to_awaiting_approval(monkeypat
 
     def _fake_invoke_runtime_completion(*args, **kwargs):  # type: ignore[no-untyped-def]
         return {
-            "assistantText": "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。",
+            "assistantText": (
+                "# result\n已完成最终交付。\n# evidence\n已生成正式答案与验证线索。\n# pending\n无。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">已完成最终交付，证据齐全，无待办。</work-node-complete>'
+            ),
             "invocation": {
                 "id": "inv_p4_default_mode_awaiting_approval_1",
                 "resolvedModel": "LongCat-2.0",
@@ -715,14 +761,23 @@ def test_runtime_parent_reorchestrates_existing_children_then_waits_for_approval
             if str(item.get("status") or "") == "completed"
         ]
         text_by_node = {
-            "child-1": "# result\n子节点一完成。\n# evidence\n子节点一证据齐全。\n# pending\nchild-2。\n# incomplete\n无。",
-            "child-2": "# result\n子节点二完成。\n# evidence\n子节点二证据齐全。\n# pending\n汇总 root。\n# incomplete\n无。",
+            "child-1": (
+                "# result\n子节点一完成。\n# evidence\n子节点一证据齐全。\n# pending\nchild-2。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">子节点一完成，交回父节点继续编排 child-2。</work-node-complete>'
+            ),
+            "child-2": (
+                "# result\n子节点二完成。\n# evidence\n子节点二证据齐全。\n# pending\n汇总 root。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">子节点二完成，交回父节点汇总。</work-node-complete>'
+            ),
         }
         if current_node_id == "root":
             if completed_children == ["child-1"]:
                 assistant_text = "继续由 root 编排并进入 child-2。\n<work-node-enter nodeId=\"child-2\"></work-node-enter>"
             else:
-                assistant_text = "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。"
+                assistant_text = (
+                    "# result\n根节点已汇总两个子节点。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。\n"
+                    '<work-node-complete status="completed">根节点已汇总两个子节点，等待批准。</work-node-complete>'
+                )
         else:
             assistant_text = text_by_node[current_node_id]
         return {
@@ -852,7 +907,10 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
             }
         if current_node_id != "root":
             return {
-                "assistantText": "# result\n子节点证据已整理完成。\n# evidence\n已形成证据摘要。\n# pending\n汇总 root。\n# incomplete\n无。",
+                "assistantText": (
+                    "# result\n子节点证据已整理完成。\n# evidence\n已形成证据摘要。\n# pending\n汇总 root。\n# incomplete\n无。\n"
+                    '<work-node-complete status="completed">子节点证据已整理完成，交回 root 汇总。</work-node-complete>'
+                ),
                 "invocation": {
                     "id": "inv_p4_dynamic_child_leaf",
                     "resolvedModel": "LongCat-2.0",
@@ -868,7 +926,10 @@ def test_runtime_single_path_can_expand_work_tree_via_assistant_tag(monkeypatch:
                 "contextLengthObservations": [],
             }
         return {
-            "assistantText": "# result\n根节点已整合子节点摘要并等待批准。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。",
+            "assistantText": (
+                "# result\n根节点已整合子节点摘要并等待批准。\n# evidence\n已形成最终答案。\n# pending\n等待批准。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">根节点已整合子节点摘要，等待批准。</work-node-complete>'
+            ),
             "invocation": {
                 "id": "inv_p4_dynamic_child_root_finalize",
                 "resolvedModel": "LongCat-2.0",

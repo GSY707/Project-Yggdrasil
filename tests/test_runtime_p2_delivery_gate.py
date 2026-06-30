@@ -787,6 +787,47 @@ def test_work_node_complete_directive_bubbles_leaf_to_parent_with_summary() -> N
     assert "Li-ion evidence collected" in parent_frame.child_completion_summaries[-1].summary
 
 
+def test_work_node_complete_confirm_children_closes_unfinished_subtree() -> None:
+    task_id = "task_p2_complete_confirm_children"
+    protocol_payload = _nested_work_tree_protocol(task_id)
+    work_tree = protocol_payload["workTree"]
+    assert isinstance(work_tree, dict)
+    work_tree["currentNodeId"] = "root"
+    protocol = TaskTakeoverProtocol.model_validate(protocol_payload)
+    actions = _extract_assistant_work_tree_actions(
+        (
+            '<work-node-complete status="completed" confirmChildren="true">\n'
+            "Result: parent audited the report and child summaries; child-1 and child-2 are already absorbed.\n"
+            "Evidence: final report and source table exist.\n"
+            "Parent next: task can enter approval.\n"
+            "</work-node-complete>"
+        ),
+        enabled=True,
+    )
+
+    updated_protocol, stack, result = _apply_parsed_assistant_work_tree_actions(
+        task_id=task_id,
+        agent_run_id="run_p2_complete_confirm_children",
+        request={"workTreeDirectiveRequired": True},
+        root_mount={},
+        takeover_protocol=protocol,
+        parsed_actions=actions,
+    )
+
+    assert updated_protocol is not None
+    assert updated_protocol.work_tree is not None
+    assert stack is not None
+    assert result["transition"] == "awaiting-approval"
+    assert result["applied"][0]["confirmChildren"] is True
+    assert set(result["confirmedCompletedDescendantNodeIds"]) == {"child-1", "child-2"}
+    nodes = {node.id: node for node in updated_protocol.work_tree.nodes}
+    assert {node_id: node.status for node_id, node in nodes.items()} == {
+        "root": "completed",
+        "child-1": "completed",
+        "child-2": "completed",
+    }
+
+
 def test_work_tree_multiple_state_directives_only_applies_first_transition() -> None:
     task_id = "task_p2_multiple_state_directives"
     protocol = TaskTakeoverProtocol.model_validate(_nested_work_tree_protocol(task_id))

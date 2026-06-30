@@ -258,6 +258,14 @@ root: 产出可引用报告
 
 如果子树里还有未完成 leaf，不能清理；应先进入 leaf 完成、失败，或由父节点确认它被其他结果覆盖后再处理。
 
+如果程序提醒“还有未完成子节点/子树”，这只表示 runtime 里有节点未被标记为终态，不等于系统断定真实工作没有完成。父节点应先检查报告、证据、child summary 和未完成节点清单，再自行判断：
+
+```text
+<work-node-complete status="completed" confirmChildren="true">
+确认该父节点及其子树的真实工作已经被最终报告、来源表和 child summaries 吸收；剩余非终态节点只是未标记完成的状态残留。关闭整棵子树，交回上层继续最终收束。
+</work-node-complete>
+```
+
 父节点不需要：
 
 - 完整搜索过程。

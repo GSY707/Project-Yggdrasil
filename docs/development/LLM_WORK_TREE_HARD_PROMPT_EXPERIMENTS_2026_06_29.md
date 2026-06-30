@@ -169,6 +169,7 @@ DeepSeek V4 Flash directive-required 机制复核：同一旧 run 中，compiled
 11. `request_task_revision()` 默认采用批评式任务控制继续：未显式指定时选择 `nodeId=auto-unfinished`，在 `resumeMessage/responseRequirements` 中要求先做 Task Control Analysis，再选择真实 work-tree directive、清理废旧节点、进入 leaf 或完成当前父/root。
 12. `task_takeover.list_unfinished_work_nodes` 已注册为只读 agent tool：从当前 `takeoverProtocol.workTree` 列出所有非终态节点，标记 root、current node、未完成 child、可能的 seeded planning placeholder，并直接给出 `suggestedBatchPruneNodeIds` 与批量 `<work-node-prune nodeIds="...">...</work-node-prune>` 示例。默认 prompt 和 revision 提示在 unresolved children 场景要求优先使用该工具，避免模型手工扫描整棵 workTree JSON。
 13. provider 调用默认使用流式响应；`YGGDRASIL_LLM_STREAM_IDLE_TIMEOUT_SECONDS` 只表示连续无字节返回的 idle timeout，不再把 provider 持续输出的长生成误判成总时长超时。流式断开会进入 retry，并在成功响应的 `rawResponse.streamReconnect` 中记录重连事件；DeepSeek 重试仍可切到非 stream + `Connection: close` 作为保底。provider profile 已记录模型最大输出上限：DeepSeek V4 Flash/Pro 384000、LongCat-2.0 128000；网关会把较小 runtime `maxTokens` 提升到模型支持上限，并用 `yggdrasil_requested_max_tokens` 留下原始请求值。
+14. `work-node-complete` 已支持 `confirmChildren="true"`：如果当前节点还有非终态后代，未确认时 runtime 会提醒这只是“节点未标终态”的状态信号，不等于实际工作没完成；确认后 runtime 会把当前节点及其非终态子树递归标为 completed。`parent-orchestration-required`、revision 默认提示和 `task_takeover.list_unfinished_work_nodes` 均已改成“先核查状态与交付物，再自行判断”的口径。
 
 仍是 suite-only / 未默认化的特性：
 
@@ -196,7 +197,7 @@ DeepSeek V4 Flash directive-required 机制复核：同一旧 run 中，compiled
 12. `delivery.web-grounded-evidence` 这种最终交付 hard gate 不能在 child/leaf handoff 窗口直接截断整棵工作树。leaf 的证据缺口必须先作为交付摘要返回父节点，由父节点决定补证、换路线或最终判定；只有 root 最终交付才应被 hard gate 阻断。
 13. 门禁修正后，真实任务能越过早期截断并长时间使用工作树。新增 `list_unfinished_work_nodes` 后，DeepSeek V4 Flash 与 LongCat-2.0 均出现 root completed + seeded skipped 的成功轨迹；但 DeepSeek V4 Flash `evalrun_7bf1bde2dcb54e769560` 又暴露出新缺口：suite 外层 completed/passed 时，最终 takeover 仍可能保留 root 和深层节点 `in-progress`。因此“外层完成态”和“工作树节点干净收束”必须分开验收。
 14. 如果允许 seeded placeholder 存在，就必须允许父节点审计后删除或跳过它们。否则模型即使已经完成真实工作，也会被旧规划节点拖住，表现成“报告产出但任务不结束”。
-15. DeepSeek V4 Flash 手动 revision 继续 `run_3858cfd93790449c9d9c` 不是 provider timeout：LLM 调用了 `task_takeover.list_unfinished_work_nodes`、记忆和文件搜索工具，最后以 `finishReason=length` 截断且无 final assistant directive，runtime 排了下一轮 continuation。继续消费到 `run_48824ae64a294af2b734` 后，runtime 仍返回 `parent-orchestration-required`，未完成节点仍是 root -> 探索样本池 -> 系统采集 -> matrix parent -> web/paper leaf 五层 `in-progress`。后续已把 provider 请求上限提升到模型支持最大值；若仍出现循环，就应归因于父节点调度/收束，而不是输出 token 上限。
+15. DeepSeek V4 Flash 手动 revision 继续 `run_3858cfd93790449c9d9c` 不是 provider timeout：LLM 调用了 `task_takeover.list_unfinished_work_nodes`、记忆和文件搜索工具，最后以 `finishReason=length` 截断且无 final assistant directive，runtime 排了下一轮 continuation。继续消费到 `run_48824ae64a294af2b734` 后，runtime 仍返回 `parent-orchestration-required`，未完成节点仍是 root -> 探索样本池 -> 系统采集 -> matrix parent -> web/paper leaf 五层 `in-progress`。后续已把 provider 请求上限提升到模型支持最大值，并加入 `confirmChildren` 完成子树确认；若仍出现循环，就应归因于父节点调度/收束，而不是输出 token 上限。
 
 ## 暂不切成默认行为的原因
 

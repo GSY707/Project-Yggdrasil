@@ -497,6 +497,12 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
             return ""
         if action_name in {"complete", "handoff"}:
             status_raw = str(attributes.get("status") or "completed").strip().lower()
+            confirm_children = str(attributes.get("confirmchildren") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "confirmed",
+            }
             if status_raw in {"complete", "done", "success", "succeeded"}:
                 status_raw = "completed"
             if status_raw in {"failure", "error"}:
@@ -527,6 +533,7 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
                     "rawTag": raw_tag,
                     "completionStatus": status_raw,
                     "summary": summary,
+                    "confirmChildren": confirm_children,
                 }
             )
             return ""
@@ -731,6 +738,7 @@ def _apply_parsed_assistant_work_tree_actions(
                         execution_summary=summary,
                         work_context_stack=updated_stack,
                         evidence_refs=[],
+                        confirm_children=bool(action.get("confirmChildren")),
                     )
                 applied.append(
                     {
@@ -740,6 +748,7 @@ def _apply_parsed_assistant_work_tree_actions(
                         "parentNodeId": completed_node.parent_node_id,
                         "completionStatus": completion_status,
                         "summary": normalize_excerpt(summary, 160),
+                        "confirmChildren": bool(action.get("confirmChildren")),
                         "activated": False,
                     }
                 )

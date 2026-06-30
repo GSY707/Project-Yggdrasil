@@ -1148,6 +1148,7 @@ def complete_current_work_node(
     execution_summary: str,
     work_context_stack: WorkContextStack | dict[str, Any] | None = None,
     evidence_refs: list[dict[str, Any]] | None = None,
+    confirm_children: bool = False,
 ) -> tuple[TaskTakeoverProtocol, WorkContextStack, dict[str, Any]]:
     if protocol.work_tree is None:
         raise ValueError("Takeover protocol does not have a work tree.")
@@ -1159,14 +1160,24 @@ def complete_current_work_node(
     current_node = _current_work_tree_node(protocol)
     if current_node is None:
         raise ValueError("Takeover protocol does not have an executable current node.")
-    if not _node_children_terminal(work_tree, current_node.id):
-        raise ValueError(f"Work-tree node {current_node.id} still has unfinished child nodes.")
+    unfinished_descendant_ids = _node_unfinished_descendant_ids(work_tree, current_node.id)
+    if unfinished_descendant_ids and not confirm_children:
+        raise ValueError(
+            f"Work-tree node {current_node.id} still has unfinished descendant nodes: "
+            f"{', '.join(unfinished_descendant_ids[:8])}. "
+            "This means runtime state has non-terminal child/subtree nodes; it does not prove the actual work is unfinished. "
+            "If you have inspected the work and confirm the subtree should close, emit "
+            '<work-node-complete status="completed" confirmChildren="true">...</work-node-complete>.'
+        )
 
     now = utc_now()
+    completed_subtree_node_ids = {current_node.id}
+    if confirm_children:
+        completed_subtree_node_ids.update(unfinished_descendant_ids)
     updated_nodes: list[dict[str, Any]] = []
     for node in work_tree.nodes:
         payload = node.model_dump(by_alias=True, mode="json")
-        if node.id == current_node.id:
+        if node.id in completed_subtree_node_ids and node.status not in {"completed", "failed", "skipped"}:
             produced_evidence_refs: list[dict[str, Any]] = []
             seen_refs: set[tuple[str, str]] = set()
             for ref in [*(payload.get("producedEvidenceRefs") or []), *(evidence_refs or [])]:
@@ -1181,7 +1192,11 @@ def complete_current_work_node(
             payload.update(
                 {
                     "status": "completed",
-                    "executionSummary": summary,
+                    "executionSummary": (
+                        summary
+                        if node.id == current_node.id
+                        else normalize_excerpt(f"Subtree completed by parent confirmation: {summary}", 240)
+                    ),
                     "failureSummary": None,
                     "producedEvidenceRefs": produced_evidence_refs,
                     "updatedAt": now,
@@ -1277,6 +1292,8 @@ def complete_current_work_node(
         "nextNodeId": next_node_id,
         "currentFocus": current_focus,
     }
+    if confirm_children and unfinished_descendant_ids:
+        result["confirmedCompletedDescendantNodeIds"] = unfinished_descendant_ids
     return normalized_protocol, normalized_stack, result
 def fail_current_work_node(
     protocol: TaskTakeoverProtocol,

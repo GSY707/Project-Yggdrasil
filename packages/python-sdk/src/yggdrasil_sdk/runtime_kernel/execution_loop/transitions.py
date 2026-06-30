@@ -539,6 +539,17 @@ def _finalize_execution_transition(
 						"confirm this node's work scope, stopping point, and return path to the parent. "
 						'After the stopping point is reached, output exactly one <work-node-complete status="completed">...</work-node-complete> directive with result, evidence, gaps/risks, and parent-next notes; do not declare the whole task complete from a child/leaf.',
 					)
+				elif transition_name == "parent-orchestration-required":
+					preferred_child = str((transition_state or {}).get("preferredChildNodeId") or "").strip()
+					_append_continuation_instruction(
+						continuation_payload,
+						"Runtime state checkpoint: this continuation was triggered because the work tree still has child/subtree nodes that are not marked terminal. "
+						"This is a state bookkeeping signal, not a claim that the actual research/work is unfinished. "
+						"First inspect runtime state and existing deliverables, preferably with task_takeover.list_unfinished_work_nodes. "
+						"Then decide: enter the child if real work remains; complete the current node with confirmChildren=\"true\" if the subtree's real work is already absorbed; "
+						"skip/prune obsolete placeholders; or complete root/final parent when all required deliverables are present. "
+						+ (f"Preferred non-terminal child from runtime state: {preferred_child}." if preferred_child else ""),
+					)
 				if delivery_gate_retry_allowed:
 					blocked_gates = [str(item) for item in (transition_state or {}).get("blockedGates") or [] if str(item).strip()]
 					blocked_summary = ", ".join(blocked_gates) if blocked_gates else "delivery evidence or policy"

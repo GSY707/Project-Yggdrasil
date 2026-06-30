@@ -449,9 +449,9 @@ def _unfinished_work_nodes(work_tree: dict[str, Any]) -> dict[str, Any]:
         )
         reason: str
         if is_root:
-            reason = "root is still not completed; inspect unfinished children before final completion"
+            reason = "runtime state still has non-terminal descendants; inspect deliverables and child summaries before deciding whether to complete with confirmChildren"
         elif unfinished_child_ids:
-            reason = "node has unfinished descendants and cannot be pruned until they are resolved"
+            reason = "node has non-terminal descendants in runtime state; this is bookkeeping, so inspect actual work before entering, completing with confirmChildren, or pruning"
         elif seeded_placeholder_likely:
             reason = "root-level seeded planning placeholder with no descendants; if covered by completed real work, batch prune/skip it"
             suggested_batch_prune.append(node_id)
@@ -468,7 +468,7 @@ def _unfinished_work_nodes(work_tree: dict[str, Any]) -> dict[str, Any]:
                 "childNodeIds": child_ids,
                 "unfinishedChildNodeIds": unfinished_child_ids,
                 "seededPlaceholderLikely": seeded_placeholder_likely,
-                "suggestedAction": "complete-root-after-children-terminal" if is_root else ("batch-prune-if-covered" if seeded_placeholder_likely else "resolve-node"),
+                "suggestedAction": "inspect-then-complete-with-confirmChildren-or-resolve" if is_root else ("batch-prune-if-covered" if seeded_placeholder_likely else "inspect-then-enter-complete-or-prune"),
                 "reason": reason,
             }
         )
@@ -485,7 +485,7 @@ def _unfinished_work_nodes(work_tree: dict[str, Any]) -> dict[str, Any]:
             else None
         ),
         "completionHint": (
-            "After all non-root unfinished nodes are completed/skipped/pruned, the parent/root must emit <work-node-complete status=\"completed\">...</work-node-complete>."
+            "These are runtime nodes not marked terminal, not proof that actual work is unfinished. Inspect deliverables and child summaries first. If the subtree is already absorbed, emit <work-node-complete status=\"completed\" confirmChildren=\"true\">...</work-node-complete>; otherwise enter/complete/skip/prune the relevant child."
             if unfinished
             else "All work nodes are terminal; root completion may proceed if delivery evidence is accepted."
         ),
