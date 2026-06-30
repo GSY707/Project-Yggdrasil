@@ -88,49 +88,16 @@ from ._imports import (
     new_id,
     utc_now,
 )
-
-def _actor(value: dict[str, Any] | ActorRef | None, *, default_type: str = "system", default_id: str = "kernel") -> ActorRef:
-    if value is None:
-        return ActorRef(type=default_type, id=default_id)
-    if isinstance(value, ActorRef):
-        return value
-    return ActorRef.model_validate(value)
-
-def _external_ref(value: dict[str, Any] | ExternalRef | None) -> ExternalRef | None:
-    if value is None:
-        return None
-    if isinstance(value, ExternalRef):
-        return value
-    return ExternalRef.model_validate(value)
-
-def _entity_refs(values: list[dict[str, Any] | EntityRef] | None) -> list[EntityRef]:
-    if not values:
-        return []
-    refs: list[EntityRef] = []
-    for value in values:
-        if isinstance(value, EntityRef):
-            refs.append(value)
-            continue
-        refs.append(EntityRef.model_validate(value))
-    return refs
-
-def _import_policy(value: dict[str, Any] | ImportPolicy | None) -> ImportPolicy:
-    if value is None:
-        return ImportPolicy()
-    if isinstance(value, ImportPolicy):
-        return value
-    return ImportPolicy.model_validate(value)
-
-def _score_snapshot_from_node(node: NodeORM) -> dict[str, float]:
-    return {
-        "importance": node.importance,
-        "stability": node.stability,
-        "forgetRate": node.forget_rate,
-        "feedforwardScore": node.feedforward_score,
-        "accessScore": node.access_score,
-        "activityK": node.activity_k,
-        "floatScore": node.float_score,
-    }
+from ._asset_records import (
+    _asset_embedding_record,
+    _asset_record,
+    _asset_segment_record,
+    _dataset_version_record,
+    _evaluation_run_record,
+    _evaluation_suite_record,
+    _model_artifact_record,
+)
+from ._record_helpers import _actor, _entity_refs, _external_ref, _import_policy, _score_snapshot_from_node
 
 def _project_record(model: ProjectORM) -> ProjectRecord:
     return ProjectRecord(
@@ -771,96 +738,6 @@ def _review_comment_record(model: ReviewCommentORM) -> ReviewCommentRecord:
         status=model.status,
         createdAt=model.created_at,
         resolvedAt=model.resolved_at,
-    )
-
-def _evaluation_suite_record(model: EvaluationSuiteORM) -> EvaluationSuiteRecord:
-    return EvaluationSuiteRecord(
-        id=model.id,
-        name=model.name,
-        domain=model.domain,
-        metricRefs=list(model.metric_refs or []),
-        createdAt=model.created_at,
-    )
-
-def _evaluation_run_record(model: EvaluationRunORM) -> EvaluationRunRecord:
-    return EvaluationRunRecord(
-        id=model.id,
-        suiteId=model.suite_id,
-        projectId=model.project_id,
-        subjectKind=model.subject_kind,
-        subjectRef=model.subject_ref,
-        status=model.status,
-        metricsRef=_external_ref(model.metrics_ref),
-        startedAt=model.started_at,
-        endedAt=model.ended_at,
-        createdAt=model.created_at,
-    )
-
-def _asset_record(model: AssetORM) -> AssetRecord:
-    return AssetRecord(
-        id=model.id,
-        projectId=model.project_id,
-        spaceId=model.space_id,
-        branchId=model.branch_id,
-        ownerNodeId=model.owner_node_id,
-        mediaType=model.media_type,
-        role=model.role,
-        storageKey=model.storage_key,
-        checksum=model.checksum,
-        sourceRef=_external_ref(model.source_ref),
-        relatedWorkTreeNodeIds=[str(node_id) for node_id in model.related_work_tree_node_ids or []],
-        durationMs=model.duration_ms,
-        width=model.width,
-        height=model.height,
-        createdAt=model.created_at,
-        createdBy=_actor(model.created_by),
-    )
-
-def _asset_segment_record(model: AssetSegmentORM) -> AssetSegmentRecord:
-    return AssetSegmentRecord(
-        id=model.id,
-        assetId=model.asset_id,
-        ordinal=model.ordinal,
-        startOffset=model.start_offset,
-        endOffset=model.end_offset,
-        textExcerpt=model.text_excerpt,
-        summary=model.summary,
-        embeddingId=model.embedding_id,
-        createdAt=model.created_at,
-    )
-
-def _asset_embedding_record(model: AssetEmbeddingORM) -> AssetEmbeddingRecord:
-    return AssetEmbeddingRecord(
-        id=model.id,
-        ownerKind=model.owner_kind,
-        ownerId=model.owner_id,
-        model=model.model,
-        dimension=model.dimension,
-        vectorRef=_external_ref(model.vector_ref),
-        createdAt=model.created_at,
-    )
-
-def _dataset_version_record(model: DatasetVersionORM) -> DatasetVersionRecord:
-    return DatasetVersionRecord(
-        id=model.id,
-        datasetName=model.dataset_name,
-        version=model.version,
-        sourceFilter=dict(model.source_filter or {}),
-        storageKey=model.storage_key,
-        rowCount=model.row_count,
-        createdAt=model.created_at,
-    )
-
-def _model_artifact_record(model: ModelArtifactORM) -> ModelArtifactRecord:
-    return ModelArtifactRecord(
-        id=model.id,
-        baseModel=model.base_model,
-        tuningMethod=model.tuning_method,
-        datasetVersionId=model.dataset_version_id,
-        metricsRef=_external_ref(model.metrics_ref),
-        storageKey=model.storage_key,
-        status=model.status,
-        createdAt=model.created_at,
     )
 
 __all__ = [name for name in globals() if not name.startswith("__")]

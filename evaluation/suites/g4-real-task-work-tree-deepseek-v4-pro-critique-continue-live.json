@@ -42,7 +42,7 @@
         {
           "id": "ctx_method_stack",
           "title": "method stack",
-          "content": "This run stacks two interventions: first the hard leaf-executes-parent-evaluates example, then a post-completion critique that asks the LLM to analyze task-control state before continuing unfinished work. The second message is only useful if the initial run stops while work-tree nodes or required routes remain unfinished.",
+          "content": "This run combines a hard leaf-executes-parent-evaluates example with a post-completion critique path for unfinished work-tree state. The critique path is relevant only when the initial run stops while work-tree nodes or required routes remain unfinished.",
           "importance": 1.0
         },
         {

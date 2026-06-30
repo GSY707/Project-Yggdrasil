@@ -464,8 +464,14 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
         call_count[0] += 1
         current_node_id = str(request.get("currentNodeId") or "")
         text_by_node = {
-            "child-1": "# result\n子节点一完成。\n# evidence\nok。\n# pending\n无。\n# incomplete\n无。",
-            "child-2": "# result\n子节点二完成。\n# evidence\nok。\n# pending\n无。\n# incomplete\n无。",
+            "child-1": (
+                "# result\n子节点一完成。\n# evidence\nok。\n# pending\n无。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">子节点一完成，回到 root 继续编排。</work-node-complete>'
+            ),
+            "child-2": (
+                "# result\n子节点二完成。\n# evidence\nok。\n# pending\n无。\n# incomplete\n无。\n"
+                '<work-node-complete status="completed">子节点二完成，回到 root 汇总。</work-node-complete>'
+            ),
             "root": "# result\n根节点完成。\n# evidence\nok。\n# pending\n无。\n# incomplete\n无。",
         }
         return {
@@ -488,7 +494,7 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
     monkeypatch.setattr(runtime_execution_loop, "invoke_runtime_completion", _fake)
     
     POLICY_PARAMS = {
-        "allowToolExecution": False,
+        "allowToolExecution": True,
         "temperature": 0.15,
         "maxTokens": 256,
         "allowModelFallback": False,
@@ -519,18 +525,19 @@ def test_sibling_continuation_preserves_provider_policy(monkeypatch: pytest.Monk
     first = run_worker_once("agent-runtime")
     assert first["status"] == "processed"
     assert first["result"]["status"] == "continuing"
+    assert first["result"]["windowExecutionArtifact"]["record"]["transitionOutcome"] == "bubble-parent"
 
     queued = first["result"]["queuedWorkItem"]["payload"]["payload"]
     assert queued["currentNodeId"] == "root"
-    assert queued["allowToolExecution"] is False
+    assert queued["allowToolExecution"] is True
     assert queued["temperature"] == 0.15
     assert queued["maxTokens"] == 256
     assert queued["candidateModels"][0]["model"] == "LongCat-2.0"
     assert queued["candidateModels"][0]["provider"] == "longcat"
 
-    # Round 2: root 完成 → awaiting-approval
+    # Round 2: root 完成；policy 不应在收束过程中被改写
     second = run_worker_once("agent-runtime")
     assert second["status"] == "processed"
 
-    assert second["result"]["status"] == "needs-clarification"
-    assert second["result"]["task"]["status"] == "awaiting-approval"
+    assert second["result"]["status"] == "completed"
+    assert second["result"]["task"]["status"] == "completed"

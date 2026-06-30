@@ -102,7 +102,7 @@ def test_list_unfinished_work_nodes_suggests_seeded_batch_prune() -> None:
     assert result["suggestedBatchPruneNodeIds"] == ["seed-question", "seed-evidence"]
     assert 'nodeIds="seed-question,seed-evidence"' in result["suggestedBatchPruneDirective"]
     root = next(item for item in result["unfinishedNodes"] if item["nodeId"] == "root")
-    assert root["suggestedAction"] == "complete-root-after-children-terminal"
+    assert root["suggestedAction"] == "inspect-then-complete-with-confirmChildren-or-resolve"
 
 
 def test_task_takeover_module_formats_and_verifies_structured_delivery() -> None:
