@@ -293,7 +293,7 @@ def _extract_assistant_memory_write_tags(assistant_text: str, *, enabled: bool) 
 def _split_structured_tag_values(value: str | None, *, fallback: list[str] | None = None) -> list[str]:
     parts = [
         normalize_excerpt(str(item).strip(), 120)
-        for item in re.split(r"[|;\n]+", str(value or ""))
+        for item in re.split(r"[|;,\n，]+", str(value or ""))
         if str(item).strip()
     ]
     normalized = [item for item in parts if item]
@@ -421,6 +421,7 @@ def _work_tree_directive_required_transition(
             "工作树流程漂移提醒：你刚才用自然语言声称创建、进入或切换工作节点，"
             "但 runtime 没有收到可应用的 <work-node-create ...></work-node-create>、"
             "<work-node-enter nodeId=\"...\"></work-node-enter> 或 "
+            "<work-node-update nodeId=\"...\" ...>...</work-node-update> 或 "
             '<work-node-complete status="completed">...</work-node-complete> directive，所以工作树状态没有变化。'
             "先输出一个真正的工作树 directive；不要继续调用资料、搜索、编辑或计算工具，也不要把父节点当 leaf 继续执行。"
         )
@@ -557,6 +558,36 @@ def _extract_assistant_work_tree_actions(assistant_text: str, *, enabled: bool) 
                 }
             )
             return ""
+        if action_name == "update":
+            node_id = str(attributes.get("nodeid") or "").strip() or None
+            title = str(attributes.get("title") or "").strip() or None
+            status = str(attributes.get("status") or "").strip() or None
+            content = str(match.group("content") or "").strip()
+            local_goal = content or str(attributes.get("goal") or "").strip() or None
+            questions = _split_structured_tag_values(attributes.get("questions"), fallback=[])
+            expected_evidence = _split_structured_tag_values(attributes.get("evidence"), fallback=[])
+            if not any([title, local_goal, questions, expected_evidence, status]):
+                blocked.append(
+                    {
+                        "status": "blocked",
+                        "reason": "missing-update-fields",
+                        "tagPreview": normalize_excerpt(raw_tag, 160),
+                    }
+                )
+                return ""
+            parsed_actions.append(
+                {
+                    "action": "update",
+                    "rawTag": raw_tag,
+                    "nodeId": node_id,
+                    "title": title,
+                    "localGoal": local_goal,
+                    "questionsItAnswers": questions,
+                    "expectedEvidence": expected_evidence,
+                    "statusValue": status,
+                }
+            )
+            return ""
         title = str(attributes.get("title") or "").strip()
         parent_node_id = str(attributes.get("parentnodeid") or "").strip() or None
         content = str(match.group("content") or "").strip()
@@ -644,7 +675,7 @@ def _apply_parsed_assistant_work_tree_actions(
         else takeover_protocol.work_tree.current_node_id or takeover_protocol.work_tree.root_node_id
     )
     multi_state_transition_blocked: list[dict[str, Any]] = []
-    if len(actions) > 1 and any(str(item.get("action") or "").strip().lower() in {"enter", "complete", "skip"} for item in actions):
+    if len(actions) > 1 and any(str(item.get("action") or "").strip().lower() in {"enter", "update", "complete", "skip"} for item in actions):
         first_action = actions[0]
         for extra_action in actions[1:]:
             multi_state_transition_blocked.append(
@@ -752,6 +783,37 @@ def _apply_parsed_assistant_work_tree_actions(
                         "activated": False,
                     }
                 )
+            elif action_kind == "update":
+                updated_protocol, updated_stack, updated_node = update_work_node(
+                    updated_protocol,
+                    task_id=task_id,
+                    agent_run_id=agent_run_id,
+                    node_id=str(action.get("nodeId") or "").strip() or None,
+                    title=str(action.get("title") or "").strip() or None,
+                    local_goal=str(action.get("localGoal") or "").strip() or None,
+                    questions_it_answers=[
+                        str(item)
+                        for item in action.get("questionsItAnswers") or []
+                        if str(item).strip()
+                    ],
+                    expected_evidence=[
+                        str(item)
+                        for item in action.get("expectedEvidence") or []
+                        if str(item).strip()
+                    ],
+                    status=str(action.get("statusValue") or "").strip() or None,
+                    work_context_stack=updated_stack,
+                )
+                applied.append(
+                    {
+                        "status": "applied",
+                        "action": "update",
+                        "nodeId": updated_node.id,
+                        "title": updated_node.title,
+                        "localGoal": updated_node.local_goal,
+                        "activated": False,
+                    }
+                )
             else:
                 updated_protocol, updated_stack, created_node = create_child_work_node(
                     updated_protocol,
@@ -793,7 +855,13 @@ def _apply_parsed_assistant_work_tree_actions(
                     "reason": (
                         "enter-child-failed"
                         if action_kind == "enter"
-                        else "complete-child-failed" if action_kind == "complete" else "skip-child-failed" if action_kind == "skip" else "create-child-failed"
+                        else "complete-child-failed"
+                        if action_kind == "complete"
+                        else "skip-child-failed"
+                        if action_kind == "skip"
+                        else "update-child-failed"
+                        if action_kind == "update"
+                        else "create-child-failed"
                     ),
                     "title": str(action.get("title") or action.get("nodeId") or "").strip() or None,
                     "detail": str(exc),
@@ -845,13 +913,24 @@ def _apply_parsed_assistant_work_tree_actions(
             ],
         }
     else:
+        current_node_id = (
+            updated_protocol.work_tree.current_node_id
+            if updated_protocol is not None and updated_protocol.work_tree is not None
+            else None
+        )
         transition = {
-            "transition": "enter-existing-child" if primary_action == "enter" else "enter-child",
+            "transition": (
+                "enter-existing-child"
+                if primary_action == "enter"
+                else "update-work-node"
+                if primary_action == "update"
+                else "enter-child"
+            ),
             "requiresContinuation": bool(applied),
-            "currentNodeId": updated_protocol.work_tree.current_node_id if updated_protocol is not None and updated_protocol.work_tree is not None else None,
+            "currentNodeId": current_node_id,
             "nextNodeId": (
                 applied[0].get("nodeId")
-                if applied and primary_action == "enter"
+                if applied and primary_action in {"enter", "update"}
                 else applied[0].get("childNodeId") if applied else None
             ),
             "currentFocus": _work_tree_focus_label(updated_protocol) if applied else request.get("currentFocus"),
@@ -860,6 +939,7 @@ def _apply_parsed_assistant_work_tree_actions(
         {
             "createdNodeIds": [item["childNodeId"] for item in applied if item.get("action") == "create" and item.get("childNodeId")],
             "enteredNodeIds": [item["nodeId"] for item in applied if item.get("action") == "enter" and item.get("nodeId")],
+            "updatedNodeIds": [item["nodeId"] for item in applied if item.get("action") == "update" and item.get("nodeId")],
             "skippedNodeIds": [
                 node_id
                 for item in applied

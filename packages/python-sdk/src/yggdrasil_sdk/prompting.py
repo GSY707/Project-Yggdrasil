@@ -878,7 +878,7 @@ def _format_runtime_hints(resolution: dict[str, Any]) -> str:
         [
             "使用方式:",
             "- 这些提示用于选择下一步，不覆盖任务现场、工具证据、用户显式要求或当前 Working_Node。",
-            "- 工作树用于上下文卫生：不要为建树而建树，但执行会产生过程噪声时优先进入子节点或叶子节点。",
+            "- 工作树用于上下文卫生：不要为建树而建树；需要隔离执行噪声时，先查找并进入已有合适节点，必要时更新节点范围，最后才新建子节点或叶子节点。",
             "- root/非叶子节点负责高层视角、流程控制、方向重估和信息合并；叶子节点负责具体执行。",
             "- 子节点回到父节点时带回有用信息、证据/文件/记忆引用、已废弃路线和剩余风险，不回灌完整过程。",
             "- 交付未就绪时，把交付草稿视为阶段材料，继续推进最有价值的下一步。",
@@ -973,9 +973,9 @@ def _format_behavior_constitution(profile: PromptProfile) -> str:
         "1. 通过结构化工具和消息通道触达外界，不跨边界越权执行。",
         "2. 工作树节点命名优先体现 questions_it_answers，避免无语义标题。",
         "3. 关键新知、失败原因、约束与关联优先写入记忆，再推进下一步。",
-        "4. 工作树是上下文卫生工具，不是必走流程；不要为建树而建树，但执行会产生过程噪声时优先把执行放进子节点或叶子节点。",
+        "4. 工作树是上下文卫生工具，不是必走流程；不要为建树而建树。需要隔离执行噪声时，优先进入已有合适工作节点；已有节点范围不准确但仍可承载当前工作时，先修改节点目标/问题/证据要求；只有没有合适节点时才新建子节点或叶子节点。",
         "5. 根节点和非叶子节点主要负责工作流程控制、任务理解、方向重估和信息合并；叶子节点负责具体查资料、改文件、跑命令和局部试错。",
-        "6. 当工作会产生大量临时细节、失败尝试、重复项、候选方向或需要隔离实验时，创建/进入工作节点或委派 Sub-Agent。",
+        "6. 当工作会产生大量临时细节、失败尝试、重复项、候选方向或需要隔离实验时，按“进入已有节点 -> 修改已有节点 -> 新建节点 -> 委派 Sub-Agent”的顺序选择。",
         "7. 子节点完成后带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线和剩余风险，不回灌完整搜索、日志或草稿。",
         "8. dependsOn 表示硬依赖；relationIds 与 runtime_hints 是信息线索，不能替代任务现场判断。",
     ]
@@ -1072,8 +1072,8 @@ def _format_response_requirements(
     )
     lines = [
         "1. 先确认总任务目标、当前节点职责和是否需要拆分：root/非叶子节点负责高层视角、流程控制、方向重估、信息合并和最终完成判断；叶子节点只负责自己边界内的具体执行，不能宣告全局任务完成。",
-        "2. 执行会产生搜索记录、编辑过程、命令输出、失败尝试、重复项或候选路线时，依据 currentNodeId、Working_Node 和 WorkContextStack 创建/进入合适工作节点；不要把“不强制建树”理解成在父节点堆执行过程。子节点开始前必须说清 scope/stopping point/return path，停止点达到后只交付本节点结果给父节点。",
-        "3. 换工作节点和结束 child/leaf 都必须操作工作树：需要拆分时用 <work-node-create ...></work-node-create>，进入已有节点用 <work-node-enter nodeId=\"...\"></work-node-enter>，当前 child/leaf 到停止点时用 <work-node-complete status=\"completed\">...</work-node-complete>；每个 LLM window 最多输出一个会改变当前节点的工作树 directive，输出后停止，等下一窗口在新节点继续；自然语言说“我创建/进入/切换/返回 leaf”不会改变 runtime 当前节点，也不能作为已经进入或完成 leaf 的证据。",
+        "2. 执行会产生搜索记录、编辑过程、命令输出、失败尝试、重复项或候选路线时，依据 currentNodeId、Working_Node 和 WorkContextStack 选择合适工作节点；优先进入已有节点，其次修改已有节点的 title/goal/questions/evidence/status 使其承载当前工作，最后才新建节点；不要把“不强制建树”理解成在父节点堆执行过程。子节点开始前必须说清 scope/stopping point/return path，停止点达到后只交付本节点结果给父节点。",
+        "3. 换工作节点、修改节点和结束 child/leaf 都必须操作工作树：进入已有节点用 <work-node-enter nodeId=\"...\"></work-node-enter>，修改已有节点用 <work-node-update nodeId=\"...\" title=\"...\" questions=\"...\" evidence=\"...\">goal</work-node-update>，只有没有合适节点时才用 <work-node-create ...></work-node-create>，当前 child/leaf 到停止点时用 <work-node-complete status=\"completed\">...</work-node-complete>；每个 LLM window 最多输出一个会改变工作树状态的 directive，输出后停止，等下一窗口在新状态继续；自然语言说“我创建/进入/修改/切换/返回 leaf”不会改变 runtime 工作树，也不能作为已经进入、修改或完成 leaf 的证据。",
         "4. 子节点/leaf 开始具体工具工作前，先确认本节点工作范围、停止点和完成后返回父节点的方式；最终合成/撰写报告可以作为 child 执行并产出完整报告草稿，但结束时必须在 work-node-complete 正文里带回父节点需要的有用信息、证据/文件/记忆引用、已废弃路线、风险和建议下一步，由父节点评估并显式选择：继续开 leaf、关闭/清理 child，或最终交付。",
         "5. 父节点发现 pending/in-progress child 已过时、重复或已被 completed child 覆盖时，先用只读工具 task_takeover.list_unfinished_work_nodes 列出未完成节点和 suggestedBatchPruneNodeIds；这是 runtime 发现节点未被标记终态的状态信号，不等于实际工作一定没完成。先核查交付物、child summary 与证据，再自行判断：仍需真实工作则进入/创建 child；占位或废旧节点用 <work-node-skip nodeId=\"...\">reason</work-node-skip> 或 <work-node-prune nodeIds=\"id1,id2\">reason</work-node-prune> 清理；当前节点子树的真实工作已被吸收但 descendants 仍非终态时，用 <work-node-complete status=\"completed\" confirmChildren=\"true\">reason</work-node-complete> 确认关闭整棵子树；批量清理只用于无未完成后代的占位子节点，若目标节点下已有 leaf，必须先确认这些 leaf 的结果已被父节点吸收，再用 confirmChildren=\"true\" 清理父节点。",
         "6. 每轮重要证据、工具批次或准备交付前，重新审视任务目标、当前工作树位置、未闭合问题和是否需要新增/进入/回收子节点。",

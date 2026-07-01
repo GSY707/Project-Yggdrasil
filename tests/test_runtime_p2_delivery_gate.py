@@ -828,6 +828,44 @@ def test_work_node_complete_confirm_children_closes_unfinished_subtree() -> None
     }
 
 
+def test_work_node_update_directive_modifies_existing_node_without_creating_child() -> None:
+    task_id = "task_p2_update_existing_node"
+    protocol = TaskTakeoverProtocol.model_validate(_nested_work_tree_protocol(task_id))
+    original_node_count = len(protocol.work_tree.nodes) if protocol.work_tree is not None else 0
+    actions = _extract_assistant_work_tree_actions(
+        (
+            '<work-node-update nodeId="child-2" title="补证据节点" '
+            'questions="缺少哪些关键证据,下一步验证什么" evidence="pytest 输出,目录索引更新" status="in-progress">\n'
+            "补齐提示词变更的验证和文档同步。\n"
+            "</work-node-update>"
+        ),
+        enabled=True,
+    )
+
+    updated_protocol, stack, result = _apply_parsed_assistant_work_tree_actions(
+        task_id=task_id,
+        agent_run_id="run_p2_update_existing_node",
+        request={"workTreeDirectiveRequired": True},
+        root_mount={},
+        takeover_protocol=protocol,
+        parsed_actions=actions,
+    )
+
+    assert updated_protocol is not None
+    assert updated_protocol.work_tree is not None
+    assert stack is not None
+    assert result["transition"] == "update-work-node"
+    assert result["updatedNodeIds"] == ["child-2"]
+    assert len(updated_protocol.work_tree.nodes) == original_node_count
+    nodes = {node.id: node for node in updated_protocol.work_tree.nodes}
+    assert nodes["child-2"].title == "补证据节点"
+    assert nodes["child-2"].local_goal == "补齐提示词变更的验证和文档同步。"
+    assert nodes["child-2"].node_text == "补齐提示词变更的验证和文档同步。"
+    assert nodes["child-2"].questions_it_answers == ["缺少哪些关键证据", "下一步验证什么"]
+    assert nodes["child-2"].expected_evidence == ["pytest 输出", "目录索引更新"]
+    assert nodes["child-2"].status == "in-progress"
+
+
 def test_work_tree_multiple_state_directives_only_applies_first_transition() -> None:
     task_id = "task_p2_multiple_state_directives"
     protocol = TaskTakeoverProtocol.model_validate(_nested_work_tree_protocol(task_id))

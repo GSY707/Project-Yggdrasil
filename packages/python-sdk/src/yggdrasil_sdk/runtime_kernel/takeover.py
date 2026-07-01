@@ -847,6 +847,107 @@ def switch_current_work_node(
     if normalized_protocol is None or normalized_stack is None:
         raise ValueError("Failed to normalize work-tree runtime state.")
     return normalized_protocol, normalized_stack
+
+def update_work_node(
+    protocol: TaskTakeoverProtocol,
+    *,
+    task_id: str,
+    agent_run_id: str,
+    node_id: str | None = None,
+    title: str | None = None,
+    local_goal: str | None = None,
+    questions_it_answers: list[str] | None = None,
+    expected_evidence: list[str] | None = None,
+    status: str | None = None,
+    work_context_stack: WorkContextStack | dict[str, Any] | None = None,
+) -> tuple[TaskTakeoverProtocol, WorkContextStack, WorkTreeNode]:
+    if protocol.work_tree is None:
+        raise ValueError("Takeover protocol does not have a work tree.")
+    work_tree = protocol.work_tree
+    target_node_id = node_id or work_tree.current_node_id
+    if not target_node_id:
+        raise ValueError("Missing target work-tree node id.")
+    node_by_id = _work_tree_node_index(work_tree)
+    target_node = node_by_id.get(target_node_id)
+    if target_node is None:
+        raise KeyError(f"Unknown work-tree node: {target_node_id}")
+
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status in {"", "none", "unchanged"}:
+        normalized_status = ""
+    elif normalized_status in {"todo", "open"}:
+        normalized_status = "pending"
+    elif normalized_status in {"active", "started"}:
+        normalized_status = "in-progress"
+    elif normalized_status not in {"pending", "in-progress", "blocked"}:
+        raise ValueError("work-node-update status only supports pending, in-progress, or blocked; use complete/skip/prune for terminal changes.")
+
+    clean_questions = [str(item).strip() for item in questions_it_answers or [] if str(item).strip()]
+    clean_evidence = [str(item).strip() for item in expected_evidence or [] if str(item).strip()]
+    has_update = any(
+        [
+            title is not None and str(title).strip(),
+            local_goal is not None and str(local_goal).strip(),
+            clean_questions,
+            clean_evidence,
+            normalized_status,
+        ]
+    )
+    if not has_update:
+        raise ValueError("work-node-update requires at least one changed field.")
+
+    now = utc_now()
+    updated_target: WorkTreeNode | None = None
+    updated_nodes: list[dict[str, Any]] = []
+    for node in work_tree.nodes:
+        payload = node.model_dump(by_alias=True, mode="json")
+        if node.id == target_node_id:
+            if title is not None and str(title).strip():
+                payload["title"] = str(title).strip()
+            if local_goal is not None and str(local_goal).strip():
+                payload["localGoal"] = str(local_goal).strip()
+                payload["nodeText"] = str(local_goal).strip()
+            if clean_questions:
+                payload["questionsItAnswers"] = clean_questions
+            if clean_evidence:
+                payload["expectedEvidence"] = clean_evidence
+            if normalized_status:
+                payload["status"] = normalized_status
+            payload["updatedAt"] = now
+            updated_target = WorkTreeNode.model_validate(payload)
+        updated_nodes.append(payload)
+    if updated_target is None:
+        raise KeyError(f"Unknown work-tree node: {target_node_id}")
+
+    updated_protocol = TaskTakeoverProtocol.model_validate(
+        {
+            **protocol.model_dump(by_alias=True, mode="json"),
+            "status": "executing",
+            "currentPhase": "execute",
+            "workTree": {
+                **work_tree.model_dump(by_alias=True, mode="json"),
+                "nodes": updated_nodes,
+                "status": "active",
+                "currentNodeId": work_tree.current_node_id or target_node_id,
+                "activePathNodeIds": _work_tree_active_path_node_ids(work_tree, current_node_id=work_tree.current_node_id or target_node_id),
+                "pcMemo": f"updated:{target_node_id}",
+                "updatedAt": now,
+            },
+        }
+    )
+    normalized_protocol, normalized_stack = normalize_takeover_runtime_state(
+        updated_protocol,
+        task_id=task_id,
+        agent_run_id=agent_run_id,
+        work_context_stack=work_context_stack,
+    )
+    if normalized_protocol is None or normalized_stack is None:
+        raise ValueError("Failed to normalize updated work-tree runtime state.")
+    normalized_node = _work_tree_node_index(normalized_protocol.work_tree).get(target_node_id) if normalized_protocol.work_tree is not None else None
+    if normalized_node is None:
+        raise ValueError("Updated work-tree node disappeared during normalization.")
+    return normalized_protocol, normalized_stack, normalized_node
+
 def bubble_to_parent_work_node(
     protocol: TaskTakeoverProtocol,
     *,

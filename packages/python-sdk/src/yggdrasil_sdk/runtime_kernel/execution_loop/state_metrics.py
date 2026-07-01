@@ -17,7 +17,7 @@ _MEMORY_WRITE_TAG_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _WORK_TREE_ACTION_TAG_PATTERN = re.compile(
-    r"<work-node-(?P<action>create|enter|complete|handoff|skip|prune)(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-(?P=action)>",
+    r"<work-node-(?P<action>create|enter|update|complete|handoff|skip|prune)(?P<attrs>[^>]*)>(?P<content>.*?)</work-node-(?P=action)>",
     re.IGNORECASE | re.DOTALL,
 )
 _WORK_TREE_NATURAL_LANGUAGE_DIRECTIVE_CLAIM_PATTERN = re.compile(
