@@ -782,7 +782,8 @@ def test_compile_runtime_prompt_includes_soft_runtime_hints() -> None:
     assert "建议下一步: refine" in resolution_section
     assert "交付就绪度: not-ready" in resolution_section
     assert "工作树用于上下文卫生" in resolution_section
-    assert "执行会产生过程噪声时优先进入子节点或叶子节点" in resolution_section
+    assert "先查找并进入已有合适节点" in resolution_section
+    assert "必要时更新节点范围" in resolution_section
     assert "root/非叶子节点负责高层视角" in resolution_section
     assert "有用信息、证据/文件/记忆引用" in resolution_section
     assert "可优先考虑的开放前沿" in resolution_section
