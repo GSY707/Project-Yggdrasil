@@ -1171,7 +1171,10 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
         text_by_node = {
             "child-1": "子节点一完成。证据：child-1 证据齐全。下一步继续 child-2。",
             "child-2": "子节点二完成。证据：child-2 证据齐全。下一步汇总 root。",
-            "root": "根节点已汇总两个子节点。证据：已形成最终答案。等待显式批准。",
+            "root": (
+                "根节点已汇总两个子节点。证据：已形成最终答案。等待显式批准。\n"
+                '<work-node-complete status="completed">根节点已汇总两个子节点，等待显式批准。</work-node-complete>'
+            ),
         }
         assistant_text = text_by_node[current_node_id]
         if current_node_id == "root" and completed_children == ["child-1"]:
