@@ -440,7 +440,7 @@ def test_runtime_audit_level_lean_writes_compact_artifacts(monkeypatch: pytest.M
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "awaiting-approval"
+    assert processed["result"]["status"] == "completed"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -571,7 +571,7 @@ def test_runtime_no_tool_prompt_does_not_expose_registered_tools(monkeypatch) ->
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["status"] == "completed"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()

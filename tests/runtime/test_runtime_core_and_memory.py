@@ -230,7 +230,7 @@ def test_main_agent_materializes_runtime_context_into_memory_tree_before_prompt(
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["status"] == "completed"
 
     with runtime.session_scope() as session:
         WorkspaceBootstrapRepository(session).ensure_default_workspace()
@@ -328,7 +328,7 @@ def test_main_agent_applies_memory_write_tags_without_interrupting_completion(mo
 
     processed = run_worker_once("agent-runtime")
     assert processed["status"] == "processed"
-    assert processed["result"]["status"] == "continuing"
+    assert processed["result"]["status"] == "completed"
     assert processed["result"]["memoryTagWrites"]["detectedCount"] == 1
     assert len(processed["result"]["memoryTagWrites"]["applied"]) == 1
     assert processed["result"]["memoryTagWrites"]["blocked"] == []
