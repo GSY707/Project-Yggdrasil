@@ -1,5 +1,7 @@
 # 世界构建、初次苏醒与任务启动协议 v0.1
 
+> 记忆、工作、能力按需挂载、命令权限与身份边界以[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)为准；本文只定义下层启动协议。
+
 - 文档状态：Draft for review
 - 版本：v0.1
 - 日期：2026-05-26

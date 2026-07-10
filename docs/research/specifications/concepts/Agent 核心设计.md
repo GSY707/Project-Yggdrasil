@@ -1,4 +1,8 @@
 # 记忆检索
+
+> [!IMPORTANT]
+> 本文是 Agent 早期概念来源。当前能力、记忆、在线身份稳定与离线进化的唯一哲学入口为[世界树计划完整设计哲学](../../../architecture/design-philosophy-and-cognitive-principles.md)。
+
 - 读取流程：从根节点开始，通过父子关系和关联关系读取大量节点。
 - 并发读取：LLM 可以同时要求多个节点的内容，快速从记忆中读取所需的内容。
 

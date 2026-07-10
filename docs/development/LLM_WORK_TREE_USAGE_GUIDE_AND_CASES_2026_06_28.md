@@ -1,5 +1,8 @@
 # LLM 工作树使用指南与案例（2026-06-28）
 
+> [!IMPORTANT]
+> 本文是当前工作树的 agent-facing 使用指南，不是项目哲学真源。工作树作为任务期外部工作记忆的完整定义，以[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)为准；绝对化 root/leaf 纪律和强提醒只允许按[弱模型行为补偿注释](../architecture/weak-model-behavior-compensation-notes.md)使用。
+
 ## 文档定位
 
 - 文档状态：Accepted as agent-facing guidance

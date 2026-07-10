@@ -1,3 +1,5 @@
+| `docs/architecture/design-philosophy-and-cognitive-principles.md` | **项目设计哲学唯一主文档**（2026-07-10）：统一定义当前注意力与长期价值、有效记忆、LOD 记忆树、任务期工作树、能力/Skill/工具按需挂载、命令权限与事实可信度、在线身份稳定、离线进化、多 Agent 与可证伪假设；所有下层设计必须服从该文档 |
+| `docs/architecture/weak-model-behavior-compensation-notes.md` | 弱模型行为补偿注释（非设计真理，2026-07-10）：隔离记录当前批准的三类暂时性过强行为提示，定义适用行为档位、任务边界、风险、强度和退场门槛；不得覆盖主哲学或整篇注入模型上下文 |
 | `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：基于应用包 `dashboard.json` 元数据设计场景页、任务模板、预期产物、应用设置，并定义 Agent 工作过程下探、返回、折叠和历史窗口回顾的 UI 规则 |
@@ -658,6 +660,13 @@ docs/
 ├── QUALITY_BASELINE.md             # 质量基线：M8 benchmark 数字基准、API 延迟基准、稳定性门禁值与长任务伪无限上下文评测口径
 ├── P1_TEST_COVERAGE_INVENTORY.md   # P1 任务测试覆盖清单：31个测试全部通过，覆盖记忆树、窗口重启、接管协议、恢复链路完整闭环
 ├── P2_TASK_14_17_FILE_STATUS_AUDIT.md # P2 任务14-17 文件现状审计：成本预算检查、工具执行隔离、runtime metrics、safe-stop机制全景分析，6项关键缺失+6项重要缺失
+├── architecture/                    # 项目设计哲学与架构说明
+│   ├── design-philosophy-and-cognitive-principles.md # 项目设计哲学唯一主文档：记忆树、工作树、能力/Skill/工具目录、主体权责、信息价值与进化的统一认知架构
+│   ├── weak-model-behavior-compensation-notes.md # 非规范维护注释：弱模型过强行为提示、风险、强度和退场条件
+│   ├── overview.md                  # 系统目的、主要组成与依赖方向概览
+│   ├── module-boundaries.md         # 模块依赖边界说明
+│   ├── data-flow.md                 # 系统数据流概览
+│   └── runtime-principles-for-newcomers.md # 面向新人的运行原理说明
 ├── design-handoff/                 # UX 重塑外包资料包：基座用户界面、应用包体验、设置/调试/配置、启动器/安装器四组界面 brief
 │   ├── README.md                    # 资料包总览：范围、当前真实基础、交付物、验收门槛和资料来源
 │   ├── 01-base-user-interface-agent.md # 基座客服型 Agent、应用路由、Prompt 代写、任务确认和错误支持 brief
@@ -1279,6 +1288,8 @@ docs/
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
 | 质量基线与延迟门禁值 | `docs/QUALITY_BASELINE.md` |
+| 项目设计哲学唯一主文档 | `docs/architecture/design-philosophy-and-cognitive-principles.md` |
+| 弱模型行为补偿注释（非设计真理） | `docs/architecture/weak-model-behavior-compensation-notes.md` |
 | 架构决策理由 | `docs/adr/ADR-<number>-*.md` |
 | CI 工作流定义 | `.github/workflows/{pr,ci,nightly,release-check}.yml` |
 | Alembic 迁移一致性检查 | `scripts/check_migrations.sh` |

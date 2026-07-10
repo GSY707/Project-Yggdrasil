@@ -6,6 +6,8 @@ Instructions here apply to this project and are shared with team members.
 
 本项目所有设计都是服务于 LLM 的，设计和实现要以 LLM 为核心。
 
+任何设计、协议、提示词、评测或实现工作开始前，先阅读 `docs/architecture/design-philosophy-and-cognitive-principles.md`。该文件是项目设计哲学唯一真源；旧理念稿、研究稿和模型补偿注释不得覆盖它。
+
 Always update  docs\DIRECTORY_REFERENCE.md file.
 
 必须尽可能地完成任务。除非任务受到硬性阻塞，不然直接继续做下一步，不要停下来。

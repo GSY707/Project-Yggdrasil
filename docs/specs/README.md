@@ -1,5 +1,7 @@
 # 数据规格索引
 
+> 所有规格的上位设计依据为[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)。规格负责落地，不得反向定义记忆树、工作树、能力/Skill/工具目录、身份或信息价值。
+
 - 文档状态：Candidate
 - 更新时间：2026-06-21
 - 目标：模块开发者只看规格即可实现模块，不需要查其他模块代码。

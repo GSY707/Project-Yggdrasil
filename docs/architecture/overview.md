@@ -1,5 +1,7 @@
 # Architecture Overview
 
+> 项目设计哲学唯一主文档：[世界树计划完整设计哲学](design-philosophy-and-cognitive-principles.md)。本页只说明工程架构；若两者冲突，以主哲学文档为准。
+
 ## System Purpose
 
 Project Yggdrasil 是一个长期任务执行系统，目标是在统一控制面下完成任务执行、记忆管理、协作评审、评测闭环与可观测性采集。

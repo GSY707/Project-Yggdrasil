@@ -2,6 +2,8 @@
 
 > 包含：近期关键文档速览、顶层结构、开源协作与治理入口、英文版入口。
 
+| `docs/architecture/design-philosophy-and-cognitive-principles.md` | **项目设计哲学唯一主文档**：统一定义记忆树、工作树、能力/Skill/工具按需挂载、信息价值、主体权责、身份与进化；所有下层设计必须服从该文档 |
+| `docs/architecture/weak-model-behavior-compensation-notes.md` | 弱模型行为补偿注释（非设计真理）：记录暂时保留的过强提示、风险与退场门槛，不得覆盖主哲学 |
 | `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
 | `docs/design-handoff/02-application-package-experience.md` | 特化应用包界面 brief：基于应用包 `dashboard.json` 元数据设计场景页、任务模板、预期产物、应用设置，并定义 Agent 工作过程下探、返回、折叠和历史窗口回顾的 UI 规则 |
@@ -62,7 +64,7 @@
 | `packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/execution_loop/transitions.py` | Agent runtime 完成/续跑/审批流转：隔离 fork 完成态，并对 work-tree correction、child/leaf checkpoint 与 delivery retry continuation 做去重追加，避免长链续跑提示膨胀；hard delivery gate 只阻断 root 最终交付，child/leaf handoff 窗口的证据缺口会作为摘要返回父节点继续调度 |
 # 世界树计划 · 目录说明书
 
-> 项目完整目录结构及各路径的职责说明。适合新加入的开发者理解代码组织方式，以及查询特定功能所在位置。（2026/6/28 更新：运行中 LLM 的工作树口径已切到“上下文卫生、父节点高层视角、leaf 执行、有用信息与引用回收”；`docs/development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md`、`docs/specs/agent-runtime-protocol-v0.2.md`、`docs/specs/work-tree-protocol-v0.2.md` 与 `docs/architecture/runtime-principles-for-newcomers.md` 是当前入口。旧强控制路线已清出当前目录索引，不再作为运行时或评测主口径。）
+> 项目完整目录结构及各路径的职责说明。所有设计先读 `docs/architecture/design-philosophy-and-cognitive-principles.md`；工作树指南和运行协议只是该主哲学的下层应用，不得反向定义项目哲学。弱模型过强提示只允许记录在 `docs/architecture/weak-model-behavior-compensation-notes.md`。
 > 2026/6/28 真实任务测试前置修复：`runtime_kernel/execution_loop/state_metrics.py` 的 `_window_restart_trigger()` 不再把 `forcedWindowRestartBudget > 0` 当作未超阈值也触发的伪 overflow；`evaluation/suites/g4-real-task-web-research-default.json` 已同步取消 fake restart 通过门槛，把默认完成态改为 `completed`，并把四段交付验收从精确 footer 标题降为内容关键词；默认真实任务入口现在以真实 live 模型调用、联网工具证据和交付合同判定效果。
 > 2026/5/27 继续同步：`evaluation/suites/g4-real-task-work-tree-debug.json` 进一步把“先服从 seeded currentNodeId / Working_Node / WorkContextStack，再完成七段报告格式”写进 suite 级 contract；`tests/test_g4_multiscene.py` 新增对应断言，避免 live case 再被纯格式化完整报告语气拉回 root-only。
 > 2026/5/27 再同步：`modules/task-takeover/src/yggdrasil_task_takeover/plugin.py`、`packages/python-sdk/src/yggdrasil_sdk/runtime_kernel/takeover.py`、`execution_loop_part_b.py` 与 `execution_loop_transitions.py` 已把“先核对再执行”升级为正式门禁：默认进入 `needs-clarification`，未确认前强制 `allowToolExecution=false` 且仅允许输出“任务理解+执行计划+确认问题”，并在执行收口阶段阻止未核对任务被标记完成；对应回归已补到 `tests/test_task_takeover.py`、`tests/test_prompting_runtime.py` 与 `tests/test_runtime_p4_foundation.py`。

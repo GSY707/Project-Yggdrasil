@@ -1,5 +1,7 @@
 # Work Tree Protocol v0.2
 
+> 工作树的上位哲学定义以[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)为准；本文只定义下层运行协议，绝对化行为强提醒不属于工作树本体。
+
 - 文档状态：Accepted as current work-tree runtime protocol
 - 版本：v0.2
 - 日期：2026-05-23，2026-06-28 更新 LLM 使用口径，2026-06-30 更新工作树标签执行顺序

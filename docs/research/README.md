@@ -2,15 +2,25 @@
 
 本目录包含世界树计划的所有研究、评估和设计文档。文档已按用途分类组织。
 
-## 当前重定义入口
+## 当前唯一设计哲学入口
 
-- `../new/世界树计划正式项目定义.md` - 当前最高层项目定义草稿与用户笔记：以 LLM 为核心，把代码定位为服务 LLM 的世界环境，并记录生命周期、根内容、能力、工具、工作树、上下文窗口、多 Agent 与项目分期。
-- `../new/元提示词.md` - 新 Boot Prompt 方案：启动时只做 I/O 绑定、根指针寻址、行为宪法和现场恢复，不承载具体业务知识。
-- `../development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` - 当前 LLM 工作树使用口径：工作树是上下文卫生工具，root/非叶子节点负责高层视角和流程控制，leaf 负责具体执行；执行噪声、候选方向、重复项、局部实验和并行工作按需进 child/leaf。
-- `../specs/work-tree-protocol-v0.2.md` - 当前工作树协议入口：定义运行时对象、硬边界、`dependsOn` 与 advisory hint 的分工，以及有用信息/证据/文件/记忆引用回收语义。
-- `../development/WORLD_BUILD_INITIAL_AWAKENING_TASK_START_EXECUTION_2026_05_26.md` - 世界构建、初次苏醒与任务级工作状态读取实施文档，负责把新三阶段方案转成分阶段实现任务。
+- `../architecture/design-philosophy-and-cognitive-principles.md` - **项目设计哲学唯一主文档**：统一定义当前注意力与长期价值、有效记忆、LOD 记忆树、任务期工作树、能力/Skill/工具按需挂载、主体权责、身份与离线进化。所有研究、协议和实现都必须服从该文档。
+- `../architecture/weak-model-behavior-compensation-notes.md` - 弱模型行为补偿注释；只供维护者记录暂时性过强提示、风险和退场门槛，不是第二套哲学。
 
-当前重新定义项目时，应先读正式项目定义草稿和元提示词方案，再读工作树使用指南与 v0.2 协议；进入实现前以执行文档为任务拆分入口。其他研究文档只作为来源、证据或候选特性处理。
+当前仍有效的下层应用文档：
+
+- `../development/LLM_WORK_TREE_USAGE_GUIDE_AND_CASES_2026_06_28.md` - 工作树 agent-facing 使用指南。
+- `../specs/work-tree-protocol-v0.2.md` - 工作树运行协议。
+- `../specs/world-build-awakening-task-start-protocol-v0.1.md` - 世界、能力索引与任务启动协议。
+
+以下文件只保留为历史思想来源，不再定义当前项目哲学：
+
+- `../new/世界树计划正式项目定义.md`
+- `../new/元提示词.md`
+- `specifications/系统核心理念.md`
+- `specifications/concepts/*.md`
+
+阅读顺序固定为：主哲学文档 -> 与任务直接相关的协议/指南 -> 历史来源或研究证据。历史来源与主哲学冲突时，无条件以主哲学为准。
 
 ## 📚 目录结构说明
 
@@ -23,7 +33,7 @@
 - `pseudo-infinite-context-window-roadmap-2026-05-16.md` - 伪无限上下文窗口实现路线
 - `real-user-validation-plan-2026-04-30.md` - 真实用户验证的计划与基线
 
-**推荐阅读**：开发者应从 `final-goal-roadmap-2026-04-30.md` 开始了解项目方向。
+**推荐阅读**：开发者应先读 `../architecture/design-philosophy-and-cognitive-principles.md`，再把 `final-goal-roadmap-2026-04-30.md` 当作历史路线与研究来源。
 
 ---
 
@@ -55,26 +65,19 @@
 ---
 
 ### 📋 [specifications/](./specifications) - 规范、设计与参考
-包含系统设计、实现规范、协议定义和核心理念文档。
+包含历史核心理念、早期概念稿和研究协议草案，不是当前工程规格入口。
 
 **子目录和关键文档**：
-- `P2_IMPLEMENTATION_SPEC_2026_05_17.md` - P2详细实现规范入口（拆分索引）
-- `P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md` - 任务14：LLM预算治理
-- `P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md` - 任务15：工具执行回合
-- `P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md` - 任务16：runtime metrics
-- `P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md` - 任务17：安全停止与可恢复断点
-- `P2_IMPLEMENTATION_INTEGRATION_GUIDE_2026_05_17.md` - 任务14-17集成验收指南
-- `P2_IMPLEMENTATION_CHECKLIST_2026_05_17.md` - P2实现检查清单
-- `P2_QUICK_START_2026_05_17.md` - P2快速启动指南
 - `hypergraph-reasoning-protocol-draft-2026-05-05.md` - 超图推理协议草案
 - `work-tree-protocol-draft-2026-05-05.md` - 工作树协议草案
-- `系统核心理念.md` - 系统的核心设计理念
-- **[concepts/](./specifications/concepts)** - 系统概念和设计文档
+- `系统核心理念.md` - 历史核心假设来源，已由主哲学文档纠偏
+- **[concepts/](./specifications/concepts)** - 历史 Agent / 记忆树概念稿
   - Agent 核心设计、Agent 其他设计
   - 记忆树核心设计、记忆树其他设计
   - Agent行为模式建议组
+- `archive/P2_*.md` - 已归档的 P2 实现与验收历史材料
 
-**推荐**：实现者先看 `P2_IMPLEMENTATION_SPEC_2026_05_17.md` 索引，再进入对应任务子文档开发。
+**推荐**：当前设计先读主哲学；当前工程规格从 [`../specs/README.md`](../specs/README.md) 进入。本目录内容只作为研究来源和历史证据。
 
 ---
 
@@ -116,15 +119,11 @@
 ### 我是...
 
 #### 新加入开发者
-1. 首先阅读：[roadmaps/final-goal-roadmap-2026-04-30.md](./roadmaps/final-goal-roadmap-2026-04-30.md)
-2. 了解系统概念：[specifications/concepts/](./specifications/concepts)
-3. 查看实现规范索引：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md)
-4. 按任务查看详细规范：
-  - [specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md](./specifications/P2_TASK14_LLM_BUDGET_SPEC_2026_05_17.md)
-  - [specifications/P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md](./specifications/P2_TASK15_TOOL_ROUND_SPEC_2026_05_17.md)
-  - [specifications/P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md](./specifications/P2_TASK16_RUNTIME_METRICS_SPEC_2026_05_17.md)
-  - [specifications/P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md](./specifications/P2_TASK17_SAFE_STOP_SPEC_2026_05_17.md)
-5. 参考快速启动：[specifications/P2_QUICK_START_2026_05_17.md](./specifications/P2_QUICK_START_2026_05_17.md)
+1. 首先阅读：[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)
+2. 再按任务阅读当前协议、架构文档和指南。
+3. 历史系统概念只作为来源参考：[specifications/concepts/](./specifications/concepts)
+4. 查看当前规格索引：[docs/specs README](../specs/README.md)
+5. 查看架构入口：[Architecture Overview](../architecture/overview.md)
 
 #### 项目管理者
 1. 阅读完成报告：[completion-reports/](./completion-reports)
@@ -132,9 +131,10 @@
 3. 参考路线图：[roadmaps/](./roadmaps)
 
 #### 系统架构师
-1. 学习核心理念：[specifications/系统核心理念.md](./specifications/系统核心理念.md)
-2. 研究设计文档：[specifications/concepts/](./specifications/concepts)
-3. 了解协议设计：[specifications/hypergraph-reasoning-protocol-draft-2026-05-05.md](./specifications/hypergraph-reasoning-protocol-draft-2026-05-05.md)
+1. 先读唯一主文档：[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)
+2. 再读当前架构与协议文档。
+3. 历史核心理念和 concepts 只用于理解思想来源。
+4. 研究候选协议：[specifications/hypergraph-reasoning-protocol-draft-2026-05-05.md](./specifications/hypergraph-reasoning-protocol-draft-2026-05-05.md)
 
 #### 调试工程师
 1. 查看技术分析：[technical-analysis/](./technical-analysis)
@@ -156,8 +156,9 @@
 
 ## ⚡ 快速导航
 
-- 🎯 **项目目标**：[roadmaps/final-goal-roadmap-2026-04-30.md](./roadmaps/final-goal-roadmap-2026-04-30.md)
-- 🛠️ **实现规范索引**：[specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md](./specifications/P2_IMPLEMENTATION_SPEC_2026_05_17.md)
+- 🎯 **项目设计哲学唯一主文档**：[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)
+- 🧪 **弱模型行为补偿注释**：[非设计真理](../architecture/weak-model-behavior-compensation-notes.md)
+- 🛠️ **当前规格索引**：[docs/specs README](../specs/README.md)
 - 📊 **最新评估**：[project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md](./project-assessments/memory-tree-theory-gap-assessment-2026-05-17.md)
 - ✅ **最新交付**：[completion-reports/P2_COMPLETION_REPORT_2026_05_17.md](./completion-reports/P2_COMPLETION_REPORT_2026_05_17.md)
 - 🐛 **问题分析**：[technical-analysis/runtime-two-failures-summary-2026-05-17.md](./technical-analysis/runtime-two-failures-summary-2026-05-17.md)

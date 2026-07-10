@@ -1,5 +1,7 @@
 # Agent 运行时协议 v0.2
 
+> 上位认知与主体边界以[世界树计划完整设计哲学](../architecture/design-philosophy-and-cognitive-principles.md)为准；本文只定义运行协议。
+
 - 文档状态：Accepted as current runtime protocol
 - 版本：v0.2
 - 日期：2026-05-23，2026-06-28 更新 LLM 工作树口径

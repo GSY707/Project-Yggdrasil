@@ -1,5 +1,9 @@
 # Project Yggdrasil
 
+> **项目主文档 / 设计哲学唯一入口：**[世界树计划完整设计哲学](docs/architecture/design-philosophy-and-cognitive-principles.md)
+>
+> 所有产品设计、协议、提示词、评测与实现都必须服从该文档；历史理念稿只作为来源，不再与主文档共同定义项目方向。
+
 [English README](README.en.md)
 
 世界树计划的正式工程仓库。
@@ -64,7 +68,7 @@ corepack pnpm yggdrasil:up
 
 ## 系统定位
 
-当前仓库是一个长期任务系统，具体目标见 docs\research\系统概念：
+当前仓库是一个长期任务系统，完整目标与认知架构以[世界树计划完整设计哲学](docs/architecture/design-philosophy-and-cognitive-principles.md)为准：
 
 - 后端以 FastAPI、SQLAlchemy、Alembic、Redis 为核心，承载任务运行、记忆树持久化、模块控制面和评测链路。
 - 前端以 Next.js 15 + React 19 为核心，直接消费 core-api 的正式数据面，而不是扫描仓库文件。
