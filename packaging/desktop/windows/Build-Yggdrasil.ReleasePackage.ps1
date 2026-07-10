@@ -50,7 +50,14 @@ function Copy-RepoPath {
 $BasePaths = @(
     "adapters",
     "applications\base-template",
-    "apps",
+    "apps\web\app",
+    "apps\web\lib",
+    "apps\web\public",
+    "apps\web\.eslintrc.json",
+    "apps\web\next-env.d.ts",
+    "apps\web\next.config.ts",
+    "apps\web\package.json",
+    "apps\web\tsconfig.json",
     "docs",
     "infra",
     "migrations",
@@ -119,8 +126,21 @@ if (-not $SkipArchive) {
         Remove-Item -LiteralPath $ZipPath -Force
     }
     Compress-Archive -Path (Join-Path $StageRoot "*") -DestinationPath $ZipPath -Force
-    $Hash = Get-FileHash -Algorithm SHA256 -Path $ZipPath
-    "$($Hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $ZipPath)" | Set-Content -Path $ChecksumPath -Encoding ASCII
+    $Stream = [System.IO.File]::OpenRead($ZipPath)
+    try {
+        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $HashBytes = $Sha256.ComputeHash($Stream)
+        }
+        finally {
+            $Sha256.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
+    $HashText = ([System.BitConverter]::ToString($HashBytes)).Replace("-", "").ToLowerInvariant()
+    "$HashText  $(Split-Path -Leaf $ZipPath)" | Set-Content -Path $ChecksumPath -Encoding ASCII
 }
 
 Write-Host "Built release package staging directory: $StageRoot"

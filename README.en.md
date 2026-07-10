@@ -1,120 +1,14 @@
 # Project Yggdrasil
 
-[中文版本](README.md)
+Project Yggdrasil is a local, self-hosted Agent workbench for long-running tasks. The first public build is an **unsigned Windows preview** that requires Docker Desktop and your own model-provider key.
 
-Project Yggdrasil is the main engineering repository for 世界树计划. It has moved well beyond an early scaffold and now operates as a runnable, testable, resumable, and extensible long-running agent system.
+The primary documentation is currently maintained in Chinese:
 
-## Overview
+- [Use Agents](docs/USER_GUIDE.md)
+- [Build Agents](docs/AGENT_DEVELOPER_GUIDE.md)
+- [Project development](docs/DEVELOPMENT.md)
+- [Canonical design philosophy](docs/architecture/design-philosophy-and-cognitive-principles.md)
 
-- FastAPI, SQLAlchemy, Alembic, and Redis power the backend control plane and persistence flow.
-- Next.js 15 and React 19 provide the web workbench.
-- The module layer already includes formal implementations for text memory, context pruning, pause and resume, shared memory, multimodal memory, relation discovery, training workflows, and sub-agent collaboration.
-- The repository also includes evaluation suites, observability hooks, backup and restore flows, and local infrastructure orchestration.
+Download builds from [GitHub Releases](https://github.com/GSY707/Project-Yggdrasil/releases).
 
-## Core Capabilities
-
-- Formal task execution lifecycle with pause, resume, safe stop, sub-agents, and PR collaboration.
-- Persistent memory tree pipeline with retrieval, shared spaces, permissions, multimodal assets, relation discovery, and memory governance.
-- PromptOps flow with PromptCompiler, seed templates, prompt artifacts, request and response audit trails, and tool execution traces.
-- Evaluation and operations support including regression suites, benchmarks, compose smoke checks, backups, and restore flows.
-
-## Architecture
-
-The system keeps a Kernel / Module / Adapter split:
-
-- Kernel provides the shared runtime, control plane, PromptOps, evaluation, and operational capabilities.
-- Modules extend the platform through hook-based, independent packages.
-- Adapters integrate external model providers and media capabilities.
-- Applications compose scenario-specific agent behavior, prompts, and UI configuration on top of the platform.
-
-## Open Source Collaboration
-
-This repository is fully open source under AGPL-3.0. The repository-wide default is simple: anything committed here is assumed to be publicly distributable, except real credentials.
-
-Read these first before contributing:
-
-- [Contribution Guide](CONTRIBUTING.en.md)
-- [Governance](GOVERNANCE.en.md)
-- [Security Policy](SECURITY.en.md)
-- [Code of Conduct](CODE_OF_CONDUCT.en.md)
-- [Open Source Boundary](docs/OPEN_SOURCE_BOUNDARY.en.md)
-- [RFC Process](docs/rfcs/README.en.md)
-
-Major design changes must go through the RFC process before implementation if they affect architecture boundaries, public interfaces, protocols, module lifecycle, compatibility guarantees, or security boundaries.
-
-## Quick Start
-
-### Install dependencies
-
-```powershell
-uv sync
-corepack pnpm install
-```
-
-Prepare a local `.env` from `.env.example` and configure at least one model provider API key. Never commit real credentials.
-
-### Start the services
-
-```powershell
-uv run yggdrasil-core-api
-uv run yggdrasil-agent-runtime
-uv run yggdrasil-module-host
-uv run yggdrasil-worker
-corepack pnpm web:dev
-```
-
-### Baseline validation
-
-```powershell
-uv run pytest -q
-corepack pnpm web:typecheck
-corepack pnpm web:lint
-corepack pnpm web:build
-```
-
-## Evaluation And Operations
-
-Evaluation commands:
-
-```powershell
-corepack pnpm eval:list
-corepack pnpm eval:regression
-corepack pnpm eval:m8:benchmark
-corepack pnpm eval:m8:live
-corepack pnpm eval:m9:control-plane
-corepack pnpm eval:m9:acceptance
-corepack pnpm eval:g2:regression
-```
-
-Operations commands:
-
-```powershell
-corepack pnpm infra:up
-corepack pnpm infra:down
-corepack pnpm infra:smoke
-corepack pnpm ops:backup
-corepack pnpm ops:restore
-corepack pnpm real-user:prepare
-corepack pnpm real-user:scorecard --csv .\evaluation\fixtures\real-user-validation\scorecard-2026-05-15-g2-complete.csv
-```
-
-`real-user:prepare` creates an isolated sandbox outside the repository for pilot runs, including a copied workspace, isolated state root, frozen task materials, and activation scripts. Pilot runs should not write back into the engineering repository.
-
-## Documentation Map
-
-- The Chinese developer guide remains the deepest engineering reference: `docs/DEVELOPER_GUIDE.md`
-- Full directory map: `docs/DIRECTORY_REFERENCE.md`
-- Protocol index: `docs/protocols/README.md`
-- Specs index: `docs/specs/README.md`
-- Gate 2 closeout summary: `docs/research/g2-closeout-2026-05-15.md`
-- Open source boundary and governance entry points are available in English
-
-## Current Focus
-
-The current focus has moved from closing Gate 2 to maintaining the now-closed Gate 2 baseline and preparing the next Gate 3 protocol upgrades.
-
-As of 2026-05-15:
-
-- Gate 1 is closed with official live reruns for `YGG-CI-01`, `YGG-CG-01`, and `YGG-CG-03`.
-- Gate 2 is closed with one full official rerun and two additional stability rounds on the same provider/model baseline.
-- The current engineering priorities are keeping `eval:g2:regression` green, backfilling plan quality and rework samples, and adding first-token latency instrumentation.
+License: [AGPL-3.0](LICENSE)

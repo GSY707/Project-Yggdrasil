@@ -1,10 +1,13 @@
 .git
 .next
 .pytest_cache
+.ruff_cache
 .tmp
+.uv-cache
 .venv
 .yggdrasil
 .yggdrasil-backups
+dist
 node_modules
 tmp
 eval_output.log

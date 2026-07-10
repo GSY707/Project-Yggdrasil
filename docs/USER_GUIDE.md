@@ -1,587 +1,98 @@
-# 世界树计划 · 使用指南
+# Project Yggdrasil 普通用户指南
 
-> 面向使用世界树系统的用户。涵盖核心概念、Web 工作台操作、任务执行、记忆树管理和应用场景使用。
+本指南面向使用 Agent 完成任务的人。你不需要理解项目源码，但首个预览版仍要求你能安装 Docker Desktop，并在本机配置自己的模型服务密钥。
 
----
+## 1. 安装
 
-## 目录
+### 1.1 准备
 
-1. [系统简介](#1-系统简介)
-2. [核心概念](#2-核心概念)
-3. [访问工作台](#3-访问工作台)
-4. [工作台总览](#4-工作台总览)
-5. [任务管理](#5-任务管理)
-6. [记忆树操作](#6-记忆树操作)
-7. [资产管理](#7-资产管理)
-8. [协作与 PR](#8-协作与-pr)
-9. [Prompt 工程](#9-prompt-工程)
-10. [训练实验](#10-训练实验)
-11. [评测与观测](#11-评测与观测)
-12. [应用场景](#12-应用场景)
-13. [运维操作](#13-运维操作)
-14. [发布、演示与隐私边界](#14-发布演示与隐私边界)
+- Windows 10/11；
+- Docker Desktop；
+- 至少一个受支持模型服务的 API key；
+- 足够的磁盘空间用于 Docker 镜像、任务材料和本地备份。
 
----
+### 1.2 下载与校验
 
-## 1. 系统简介
-
-世界树计划是一个面向**长期任务**的 AI Agent 操作系统。
-
-普通 AI 助手受限于上下文窗口，记忆随对话结束而消失。世界树通过**记忆树**解决了这一问题：
-
-- Agent 的记忆被持久化存储为结构化节点树。
-- 每次执行时，系统动态加载与当前任务最相关的记忆节点。
-- 任务可以暂停、恢复，即使上下文重置也能继续执行。
-- 不同 Agent 可以通过 Sub-Agent 机制协作，并通过 PR 提交修改。
-
-**适合的场景：**
-
-- 需要长期维护大量知识和上下文的研究工作
-- 跨越多个会话的软件开发项目
-- 需要结构化记忆的内容创作
-- 涉及复杂知识积累的学习辅导
-
----
-
-## 2. 核心概念
-
-### 记忆节点 (Memory Node)
-
-记忆树中的最小存储单元。每个节点包含：
-- **内容**：文本或多模态内容
-- **层级**：在树中的位置（根节点、中间节点、叶节点）
-- **关联**：与其他节点的语义关联边
-- **版本历史**：所有历史版本可回溯
-- **来源**：内容的来源（Agent 写入、用户导入、Sub-Agent 提交等）
-
-### 任务 (Task)
-
-一次完整的 Agent 工作单元。任务具有状态机：
-
-```
-created → running → paused → running → completed
-                          ↓
-                       failed
-```
-
-任务的执行过程和所有 LLM 调用都被完整记录，可以随时回溯。
-
-### 应用 (Application)
-
-针对特定场景的 Agent 配置。不同应用使用不同的提示模板、模块组合和工作方式。例如：
-- `coding-greenfield`：从零开始编写代码
-- `deep-research`：深度研究与资料整理
-- `learning-coach`：个性化学习辅导
-
-### 模块 (Module)
-
-扩展系统能力的可插拔组件。用户不需要直接操作模块，但可以在工作台中查看已加载的模块。
-
----
-
-## 3. 访问工作台
-
-首次本地使用时，先在项目根目录启动本地产品模式：
+从 [GitHub Releases](https://github.com/GSY707/Project-Yggdrasil/releases) 下载 ZIP 和同名 `.sha256`，在下载目录运行：
 
 ```powershell
-corepack pnpm yggdrasil:up
+$expected = (Get-Content .\project-yggdrasil-local-preview-0.1.0-preview.1.sha256).Split()[0]
+$actual = (Get-FileHash .\project-yggdrasil-local-preview-0.1.0-preview.1.zip -Algorithm SHA256).Hash.ToLower()
+$actual -eq $expected.ToLower()
 ```
 
-该命令会启动本地依赖、数据库迁移、Core API、Agent Runtime、Module Host、Worker 和 Web 工作台。系统启动后，通过浏览器访问：
+结果应为 `True`。然后解压 ZIP，运行：
 
-```
-http://localhost:3000
-```
-
-工作台提供以下主要页面：
-
-| 页面 | 路径 | 功能 |
-|------|------|------|
-| 总览 | `/` | 首次启动检查、快捷入口 |
-| 任务 | `/tasks` | 从应用模板创建、启动和查看任务 |
-| 任务分析 | `/tasks/{taskId}/analysis` | 查看单任务的 LLM 运行窗口、轮次、工具和工件分析 |
-| 节点 | `/nodes` | 记忆树节点浏览 |
-| 协作 | `/collaboration` | PR 审查与合并 |
-| 资产 | `/assets` | 导入文本素材、切段预览、附加到新任务 |
-| Prompt | `/prompting` | Prompt 模板调试与预览 |
-| 训练 | `/training` | 训练实验管理 |
-| 评测 | `/evaluations` | 评测结果查看 |
-| 观测 | `/observability` | 调用链路追踪 |
-| 模块 | `/mcp` | MCP 模块状态 |
-| 发布与安全 | `/release` | 发布模式、演示路径、本地数据、隐私和支持边界 |
-| 数据治理 | `/data-governance` | 数据资产清单、备份快照、删除影响预览、受保护 task 删除和本地删除审计 |
-
----
-
-## 4. 工作台总览
-
-总览页面现在首先显示首次任务启动检查：
-
-- **Core API**：控制面是否可访问
-- **Database**：数据库是否可连接
-- **Redis coordination**：任务队列协调后端是否可用
-- **Worker queue**：队列是否可访问，并提示是否需要启动 worker
-- **Model provider**：是否配置了可用模型 provider key
-- **State root / Workspace path**：本地状态目录和工作区路径是否有效
-
-任务启动面板会再次读取 Core API `/health` 的 `providerStatus`。没有 provider key，或仍处于 `YGGDRASIL_DISABLE_LIVE_LLM=1` 的 fallback 测试模式时，Web 会阻止「创建并启动」和「立即启动」；用户仍可以先创建草稿。
-
-检查项下方保留系统运行快照：
-
-- **任务统计**：运行中、已完成、失败的任务数量
-- **记忆节点统计**：总节点数、最近写入
-- **资产统计**：已导入的资产数量与大小
-- **训练实验**：最近的训练任务状态
-- **快捷操作**：创建新任务、选择应用、导入素材
-
----
-
-## 5. 任务管理
-
-### 5.1 创建任务
-
-1. 进入 **任务** 页面。
-2. 在页面顶部的 **新任务** 面板选择应用。
-3. 选择该应用提供的任务模板。顶部应用会显示示例任务和预期产物，帮助判断模板是否适合当前目标。
-4. 修改任务标题和目标。
-5. 点击「创建并启动」，系统会先创建任务，再进入运行队列。
-
-也可以点击「只创建草稿」。草稿创建后，面板会显示「立即启动」，可继续启动并跳转到任务详情页。
-
-应用列表页和应用详情页也提供「新任务」入口，会带着对应应用跳到任务页。
-
-如果先在 **资产** 页面导入了文本素材，点击「用这个素材创建任务」会打开任务页，并在「新任务」面板中显示“已附加素材”。创建和启动任务时，素材 ID、摘要节点、切段数量和摘要会作为任务上下文传入。
-
-### 5.2 查看任务执行
-
-进入任务详情页可以看到：
-
-- **实时执行日志**：Agent 的每一步操作
-- **LLM 调用记录**：每次模型调用的输入、输出、延迟、Token 用量
-- **工具调用**：Agent 使用的工具及其结果
-- **记忆操作**：Agent 读取和写入了哪些记忆节点
-- **PromptCompiler 产物**：实际发送给模型的完整 Prompt
-
-任务详情页现在还提供 **LLM 工作分析摘要**：
-
-- 直接显示窗口数、轮次数、工具执行数和工件覆盖率
-- 可刷新最新分析结果
-- 可跳转到完整分析页 `/tasks/{taskId}/analysis`
-
-如需完整排查手册，参见 `docs/LLM_WORK_ANALYZER_USER_GUIDE.md`。
-
-### 5.3 使用 LLM 工作分析页
-
-LLM 工作分析页专门用于回看单任务的运行过程，而不是只看最终结果。
-
-页面会展示：
-
-- **Coverage**：request/response/prompt/metrics/takeover/work-context-stack 等工件覆盖率
-- **Windows**：每一窗的 objective、focus、work tree 锚点、检索摘要和交付摘要
-- **Turns**：每轮 finish reason、工具调用数、失败数和延迟
-- **Tools**：工具名、执行结果、sourceWorkTreeNodeId、失败摘要
-- **Artifacts**：对应原始工件文件位置
-
-推荐做法：
-
-1. 先看 Coverage，确认分析结论是否建立在完整工件之上。
-2. 再看 Windows，定位哪一窗开始偏航。
-3. 最后用 Tools 和 Artifacts 做细查。
-
-> **提示**：如果任务刚结束，先点“刷新分析”再查看完整分析页，能减少读到旧结果的概率。
-
-### 5.4 暂停与恢复任务
-
-当任务运行中时，可以点击「暂停」将任务挂起。任务的完整状态会被快照保存。
-
-恢复任务时，系统会从快照恢复上下文，Agent 无感知地继续执行。
-
-> **注意**：暂停仅在 Agent 执行到安全检查点时生效，不会在 LLM 调用中途强制中断。
-
-### 5.5 任务的 Safe Stop
-
-如需立即停止任务（而不是暂停），使用 **Safe Stop**。系统会等待当前 LLM 调用完成后安全终止，避免数据损坏。
-
-### 5.6 Sub-Agent 任务
-
-某些应用场景会自动启动 Sub-Agent 处理子任务。Sub-Agent 在独立的记忆分支工作，完成后通过 PR 机制提交修改（参见[协作与 PR](#8-协作与-pr)）。
-
----
-
-## 6. 记忆树操作
-
-### 6.1 浏览记忆树
-
-进入 **节点** 页面，可以：
-
-- 以树形结构浏览所有记忆节点
-- 点击节点查看详细内容
-- 查看节点的子节点、关联节点、来源信息
-- 查看节点的历史版本
-
-### 6.2 节点详情
-
-每个节点详情页包含：
-
-| 字段 | 说明 |
-|------|------|
-| 内容 | 节点存储的实际文本或媒体 |
-| 层级路径 | 在树中的位置 |
-| 父节点 | 上级节点链接 |
-| 子节点 | 下级节点列表 |
-| 关联节点 | 跨树的语义关联 |
-| 创建时间 | 首次写入时间 |
-| 最近更新 | 最近一次修改 |
-| 版本历史 | 所有历史版本，可对比差异 |
-| 来源 | 写入来源（任务 ID、Sub-Agent、用户导入等） |
-
-### 6.3 导入文本到记忆树
-
-记忆树支持从外部导入文本内容。通过 **资产** 页面选择文本文件或粘贴正文后，系统会先展示切段预览；确认导入后，会创建资产记录、切段和摘要节点。随后可以把这个素材附加到新任务，让 Agent 在执行时带着这份材料进入工作。
-
-### 6.4 共享记忆空间
-
-系统支持多个 Agent 共享同一个记忆空间（需要配置 `shared-memory` 模块）。共享空间有权限控制：
-
-- **读取权限**：可以检索和查看节点
-- **写入权限**：可以创建和修改节点
-- **管理权限**：可以配置空间设置
-
----
-
-## 7. 资产管理
-
-**资产**是系统中的外部材料资源。当前 Web 工作流优先支持可在浏览器中直接读取的文本类文件，也支持手动粘贴图片、音频、视频的转录或摘录文本。
-
-### 7.1 上传资产
-
-进入 **资产** 页面：
-
-1. 点击「选择文件」，选择 `.txt`、`.md`、`.json`、`.csv`、`.log` 等文本类文件；也可以直接在正文框粘贴资料。
-2. 页面会显示文件名、素材类型和切段预览。
-3. 确认空间与分支后点击「导入素材」。
-4. 导入成功后，会显示素材 ID、切段数量和摘要节点。
-
-### 7.2 资产与记忆节点的关系
-
-导入素材会立即生成可追踪的记忆入口：
-
-1. 系统把正文切成多个片段，便于后续检索。
-2. 系统为素材生成摘要节点，作为任务和记忆树之间的入口。
-3. 在导入结果或资产索引中点击「附加到新任务」，任务创建面板会显示该素材，并把摘要上下文传给新任务。
-
-### 7.3 资产版本管理
-
-当前 Web 页面展示的是已导入资产索引。若需要版本化更新，建议重新导入新素材并在任务目标中说明它与旧素材的关系。
-
----
-
-## 8. 协作与 PR
-
-当 Sub-Agent 或协作用户完成工作后，他们通过 **Pull Request (PR)** 机制提交记忆变更。
-
-### 8.1 查看待处理 PR
-
-进入 **协作** 页面查看所有待处理的 PR 列表。
-
-### 8.2 审查 PR
-
-点击 PR 进入详情：
-
-- **变更摘要**：修改了哪些节点
-- **差异视图**：新旧内容对比（支持文本 diff）
-- **执行上下文**：Sub-Agent 执行过程和决策理由
-- **影响分析**：变更会影响哪些关联节点
-
-### 8.3 合并或拒绝 PR
-
-- **合并**：将 Sub-Agent 的记忆变更合并到主记忆树
-- **拒绝**：丢弃变更，Sub-Agent 的工作分支保留但不合并
-- **请求修改**：添加评论，要求 Sub-Agent 重新执行
-
----
-
-## 9. Prompt 工程
-
-**Prompt 工作台**提供对系统所有提示模板的管理和调试能力。
-
-### 9.1 查看 Prompt 模板
-
-进入 **Prompt** 页面，可以看到：
-
-- 所有已注册的 Prompt 模板
-- 每个模板的变量列表
-- 模板的版本历史
-
-### 9.2 Prompt 编译预览
-
-选择一个模板，填入变量值，可以实时预览编译后发送给模型的完整 Prompt（包括注入的记忆节点）。
-
-### 9.3 调用记录
-
-每次 LLM 调用的实际 Prompt 都被记录。进入任意 Prompt Artifact，可以：
-
-- 查看完整的输入 Prompt
-- 查看模型响应
-- 对比不同版本模板的效果差异
-
----
-
-## 10. 训练实验
-
-**训练实验**模块允许积累高质量的交互数据并进行模型蒸馏实验。
-
-### 10.1 Dataset 版本管理
-
-进入 **训练** 页面：
-
-- 查看所有 Dataset 版本
-- 创建新的 Dataset 版本（从任务执行记录中筛选）
-- 查看 Dataset 统计（样本数、质量分布）
-
-### 10.2 模型产物 (Model Artifact)
-
-训练完成后会生成模型产物：
-
-- 查看产物详情（训练配置、验证指标）
-- 管理产物的晋级状态（实验 → 候选 → 生产）
-- 对比不同产物版本的指标
-
-### 10.3 验证门
-
-模型产物需要通过验证门才能晋级。验证门会在评测套件上运行对比测试，确保新模型不劣于基线。
-
----
-
-## 11. 评测与观测
-
-### 11.1 评测结果
-
-进入 **评测** 页面查看历次评测的结果：
-
-- 回归评测通过/失败情况
-- Benchmark 分数趋势
-- 各评测维度的明细数据
-
-### 11.2 调用链路追踪
-
-进入 **观测** 页面，可以查看系统中每次 LLM 调用的完整追踪信息：
-
-- 请求/响应时间线
-- Token 用量统计
-- 错误与异常记录
-
-也可以直接访问 Jaeger UI（`http://localhost:16686`）查看跨服务的分布式调用链。
-
-### 11.3 LLM 观测 (Langfuse)
-
-对于更细粒度的 LLM 观测，访问 Langfuse（`http://localhost:3100`）：
-
-- 每次生成的详细记录
-- 成本统计（按模型、按应用、按时间段）
-- 质量趋势分析
-
----
-
-## 12. 应用场景
-
-系统内置以下应用场景，每个场景针对特定工作类型进行了优化：
-
-### coding-greenfield · 从零编写代码
-
-适合：全新项目开发，无现有代码库。
-
-特点：
-- Agent 会主动建立项目结构记忆节点
-- 代码文件变更会自动同步为记忆
-- 支持 Sub-Agent 并行处理不同模块
-
-### coding-inherit · 继承已有代码库
-
-适合：接手已有代码库，进行维护和功能开发。
-
-特点：
-- 启动时自动导入代码库结构为记忆节点
-- 理解现有架构后再提出修改建议
-- 变更通过 PR 机制提交
-
-### deep-research · 深度研究
-
-适合：文献研究、市场调研、技术分析。
-
-特点：
-- 自动整理多来源信息为结构化节点
-- 关联发现功能识别不同资料间的联系
-- 支持大量文本资产的批量导入
-
-### epic-writing · 长篇内容创作
-
-适合：小说、剧本、长篇报告等长内容。
-
-特点：
-- 世界观、人物、情节节点自动分层管理
-- 保持长期内容一致性
-- 支持分章节并行创作
-
-### knowledge-studio · 知识管理
-
-适合：个人知识库建设、团队知识沉淀。
-
-特点：
-- 自动整理与分类导入的知识
-- 发现知识间的关联
-- 支持知识的软遗忘（过期知识自动降权）
-
-### learning-coach · 学习辅导
-
-适合：系统性学习某项技能或知识领域。
-
-特点：
-- 根据学习进度动态调整记忆树
-- 记住学习者的知识盲点
-- 个性化制定学习计划
-
-### maintenance-ops · 系统运维
-
-适合：服务器运维、系统巡检、故障处理。
-
-特点：
-- 维护系统配置和历史操作记忆
-- 关联历史故障和解决方案
-- 支持 Sub-Agent 并行巡检
-
-### scenic-guide · 信息导览
-
-适合：旅行规划、本地信息整合。
-
-特点：
-- 地理信息结构化存储
-- 时效性信息标记与软遗忘
-- 关联发现不同地点和活动的关系
-
-### software-factory · 软件工程
-
-适合：大型软件项目，涵盖需求、设计、实现、测试全流程。
-
-特点：
-- 需求、设计、代码多层级记忆树
-- Sub-Agent 分模块并行开发
-- 变更通过 PR 机制管控质量
-
----
-
-## 13. 运维操作
-
-### 13.1 备份
-
-```bash
-# 创建备份快照
-corepack pnpm ops:backup
+```text
+packaging\desktop\windows\Yggdrasil Installer.cmd
 ```
 
-备份内容包括数据库 dump、完整状态目录和元数据。默认保存在 `./.yggdrasil-backups/<timestamp>/`。
+这是未签名预览包，Windows 可能显示 SmartScreen 或 PowerShell 安全提示。只应使用本仓库 GitHub Release 提供、且 SHA256 校验通过的文件。
 
-### 13.2 恢复
+### 1.3 连接模型服务
 
-```bash
-# 恢复最近一次快照
-corepack pnpm ops:restore
+在解压目录把 `infra\product.env.template` 复制为 `infra\product.env`，只填写你实际使用的服务密钥，例如：
 
-# 恢复指定快照
-uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot ./.yggdrasil-backups/<timestamp>
+```dotenv
+YGGDRASIL_LLM_API_KEY_DEEPSEEK=你的密钥
 ```
 
-> **注意**：PostgreSQL 备份恢复依赖本机已安装的 `pg_dump` 和 `psql`；产品 Compose 镜像内已安装与产品 Postgres 对齐的 17.x client。
+不要把 `infra/product.env` 发给别人或提交到 Git。配置后重新启动 Yggdrasil。Web“设置”页当前只显示连接状态，不会保存密钥。
 
-### 13.3 基础设施管理
+## 2. 第一次任务
 
-```bash
-# 一键启动本地产品
-corepack pnpm yggdrasil:up
+1. 从开始菜单打开 **Yggdrasil Desktop**。
+2. 等待浏览器打开 `http://localhost:3000`。
+3. 首页先检查“AI 服务”和“需要处理”；存在阻塞时不要启动任务。
+4. 进入“应用”，选择最接近目标的 Agent。
+5. 有资料时先进入“材料”，粘贴文本或选择文本文件并导入。
+6. 点击“用这个素材创建任务”，选择应用和任务模板。
+7. 先“只创建草稿”，核对目标、材料和预算；确认后再启动。
+8. 在任务详情查看状态、结果、暂停/恢复能力和必要的诊断信息。
 
-# 启动基础设施
-corepack pnpm infra:up
+## 3. 如何选择应用
 
-# 停止基础设施
-corepack pnpm infra:down
+| 你的目标 | 推荐应用 |
+| --- | --- |
+| 调研一个开放问题、比较证据 | Deep Research |
+| 推进学习、论文或研究写作 | Graduate Researcher |
+| 从零开发一个软件项目 | Coding Greenfield |
+| 整理资料、笔记和知识档案 | Knowledge Studio |
 
-# 验证基础设施健康状态
-corepack pnpm infra:smoke
+应用模板会说明需要准备的材料、示例任务和预期产物。先选最接近的模板，再修改标题和目标，不要从空白描述开始。
 
-# 启动 Langfuse 本地观测
-corepack pnpm infra:langfuse:up
-```
+## 4. 材料、隐私与模型服务
 
-### 13.4 查看服务日志
+- 任务、材料、结果、运行状态和备份默认保存在本机。
+- 启动真实任务后，任务目标、材料摘要、检索上下文和 Prompt 会发送给你选择的模型服务商。
+- 当前浏览器直接导入以文本类文件为主；PDF、图片、音频和视频需先提供可读取的摘录或转录文本。
+- 本版本没有 Project Yggdrasil 官方云端工作区、远端备份或远端删除服务。
 
-```bash
-# 查看 Core API 日志
-uv run yggdrasil-core-api 2>&1 | tee core-api.log
+## 5. 备份、删除与更新
 
-# 查看基础设施日志
-docker compose -f infra/docker-compose.yml logs -f postgres
-docker compose -f infra/docker-compose.yml logs -f redis
-```
+- 在“数据与备份”中查看本地备份、删除影响预览和受保护的 task 删除。
+- 删除前先生成影响预览，并保留默认的删除前备份。
+- 卸载默认保留任务数据和备份；删除本地数据需要额外确认。
+- 更新只支持手动检查和手动应用，不会在后台静默执行新版本。
 
----
+## 6. 常见问题
 
-## 14. 发布、演示与隐私边界
+### 首页长时间显示“正在准备”
 
-### 14.1 发布模式矩阵
+首个冷启动需要等待数据库和本地服务就绪。若持续超过约 30 秒，从开始菜单打开 **Yggdrasil Status** 或“帮助与诊断”，确认 Docker Desktop、Core API 和数据库状态。
 
-| 模式 | 当前状态 | 启动入口 | 更新方式 | 数据位置 | 支持边界 |
-|------|----------|----------|----------|----------|----------|
-| 开发者工作区 | 可用 | 手动启动服务，或 `corepack pnpm yggdrasil:up` | `git pull` 后重新执行依赖安装和迁移 | `.yggdrasil` 或 compose 数据库 | 面向贡献者、调试和定向测试 |
-| 本地产品模式 | 推荐 | `corepack pnpm yggdrasil:up` | 停止服务后更新源码、依赖和迁移，再重新启动 | `.yggdrasil`、`.yggdrasil/product-logs`、`.yggdrasil-backups` | 当前外部试用默认模式 |
-| 完整 Docker Compose 产品栈 | 预览可验证 | `corepack pnpm product:up` | `corepack pnpm product:upgrade`；失败时用 `product:rollback` 恢复快照 | `postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` | 适合自托管产品栈验证；已提供备份、恢复、快照列表、升级和回滚维护命令，正式发行前仍需多版本演练 |
-| 桌面封装 | 未签名安装包预览 | `packaging/desktop/windows/Yggdrasil Installer.cmd` / `Yggdrasil Tray.cmd` | `Yggdrasil Update.cmd` 检查；`Yggdrasil Apply Update.cmd` 仅 fast-forward 手动应用；失败时用 `Yggdrasil Rollback.cmd` | 同产品 Compose volume | Windows 未签名安装/卸载、托盘控制器、启动/停止/状态/日志/备份/恢复/快照/升级/回滚和更新检查入口已提供；签名和静默自动更新未完成 |
-| 托管 / SaaS | 计划中 | 尚未发布 | 由官方托管环境负责，策略待定义 | 计划支持官方远端工作区；当前不会自动上传 | 已进入路线图，但当前无 uptime 或商业支持承诺 |
-| 官方远端数据服务 | 计划中 | 尚未发布 | 远端契约已冻结草案 | 远端数据托管、远端备份、远端删除待实现 | 当前仍只支持本地 backup/restore；契约见 `docs/specs/remote-data-service-contract-v0.1.md` |
+### 可以创建草稿，但不能启动
 
-### 14.2 公开演示
+这是安全门。通常是模型密钥未配置或服务仍在重启。检查 `infra/product.env`，重启产品，再在“设置”确认 AI 服务为“已连接”。
 
-演示脚本见 `docs/demos/LOCAL_FIRST_TASK_DEMO.md`。推荐演示顺序：
+### 材料已经导入，但任务里没有看到
 
-1. `/assets` 导入文本素材并查看切段预览。
-2. 点击「用这个素材创建任务」进入 `/tasks`。
-3. 选择 `Deep Research Lab`，确认模板展示示例任务和预期产物。
-4. 创建草稿或直接创建并启动。
-5. 在任务详情页查看运行状态、模型调用、Prompt 工件和 LLM 工作分析摘要。
+从材料导入完成卡片点击“用这个素材创建任务”或“附加到新任务”。任务表单应显示“已附加素材”。
 
-### 14.3 本地数据位置
+### 我看到英文或运行时术语
 
-| 数据类型 | 默认位置或来源 |
-|----------|----------------|
-| provider key | `.env`、`infra/product.env` 或用户级环境变量；不要写入仓库、模板或镜像 |
-| SQLite 数据库 | `.yggdrasil/local-dev.db` |
-| 状态根 | `YGGDRASIL_STATE_ROOT`，默认 `.yggdrasil` |
-| LLM 请求/响应和 Prompt 工件 | `.yggdrasil/state/llm/`、`.yggdrasil/state/prompt/` |
-| 运行窗口和任务分析 | `.yggdrasil/state/runtime/`、`.yggdrasil/state/analysis/` |
-| 产品日志 | `.yggdrasil/product-logs/` |
-| 观测 JSONL | `.yggdrasil/state/observability/` |
-| 备份快照 | `.yggdrasil-backups/<timestamp>/` |
+首版任务详情仍保留部分维护者诊断字段，这是已知界面边界，不影响草稿、启动和结果状态。不要修改不了解的高级控制项。
 
-### 14.4 哪些内容会离开本机
+## 7. 获取帮助
 
-- 启用真实 LLM provider 时，任务目标、导入素材摘要、检索上下文、Prompt 和模型响应会发送给对应 provider。
-- Langfuse 或 OpenTelemetry endpoint 指向远端时，trace、generation metadata、错误摘要和部分运行属性会写入远端观测系统。
-- `uv`、`pnpm`、Docker、Git 等安装和更新命令会访问各自的软件源或代码托管服务。
-- 托管 / SaaS 和官方远端数据服务已加入计划；当前本地产品模式不会自动把数据上传到 Project Yggdrasil 官方服务。未来若提供远端同步，必须通过显式账号、工作区和同步开关进入。
-
-### 14.5 导出、恢复与删除状态
-
-- **导出 / 备份**：`corepack pnpm ops:backup`
-- **恢复最近快照**：`corepack pnpm ops:restore`
-- **恢复指定快照**：`uv run python -m yggdrasil_sdk.ops_cli backup restore --snapshot ./.yggdrasil-backups/<timestamp>`
-- **产品 Compose 备份**：`corepack pnpm product:backup`
-- **产品 Compose 恢复**：`corepack pnpm product:restore -- --snapshot <snapshot>`。恢复会先停止 Web / Worker / API 侧服务，再用一次性容器恢复，最后重新拉起应用服务；不要在任务运行中执行。
-- **产品 Compose 快照列表**：`corepack pnpm product:snapshots`
-- **产品 Compose 升级**：`corepack pnpm product:upgrade`。升级前会创建保护性快照，随后重建产品栈并执行 product smoke。
-- **产品 Compose 回滚**：`corepack pnpm product:rollback -- --snapshot <snapshot>`。回滚前会尝试创建保护性快照，再恢复指定快照并执行 product smoke。
-- **删除影响预览**：进入 `/data-governance`，选择 task / asset / node 并生成 dry-run。asset / node 仍只做预览。
-- **Web 保护性 task 硬删除**：`/data-governance` 在 task plan 无 blocker 且用户精确输入 scopeId 后才允许执行；默认 `backupBeforeDelete=true`，后端会创建保护性备份、执行前重新生成 plan，并返回删除证明。
-- **task 级本地硬删除 API**：后端提供 `POST /data-governance/delete`，必须传入 `confirmScopeId`；运行中任务会被阻塞，且不会创建删除前备份。确认旧备份、产品日志、LLM provider、Langfuse 和 OTel 远端数据不会被本地 task 删除自动处理。
-- **手动清理本地状态**：停止服务后再清理 `.yggdrasil`；如果使用产品 Compose，需要先确认 `postgres-data`、`minio-data`、`yggdrasil-state`、`yggdrasil-backups` 等卷的清理范围。
-- **远端备份 / 远端删除**：契约见 `docs/specs/remote-data-service-contract-v0.1.md`，但当前没有官方远端备份库、远端恢复入口、远端删除请求入口或远端删除证明。
-
-更多开源和支持边界见 `docs/OPEN_SOURCE_BOUNDARY.md`。
+先在产品内打开“帮助与诊断”，记录状态和失败步骤。公开问题可提交到 [GitHub Issues](https://github.com/GSY707/Project-Yggdrasil/issues)，不要附带 API key、原始私密材料或完整环境文件。

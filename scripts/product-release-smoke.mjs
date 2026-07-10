@@ -9,8 +9,6 @@ const composePrefix = ["compose", "--env-file", productEnvPath, "-f", "infra/doc
 const composeEnv = {
   ...process.env,
   COMPOSE_BAKE: "false",
-  COMPOSE_DOCKER_CLI_BUILD: "0",
-  DOCKER_BUILDKIT: "0",
   YGGDRASIL_PRODUCT_ENV_FILE: productEnvFileForCompose,
 };
 
@@ -44,6 +42,22 @@ function dockerCompose(args, options) {
   return run("docker", [...composePrefix, ...args], options);
 }
 
+function buildReleaseImage(dockerfile, tag) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", ["build", "-f", dockerfile, "-t", tag, "."], {
+      env: { ...composeEnv, DOCKER_BUILDKIT: "0" },
+      stdio: "inherit",
+    });
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`docker build ${dockerfile} exited with code ${code ?? 1}`));
+    });
+  });
+}
+
 async function productSmoke() {
   const result = await run("uv", ["run", "python", "-m", "yggdrasil_sdk.ops_cli", "product-compose-smoke"], { capture: true });
   process.stdout.write(result.stdout);
@@ -68,8 +82,12 @@ async function main() {
   console.log("[release-smoke] docker compose config");
   await dockerCompose(["config"]);
 
+  console.log("[release-smoke] build release images once");
+  await buildReleaseImage("infra/docker/python-service.Dockerfile", "project-yggdrasil/python-service:local");
+  await buildReleaseImage("infra/docker/web.Dockerfile", "project-yggdrasil/web:local");
+
   console.log("[release-smoke] product up");
-  await dockerCompose(["up", "-d", "--build"]);
+  await dockerCompose(["up", "-d", "--no-build"]);
 
   console.log("[release-smoke] product smoke");
   await productSmoke();

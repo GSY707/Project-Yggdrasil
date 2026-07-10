@@ -21,7 +21,7 @@ const composePrefix = [
 
 const commandArgs = {
   config: ["config"],
-  up: ["up", "-d", "--build"],
+  up: ["up", "-d", "--no-build"],
   down: ["down"],
   status: ["ps"],
   logs: ["logs", "-f", ...SERVICES_FOR_LOGS],
@@ -32,8 +32,6 @@ const commandArgs = {
 const composeEnv = {
   ...process.env,
   COMPOSE_BAKE: "false",
-  COMPOSE_DOCKER_CLI_BUILD: "0",
-  DOCKER_BUILDKIT: "0",
   YGGDRASIL_PRODUCT_ENV_FILE: productEnvFileForCompose,
 };
 
@@ -62,6 +60,22 @@ function runProductSmoke() {
   return runCommand("uv", ["run", "python", "-m", "yggdrasil_sdk.ops_cli", "product-compose-smoke"]);
 }
 
+async function buildProductImages() {
+  const legacyBuildEnv = { ...composeEnv, DOCKER_BUILDKIT: "0" };
+  for (const [dockerfile, tag] of [
+    ["infra/docker/python-service.Dockerfile", "project-yggdrasil/python-service:local"],
+    ["infra/docker/web.Dockerfile", "project-yggdrasil/web:local"],
+  ]) {
+    await new Promise((resolve, reject) => {
+      const child = spawn("docker", ["build", "-f", dockerfile, "-t", tag, "."], {
+        env: legacyBuildEnv,
+        stdio: "inherit",
+      });
+      child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`docker build ${dockerfile} exited with code ${code ?? 1}`)));
+    });
+  }
+}
+
 async function restoreProductStack(args) {
   await runCompose(["stop", ...APP_SERVICES]);
   let restoreError = null;
@@ -79,7 +93,8 @@ async function restoreProductStack(args) {
 async function upgradeProductStack() {
   await runCompose(["exec", "-T", "core-api", "yggdrasil-ops", "backup", "create"]);
   await runCompose(["stop", ...APP_SERVICES]);
-  await runCompose(["up", "-d", "--build"]);
+  await buildProductImages();
+  await runCompose(["up", "-d", "--no-build"]);
   await runProductSmoke();
 }
 
@@ -98,6 +113,11 @@ async function rollbackProductStack() {
 }
 
 async function main() {
+  if (command === "up") {
+    await buildProductImages();
+    await runCompose(["up", "-d", "--no-build"]);
+    return;
+  }
   if (command === "restore") {
     await restoreProductStack(rest);
     return;

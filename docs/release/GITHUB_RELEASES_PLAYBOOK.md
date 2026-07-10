@@ -99,9 +99,17 @@ Local product data stays in local Docker volumes and local Yggdrasil data folder
 
 - Unsigned package; Windows SmartScreen or ExecutionPolicy warnings may appear.
 - Docker Desktop is detected and guided, not bundled.
+- A model-provider key must currently be stored in the local untracked `infra/product.env`; the Web settings page reports connection status but does not save keys.
+- Task detail still exposes some maintainer-oriented runtime and diagnostic terminology.
 - SaaS, official remote backup, official remote restore, and official remote deletion are not released.
 - Asset / node hard deletion remains outside this release.
 ```
+
+发布正文还必须链接：
+
+- `docs/USER_GUIDE.md`
+- `docs/AGENT_DEVELOPER_GUIDE.md`
+- `docs/release/FIRST_RELEASE_USER_AUDIT_2026-07-10.md`
 
 ## 5. 发布后核验
 

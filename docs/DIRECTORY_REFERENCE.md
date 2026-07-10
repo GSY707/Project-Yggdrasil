@@ -1,4 +1,10 @@
 | `docs/architecture/design-philosophy-and-cognitive-principles.md` | **项目设计哲学唯一主文档**（2026-07-10）：统一定义当前注意力与长期价值、有效记忆、LOD 记忆树、任务期工作树、能力/Skill/工具按需挂载、命令权限与事实可信度、在线身份稳定、离线进化、多 Agent 与可证伪假设；所有下层设计必须服从该文档 |
+| `README.md` | 2026-07-10 首版用户入口：仅保留普通客户使用 Agent、Agent 开发者、首版边界和单一项目开发链接，不再在首页展开基座内部命令与目录 |
+| `docs/USER_GUIDE.md` | 普通客户指南：从 GitHub Release 下载、SHA256 校验、Windows 安装、模型密钥、本地任务路径、隐私、备份、更新与常见问题 |
+| `docs/AGENT_DEVELOPER_GUIDE.md` | Agent 开发者指南：从现有应用出发，说明应用包目录、用户体验合同、LLM 资产设计、装配验证与深入协议入口 |
+| `docs/DEVELOPMENT.md` | 项目基座开发的单一外部入口：汇总设计哲学、开发指南、目录索引、贡献规范与发布维护入口 |
+| `docs/release/FIRST_RELEASE_USER_AUDIT_2026-07-10.md` | 首版真实用户流程验收：记录开始页、应用、材料、Deep Research 草稿、任务详情与设置状态，冻结“Windows 本地自托管未签名预览版”发布边界及截图证据 |
+| `docs/release/first-release-audit-2026-07-10/` | 2026-07-10 首版用户体验审计截图：稳定开始页、应用选择、材料导入前后、任务草稿、任务详情与设置页 |
 | `docs/architecture/weak-model-behavior-compensation-notes.md` | 弱模型行为补偿注释（非设计真理，2026-07-10）：隔离记录当前批准的三类暂时性过强行为提示，定义适用行为档位、任务边界、风险、强度和退场门槛；不得覆盖主哲学或整篇注入模型上下文 |
 | `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
