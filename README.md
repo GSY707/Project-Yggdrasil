@@ -14,8 +14,8 @@ Project Yggdrasil 是一个面向长程任务的本地 Agent 工作台。你可�
 2. 校验 SHA256，解压 ZIP。
 3. 安装并启动 Docker Desktop。
 4. 在解压目录运行 `packaging\desktop\windows\Yggdrasil Installer.cmd`。
-5. 把 `infra\product.env.template` 复制为 `infra\product.env`，在本机填入至少一个模型服务密钥。
-6. 从开始菜单打开 **Yggdrasil Desktop**，浏览器会进入 `http://localhost:3000`。
+5. 从开始菜单打开 **Yggdrasil Desktop**，浏览器会进入 `http://localhost:3000`。
+6. 在“设置”选择 LLM 供应商并保存自己的 API 密钥。
 7. 在“应用”中选择场景，在“材料”中导入资料，再创建任务草稿并确认启动。
 
 完整说明、数据边界、备份和故障处理见 [普通用户指南](docs/USER_GUIDE.md)。
@@ -47,7 +47,7 @@ Project Yggdrasil 是一个面向长程任务的本地 Agent 工作台。你可�
 - 模型调用会把任务目标和必要上下文发送给你选择的模型服务商。
 - 未配置模型密钥时仍可导入材料和创建草稿，但系统会阻止启动真实任务。
 - ZIP、PowerShell 脚本和快捷方式尚未签名，Windows 可能显示安全警告。
-- 模型密钥目前通过本机 `infra/product.env` 配置，Web 设置页只显示连接状态。
+- 模型密钥可在 Web“设置”页保存到本机状态卷；页面只显示配置状态和密钥末四位，不回传完整密钥。环境文件仍可作为维护者部署方式。
 - 任务详情保留部分运行时与诊断信息；普通用户主路径已经与维护者入口分开，但还不是最终消费级界面。
 
 ## 项目开发

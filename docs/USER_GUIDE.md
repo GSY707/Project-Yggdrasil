@@ -1,6 +1,6 @@
 # Project Yggdrasil 普通用户指南
 
-本指南面向使用 Agent 完成任务的人。你不需要理解项目源码，但首个预览版仍要求你能安装 Docker Desktop，并在本机配置自己的模型服务密钥。
+本指南面向使用 Agent 完成任务的人。你不需要理解项目源码，但首个预览版仍要求你能安装 Docker Desktop，并准备自己的模型服务密钥。
 
 ## 1. 安装
 
@@ -31,18 +31,18 @@ packaging\desktop\windows\Yggdrasil Installer.cmd
 
 ### 1.3 连接模型服务
 
-在解压目录把 `infra\product.env.template` 复制为 `infra\product.env`，只填写你实际使用的服务密钥，例如：
+启动产品后打开“设置”，在“连接 AI 服务”中：
 
-```dotenv
-YGGDRASIL_LLM_API_KEY_DEEPSEEK=你的密钥
-```
+1. 选择 LongCat、OpenRouter、DeepSeek 或 VectorEngine；
+2. 输入该供应商的 API 密钥；
+3. 点击“保存密钥”，等待状态变为“已连接”。
 
-不要把 `infra/product.env` 发给别人或提交到 Git。配置后重新启动 Yggdrasil。Web“设置”页当前只显示连接状态，不会保存密钥。
+密钥保存在本机 Yggdrasil 状态卷中，页面不会再次返回完整值，只显示末四位。删除 Web 保存的密钥可在同一区域完成。维护者也可以继续通过 `infra/product.env` 注入密钥；环境文件提供的密钥只能由维护者在文件中删除。
 
 ## 2. 第一次任务
 
-1. 从开始菜单打开 **Yggdrasil Desktop**。
-2. 等待浏览器打开 `http://localhost:3000`。
+1. 从开始菜单打开 **Yggdrasil Desktop**，进入深色本地启动器。
+2. 点击 **Start Yggdrasil**，就绪后点击 **Open workspace** 打开浏览器工作台。
 3. 首页先检查“AI 服务”和“需要处理”；存在阻塞时不要启动任务。
 4. 进入“应用”，选择最接近目标的 Agent。
 5. 有资料时先进入“材料”，粘贴文本或选择文本文件并导入。
@@ -83,7 +83,7 @@ YGGDRASIL_LLM_API_KEY_DEEPSEEK=你的密钥
 
 ### 可以创建草稿，但不能启动
 
-这是安全门。通常是模型密钥未配置或服务仍在重启。检查 `infra/product.env`，重启产品，再在“设置”确认 AI 服务为“已连接”。
+这是安全门。通常是模型密钥未配置或服务仍在启动。先在“设置”保存供应商密钥并确认 AI 服务为“已连接”；若仍阻塞，再打开“帮助与诊断”。
 
 ### 材料已经导入，但任务里没有看到
 

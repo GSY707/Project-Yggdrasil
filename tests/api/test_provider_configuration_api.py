@@ -75,3 +75,25 @@ def test_health_includes_provider_status_without_key_values(monkeypatch: pytest.
     payload = response.json()
     assert payload["providerStatus"]["status"] == "ready"
     assert "secret-value" not in response.text
+
+
+def test_web_provider_settings_save_and_delete_without_returning_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    _clear_provider_env(monkeypatch)
+    monkeypatch.setenv("YGGDRASIL_STATE_ROOT", str(tmp_path))
+
+    catalog = client.get("/providers")
+    assert catalog.status_code == 200
+    assert {item["id"] for item in catalog.json()["providers"]} >= {"longcat", "openrouter", "deepseek_direct"}
+
+    saved = client.post("/providers/openrouter", json={"apiKey": "secret-value-1234"})
+    assert saved.status_code == 200
+    assert saved.json()["status"]["configuredProviders"][0]["source"] == "web-settings"
+    assert saved.json()["status"]["configuredProviders"][0]["keyHint"] == "••••1234"
+    assert "secret-value-1234" not in saved.text
+
+    deleted = client.delete("/providers/openrouter")
+    assert deleted.status_code == 200
+    assert deleted.json()["status"]["configuredProviders"] == []

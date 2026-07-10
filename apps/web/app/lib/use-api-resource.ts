@@ -93,3 +93,11 @@ export async function postApiJson<T>(path: string, body?: unknown): Promise<T> {
   }
   return (await response.json()) as T;
 }
+
+export async function deleteApiJson<T>(path: string): Promise<T> {
+  const response = await fetch(`/api/core${path}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await responseErrorMessage(response));
+  }
+  return (await response.json()) as T;
+}

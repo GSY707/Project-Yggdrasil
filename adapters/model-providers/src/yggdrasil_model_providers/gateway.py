@@ -241,11 +241,13 @@ def _prepare_provider_tools(provider: str, tools: list[dict[str, Any]] | None) -
             aliases[aliased_name] = original_name
     return prepared, aliases
 def _environment_provider_keys() -> dict[str, str]:
+    from yggdrasil_sdk.provider_config import provider_key
+
     candidates = {
-        "longcat": os.environ.get("YGGDRASIL_LLM_API_KEY_LONGCAT") or os.environ.get("LONGCAT_API_KEY"),
-        "openrouter": os.environ.get("YGGDRASIL_LLM_API_KEY_OPENROUTER") or os.environ.get("OPENROUTER_API_KEY"),
-        "deepseek_direct": os.environ.get("YGGDRASIL_LLM_API_KEY_DEEPSEEK") or os.environ.get("DEEPSEEK_API_KEY"),
-        "vectorengine": os.environ.get("YGGDRASIL_LLM_API_KEY_VECTORENGINE") or os.environ.get("VECTORENGINE_API_KEY"),
+        "longcat": provider_key("longcat"),
+        "openrouter": provider_key("openrouter"),
+        "deepseek_direct": provider_key("deepseek_direct"),
+        "vectorengine": provider_key("vectorengine"),
     }
     if os.environ.get("YGGDRASIL_LLM_PROVIDER") and os.environ.get("YGGDRASIL_LLM_API_KEY"):
         candidates[str(os.environ["YGGDRASIL_LLM_PROVIDER"]).strip()] = str(os.environ["YGGDRASIL_LLM_API_KEY"]).strip()

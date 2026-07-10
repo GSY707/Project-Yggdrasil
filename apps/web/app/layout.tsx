@@ -17,8 +17,8 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <div className="app-shell">
           <aside className="shell-side">
             <div className="sidebar-brand">
-              <p className="sidebar-kicker">Project Yggdrasil</p>
-              <h1>Yggdrasil</h1>
+              <p className="sidebar-kicker">Local Agent System</p>
+              <h1>Project<br />Yggdrasil</h1>
               <p className="sidebar-copy">
                 在本机整理材料、选择应用、确认任务，并保留数据边界。
               </p>

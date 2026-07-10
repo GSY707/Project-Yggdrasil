@@ -1,26 +1,26 @@
 :root {
-  color-scheme: light;
-  --bg-0: #f5f3ed;
-  --bg-1: #f8f7f2;
-  --bg-2: #e6ece8;
-  --ink-0: #19211d;
-  --ink-1: #46524d;
-  --ink-2: #6b746f;
-  --line: rgba(28, 42, 35, 0.12);
-  --line-strong: rgba(18, 36, 30, 0.22);
-  --card: rgba(255, 253, 247, 0.84);
-  --side: rgba(20, 52, 43, 0.92);
-  --side-line: rgba(255, 246, 222, 0.16);
-  --accent: #0e6a5a;
-  --accent-soft: rgba(14, 106, 90, 0.12);
-  --signal: #bf5d32;
-  --signal-soft: rgba(191, 93, 50, 0.14);
-  --warn: #8b6a1d;
-  --warn-soft: rgba(139, 106, 29, 0.14);
-  --shadow: 0 24px 60px rgba(23, 31, 27, 0.1);
-  --radius-xl: 16px;
-  --radius-lg: 12px;
-  --radius-md: 8px;
+  color-scheme: dark;
+  --bg-0: #070d19;
+  --bg-1: #0a1120;
+  --bg-2: #101827;
+  --ink-0: #f0f4fa;
+  --ink-1: #c4cbd7;
+  --ink-2: #8994a6;
+  --line: #202b3d;
+  --line-strong: #334057;
+  --card: #111a2a;
+  --side: #121b2b;
+  --side-line: #27344a;
+  --accent: #20e3a2;
+  --accent-soft: rgba(32, 227, 162, 0.12);
+  --signal: #ff758f;
+  --signal-soft: rgba(255, 117, 143, 0.13);
+  --warn: #ffc65c;
+  --warn-soft: rgba(255, 198, 92, 0.12);
+  --shadow: none;
+  --radius-xl: 8px;
+  --radius-lg: 6px;
+  --radius-md: 4px;
 }
 
 * {
@@ -35,9 +35,9 @@ body {
 }
 
 body {
-  background: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 48%, var(--bg-2) 100%);
+  background: var(--bg-0);
   color: var(--ink-0);
-  font-family: "Aptos", "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: Inter, "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 a {
@@ -54,7 +54,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -63,20 +63,19 @@ textarea {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 18px;
   min-height: 100vh;
-  padding: 28px 22px 24px;
+  padding: 28px 16px 20px;
   border-right: 1px solid var(--side-line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.08)), var(--side);
-  color: #f3ebd7;
+  background: var(--side);
+  color: var(--ink-0);
 }
 
 .sidebar-brand {
-  padding: 22px;
-  border: 1px solid var(--side-line);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 10px 8px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .sidebar-kicker,
@@ -87,17 +86,18 @@ textarea {
 .meta-label,
 .nav-kicker {
   margin: 0;
-  color: rgba(243, 235, 215, 0.76);
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  color: var(--ink-2);
+  font-size: 10px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .sidebar-brand h1 {
-  margin: 12px 0 0;
-  font-family: "Noto Serif SC", "Source Han Serif SC", serif;
-  font-size: 34px;
-  line-height: 1.02;
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1.15;
 }
 
 .sidebar-copy,
@@ -113,7 +113,7 @@ textarea {
 }
 
 .sidebar-copy {
-  color: rgba(243, 235, 215, 0.8);
+  display: none;
 }
 
 .sidebar-nav {
@@ -137,34 +137,30 @@ textarea {
 
 .nav-link {
   display: block;
-  padding: 14px 16px;
+  padding: 10px 11px;
   border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  color: rgba(243, 235, 215, 0.8);
+  color: var(--ink-1);
   transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 
 .nav-link:hover,
 .nav-link.active {
-  transform: translateX(4px);
+  transform: none;
   border-color: var(--side-line);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff7e7;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .nav-label {
   display: block;
-  margin-top: 6px;
-  font-size: 18px;
+  margin-top: 3px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 .nav-description {
-  display: block;
-  margin-top: 6px;
-  color: rgba(243, 235, 215, 0.68);
-  font-size: 13px;
-  line-height: 1.5;
+  display: none;
 }
 
 .advanced-nav {
@@ -207,7 +203,7 @@ textarea {
 }
 
 .shell-topbar {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -241,7 +237,7 @@ textarea {
   padding: 7px 11px;
   border-radius: var(--radius-md);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.65);
+  background: var(--bg-2);
   color: var(--ink-1);
   font-size: 12px;
   font-weight: 650;
@@ -253,9 +249,9 @@ textarea {
 }
 
 .page-stack {
-  width: min(1320px, calc(100% - 40px));
+  width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 22px 0 56px;
+  padding: 34px 0 56px;
 }
 
 .page-header {
@@ -275,16 +271,16 @@ textarea {
 .section-title,
 .detail-title {
   margin: 10px 0 0;
-  font-family: "Noto Serif SC", "Source Han Serif SC", serif;
-  line-height: 1.04;
+  font-family: inherit;
+  line-height: 1.15;
 }
 
 .page-title {
-  font-size: clamp(34px, 4.2vw, 56px);
+  font-size: clamp(28px, 3vw, 38px);
 }
 
 .section-title {
-  font-size: 28px;
+  font-size: 19px;
 }
 
 .detail-title {
@@ -307,13 +303,13 @@ textarea {
   border-radius: var(--radius-lg);
   background: var(--card);
   box-shadow: var(--shadow);
-  animation: rise 360ms ease both;
+  animation: none;
 }
 
 .surface,
 .detail-hero,
 .table-surface {
-  padding: 22px;
+  padding: 18px;
 }
 
 .stat-grid {
@@ -334,7 +330,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--bg-2);
 }
 
 .form-grid {
@@ -379,7 +375,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--bg-2);
 }
 
 .launch-detail-grid {
@@ -405,7 +401,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--bg-2);
 }
 
 .segment-list {
@@ -433,7 +429,7 @@ textarea {
 .app-matrix {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
   margin-top: 18px;
 }
 
@@ -459,7 +455,7 @@ textarea {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--bg-2);
 }
 
 .screenshot-image {
@@ -468,16 +464,16 @@ textarea {
   height: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--bg-2);
 }
 
 .stat-card {
-  padding: 20px;
+  padding: 16px;
 }
 
 .stat-value {
   margin: 14px 0 0;
-  font-size: clamp(28px, 3.8vw, 46px);
+  font-size: clamp(22px, 2.4vw, 32px);
   font-weight: 700;
 }
 
@@ -575,7 +571,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--bg-2);
 }
 
 .form-field {
@@ -588,7 +584,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--bg-0);
   color: var(--ink-0);
 }
 
@@ -622,7 +618,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--bg-0);
   color: var(--ink-0);
 }
 
@@ -682,7 +678,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--bg-0);
   color: var(--ink-0);
 }
 
@@ -713,13 +709,14 @@ textarea {
 }
 
 .action-button {
-  background: linear-gradient(135deg, #0f6c5b, #164d42);
-  color: #fff9ed;
+  background: var(--accent);
+  color: #04110d;
+  font-weight: 750;
 }
 
 .ghost-button {
   border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.72);
+  background: #202a3c;
   color: var(--ink-0);
 }
 
@@ -740,7 +737,7 @@ textarea {
   padding: 22px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.46);
+  background: var(--card);
 }
 
 .loading-grid {

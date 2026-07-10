@@ -1,2 +1,2 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Yggdrasil.Desktop.ps1" start
+powershell -NoProfile -ExecutionPolicy Bypass -Sta -File "%~dp0Yggdrasil.Launcher.ps1"

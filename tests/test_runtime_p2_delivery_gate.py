@@ -1157,6 +1157,8 @@ def test_child_completion_with_missing_web_evidence_bubbles_to_parent(monkeypatc
 
 
 def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    root_call_count = [0]
+
     def _fake(*args, **kwargs):
         request = kwargs["request"]
         current_node_id = str(request.get("currentNodeId") or "")
@@ -1177,7 +1179,9 @@ def test_work_tree_revision_and_approve_stay_in_same_multinode_chain(monkeypatch
             ),
         }
         assistant_text = text_by_node[current_node_id]
-        if current_node_id == "root" and completed_children == ["child-1"]:
+        if current_node_id == "root":
+            root_call_count[0] += 1
+        if current_node_id == "root" and root_call_count[0] == 1 and completed_children == ["child-1"]:
             assistant_text = "root 继续编排并进入 child-2。\n<work-node-enter nodeId=\"child-2\"></work-node-enter>"
         return {
             "assistantText": assistant_text,

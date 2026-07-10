@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import type { ApplicationCatalogItem, ServiceHealthSnapshot } from "@yggdrasil/frontend-sdk";
 
-import { useApiResource } from "../lib/use-api-resource";
+import { deleteApiJson, postApiJson, useApiResource } from "../lib/use-api-resource";
 import { ErrorState, LoadingState, PageHeader, StatCard, StatusBadge, Surface } from "./workbench-primitives";
 
 type ApplicationsResponse = { activeAppId: string; applications: ApplicationCatalogItem[] };
+type ProviderSettingsResponse = {
+  providers: Array<{ id: string; label: string }>;
+  status: ServiceHealthSnapshot["providerStatus"];
+};
 
 const DEFAULT_APP_IDS = [
   "yggdrasil.app.deep-research",
@@ -39,8 +44,44 @@ function aiServiceCopy(status: ServiceHealthSnapshot["providerStatus"]): string 
 export function SettingsPage() {
   const health = useApiResource<ServiceHealthSnapshot>("/health");
   const applications = useApiResource<ApplicationsResponse>("/applications");
+  const providerSettings = useApiResource<ProviderSettingsResponse>("/providers");
+  const [selectedProvider, setSelectedProvider] = useState("longcat");
+  const [apiKey, setApiKey] = useState("");
+  const [providerMessage, setProviderMessage] = useState<string | null>(null);
+  const [isSavingProvider, setIsSavingProvider] = useState(false);
 
-  if (health.isLoading || applications.isLoading) {
+  async function saveProvider() {
+    setIsSavingProvider(true);
+    setProviderMessage(null);
+    try {
+      await postApiJson(`/providers/${encodeURIComponent(selectedProvider)}`, { apiKey });
+      setApiKey("");
+      setProviderMessage("密钥已保存到本机，运行中的任务服务会直接使用新配置。");
+      health.reload();
+      providerSettings.reload();
+    } catch (error) {
+      setProviderMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSavingProvider(false);
+    }
+  }
+
+  async function removeProvider(providerId: string) {
+    setIsSavingProvider(true);
+    setProviderMessage(null);
+    try {
+      await deleteApiJson(`/providers/${encodeURIComponent(providerId)}`);
+      setProviderMessage("已删除该供应商在 Web 设置中保存的密钥。");
+      health.reload();
+      providerSettings.reload();
+    } catch (error) {
+      setProviderMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSavingProvider(false);
+    }
+  }
+
+  if (health.isLoading || applications.isLoading || providerSettings.isLoading) {
     return <LoadingState title="正在读取设置" />;
   }
 
@@ -85,9 +126,46 @@ export function SettingsPage() {
             <StatusBadge value={providerStatus?.status ?? "unavailable"} />
           </div>
           <div className="field-actions">
-            <Link className="action-button" href="/release">查看连接状态</Link>
+            <label className="form-field">
+              <span className="meta-label">LLM 供应商</span>
+              <select className="field-input" value={selectedProvider} onChange={(event) => setSelectedProvider(event.target.value)}>
+                {(providerSettings.data?.providers ?? []).map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              <span className="meta-label">API 密钥</span>
+              <input
+                className="field-input"
+                autoComplete="new-password"
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="输入密钥；保存后不会再次显示"
+                type="password"
+                value={apiKey}
+              />
+            </label>
+          </div>
+          <div className="field-actions">
+            <button className="action-button" disabled={isSavingProvider || apiKey.trim().length < 8} onClick={() => void saveProvider()} type="button">
+              {isSavingProvider ? "正在保存…" : "保存密钥"}
+            </button>
             <Link className="ghost-button" href="/tasks">先创建草稿</Link>
           </div>
+          {providerMessage ? <p className="section-copy" role="status">{providerMessage}</p> : null}
+          {(providerSettings.data?.status?.configuredProviders ?? []).map((provider) => (
+            <article className="compact-record" key={provider.id}>
+              <div className="record-head">
+                <div>
+                  <h4 className="record-title">{provider.label}</h4>
+                  <p className="meta-copy">{provider.source === "web-settings" ? `本机设置 ${provider.keyHint ?? ""}` : "由环境文件提供"}</p>
+                </div>
+                {provider.source === "web-settings" ? (
+                  <button className="ghost-button" disabled={isSavingProvider} onClick={() => void removeProvider(provider.id)} type="button">删除</button>
+                ) : null}
+              </div>
+            </article>
+          ))}
         </Surface>
 
         <Surface>

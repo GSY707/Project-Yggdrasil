@@ -13,6 +13,7 @@ from .routes.nodes import router as nodes_router
 from .routes.observability import router as observability_router
 from .routes.outbox import router as outbox_router
 from .routes.prompting import router as prompting_router
+from .routes.providers import router as providers_router
 from .routes.runtime import router as runtime_router
 from .routes.specs import router as specs_router
 from .routes.tasks import router as tasks_router
@@ -34,6 +35,7 @@ router.include_router(collaboration_router, prefix="/collaboration", tags=["coll
 router.include_router(data_governance_router, prefix="/data-governance", tags=["data-governance"])
 router.include_router(training_router, prefix="/training", tags=["training"])
 router.include_router(prompting_router, prefix="/prompting", tags=["prompting"])
+router.include_router(providers_router, prefix="/providers", tags=["providers"])
 router.include_router(workbench_router, prefix="/workbench", tags=["workbench"])
 router.include_router(evaluations_router, prefix="/evaluations", tags=["evaluations"])
 router.include_router(observability_router, prefix="/observability", tags=["observability"])

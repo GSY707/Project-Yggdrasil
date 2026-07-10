@@ -43,6 +43,8 @@ export interface ProviderConfigurationStatus {
     label: string;
     envNames: string[];
     configuredEnvNames: string[];
+    source?: "environment" | "web-settings";
+    keyHint?: string | null;
   }>;
   requiredAnyOf: string[];
   disabledEnv: string;
