@@ -1,6 +1,6 @@
 # Project Yggdrasil 普通用户指南
 
-本指南面向使用 Agent 完成任务的人。你不需要理解项目源码，但首个预览版仍要求你能安装 Docker Desktop，并准备自己的模型服务密钥。
+本指南面向使用 Agent 完成任务的人。你不需要理解项目源码，但当前预览版仍要求你能安装 Docker Desktop，并准备自己的模型服务密钥。
 
 ## 1. 安装
 
@@ -16,8 +16,8 @@
 从 [GitHub Releases](https://github.com/GSY707/Project-Yggdrasil/releases) 下载 ZIP 和同名 `.sha256`，在下载目录运行：
 
 ```powershell
-$expected = (Get-Content .\project-yggdrasil-local-preview-0.1.0-preview.1.sha256).Split()[0]
-$actual = (Get-FileHash .\project-yggdrasil-local-preview-0.1.0-preview.1.zip -Algorithm SHA256).Hash.ToLower()
+$expected = (Get-Content .\project-yggdrasil-local-preview-0.1.0-preview.2.sha256).Split()[0]
+$actual = (Get-FileHash .\project-yggdrasil-local-preview-0.1.0-preview.2.zip -Algorithm SHA256).Hash.ToLower()
 $actual -eq $expected.ToLower()
 ```
 

@@ -15,7 +15,9 @@ import type {
   TaskControlActionResponse,
 } from "@yggdrasil/frontend-sdk";
 
+import type { TranslationKey, TranslationValues } from "../i18n";
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
+import { useTranslation } from "./locale-provider";
 import { EmptyState, ErrorState, StatusBadge, Surface } from "./workbench-primitives";
 
 type TaskLaunchPanelProps = {
@@ -30,11 +32,13 @@ type LaunchTemplate = ApplicationTaskTemplate & {
   appId: string;
 };
 
+type Translator = (key: TranslationKey, values?: TranslationValues) => string;
+
 function dashboardFor(item: ApplicationCatalogItem): ApplicationDashboard {
   return item.dashboard ?? {};
 }
 
-function templatesFor(item: ApplicationCatalogItem): LaunchTemplate[] {
+function templatesFor(item: ApplicationCatalogItem, t: Translator): LaunchTemplate[] {
   const manifest = item.application;
   const dashboard = dashboardFor(item);
   const templates = Array.isArray(dashboard.taskTemplates) ? dashboard.taskTemplates : [];
@@ -49,9 +53,9 @@ function templatesFor(item: ApplicationCatalogItem): LaunchTemplate[] {
     {
       id: "default",
       appId: manifest.appId,
-      title: `${manifest.displayName} task`,
-      goal: dashboard.hero?.summary ?? manifest.description ?? `Run ${manifest.displayName}.`,
-      description: "使用应用默认 prompt、场景和能力启动一个新任务。",
+      title: t("taskLaunch.defaultTemplateTitle", { name: manifest.displayName }),
+      goal: dashboard.hero?.summary ?? manifest.description ?? t("taskLaunch.defaultTemplateGoal", { name: manifest.displayName }),
+      description: t("taskLaunch.defaultTemplateDescription"),
       currentFocus: "first-task",
       currentObjective: dashboard.hero?.title ?? manifest.displayName,
       taskType: "general",
@@ -85,17 +89,17 @@ function attachmentContext(attachments: TaskLaunchAttachment[]) {
   }));
 }
 
-function goalWithAttachments(goal: string, attachments: TaskLaunchAttachment[]): string {
+function goalWithAttachments(goal: string, attachments: TaskLaunchAttachment[], t: Translator): string {
   if (attachments.length === 0) {
     return goal;
   }
   const lines = attachments.map((attachment, index) => {
     const label = attachment.label ?? attachment.sourceUri ?? attachment.assetId;
-    const summary = attachment.summary ? `；摘要：${attachment.summary}` : "";
-    const node = attachment.summaryNodeId ? `；摘要节点：${attachment.summaryNodeId}` : "";
-    return `${index + 1}. ${label}（素材 ${attachment.assetId}${node}${summary}）`;
+    const summary = attachment.summary ? t("taskLaunch.attachmentSummary", { summary: attachment.summary }) : "";
+    const node = attachment.summaryNodeId ? t("taskLaunch.attachmentNode", { node: attachment.summaryNodeId }) : "";
+    return t("taskLaunch.attachmentLine", { index: index + 1, label, assetId: attachment.assetId, node, summary });
   });
-  return `${goal}\n\n已附加素材：\n${lines.join("\n")}`;
+  return `${goal}\n\n${t("taskLaunch.attachmentsHeading")}\n${lines.join("\n")}`;
 }
 
 function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplate, attachments: TaskLaunchAttachment[]) {
@@ -122,38 +126,39 @@ function buildStartPayload(item: ApplicationCatalogItem, template: LaunchTemplat
   };
 }
 
-function explainLaunchError(rawError: string, stage: "create" | "start"): string {
+function explainLaunchError(rawError: string, stage: "create" | "start", t: Translator): string {
   const lower = rawError.toLowerCase();
   if (lower.includes("failed to fetch") || lower.includes("econnrefused") || lower.includes("connection refused")) {
-    return "本地服务未启动或暂时不可用。请打开帮助与诊断查看产品状态，然后重试。";
+    return t("taskLaunch.errorService");
   }
   if (lower.includes("database") || lower.includes("sqlalchemy") || lower.includes("psycopg")) {
-    return "本地数据服务暂时不可用。请打开帮助与诊断检查本地产品状态。";
+    return t("taskLaunch.errorDatabase");
   }
   if (lower.includes("redis") || lower.includes("coordination") || lower.includes("queue")) {
-    return "任务队列暂时不可用。请打开帮助与诊断检查后台服务。";
+    return t("taskLaunch.errorQueue");
   }
   if (lower.includes("provider") || lower.includes("api key") || lower.includes("no configured")) {
-    return "AI 服务还没有连接。请打开设置完成 AI 服务连接后再启动任务。";
+    return t("taskLaunch.errorProvider");
   }
   if (lower.includes("application") || lower.includes("app")) {
-    return "没有可用应用或应用未正确装配。请先在应用页面激活应用，再重新启动任务。";
+    return t("taskLaunch.errorApplication");
   }
   if (stage === "start") {
-    return "任务已创建但暂时没有启动成功。请打开任务详情或帮助与诊断查看状态。";
+    return t("taskLaunch.errorStart");
   }
-  return "任务暂时无法创建。请检查材料、应用和设置后重试。";
+  return t("taskLaunch.errorCreate");
 }
 
 function ProviderReadiness({ error, isLoading, status }: { error?: string | null; isLoading?: boolean; status?: ProviderConfigurationStatus }) {
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <div className="launch-template">
         <div className="record-head">
           <div>
-          <p className="meta-label">AI 服务</p>
-          <h4 className="record-title">正在检查连接状态</h4>
-          <p className="meta-copy">启动动作会在配置状态确认后开放。</p>
+          <p className="meta-label">{t("taskLaunch.provider")}</p>
+          <h4 className="record-title">{t("taskLaunch.providerChecking")}</h4>
+          <p className="meta-copy">{t("taskLaunch.providerCheckingCopy")}</p>
           </div>
           <StatusBadge value="pending" />
         </div>
@@ -165,9 +170,9 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
       <div className="launch-template">
         <div className="record-head">
           <div>
-          <p className="meta-label">AI 服务</p>
-          <h4 className="record-title">连接状态不可用</h4>
-          <p className="meta-copy">请打开帮助与诊断查看本地产品状态。</p>
+          <p className="meta-label">{t("taskLaunch.provider")}</p>
+          <h4 className="record-title">{t("taskLaunch.providerUnavailable")}</h4>
+          <p className="meta-copy">{t("taskLaunch.providerUnavailableCopy")}</p>
           </div>
           <StatusBadge value="blocked" />
         </div>
@@ -180,17 +185,17 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
   const configuredLabels = status.configuredProviders.map((provider) => provider.label);
   const statusCopy =
     status.status === "ready"
-      ? "AI 服务已连接，可以启动任务。"
+      ? t("taskLaunch.providerReady")
       : status.status === "warning"
-        ? "AI 服务连接需要确认，建议先创建草稿。"
-        : "请在设置里连接 AI 服务后再启动任务。";
+        ? t("taskLaunch.providerWarning")
+        : t("taskLaunch.providerBlocked");
   return (
     <div className="launch-template">
       <div className="record-head">
         <div>
-          <p className="meta-label">AI 服务</p>
+          <p className="meta-label">{t("taskLaunch.provider")}</p>
           <h4 className="record-title">
-            {status.status === "ready" ? "AI 服务已连接" : status.status === "warning" ? "连接需要确认" : "启动前需要连接 AI 服务"}
+            {status.status === "ready" ? t("taskLaunch.providerReadyTitle") : status.status === "warning" ? t("taskLaunch.providerWarningTitle") : t("taskLaunch.providerBlockedTitle")}
           </h4>
           <p className="meta-copy">{statusCopy}</p>
         </div>
@@ -205,7 +210,7 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
           ))}
         </div>
       ) : (
-        <p className="meta-copy">请在设置里完成连接，然后回到这里启动任务。</p>
+        <p className="meta-copy">{t("taskLaunch.providerNoConfigured")}</p>
       )}
       {status.remediation ? <p className="meta-copy">{status.remediation}</p> : null}
     </div>
@@ -215,17 +220,18 @@ function ProviderReadiness({ error, isLoading, status }: { error?: string | null
 export function TaskLaunchPanel({
   applications,
   defaultAppId,
-  title = "新建并启动任务",
+  title,
   compact = false,
   initialAttachments = [],
 }: TaskLaunchPanelProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const health = useApiResource<ServiceHealthSnapshot>("/health");
   const providerStatus = health.data?.providerStatus;
   const providerStartBlocked = providerStatus?.status !== "ready";
   const [selectedAppId, setSelectedAppId] = useState(defaultAppId ?? applications.find((item) => item.configBinding.active)?.application.appId ?? applications[0]?.application.appId ?? "");
   const selectedApp = applications.find((item) => item.application.appId === selectedAppId) ?? applications[0];
-  const templates = useMemo(() => (selectedApp ? templatesFor(selectedApp) : []), [selectedApp]);
+  const templates = useMemo(() => (selectedApp ? templatesFor(selectedApp, t) : []), [selectedApp, t]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
   const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? templates[0];
   const [taskTitle, setTaskTitle] = useState(selectedTemplate?.title ?? "");
@@ -256,7 +262,7 @@ export function TaskLaunchPanel({
 
   async function createTask(): Promise<string> {
     if (!selectedApp || !selectedTemplate) {
-      throw new Error("没有可启动的应用。请先激活一个应用。");
+      throw new Error(t("taskLaunch.errorApplication"));
     }
     const budget = asRecord(selectedTemplate.budget);
     const effectiveGoal = taskGoal.trim() || selectedTemplate.goal;
@@ -264,9 +270,9 @@ export function TaskLaunchPanel({
     const payload = {
       appId: selectedApp.application.appId,
       title: taskTitle.trim() || selectedTemplate.title,
-      goal: goalWithAttachments(effectiveGoal, initialAttachments),
+      goal: goalWithAttachments(effectiveGoal, initialAttachments, t),
       currentFocus: selectedTemplate.currentFocus ?? "web-launch",
-      currentObjective: goalWithAttachments(effectiveObjective, initialAttachments),
+      currentObjective: goalWithAttachments(effectiveObjective, initialAttachments, t),
       budget: budget,
       status: "draft",
     };
@@ -282,7 +288,7 @@ export function TaskLaunchPanel({
     try {
       await createTask();
     } catch (error) {
-      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), "create"));
+      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), "create", t));
     } finally {
       setIsSubmitting(false);
     }
@@ -290,7 +296,7 @@ export function TaskLaunchPanel({
 
   async function startTask(taskId: string) {
     if (!selectedApp || !selectedTemplate) {
-      throw new Error("没有可启动的应用。请先激活一个应用。");
+      throw new Error(t("taskLaunch.errorApplication"));
     }
     await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/start`, buildStartPayload(selectedApp, selectedTemplate, initialAttachments));
     router.push(`/tasks/${encodeURIComponent(taskId)}`);
@@ -303,7 +309,7 @@ export function TaskLaunchPanel({
       const taskId = createdTaskId ?? await createTask();
       await startTask(taskId);
     } catch (error) {
-      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), createdTaskId ? "start" : "create"));
+      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), createdTaskId ? "start" : "create", t));
     } finally {
       setIsSubmitting(false);
     }
@@ -318,34 +324,34 @@ export function TaskLaunchPanel({
     try {
       await startTask(createdTaskId);
     } catch (error) {
-      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), "start"));
+      setLaunchError(explainLaunchError(error instanceof Error ? error.message : String(error), "start", t));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   if (applications.length === 0) {
-    return <EmptyState title="没有可启动应用" detail="应用目录还没有被 Core API 发现，无法创建第一任务。" />;
+    return <EmptyState title={t("taskLaunch.noApps")} detail={t("taskLaunch.noAppsDetail")} />;
   }
 
   return (
     <Surface className={compact ? "task-launch compact" : "task-launch"}>
       <div className="record-head">
         <div>
-          <p className="section-kicker">新任务</p>
-          <h3 className="section-title">{title}</h3>
-          <p className="section-copy">选择应用模板后先保存草稿，也可以在确认目标、材料和预算后立即启动。</p>
+          <p className="section-kicker">{t("taskLaunch.eyebrow")}</p>
+          <h3 className="section-title">{title ?? t("taskLaunch.title")}</h3>
+          <p className="section-copy">{t("taskLaunch.summary")}</p>
         </div>
         {selectedApp ? <StatusBadge value={selectedApp.configBinding.active ? "active" : "available"} /> : null}
       </div>
 
       <ProviderReadiness error={health.error} isLoading={health.isLoading} status={providerStatus} />
 
-      {launchError ? <ErrorState title="任务启动失败" detail={launchError} /> : null}
+      {launchError ? <ErrorState title={t("taskLaunch.failed")} detail={launchError} /> : null}
 
       <div className="launch-grid">
         <div className="form-field">
-          <label className="meta-label" htmlFor="launch-app">应用</label>
+          <label className="meta-label" htmlFor="launch-app">{t("taskLaunch.application")}</label>
           <select className="field-input" disabled={compact || isSubmitting} id="launch-app" onChange={(event) => setSelectedAppId(event.target.value)} value={selectedApp?.application.appId ?? ""}>
             {applications.map((item) => (
               <option key={item.application.appId} value={item.application.appId}>
@@ -355,7 +361,7 @@ export function TaskLaunchPanel({
           </select>
         </div>
         <div className="form-field">
-          <label className="meta-label" htmlFor="launch-template">任务模板</label>
+          <label className="meta-label" htmlFor="launch-template">{t("taskLaunch.template")}</label>
           <select className="field-input" disabled={isSubmitting} id="launch-template" onChange={(event) => setSelectedTemplateId(event.target.value)} value={selectedTemplate?.id ?? ""}>
             {templates.map((template) => (
               <option key={template.id} value={template.id}>
@@ -368,12 +374,12 @@ export function TaskLaunchPanel({
 
       {selectedTemplate ? (
         <div className="launch-template">
-          <p className="meta-label">模板说明</p>
+          <p className="meta-label">{t("taskLaunch.templateDescription")}</p>
           <p className="meta-copy">{selectedTemplate.description ?? selectedTemplate.goal}</p>
           {stringList(selectedTemplate.exampleTasks).length > 0 || stringList(selectedTemplate.expectedOutputs).length > 0 ? (
             <div className="launch-detail-grid">
               <div>
-                <p className="meta-label">示例任务</p>
+                <p className="meta-label">{t("taskLaunch.exampleTasks")}</p>
                 <ul className="mini-list">
                   {stringList(selectedTemplate.exampleTasks).map((example) => (
                     <li key={example}>{example}</li>
@@ -381,7 +387,7 @@ export function TaskLaunchPanel({
                 </ul>
               </div>
               <div>
-                <p className="meta-label">预期产物</p>
+                <p className="meta-label">{t("taskLaunch.expectedOutputs")}</p>
                 <ul className="mini-list">
                   {stringList(selectedTemplate.expectedOutputs).map((output) => (
                     <li key={output}>{output}</li>
@@ -395,18 +401,18 @@ export function TaskLaunchPanel({
 
       {initialAttachments.length > 0 ? (
         <div className="launch-template">
-          <p className="meta-label">已附加素材</p>
+          <p className="meta-label">{t("taskLaunch.attachments")}</p>
           <div className="record-list compact-list">
             {initialAttachments.map((attachment) => (
               <article className="compact-record" key={attachment.assetId}>
                 <div>
                   <h4 className="record-title">{attachment.label ?? attachment.sourceUri ?? attachment.assetId}</h4>
-                  <p className="meta-copy">{attachment.summary ?? "任务启动时会把这个素材作为输入上下文。"}</p>
+                  <p className="meta-copy">{attachment.summary ?? t("taskLaunch.attachmentFallback")}</p>
                 </div>
                 <div className="pill-row">
-                  <span className="inline-chip">素材 {attachment.assetId}</span>
-                {attachment.summaryNodeId ? <span className="inline-chip">已生成摘要</span> : null}
-                  {attachment.segmentCount ? <span className="inline-chip">切段 {attachment.segmentCount}</span> : null}
+                  <span className="inline-chip">{t("taskLaunch.asset", { id: attachment.assetId })}</span>
+                {attachment.summaryNodeId ? <span className="inline-chip">{t("taskLaunch.summaryCreated")}</span> : null}
+                  {attachment.segmentCount ? <span className="inline-chip">{t("taskLaunch.segmentCount", { count: attachment.segmentCount })}</span> : null}
                 </div>
               </article>
             ))}
@@ -416,41 +422,41 @@ export function TaskLaunchPanel({
 
       <div className="form-grid">
         <div className="form-field">
-          <label className="meta-label" htmlFor="launch-title">标题</label>
+          <label className="meta-label" htmlFor="launch-title">{t("taskLaunch.taskTitle")}</label>
           <input className="field-input" disabled={isSubmitting} id="launch-title" onChange={(event) => setTaskTitle(event.target.value)} value={taskTitle} />
         </div>
         <div className="form-field">
-          <label className="meta-label" htmlFor="launch-goal">目标</label>
+          <label className="meta-label" htmlFor="launch-goal">{t("taskLaunch.goal")}</label>
           <textarea className="field-input field-textarea" disabled={isSubmitting} id="launch-goal" onChange={(event) => setTaskGoal(event.target.value)} value={taskGoal} />
         </div>
       </div>
 
       {selectedApp ? (
         <div className="pill-row">
-          <span className="inline-chip">应用 {selectedApp.application.displayName}</span>
-          <span className="inline-chip">模板 {selectedTemplate?.title ?? "默认"}</span>
-          <span className="inline-chip">启动前确认</span>
+          <span className="inline-chip">{t("taskLaunch.appChip", { name: selectedApp.application.displayName })}</span>
+          <span className="inline-chip">{t("taskLaunch.templateChip", { name: selectedTemplate?.title ?? t("taskLaunch.defaultTemplate") })}</span>
+          <span className="inline-chip">{t("taskLaunch.preStartConfirm")}</span>
         </div>
       ) : null}
 
       <div className="field-actions">
         <button className="action-button" disabled={isSubmitting || !selectedTemplate || providerStartBlocked} onClick={() => void handleCreateAndStart()} type="button">
-          {isSubmitting ? "处理中" : createdTaskId ? "启动已创建任务" : "创建并启动"}
+          {isSubmitting ? t("taskLaunch.processing") : createdTaskId ? t("taskLaunch.startCreated") : t("taskLaunch.createAndStart")}
         </button>
         <button className="ghost-button" disabled={isSubmitting || !selectedTemplate} onClick={() => void handleCreateOnly()} type="button">
-          只创建草稿
+          {t("taskLaunch.createDraft")}
         </button>
         {createdTaskId ? (
           <button className="ghost-button" disabled={isSubmitting || providerStartBlocked} onClick={() => void handleStartCreated()} type="button">
-            立即启动
+            {t("taskLaunch.startNow")}
           </button>
         ) : null}
       </div>
 
       {createdTaskId ? (
         <div className="field-actions">
-          <p className="meta-copy mono">已创建 {createdTaskId}</p>
-          <Link className="ghost-button" href={`/tasks/${encodeURIComponent(createdTaskId)}`}>查看任务</Link>
+          <p className="meta-copy mono">{t("taskLaunch.created", { id: createdTaskId })}</p>
+          <Link className="ghost-button" href={`/tasks/${encodeURIComponent(createdTaskId)}`}>{t("taskLaunch.viewTask")}</Link>
         </div>
       ) : null}
     </Surface>

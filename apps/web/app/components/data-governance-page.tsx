@@ -14,7 +14,9 @@ import type {
 import { useMemo, useState } from "react";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
+import { localizedText } from "../i18n";
 import { ErrorState, LoadingState, PageHeader, StatCard, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+import { useLocale } from "./locale-provider";
 
 function jsonSnippet(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
@@ -25,28 +27,30 @@ function unknownRecord(value: unknown): Record<string, unknown> {
 }
 
 function PlanPreview({ plan }: { plan: DataGovernanceDeletionPlan }) {
+  const { locale } = useLocale();
+  const l = (zhCN: string, english: string) => localizedText(locale, zhCN, english);
   const tableRows = plan.database?.tables ?? [];
   return (
     <Surface>
       <div className="record-head">
         <div>
-          <p className="section-kicker">Deletion Preview</p>
+          <p className="section-kicker">{localizedText(locale, "删除预览", "Deletion preview")}</p>
           <h2 className="section-title">{plan.scopeKind} / {plan.scopeId}</h2>
-          <p className="section-copy">target {String(plan.target?.title ?? plan.target?.mediaType ?? plan.target?.nodeType ?? "-")}</p>
+          <p className="section-copy">{localizedText(locale, "目标", "target")} {String(plan.target?.title ?? plan.target?.mediaType ?? plan.target?.nodeType ?? "-")}</p>
         </div>
         <StatusBadge value={plan.blockers && plan.blockers.length > 0 ? "blocked" : "preview"} />
       </div>
       <section className="stat-grid compact">
-        <StatCard label="DB Rows" value={plan.database?.totalRows ?? tableRows.reduce((sum, row) => sum + row.count, 0)} copy="预览会影响的数据库记录数。" />
-        <StatCard label="State Files" value={plan.stateFileCount ?? 0} copy={`${plan.stateFileBytes ?? 0} bytes`} />
-        <StatCard label="Blockers" value={plan.blockers?.length ?? 0} copy="阻塞项为 0 才允许后端确认执行。" />
-        <StatCard label="Warnings" value={plan.warnings?.length ?? 0} copy="保留边界和外部系统提示。" />
+        <StatCard label={l("数据库记录", "DB rows")} value={plan.database?.totalRows ?? tableRows.reduce((sum, row) => sum + row.count, 0)} copy={localizedText(locale, "预览会影响的数据库记录数。", "Database records affected by this preview.")} />
+        <StatCard label={l("状态文件", "State files")} value={plan.stateFileCount ?? 0} copy={`${plan.stateFileBytes ?? 0} bytes`} />
+        <StatCard label={l("阻塞项", "Blockers")} value={plan.blockers?.length ?? 0} copy={localizedText(locale, "阻塞项为 0 才允许后端确认执行。", "Execution requires zero blockers.")} />
+        <StatCard label={l("警告", "Warnings")} value={plan.warnings?.length ?? 0} copy={localizedText(locale, "保留边界和外部系统提示。", "Retention and external-system warnings.")} />
       </section>
       {plan.blockers && plan.blockers.length > 0 ? (
         <div className="record-list">
           {plan.blockers.map((item) => (
             <article className="compact-record" key={item}>
-              <p className="meta-label">Blocker</p>
+              <p className="meta-label">{localizedText(locale, "阻塞项", "Blocker")}</p>
               <p className="meta-copy">{item}</p>
             </article>
           ))}
@@ -54,7 +58,7 @@ function PlanPreview({ plan }: { plan: DataGovernanceDeletionPlan }) {
       ) : null}
       <div className="content-grid tight">
         <article className="record-card">
-          <h3 className="record-title">Database Plan</h3>
+          <h3 className="record-title">{localizedText(locale, "数据库计划", "Database plan")}</h3>
           <div className="record-list">
             {tableRows.map((row) => (
               <div className="kv-item" key={row.table}>
@@ -62,18 +66,18 @@ function PlanPreview({ plan }: { plan: DataGovernanceDeletionPlan }) {
                   <p className="meta-label">{row.table}</p>
                   <span className="inline-chip">{row.action}</span>
                 </div>
-                <p className="meta-copy">{row.count} rows</p>
+                <p className="meta-copy">{row.count} {l("条记录", "rows")}</p>
                 {row.sampleIds.length > 0 ? <p className="code-block mono">{row.sampleIds.slice(0, 6).join("\n")}</p> : null}
               </div>
             ))}
           </div>
         </article>
         <article className="record-card">
-          <h3 className="record-title">Retained Boundary</h3>
+          <h3 className="record-title">{localizedText(locale, "保留边界", "Retained boundary")}</h3>
           <div className="record-list">
             {(plan.retainedData ?? []).map((item, index) => (
               <div className="kv-item" key={`${String(item.location ?? "retained")}-${index}`}>
-                <p className="meta-label">{String(item.reason ?? "retained")}</p>
+                <p className="meta-label">{item.reason === "retained" ? l("保留", "Retained") : String(item.reason ?? l("保留", "Retained"))}</p>
                 <p className="meta-copy mono">{String(item.location ?? "-")}</p>
               </div>
             ))}
@@ -92,23 +96,25 @@ function PlanPreview({ plan }: { plan: DataGovernanceDeletionPlan }) {
 }
 
 function DeletionResultSummary({ result }: { result: DataGovernanceDeletionResult }) {
+  const { locale } = useLocale();
+  const l = (zhCN: string, english: string) => localizedText(locale, zhCN, english);
   const certificate = result.deletionCertificate;
   return (
     <Surface>
       <div className="record-head">
         <div>
-          <p className="section-kicker">Deletion Certificate</p>
+          <p className="section-kicker">{localizedText(locale, "删除证明", "Deletion certificate")}</p>
           <h2 className="section-title">{certificate ? certificate.id : result.status}</h2>
-          <p className="section-copy">删除执行结果与保留边界摘要会进入审计记录。</p>
+          <p className="section-copy">{localizedText(locale, "删除执行结果与保留边界摘要会进入审计记录。", "The deletion result and retained-boundary summary are written to the audit record.")}</p>
         </div>
         <StatusBadge value={result.status} />
       </div>
       {certificate ? (
         <section className="stat-grid compact">
-          <StatCard label="Deleted Rows" value={certificate.deletedRows} copy="数据库删除证明计数。" />
-          <StatCard label="State Deleted" value={certificate.stateFiles.deleted} copy={`${certificate.stateFiles.requested} requested`} />
-          <StatCard label="State Failed" value={certificate.stateFiles.failed} copy="失败项需要人工处理。" />
-          <StatCard label="Backup" value={certificate.backupSnapshotDir ? "ready" : "skipped"} copy={certificate.backupSnapshotDir ?? "本次未创建保护性备份。"} />
+          <StatCard label={l("已删除记录", "Deleted rows")} value={certificate.deletedRows} copy={localizedText(locale, "数据库删除证明计数。", "Database deletion certificate count.")} />
+          <StatCard label={l("已删除状态文件", "State files deleted")} value={certificate.stateFiles.deleted} copy={`${certificate.stateFiles.requested} ${l("项请求", "requested")}`} />
+          <StatCard label={l("失败状态文件", "State files failed")} value={certificate.stateFiles.failed} copy={localizedText(locale, "失败项需要人工处理。", "Failed items require manual handling.")} />
+          <StatCard label={l("备份", "Backup")} value={certificate.backupSnapshotDir ? "ready" : "skipped"} copy={certificate.backupSnapshotDir ?? localizedText(locale, "本次未创建保护性备份。", "No protective backup was created.")} />
         </section>
       ) : null}
       <p className="code-block mono">{jsonSnippet(certificate ?? result)}</p>
@@ -117,12 +123,14 @@ function DeletionResultSummary({ result }: { result: DataGovernanceDeletionResul
 }
 
 export function DataGovernancePage() {
+  const { locale } = useLocale();
+  const l = (zhCN: string, english: string) => localizedText(locale, zhCN, english);
   const manifest = useApiResource<DataGovernanceManifest>("/data-governance/manifest");
   const operations = useApiResource<DataGovernanceOperationsResponse>("/data-governance/operations?limit=20");
   const backups = useApiResource<DataGovernanceBackupsResponse>("/data-governance/backups?limit=8");
   const [scopeKind, setScopeKind] = useState("task");
   const [scopeId, setScopeId] = useState("");
-  const [reason, setReason] = useState("local data governance operation");
+  const [reason, setReason] = useState(() => l("本地数据治理操作", "Local data governance operation"));
   const [includeStateFiles, setIncludeStateFiles] = useState(true);
   const [backupBeforeDelete, setBackupBeforeDelete] = useState(true);
   const [confirmScopeId, setConfirmScopeId] = useState("");
@@ -190,7 +198,7 @@ export function DataGovernancePage() {
         requestedBy: { type: "user", id: "web" },
       });
       const backup = unknownRecord(response.backup);
-      setBackupMessage(`已创建保护性备份：${String(backup.snapshotDir ?? backup.name ?? "snapshot")}`);
+      setBackupMessage(`${localizedText(locale, "已创建保护性备份", "Protective backup created")}: ${String(backup.snapshotDir ?? backup.name ?? "snapshot")}`);
       backups.reload();
       operations.reload();
     } catch (error) {
@@ -228,58 +236,58 @@ export function DataGovernancePage() {
   }
 
   if (isLoading) {
-    return <LoadingState title="正在读取数据治理边界" />;
+    return <LoadingState title={localizedText(locale, "正在读取数据治理边界", "Loading data governance boundary")} />;
   }
 
-  if (error || !manifestData) {
-    return <ErrorState detail={error ?? "数据治理清单不可用。"} />;
+  if (error || !manifestData || !Array.isArray(manifestData.assets)) {
+    return <ErrorState detail={error ?? localizedText(locale, "数据治理清单不可用。", "Data governance manifest is unavailable.")} />;
   }
 
   return (
     <div>
       <PageHeader
-        eyebrow="数据治理"
-        title="本地数据资产、保护性备份、删除证明与审计"
-        summary={<>统一展示本地数据位置、远端边界、删除影响预览、保护性备份和最近治理操作。task 硬删除需要无阻塞 plan 与精确确认。</>}
-        actions={<button className="ghost-button" onClick={() => { manifest.reload(); operations.reload(); backups.reload(); }} type="button">刷新治理状态</button>}
+        eyebrow={localizedText(locale, "数据治理", "Data governance")}
+        title={localizedText(locale, "本地数据资产、保护性备份、删除证明与审计", "Local data assets, backups, deletion certificates, and audit")}
+        summary={<>{localizedText(locale, "统一展示本地数据位置、远端边界、删除影响预览、保护性备份和最近治理操作。task 硬删除需要无阻塞 plan 与精确确认。", "Review local data paths, remote boundaries, deletion previews, protective backups, and recent operations. Task hard-delete requires a blocker-free plan and exact confirmation.")}</>}
+        actions={<button className="ghost-button" onClick={() => { manifest.reload(); operations.reload(); backups.reload(); }} type="button">{localizedText(locale, "刷新治理状态", "Refresh governance")}</button>}
       />
 
       <section className="stat-grid">
-        <StatCard label="Manifest" value={manifestData.version} copy={`generated ${formatTimestamp(manifestData.generatedAt)}`} />
-        <StatCard label="Assets" value={stats.totalAssets} copy="任务、运行、Prompt、记忆、资产、观测、日志和备份。" />
-        <StatCard label="Executable" value={stats.executablePolicies} copy="当前仅 task 作用域进入硬删除首批闭环。" />
-        <StatCard label="Backups" value={backupRows.length} copy="最近保护性快照。" />
-        <StatCard label="Audit Events" value={operationRows.length} copy="最近数据治理操作记录。" />
+        <StatCard label={l("清单", "Manifest")} value={manifestData.version} copy={`${l("生成于", "Generated")} ${formatTimestamp(manifestData.generatedAt, locale)}`} />
+        <StatCard label={l("资产", "Assets")} value={stats.totalAssets} copy={localizedText(locale, "任务、运行、Prompt、记忆、资产、观测、日志和备份。", "Tasks, runs, prompts, memory, assets, observability, logs, and backups.")} />
+        <StatCard label={l("可执行策略", "Executable")} value={stats.executablePolicies} copy={localizedText(locale, "当前仅 task 作用域进入硬删除首批闭环。", "Only task scope is in the first hard-delete closure.")} />
+        <StatCard label={l("备份", "Backups")} value={backupRows.length} copy={localizedText(locale, "最近保护性快照。", "Recent protective snapshots.")} />
+        <StatCard label={l("审计事件", "Audit events")} value={operationRows.length} copy={localizedText(locale, "最近数据治理操作记录。", "Recent governance operations.")} />
       </section>
 
       <Surface>
-        <p className="section-kicker">Deletion Dry-run</p>
-        <h2 className="section-title">删除影响预览</h2>
+        <p className="section-kicker">{l("删除预演", "Deletion dry-run")}</p>
+        <h2 className="section-title">{localizedText(locale, "删除影响预览", "Deletion impact preview")}</h2>
         <div className="form-grid">
           <label className="form-field" htmlFor="governance-scope-kind">
-            <span>Scope</span>
+            <span>{l("范围", "Scope")}</span>
             <select className="field-input" id="governance-scope-kind" onChange={(event) => setScopeKind(event.target.value)} value={scopeKind}>
-              <option value="task">task</option>
-              <option value="asset">asset</option>
-              <option value="node">node</option>
+              <option value="task">{l("任务", "Task")}</option>
+              <option value="asset">{l("素材", "Asset")}</option>
+              <option value="node">{l("节点", "Node")}</option>
             </select>
           </label>
           <label className="form-field" htmlFor="governance-scope-id">
-            <span>Scope ID</span>
+            <span>{l("范围 ID", "Scope ID")}</span>
             <input className="field-input" id="governance-scope-id" onChange={(event) => setScopeId(event.target.value)} value={scopeId} />
           </label>
           <label className="form-field" htmlFor="governance-reason">
-            <span>Reason</span>
+            <span>{l("原因", "Reason")}</span>
             <input className="field-input" id="governance-reason" onChange={(event) => setReason(event.target.value)} value={reason} />
           </label>
           <label className="form-field inline-check" htmlFor="governance-state-files">
             <input id="governance-state-files" checked={includeStateFiles} onChange={(event) => setIncludeStateFiles(event.target.checked)} type="checkbox" />
-            <span>Include state files</span>
+            <span>{l("包括状态文件", "Include state files")}</span>
           </label>
         </div>
         <div className="button-row">
           <button className="action-button" disabled={isSubmitting || scopeId.trim().length === 0} onClick={() => void submitPlan()} type="button">
-            生成预览
+            {localizedText(locale, "生成预览", "Generate preview")}
           </button>
         </div>
         {submitError ? <p className="error-copy">{submitError}</p> : null}
@@ -291,32 +299,32 @@ export function DataGovernancePage() {
         <Surface>
           <div className="record-head">
             <div>
-              <p className="section-kicker">Protected Execution</p>
-              <h2 className="section-title">执行 task 硬删除</h2>
-              <p className="section-copy">后端会在执行前重新生成 plan；运行中任务、asset 和 node 仍会被阻塞。</p>
+              <p className="section-kicker">{l("受保护执行", "Protected execution")}</p>
+              <h2 className="section-title">{localizedText(locale, "执行 task 硬删除", "Execute task hard-delete")}</h2>
+              <p className="section-copy">{localizedText(locale, "后端会在执行前重新生成 plan；运行中任务、asset 和 node 仍会被阻塞。", "The backend regenerates the plan before execution; running tasks, assets, and nodes remain blocked.")}</p>
             </div>
             <StatusBadge value={canExecuteDelete ? "ready" : "locked"} />
           </div>
           <div className="form-grid">
             <label className="form-field" htmlFor="governance-confirm-scope-id">
-              <span>Confirm Scope ID</span>
+              <span>{l("确认范围 ID", "Confirm scope ID")}</span>
               <input className="field-input" id="governance-confirm-scope-id" onChange={(event) => setConfirmScopeId(event.target.value)} value={confirmScopeId} />
             </label>
             <label className="form-field inline-check" htmlFor="governance-backup-before-delete">
               <input id="governance-backup-before-delete" checked={backupBeforeDelete} onChange={(event) => setBackupBeforeDelete(event.target.checked)} type="checkbox" />
-              <span>先创建保护性备份</span>
+              <span>{localizedText(locale, "先创建保护性备份", "Create a protective backup first")}</span>
             </label>
           </div>
           <div className="button-row">
             <button className="action-button" disabled={!canExecuteDelete || isExecutingDelete} onClick={() => void executeDelete()} type="button">
-              {isExecutingDelete ? "执行中" : `删除 ${plan.scopeId}`}
+              {isExecutingDelete ? localizedText(locale, "执行中", "Executing") : `${localizedText(locale, "删除", "Delete")} ${plan.scopeId}`}
             </button>
             <button className="ghost-button" disabled={isCreatingBackup} onClick={() => void createProtectiveBackup()} type="button">
-              {isCreatingBackup ? "创建中" : "创建保护性备份"}
+              {isCreatingBackup ? localizedText(locale, "创建中", "Creating") : localizedText(locale, "创建保护性备份", "Create protective backup")}
             </button>
           </div>
-          {plan.scopeKind !== "task" ? <p className="meta-copy">当前作用域只允许预览；本阶段不执行 {plan.scopeKind} 硬删除。</p> : null}
-          {planBlockers.length > 0 ? <p className="error-copy">存在 blocker 时不会创建删除前备份，也不会执行删除。</p> : null}
+          {plan.scopeKind !== "task" ? <p className="meta-copy">{localizedText(locale, "当前作用域只允许预览；本阶段不执行", "This scope is preview-only; this stage does not execute")} {plan.scopeKind} {localizedText(locale, "硬删除。", "hard-delete.")}</p> : null}
+          {planBlockers.length > 0 ? <p className="error-copy">{localizedText(locale, "存在 blocker 时不会创建删除前备份，也不会执行删除。", "A pre-delete backup and deletion are blocked while blockers exist.")}</p> : null}
           {deleteError ? <p className="error-copy">{deleteError}</p> : null}
           {backupError ? <p className="error-copy">{backupError}</p> : null}
           {backupMessage ? <p className="meta-copy">{backupMessage}</p> : null}
@@ -328,24 +336,24 @@ export function DataGovernancePage() {
       <Surface>
         <div className="record-head">
           <div>
-            <p className="section-kicker">Backups</p>
-            <h2 className="section-title">保护性快照</h2>
+            <p className="section-kicker">{l("备份", "Backups")}</p>
+            <h2 className="section-title">{l("保护性快照", "Protective snapshots")}</h2>
             <p className="section-copy mono">{backups.data?.backupRoot ?? manifestData.backupRoot}</p>
           </div>
           <button className="ghost-button" disabled={isCreatingBackup} onClick={() => void createProtectiveBackup()} type="button">
-            {isCreatingBackup ? "创建中" : "创建备份"}
+            {isCreatingBackup ? localizedText(locale, "创建中", "Creating") : localizedText(locale, "创建备份", "Create backup")}
           </button>
         </div>
         <div className="record-list">
           {backupRows.length === 0 ? (
-            <p className="meta-copy">暂无保护性快照。</p>
+            <p className="meta-copy">{localizedText(locale, "暂无保护性快照。", "No protective snapshots.")}</p>
           ) : (
             backupRows.map((backup) => (
               <article className="record-card" key={backup.snapshotDir}>
                 <div className="record-head">
                   <div>
                     <h3 className="record-title">{backup.name}</h3>
-                    <p className="meta-copy">{formatTimestamp(backup.createdAt ?? null)}</p>
+                    <p className="meta-copy">{formatTimestamp(backup.createdAt ?? null, locale)}</p>
                   </div>
                   <StatusBadge value={backup.databaseKind ?? "snapshot"} />
                 </div>
@@ -357,15 +365,15 @@ export function DataGovernancePage() {
       </Surface>
 
       <Surface>
-        <p className="section-kicker">Manifest</p>
-        <h2 className="section-title">数据资产清单</h2>
+        <p className="section-kicker">{l("清单", "Manifest")}</p>
+        <h2 className="section-title">{localizedText(locale, "数据资产清单", "Data asset manifest")}</h2>
         <div className="record-list">
           {manifestData.assets.map((item) => (
             <article className="record-card" key={item.id}>
               <div className="record-head">
                 <div>
                   <h3 className="record-title">{item.label}</h3>
-                  <p className="meta-copy">sensitivity {item.sensitivity}</p>
+                  <p className="meta-copy">{l("敏感级别", "Sensitivity")} {item.sensitivity}</p>
                 </div>
                 <StatusBadge value={item.deletePolicy.includes("supported") ? "available" : "planned"} />
               </div>
@@ -378,37 +386,37 @@ export function DataGovernancePage() {
 
       <div className="content-grid tight">
         <Surface>
-          <p className="section-kicker">Paths</p>
-          <h2 className="section-title">本地边界</h2>
+          <p className="section-kicker">{l("路径", "Paths")}</p>
+        <h2 className="section-title">{localizedText(locale, "本地边界", "Local boundary")}</h2>
           <div className="record-list">
             <div className="kv-item">
-              <p className="meta-label">state root</p>
+              <p className="meta-label">{l("状态根", "State root")}</p>
               <p className="meta-copy mono">{manifestData.stateRoot}</p>
             </div>
             <div className="kv-item">
-              <p className="meta-label">product logs</p>
+              <p className="meta-label">{l("产品日志", "Product logs")}</p>
               <p className="meta-copy mono">{manifestData.productLogRoot}</p>
             </div>
             <div className="kv-item">
-              <p className="meta-label">backups</p>
+              <p className="meta-label">{l("备份", "Backups")}</p>
               <p className="meta-copy mono">{manifestData.backupRoot}</p>
             </div>
           </div>
         </Surface>
 
         <Surface>
-          <p className="section-kicker">Remote Boundary</p>
-          <h2 className="section-title">远端边界</h2>
+          <p className="section-kicker">{l("远端边界", "Remote boundary")}</p>
+        <h2 className="section-title">{localizedText(locale, "远端边界", "Remote boundary")}</h2>
           <p className="code-block mono">{jsonSnippet(manifestData.remoteBoundary)}</p>
         </Surface>
       </div>
 
       <Surface>
-        <p className="section-kicker">Audit</p>
-        <h2 className="section-title">最近治理操作</h2>
+        <p className="section-kicker">{l("审计", "Audit")}</p>
+        <h2 className="section-title">{localizedText(locale, "最近治理操作", "Recent governance operations")}</h2>
         <div className="record-list">
           {operationRows.length === 0 ? (
-            <p className="meta-copy">暂无治理操作。</p>
+            <p className="meta-copy">{localizedText(locale, "暂无治理操作。", "No governance operations.")}</p>
           ) : (
             operationRows.map((operation) => (
               <article className="record-card" key={operation.id}>
@@ -420,8 +428,8 @@ export function DataGovernancePage() {
                   <StatusBadge value={operation.status} />
                 </div>
                 <div className="pill-row">
-                  <span className="inline-chip">dryRun {String(operation.dryRun)}</span>
-                  <span className="inline-chip">{formatTimestamp(operation.createdAt)}</span>
+                  <span className="inline-chip">{l("预演", "Dry run")} {String(operation.dryRun)}</span>
+                  <span className="inline-chip">{formatTimestamp(operation.createdAt, locale)}</span>
                 </div>
                 {operation.errorSummary ? <p className="error-copy">{operation.errorSummary}</p> : null}
               </article>

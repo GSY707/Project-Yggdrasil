@@ -123,5 +123,151 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Software Factory",
+        "title": "Software Delivery Agent",
+        "summary": "This focused application combines coding and maintenance scenarios in one application package, exposing important configuration, prompt assembly results, and engineering entry points through the control plane."
+      },
+      "quickActions": [
+        {
+          "href": "/tasks",
+          "label": "Tasks"
+        },
+        {
+          "href": "/prompting?appId=yggdrasil.app.software-factory",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.software-factory",
+          "label": "Application details"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "deliver-change",
+          "title": "Deliver a software change",
+          "goal": "Describe the target capability, constraints, and expected validation so the software delivery application can plan and execute the work.",
+          "description": "For complete software delivery from requirements through implementation and verification.",
+          "currentObjective": "Deliver a verifiable software change"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

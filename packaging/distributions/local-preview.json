@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "distributionId": "local-preview",
   "displayName": "Project Yggdrasil Local Preview",
-  "version": "0.1.0-preview.1",
+  "version": "0.1.0-preview.2",
   "releaseChannel": "github-releases-preview",
   "updatePolicy": "manual-check-manual-apply",
   "signing": {
@@ -41,8 +41,8 @@
     }
   ],
   "releaseArtifacts": {
-    "primary": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.zip",
-    "checksum": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.sha256",
+    "primary": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.2.zip",
+    "checksum": "dist/releases/project-yggdrasil-local-preview-0.1.0-preview.2.sha256",
     "channel": "GitHub Releases"
   }
 }

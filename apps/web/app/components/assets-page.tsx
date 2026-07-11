@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { AssetIngestResponse, AssetRecord, AssetSegmentRecord } from "@yggdrasil/frontend-sdk";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
+import { useTranslation } from "./locale-provider";
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
 
 type AssetsResponse = { assets: AssetRecord[] };
@@ -27,14 +28,14 @@ function inferMediaType(fileName: string): string {
   return "document";
 }
 
-function mediaTypeLabel(value: string | undefined): string {
+function mediaTypeLabel(value: string | undefined, locale: string): string {
   const labels: Record<string, string> = {
-    audio: "音频",
-    document: "文档",
-    image: "图像",
-    video: "视频",
+    audio: locale === "en" ? "Audio" : "音频",
+    document: locale === "en" ? "Document" : "文档",
+    image: locale === "en" ? "Image" : "图像",
+    video: locale === "en" ? "Video" : "视频",
   };
-  return labels[value ?? ""] ?? value ?? "素材";
+  return labels[value ?? ""] ?? value ?? (locale === "en" ? "Material" : "材料");
 }
 
 function previewSegments(text: string, targetChars = 220): SegmentPreview[] {
@@ -98,6 +99,7 @@ function taskLinkForAsset({
 }
 
 export function AssetsPage() {
+  const { locale, t } = useTranslation();
   const assets = useApiResource<AssetsResponse>("/assets?limit=200");
   const [form, setForm] = useState({
     mediaType: "document",
@@ -126,10 +128,10 @@ export function AssetsPage() {
       const text = await file.text();
       const normalized = text.trim();
       if (!normalized) {
-        throw new Error("文件没有可导入的文本内容。");
+        throw new Error(t("assets.emptyFile"));
       }
       if (normalized.length > MAX_BROWSER_IMPORT_CHARS) {
-        throw new Error(`当前浏览器导入单次最多 ${MAX_BROWSER_IMPORT_CHARS.toLocaleString("zh-CN")} 个字符，请先拆分文件。`);
+        throw new Error(t("assets.tooLarge", { count: MAX_BROWSER_IMPORT_CHARS.toLocaleString(locale) }));
       }
       const nextSegments = previewSegments(normalized);
       setSelectedFileName(file.name);
@@ -176,30 +178,30 @@ export function AssetsPage() {
   }
 
   if (assets.isLoading) {
-    return <LoadingState title="正在读取素材索引" />;
+    return <LoadingState title={t("assets.loading")} />;
   }
 
   if (assets.error) {
-    return <ErrorState detail={assets.error} />;
+    return <ErrorState detail={assets.error} title={t("error.defaultTitle")} />;
   }
 
   const assetList = assets.data?.assets ?? [];
 
   return (
-    <div>
+    <div className="materials-page">
       <PageHeader
-        eyebrow="素材"
-        title="导入素材并用于新任务"
-        summary={<>选择文本类文件或粘贴资料，系统会切段、生成摘要节点，并允许把导入素材直接附加到新任务。</>}
-        actions={<button className="ghost-button" onClick={assets.reload} type="button">刷新资产索引</button>}
+        eyebrow={t("assets.eyebrow")}
+        title={t("assets.title")}
+        summary={<>{t("assets.summary")}</>}
+        actions={<button className="ghost-button" onClick={assets.reload} type="button">{t("assets.reload")}</button>}
       />
 
-      {submitError ? <ErrorState title="素材导入失败" detail={submitError} /> : null}
+      {submitError ? <ErrorState title={t("assets.importError")} detail={submitError} /> : null}
 
       <div className="content-grid tight">
         <Surface>
-          <p className="section-kicker">导入</p>
-          <h3 className="section-title">导入素材</h3>
+          <p className="section-kicker">{t("assets.importEyebrow")}</p>
+          <h3 className="section-title">{t("assets.importTitle")}</h3>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -207,7 +209,7 @@ export function AssetsPage() {
             }}
           >
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-file">选择文件</label>
+              <label className="meta-label" htmlFor="asset-file">{t("assets.chooseFile")}</label>
               <input
                 accept=".txt,.md,.markdown,.csv,.json,.jsonl,.yaml,.yml,.xml,.html,.log,.rst,.text,text/*,application/json"
                 className="field-input"
@@ -215,55 +217,55 @@ export function AssetsPage() {
                 onChange={(event) => void handleFileSelected(event.target.files?.[0] ?? null)}
                 type="file"
               />
-              <p className="meta-copy">当前浏览器导入支持可直接读取的文本类文件；图片、音频和 PDF 请先提供转录或摘录文本。</p>
+              <p className="meta-copy">{t("assets.browserCopy")}</p>
             </div>
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-media-type">素材类型</label>
+              <label className="meta-label" htmlFor="asset-media-type">{t("assets.mediaType")}</label>
               <select className="field-input" id="asset-media-type" onChange={(event) => setForm((value) => ({ ...value, mediaType: event.target.value }))} value={form.mediaType}>
-                <option value="document">文档</option>
-                <option value="audio">音频</option>
-                <option value="image">图像</option>
-                <option value="video">视频</option>
+                <option value="document">{t("assets.document")}</option>
+                <option value="audio">{t("assets.audio")}</option>
+                <option value="image">{t("assets.image")}</option>
+                <option value="video">{t("assets.video")}</option>
               </select>
             </div>
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-source-uri">来源 / 文件名</label>
-              <input className="field-input" id="asset-source-uri" onChange={(event) => setForm((value) => ({ ...value, sourceUri: event.target.value }))} placeholder="可选：素材来源 URL 或路径" value={form.sourceUri} />
+              <label className="meta-label" htmlFor="asset-source-uri">{t("assets.source")}</label>
+              <input className="field-input" id="asset-source-uri" onChange={(event) => setForm((value) => ({ ...value, sourceUri: event.target.value }))} placeholder={t("assets.sourcePlaceholder")} value={form.sourceUri} />
             </div>
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-space-id">记忆空间</label>
+              <label className="meta-label" htmlFor="asset-space-id">{t("assets.space")}</label>
               <input className="field-input" id="asset-space-id" onChange={(event) => setForm((value) => ({ ...value, spaceId: event.target.value }))} value={form.spaceId} />
             </div>
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-branch-id">记忆分支</label>
+              <label className="meta-label" htmlFor="asset-branch-id">{t("assets.branch")}</label>
               <input className="field-input" id="asset-branch-id" onChange={(event) => setForm((value) => ({ ...value, branchId: event.target.value }))} value={form.branchId} />
             </div>
             <div className="form-field">
-              <label className="meta-label" htmlFor="asset-source-text">正文</label>
-              <textarea className="field-input field-textarea" id="asset-source-text" onChange={(event) => setForm((value) => ({ ...value, sourceText: event.target.value }))} placeholder="输入文本、转录或字幕内容，系统会自动切段并生成摘要节点。" rows={8} value={form.sourceText} />
+              <label className="meta-label" htmlFor="asset-source-text">{t("assets.body")}</label>
+              <textarea className="field-input field-textarea" id="asset-source-text" onChange={(event) => setForm((value) => ({ ...value, sourceText: event.target.value }))} placeholder={t("assets.bodyPlaceholder")} rows={8} value={form.sourceText} />
             </div>
             <div className="pill-row">
               <StatusBadge value={importStatus} />
-              {selectedFileName ? <span className="inline-chip">文件 {selectedFileName}</span> : null}
-              {parsedSegments.length > 0 ? <span className="inline-chip">预览切段 {parsedSegments.length}</span> : null}
+              {selectedFileName ? <span className="inline-chip">{t("assets.file", { name: selectedFileName })}</span> : null}
+              {parsedSegments.length > 0 ? <span className="inline-chip">{t("assets.previewSegments", { count: parsedSegments.length })}</span> : null}
             </div>
             <div className="field-actions">
               <button className="action-button" disabled={isSubmitting || form.sourceText.trim().length === 0} type="submit">
-                {isSubmitting ? "正在导入" : "导入素材"}
+                {isSubmitting ? t("assets.importing") : t("assets.import")}
               </button>
             </div>
           </form>
 
           {parsedSegments.length > 0 ? (
             <div className="segment-list">
-              <p className="meta-label">切段预览</p>
+              <p className="meta-label">{t("assets.segmentPreview")}</p>
               {parsedSegments.slice(0, 8).map((segment) => (
                 <article className="segment-card" key={segment.ordinal}>
                   <span className="inline-chip">#{segment.ordinal}</span>
                   <p className="meta-copy">{segment.textExcerpt}</p>
                 </article>
               ))}
-              {parsedSegments.length > 8 ? <p className="meta-copy">还有 {parsedSegments.length - 8} 个切段会一并导入。</p> : null}
+              {parsedSegments.length > 8 ? <p className="meta-copy">{t("assets.moreSegments", { count: parsedSegments.length - 8 })}</p> : null}
             </div>
           ) : null}
 
@@ -271,29 +273,29 @@ export function AssetsPage() {
             <div className="record-card">
               <div className="record-head">
                 <div>
-                  <h4 className="record-title">最近一次导入</h4>
-                  <p className="meta-copy">{shortText(ingestResult.summaryNode?.content ?? ingestResult.summary) ?? "素材已导入并生成摘要节点。"}</p>
+                  <h4 className="record-title">{t("assets.latestImport")}</h4>
+                  <p className="meta-copy">{shortText(ingestResult.summaryNode?.content ?? ingestResult.summary) ?? t("assets.importedFallback")}</p>
                 </div>
                 <StatusBadge value="completed" />
               </div>
               <div className="pill-row">
-                <span className="inline-chip">素材 {ingestResult.asset.id}</span>
-                <span className="inline-chip">切段 {ingestResult.segmentCount}</span>
-                <span className="inline-chip">摘要节点 {String(ingestResult.summaryNode?.id ?? "-")}</span>
+                <span className="inline-chip">{locale === "en" ? "Material" : "素材"} {ingestResult.asset.id}</span>
+                <span className="inline-chip">{locale === "en" ? "Segments" : "切段"} {ingestResult.segmentCount}</span>
+                <span className="inline-chip">{locale === "en" ? "Summary node" : "摘要节点"} {String(ingestResult.summaryNode?.id ?? "-")}</span>
               </div>
               <div className="field-actions">
                 <Link
                   className="action-button"
                   href={taskLinkForAsset({
                     assetId: ingestResult.asset.id,
-                    label: `${mediaTypeLabel(ingestResult.asset.mediaType)}素材`,
+                    label: `${mediaTypeLabel(ingestResult.asset.mediaType, locale)}${t("assets.material")}`,
                     sourceUri: ingestResult.asset.sourceRef?.locator ?? ingestResult.asset.storageKey,
                     summary: shortText(ingestResult.summaryNode?.content ?? ingestResult.summary),
                     summaryNodeId: ingestResult.summaryNode?.id,
                     segmentCount: ingestResult.segmentCount,
                   })}
                 >
-                  用这个素材创建任务
+                  {t("assets.useForTask")}
                 </Link>
               </div>
             </div>
@@ -301,38 +303,38 @@ export function AssetsPage() {
         </Surface>
 
         <Surface>
-          <p className="section-kicker">素材</p>
-          <h3 className="section-title">资产索引</h3>
+          <p className="section-kicker">{t("assets.indexEyebrow")}</p>
+          <h3 className="section-title">{t("assets.indexTitle")}</h3>
           {assetList.length === 0 ? (
-            <EmptyState title="还没有资产记录" detail="可以先在左侧表单导入一条素材，系统会自动创建资产、切段和摘要节点。" />
+            <EmptyState title={t("assets.emptyTitle")} detail={t("assets.emptyDetail")} />
           ) : (
             <div className="record-list">
               {assetList.map((asset) => (
                 <article className="record-card" key={asset.id}>
                   <div className="record-head">
                     <div>
-                      <h4 className="record-title">{mediaTypeLabel(asset.mediaType)} · {asset.id}</h4>
+                      <h4 className="record-title">{mediaTypeLabel(asset.mediaType, locale)} · {asset.id}</h4>
                       <p className="meta-copy">{asset.storageKey}</p>
                     </div>
                     <StatusBadge value={asset.role} />
                   </div>
                   <div className="pill-row">
-                    <span className="inline-chip">空间 {asset.spaceId}</span>
-                    <span className="inline-chip">分支 {asset.branchId}</span>
-                    <span className="inline-chip">归属 {String(asset.ownerNodeId ?? "-")}</span>
-                    <span className="inline-chip">来源 {String(asset.sourceRef?.locator ?? "-")}</span>
-                    <span className="inline-chip">创建 {formatTimestamp(asset.createdAt)}</span>
+                    <span className="inline-chip">{t("assets.spaceLabel", { value: asset.spaceId })}</span>
+                    <span className="inline-chip">{t("assets.branchLabel", { value: asset.branchId })}</span>
+                    <span className="inline-chip">{t("assets.ownerLabel", { value: String(asset.ownerNodeId ?? "-") })}</span>
+                    <span className="inline-chip">{t("assets.sourceLabel", { value: String(asset.sourceRef?.locator ?? "-") })}</span>
+                    <span className="inline-chip">{t("assets.createdLabel", { value: formatTimestamp(asset.createdAt, locale) })}</span>
                   </div>
                   <div className="field-actions">
                     <Link
                       className="ghost-button"
                       href={taskLinkForAsset({
                         assetId: asset.id,
-                        label: `${mediaTypeLabel(asset.mediaType)} · ${asset.id}`,
+                        label: `${mediaTypeLabel(asset.mediaType, locale)} · ${asset.id}`,
                         sourceUri: asset.sourceRef?.locator ?? asset.storageKey,
                       })}
                     >
-                      附加到新任务
+                      {t("assets.attach")}
                     </Link>
                   </div>
                 </article>

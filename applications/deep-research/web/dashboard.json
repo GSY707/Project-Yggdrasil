@@ -160,5 +160,195 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Deep Research Lab",
+        "title": "Deep Research",
+        "summary": "A focused application for high-uncertainty research. It emphasizes source tracking, evidence organization, proactive course correction, and durable knowledge capture."
+      },
+      "quickActions": [
+        {
+          "href": "/prompting?appId=yggdrasil.app.deep-research",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.deep-research",
+          "label": "Application details"
+        },
+        {
+          "href": "/tasks",
+          "label": "Tasks"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "research-question",
+          "title": "Research an open question",
+          "goal": "Provide the research question, scope, and output standard so the application can organize an evidence chain and capture its conclusion.",
+          "description": "For research with substantial uncertainty.",
+          "exampleTasks": [
+            "Research whether AI search will change the traffic structure of small and medium content websites. Focus on evidence rather than slogans.",
+            "Help me judge whether this claim is reliable: remote work always reduces team innovation.",
+            "I want to know whether a new technology is worth investing in. First map its real progress, limitations, and objections."
+          ],
+          "expectedOutputs": [
+            "Conclusion summary: a direct answer, confidence level, key evidence, and what remains uncertain.",
+            "Evidence list: sources, core facts, supporting or opposing direction, and evidence strength.",
+            "Follow-up validation list: what to investigate next, whom to ask, and what data would strengthen the conclusion."
+          ],
+          "currentObjective": "Reach a research conclusion with clear evidence boundaries"
+        },
+        {
+          "id": "decision-brief",
+          "title": "Create a research brief for a complex decision",
+          "goal": "Provide the options, decision goal, and constraints so the application can compare evidence, risks, and trade-offs.",
+          "description": "For procurement, selection, strategic judgment, and investment-priority discussions.",
+          "exampleTasks": [
+            "We must choose between building a customer-service system and buying SaaS. Compare cost, risk, and long-term maintenance.",
+            "Research whether our team should move its knowledge base from Notion to a local solution, then recommend a decision.",
+            "I want to choose an online course platform. Compare options for a small team and their hidden costs."
+          ],
+          "expectedOutputs": [
+            "Option comparison: benefits, costs, fit conditions, risks, and reasons to reject each option.",
+            "Recommendation: primary and fallback choices, plus conditions that would change the decision.",
+            "Pre-decision questions: budget, people, time, and external constraints that still need confirmation."
+          ],
+          "currentObjective": "Produce a discussable, accountable decision brief"
+        },
+        {
+          "id": "trend-watch",
+          "title": "Track industry or policy changes",
+          "goal": "Provide the industry, region, and time range so the application can organize recent changes, affected groups, and the next observation points.",
+          "description": "For ongoing monitoring of markets, policy, technology paths, and competitive shifts.",
+          "exampleTasks": [
+            "Track changes in open-source large-model toolchains over the past year, focusing on what affects small-team development.",
+            "Research changes in education-technology policy in a region and summarize the impact on training providers and school procurement.",
+            "I want to understand the real progress of virtual-host livestreaming. Separate promotion, deployed cases, and risks."
+          ],
+          "expectedOutputs": [
+            "Change timeline: important events, dates, stakeholders, and scope of impact.",
+            "Impact analysis: beneficiaries, affected parties, short-term effects, and long-term uncertainty.",
+            "Watch list: signals, keywords, and search directions worth tracking next."
+          ],
+          "currentObjective": "Create a continuously updatable trend-research record"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

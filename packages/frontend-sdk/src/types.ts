@@ -348,15 +348,73 @@ export interface ApplicationSettingsField {
   defaultValue?: string | number | boolean | null;
 }
 
+export type ApplicationDashboardLocaleKey = "en" | "zh-CN";
+
+export interface ApplicationDashboardHero {
+  eyebrow?: string;
+  title?: string;
+  summary?: string;
+}
+
+export interface ApplicationDashboardQuickAction {
+  label?: string;
+  href?: string;
+}
+
+/**
+ * Localized copy is an overlay keyed by the stable task-template id. Runtime
+ * fields such as taskType, budget, and startPayload remain in the base
+ * dashboard so localization cannot alter task behavior.
+ */
+export interface ApplicationDashboardLocalizedTaskTemplate {
+  id: string;
+  title?: string;
+  goal?: string;
+  description?: string;
+  exampleTasks?: string[];
+  expectedOutputs?: string[];
+  currentFocus?: string;
+  currentObjective?: string;
+}
+
+/**
+ * Localized settings copy is keyed by the stable configuration key. Field
+ * type, default value, and option value remain part of the base contract.
+ */
+export interface ApplicationDashboardLocalizedSettingsField {
+  key: string;
+  label?: string;
+  description?: string;
+  options?: Array<{ label: string; value: string }>;
+}
+
+export interface ApplicationDashboardLocaleContent {
+  hero?: ApplicationDashboardHero;
+  quickActions?: ApplicationDashboardQuickAction[];
+  taskTemplates?: ApplicationDashboardLocalizedTaskTemplate[];
+  settingsSchema?: ApplicationDashboardLocalizedSettingsField[];
+}
+
+/**
+ * `en` and `zh-CN` are the initial product locales. The index signature keeps
+ * application packages forward-compatible with additional locale tags.
+ */
+export interface ApplicationDashboardLocales {
+  en?: ApplicationDashboardLocaleContent;
+  "zh-CN"?: ApplicationDashboardLocaleContent;
+  [locale: string]: ApplicationDashboardLocaleContent | undefined;
+}
+
 export interface ApplicationDashboard {
-  hero?: {
-    eyebrow?: string;
-    title?: string;
-    summary?: string;
-  };
-  quickActions?: Array<{ label?: string; href?: string }>;
+  /**
+   * Legacy/default dashboard content. Existing application packages retain
+   * this shape for API compatibility; locale overlays replace only UI copy.
+   */
+  hero?: ApplicationDashboardHero;
+  quickActions?: ApplicationDashboardQuickAction[];
   taskTemplates?: ApplicationTaskTemplate[];
   settingsSchema?: ApplicationSettingsField[];
+  locales?: ApplicationDashboardLocales;
   [key: string]: unknown;
 }
 

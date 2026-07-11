@@ -156,5 +156,191 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Knowledge Studio",
+        "title": "Research & Creation Agent",
+        "summary": "This application combines deep-research and epic-writing scenarios in one package for work that needs both an evidence chain and durable creative assets."
+      },
+      "quickActions": [
+        {
+          "href": "/prompting?appId=yggdrasil.app.knowledge-studio",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.knowledge-studio",
+          "label": "Application details"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "knowledge-artifact",
+          "title": "Organize a knowledge artifact",
+          "goal": "Provide the topic, existing materials, and target audience to produce a structured knowledge asset or creative source material.",
+          "description": "For organizing knowledge between research and creation.",
+          "exampleTasks": [
+            "I have a batch of materials on ancient Chinese cities. Organize them into a thematic dossier that can support further writing.",
+            "Turn these interview records into viewpoints, cases, and quotable excerpts for a later report.",
+            "I want to create a knowledge topic around long-termism. Help build its structure, key questions, and source list."
+          ],
+          "expectedOutputs": [
+            "Knowledge dossier: topic structure, key concepts, representative materials, and directions for expansion.",
+            "Source index: quotable excerpts, cases, people, timelines, and use contexts.",
+            "Next-output suggestions: angles suitable for an article, report, course, or creative setting."
+          ],
+          "currentObjective": "Generate a reusable knowledge artifact"
+        },
+        {
+          "id": "research-to-article",
+          "title": "Turn research into an article or report",
+          "goal": "Provide research materials, audience profile, and communication goal so the application can organize the argument and produce an editable draft.",
+          "description": "For converting research into a public article, long-form piece, internal report, or talk.",
+          "exampleTasks": [
+            "Turn my collected material into a long article for general readers about how AI changes knowledge work.",
+            "I need an internal presentation explaining how an industry change affects our team.",
+            "Turn scattered notes into an article with a viewpoint, examples, and conclusion."
+          ],
+          "expectedOutputs": [
+            "Article structure: title directions, core argument, section plan, and the problem each section resolves.",
+            "Draft: body copy for the intended audience, integrated examples, and closing suggestions.",
+            "Revision advice: facts to verify, expression risks, removable passages, and ways to strengthen persuasion."
+          ],
+          "currentObjective": "Turn research material into a publishable or presentable text"
+        },
+        {
+          "id": "creative-world-bible",
+          "title": "Build a creative world bible",
+          "goal": "Provide the world setting, characters, timeline, or source materials so the application can organize durable creative references.",
+          "description": "For novels, screenplays, game settings, and long-running content creation.",
+          "exampleTasks": [
+            "I have a near-future city story. Help organize its world rules, major factions, and character relationships.",
+            "Turn these historical sources into material for an alternate-world setting and flag what needs more research.",
+            "My novel has too many characters. Build character profiles, relationship notes, and a timeline."
+          ],
+          "expectedOutputs": [
+            "World bible: rules, locations, factions, characters, key events, and unresolved questions.",
+            "Continuity review: contradictions, missing motivations, timeline conflicts, and settings that need expansion.",
+            "Writing-next suggestions: events for the next chapter, character conflicts, and source material to use."
+          ],
+          "currentObjective": "Build durable, reusable creative-setting assets"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

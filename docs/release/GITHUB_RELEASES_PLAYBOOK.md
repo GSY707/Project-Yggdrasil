@@ -1,6 +1,6 @@
 # GitHub Releases 发布手册
 
-日期：2026-06-18
+日期：2026-07-12
 
 ## 1. 当前发布口径
 
@@ -28,9 +28,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/desktop/windows/Bu
 
 输出：
 
-- `dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.zip`
-- `dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1.sha256`
-- staging 目录：`dist/releases/project-yggdrasil-local-preview-0.1.0-preview.1/`
+- `dist/releases/project-yggdrasil-local-preview-0.1.0-preview.2.zip`
+- `dist/releases/project-yggdrasil-local-preview-0.1.0-preview.2.sha256`
+- staging 目录：`dist/releases/project-yggdrasil-local-preview-0.1.0-preview.2/`
 
 ## 3. 发布前门禁
 
@@ -58,13 +58,13 @@ corepack pnpm product:release-smoke
 Release 标题：
 
 ```text
-Project Yggdrasil local-preview 0.1.0-preview.1
+Project Yggdrasil local-preview 0.1.0-preview.2
 ```
 
 上传资产：
 
-- `project-yggdrasil-local-preview-0.1.0-preview.1.zip`
-- `project-yggdrasil-local-preview-0.1.0-preview.1.sha256`
+- `project-yggdrasil-local-preview-0.1.0-preview.2.zip`
+- `project-yggdrasil-local-preview-0.1.0-preview.2.sha256`
 
 说明正文：
 
@@ -90,6 +90,10 @@ Local self-hosted preview for Windows. This package is unsigned.
 ## Update Policy
 
 Manual check and manual apply only. No silent background update is enabled.
+
+## UI and Language
+
+This preview includes the Stitch Roots & Circuitry interface refactor across the Web workbench and Windows launcher/tray, with Chinese and English language switching enabled.
 
 ## Data Boundary
 

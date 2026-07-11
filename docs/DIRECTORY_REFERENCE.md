@@ -6,7 +6,8 @@
 | `docs/release/FIRST_RELEASE_USER_AUDIT_2026-07-10.md` | 首版真实用户流程验收：记录开始页、应用、材料、Deep Research 草稿、任务详情与设置状态，补充 Web 供应商密钥闭环和 Stitch 高保真稿未被忠实实现的复核结论 |
 | `docs/release/first-release-audit-2026-07-10/` | 2026-07-10 首版用户体验审计截图：稳定开始页、应用选择、材料导入前后、任务草稿、任务详情与设置页 |
 | `docs/release/stitch-ui-implementation-2026-07-11/` | Stitch 最终稿工程重做后的桌面截图：主页、四应用矩阵和含 Web 供应商密钥表单的设置中心 |
-| `design-qa.md` | Stitch 图到代码阻塞验收：记录视觉真源、同视口实现截图、两轮 P1/P2 修复和最终通过结论 |
+| `docs/release/stitch-ui-implementation-2026-07-11/help-diagnostics/` | Help & Diagnostics 的 Stitch 源图、生产英文图和生产中文图；逻辑视口 1280×1104，同视口验收证据 |
+| `design-qa.md` | Stitch 图到代码验收：记录 Help & Diagnostics 真源、1280×1104 同视口源/实现截图、P0/P1/P2 修复、生产构建与中英切换证据 |
 | `docs/architecture/weak-model-behavior-compensation-notes.md` | 弱模型行为补偿注释（非设计真理，2026-07-10）：隔离记录当前批准的三类暂时性过强行为提示，定义适用行为档位、任务边界、风险、强度和退场门槛；不得覆盖主哲学或整篇注入模型上下文 |
 | `docs/design-handoff/README.md` | UX 重塑外包资料包总览（2026-06-07）：把本轮与用户接触的 UX 重设计拆成基座用户界面、特化应用包界面、设置/调试/配置界面和启动器/安装器体验四组资料，并列出外包团队交付物、当前真实入口和验收门槛 |
 | `docs/design-handoff/01-base-user-interface-agent.md` | 基座面向用户界面 brief：定义客服型 Agent、首次启动正门、应用路由、Prompt 代写、任务确认、错误支持和普通/高级入口分层 |
@@ -348,13 +349,15 @@ apps/
 - `apps/web/app/components/assets-page.tsx` 是 P1 素材导入入口：支持浏览器读取文本类文件、切段预览、导入状态、摘要节点展示，并通过 `/tasks?assetId=...` 把素材附加到新任务。
 - `apps/web/app/components/applications-page.tsx` 阶段 1 已改为四应用统一矩阵，默认突出 Deep Research、Graduate Writing、Coding Assistant、Knowledge Base，并按 Needs / Templates / Settings / Review Status / Primary Action 展示，内部 ID、模块数和场景数不再压在普通卡片上。
 - `apps/web/app/components/settings-page.tsx` 是普通设置中心：AI Service 支持选择供应商、保存或删除本机密钥，并仅显示密钥末四位；同时保留 Spending、Storage、App Defaults、Data & Privacy，Prompt、MCP、评测、观测等维护者入口不占普通主路径。后端 `/providers` 由 `api/routes/providers.py` 提供，密钥写入共享本地状态卷的 `provider-secrets.json`，不会在 API 响应中返回明文。
-- `apps/web/app/components/release-page.tsx` 是帮助与诊断入口：展示当前真实支持的运行模式、provider 配置状态、演示步骤、截图、本地数据/日志/备份位置、出机边界，以及导出/恢复/删除状态；完整 Docker 产品栈和桌面封装当前只写成预览可验证，托管 / SaaS 和官方远端数据服务仍只能写成计划中。
+- `apps/web/app/components/release-page.tsx` 是 Stitch Help & Diagnostics 入口：按源屏幕展示四项健康卡、需要处理、维护、最近活动和维护者原始日志；实时 provider 状态与中英文状态映射由健康接口驱动，维护入口链接到设置、任务、数据治理和观测页面。
 - `apps/web/app/components/data-governance-page.tsx` 是本地数据治理入口：消费 `/data-governance/manifest`、`/backups`、`/backup`、`/deletion-plan`、`/delete` 和 `/operations`，开放备份快照、删除影响预览、受保护 task 硬删除、删除证明与审计查看；asset / node 仍只做预览。
+- `apps/web/app/components/mcp-bridge-page.tsx` 是 MCP 维护入口：管理项目工作区、内建与导入 server、同步/启停和桥接工具；workspace 选项、服务器状态与内建描述按 `zh-CN`/`en` 显示。
+- `apps/web/app/components/prompting-page.tsx` 是 PromptCompiler 维护入口：按当前应用预览 profile、seed、注册工具和 compile artifact；应用 dashboard hero 会随界面语言切换。
 - `apps/web/app/components/application-detail-page.tsx` 已把 `importantConfig` 的常用字段改成 dashboard `settingsSchema[]` 驱动的 typed controls；阶段 1 后普通摘要不再默认展示 appId、Prompt、memory namespace、effectiveConfig raw JSON，装配信息进入维护者详情。
-- `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 现在保留原始状态值用于颜色判定，同时把常见运行状态、导入状态和素材角色显示为中文产品标签。
+- `apps/web/app/components/workbench-primitives.tsx` 提供 PageHeader/Surface/StatCard/StatusBadge 等共享组件；`StatusBadge` 保留原始状态值用于颜色判定，同时把运行、导入、素材、快照、MCP 与治理状态映射为中英产品标签，`statusLabel` 供筛选与回执复用。
 - `apps/web/app/lib/use-api-resource.ts` 是 Web 控制面通用 API loader；路径切换会清空旧数据，普通 reload 会保留当前数据直到新响应返回，避免任务创建后刷新列表时卸载启动面板。
 - `apps/web/app/components/task-detail-page.tsx` 现已作为任务控制面 UI：除 pause/resume 外，也会展示 approve/revision、mailbox state/message 与 side-channel event，收口 P6 的前端可见性；同时已新增 LLM 工作分析摘要卡，并提供进入完整分析页的入口。
-- `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图。
+- `apps/web/app/components/task-llm-work-analysis.tsx` 负责 Web 端的正式 LLM 工作分析视图：任务详情页用 compact 模式展示摘要，独立分析页用 full 模式展示窗口、轮次、工具、工件和辅助信号；本轮已补上工作树调试摘要卡、节点切换时间线、prefix cache key 与 cache hit/write/non-cache 视图，并覆盖中英标签与 locale 时间格式。
 - `apps/web/app/tasks/[taskId]/analysis/page.tsx` 为任务级独立分析路由，直接消费 `/tasks/{taskId}/analysis/latest`。
 
 ---
@@ -1292,7 +1295,7 @@ docs/
 | UX 重塑外包资料包 | `docs/design-handoff/README.md`、`docs/design-handoff/01-base-user-interface-agent.md`、`docs/design-handoff/02-application-package-experience.md`、`docs/design-handoff/03-settings-debug-configuration.md`、`docs/design-handoff/04-launcher-experience.md` |
 | Stitch 外部设计稿 | Codex 全局 MCP `stitch`（`https://stitch.googleapis.com/mcp`）：本轮设计验收只使用 `Project Yggdrasil Design System`（`projects/6603619266131280055`）；凭据只保存在本机 Codex 配置，不进入仓库 |
 | Web 素材导入与附加任务入口 | `apps/web/app/components/assets-page.tsx` |
-| 发布模式、演示、隐私边界和远端计划 | `apps/web/app/components/release-page.tsx`、`apps/web/app/release/page.tsx`、`docs/demos/LOCAL_FIRST_TASK_DEMO.md`、`docs/development/PRODUCT_PACKAGING_AND_REMOTE_DATA_REQUIREMENTS_GAP_2026_06_04.md`、`docs/development/PRODUCT_RELEASE_COMPLETION_EVALUATION_2026_06_18.md`、`docs/specs/remote-data-service-contract-v0.1.md` |
+| Help & Diagnostics 页面 | `apps/web/app/components/release-page.tsx`、`apps/web/app/components/app-shell.tsx`、`apps/web/app/globals.css`、`docs/development/stitch-generated-sources-2026-07-11/README.md`、`design-qa.md` |
 | GitHub Releases 发布手册 | `docs/release/GITHUB_RELEASES_PLAYBOOK.md` |
 | 前端页面 | `apps/web/app/<page>/page.tsx` |
 | 评测套件定义 | `evaluation/suites/*.json` |
@@ -1330,3 +1333,12 @@ docs/
 
 
 
+| `docs/development/stitch-generated-sources-2026-07-11/README.md` | 本轮使用 Stitch MCP 补齐的 Task Hub、Task Detail、Materials、Application Detail、Help & Diagnostics 五个实现源；统一使用 `Roots & Circuitry` 设计系统，记录 screen id、截图/HTML 源与失败生成请求 |
+| `apps/web/app/i18n.ts` | Web 双语消息合同：`zh-CN` 与 `en`；`SUPPORTED_LOCALES` 是后续增加语言的唯一注册入口 |
+| `apps/web/app/components/locale-provider.tsx` | 客户端语言状态、localStorage 持久化、`<html lang>` 同步与翻译上下文 |
+| `apps/web/app/components/language-switcher.tsx` | Stitch 侧栏底部的中英文分段切换控件 |
+| `apps/web/app/components/app-shell.tsx` | Roots & Circuitry 256px 侧栏、顶部状态栏与共享工作台壳层 |
+| `apps/web/app/globals.css` | Stitch 设计 token、表面层级、12 列布局、主页/应用/设置/任务/材料/应用详情页面实现样式 |
+| `apps/web/app/components/{overview,applications,settings,tasks,task-detail,assets,application-detail}-page.tsx` | 已按最终 Stitch 源重构的主要普通用户入口，均接入双语与维护者细节折叠 |
+| `packaging/desktop/windows/Yggdrasil.Launcher.ps1` | Roots & Circuitry Windows 启动器/准备向导重构；提供 EN/中文切换、语言持久化、启动器与安装准备两种视图 |
+| `packaging/desktop/windows/Yggdrasil.Tray.ps1` | 托盘菜单双语化；通过同一 `UiLanguage` 注册表值与启动器保持语言一致 |

@@ -1,40 +1,48 @@
 # Stitch 设计工程验收
 
-- source visual truth: `docs/development/stitch-design-captures-2026-06-17/post-rework-v10-passline/contact-sheets/`
-- implementation screenshots: `docs/release/stitch-ui-implementation-2026-07-11/`
-- viewport: 1265 × 712，桌面端
-- state: 无供应商密钥、存在一个任务草稿的本地运行态
+本轮验收的核心判断是：普通用户界面已经从旧的浅色产品壳直接切换到 Stitch 的 Roots & Circuitry 工作台结构；Help & Diagnostics 使用同一份 Stitch 源页面做了同视口对照；中英文是同一套界面状态的语言切换，不是两套分叉设计。
 
-## Findings
+## 真源与验收范围
 
-当前没有遗留 P0/P1/P2 视觉差异。主页、应用矩阵和设置中心均已从浅色深绿旧主题直接切换到 Stitch 的深海军蓝背景、青绿色主操作、紧凑无衬线排版、细边框卡片和窄侧栏。页面保留真实产品数据和中文用户文案，因此不会逐字复制 Stitch 英文静态样例，但信息层级、区域比例、密度和状态色保持一致。
+- Stitch 项目：`6603619266131280055`（Project Yggdrasil Design System）。
+- 已接受的源页面包：`docs/development/stitch-design-captures-2026-06-17/post-rework-v10-passline/`。
+- 生成源页面清单：`docs/development/stitch-generated-sources-2026-07-11/README.md`。
+- 本轮 Help & Diagnostics 源页面：`86b1a666db2a48b3a0c76c10066eb033`；源 HTML 镜像与截图由清单记录，未凭审美重新设计。
+- 实现入口：`apps/web/app/components/release-page.tsx` 与 `apps/web/app/components/app-shell.tsx`。
+- 实现地址：生产构建 `http://localhost:3101/release`；源码级路由仍为 `/release`。
 
-## Required fidelity surfaces
+验收覆盖 Web 的主导航、任务、应用、材料、数据治理、设置、Help & Diagnostics 以及维护者工作台页面，同时覆盖 Windows Launcher/Tray 的中英文入口。后续新增语言只需扩展 `apps/web/app/i18n.ts`，不会复制页面组件。
 
-- Fonts and typography: 已删除大字号衬线标题，统一使用 Segoe UI / 系统无衬线；标题、标签和正文层级与参考稿一致。
-- Spacing and layout rhythm: 侧栏从 320px 收窄到 224px；应用保持四列矩阵；卡片圆角、内边距、间距和页面宽度按紧凑桌面布局重设。
-- Colors and visual tokens: 背景、面板、边框、正文、次要文字、青绿主色、黄色警告和粉红阻塞状态均改成 Stitch 深色 token。
-- Image quality and asset fidelity: 三个目标页面没有内容型图片资产；没有用占位图、CSS 插画或自制 SVG 替代设计资产。
-- Copy and content: 保留真实中文任务、应用、隐私和供应商状态，不复刻静态英文示例数据。
-- Accessibility: 保留语义链接、按钮、label、密码输入和状态消息；深色 token 保持正文与背景对比，焦点行为沿用原生控件。
+## 同视口视觉证据
 
-## Comparison history
+Help & Diagnostics 使用逻辑视口 `1280 × 1104`，源图、英文产物和中文产物均来自同一视口。浏览器因滚动条产生的实际内容宽度差异属于渲染环境差异，不是布局参数差异。
 
-### Iteration 1
+- Stitch 源：`docs/release/stitch-ui-implementation-2026-07-11/help-diagnostics/source-1280x1104.png`
+- 生产英文：`docs/release/stitch-ui-implementation-2026-07-11/help-diagnostics/production-en-1280x1104.png`
+- 生产中文：`docs/release/stitch-ui-implementation-2026-07-11/help-diagnostics/production-zh-1280x1104.png`
 
-- Earlier P1: 当前产品使用米白背景、深绿宽侧栏、超大衬线标题，与 Stitch 深色紧凑工作台完全不同。
-- Fix: 替换全局视觉 token、壳层宽度、导航状态、标题字体、卡片密度和按钮样式；补充设置页控件样式。
-- Post-fix evidence: `01-home.png`、`02-applications.png`、`03-settings.png`。
+对照结果：固定窄侧栏、顶栏、命令搜索、四张健康卡、Action Required、Maintenance、Recent Activity 与原始维护者日志的区域顺序、密度、边框、状态色和对齐方式与 Stitch 源一致；中英文只改变文案和日期格式，不改变结构。`Settings` 的激活态按 Stitch 源截图保留，即使当前路径是 `/release`，以避免把源页面静态意图改成另一套导航审美。
 
-### Iteration 2
+## 迭代与剩余风险
 
-- Earlier P2: 设置页原生 select/input 仍继承浅色半透明背景。
-- Fix: 将 `.field-input` 显式切换到深色背景和强边框。
-- Post-fix evidence: `03-settings.png`。
+### P0/P1：已关闭
 
-## Follow-up polish
+旧版米白背景、深绿宽侧栏、衬线大标题、宽松卡片和发布矩阵已删除；全局 token、侧栏宽度、图标、卡片边框、控件、状态色和内容密度均按 Stitch 结构重置。生产构建后的主路由与高级路由均完成烟测，未出现 `Application error`、错误页或中英文缺失文案。
 
-- P3: 可在未来引入与 Stitch 图标风格一致的正式图标库；本轮没有用字符或临时图形伪造图标。
-- P3: 任务详情属于 Stitch 最终包未覆盖的页面，已继承新 token，但后续仍可单独做信息密度设计。
+### P2：资产回退已记录
+
+Stitch Help 源页面使用远程 logo/headshot 位图；仓库没有可复用的同源资产，远程图片也不适合作为产品运行时依赖。因此实现使用本地 Material 图标与 `SA` 头像缩写作为资产回退，布局、尺寸、颜色和层级仍按源页面执行。这是唯一明确的像素级资产差异；若后续提供仓库自有 logo/avatar，可只替换资产，不改页面结构。
+
+Stitch 对 Data & Privacy 与 Maintainer Workbench 的新生成请求未返回有效页面，失败请求没有盲目重试；这两类页面沿用已接受的源包和当前真实产品数据，并已在生成源清单中留痕。
+
+## 验证结果
+
+- `corepack pnpm --filter @yggdrasil/web typecheck`：通过。
+- `corepack pnpm --filter @yggdrasil/web build`：通过，17 条 Web 路由生成，包含 `/release`。
+- 中英文词典：551/551 key 对齐；直接 JSX 用户文案扫描仅剩品牌名和技术名。
+- 生产环境语言切换：`zh-CN`/`en`、`<html lang>`、按钮选中态、状态卡、日志和日期格式均已验证；18 条 Web 路由在英文和中文状态各完成一次生产烟测。
+- 空数据/后端暂不可用时，数据治理、MCP、节点详情、观测和任务分析页面进入有语义的 Loading/Empty/ErrorState，不再因接口返回不完整对象而抛出客户端异常。
+- Windows PowerShell：Launcher/Tray UTF-8、语言持久化、解析与不可见 WinForms 检查通过。
+- 真实本地数据库没有被本轮 QA 改写；生产视觉烟测使用隔离的健康接口 fixture，避免把既有 schema 漂移误报成 UI 缺陷。
 
 final result: passed

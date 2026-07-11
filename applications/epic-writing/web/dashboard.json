@@ -112,5 +112,151 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Epic Writing Studio",
+        "title": "Creative Writing",
+        "summary": "A focused application for long-form creative work. It emphasizes narrative continuity, character consistency, timeline management, and durable story assets."
+      },
+      "quickActions": [
+        {
+          "href": "/prompting?appId=yggdrasil.app.epic-writing",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.epic-writing",
+          "label": "Application details"
+        },
+        {
+          "href": "/tasks",
+          "label": "Tasks"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "story-development",
+          "title": "Advance a long-form creative project",
+          "goal": "Provide the world setting, characters, the current chapter goal, and continuity constraints to advance a creative task.",
+          "description": "For long-form narratives, world-building maintenance, and chapter development.",
+          "currentObjective": "Advance long-form creative work while preserving continuity"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

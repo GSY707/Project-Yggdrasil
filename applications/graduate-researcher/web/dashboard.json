@@ -167,5 +167,199 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Graduate Researcher",
+        "title": "Graduate Study",
+        "summary": "A focused application for long-horizon learning. It enables a tool-rich workflow by default—web research, computational validation, memory organization, relationship discovery, and multimodal intake—so the budget is invested in learning and durable memory."
+      },
+      "quickActions": [
+        {
+          "href": "/mcp",
+          "label": "MCP tools"
+        },
+        {
+          "href": "/prompting?appId=yggdrasil.app.graduate-researcher",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.graduate-researcher",
+          "label": "Application details"
+        },
+        {
+          "href": "/tasks",
+          "label": "Tasks"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "learning-research-loop",
+          "title": "Start a long-term learning and research loop",
+          "goal": "Provide the learning topic, current level, and phase goal so the application can create a learning path, collect evidence, and capture memory.",
+          "description": "For long-horizon learning, literature reading, and research-skill development.",
+          "exampleTasks": [
+            "I want to learn multimodal large models systematically in 12 weeks. Plan readings, exercises, and reviews around my math background.",
+            "I am entering urban sociology. First build a learning route for core concepts, classic literature, and current research questions.",
+            "I have read several papers but they feel scattered. Help me organize the themes and plan the next reading round."
+          ],
+          "expectedOutputs": [
+            "Phased learning path: weekly themes, readings, exercises, and review questions.",
+            "Sources and viewpoints: key papers or books, central claims, boundaries of applicability, and disputes.",
+            "Research memo: unanswered questions, next search directions, and concepts that need repeated reinforcement."
+          ],
+          "currentObjective": "Build a long-term learning and research loop"
+        },
+        {
+          "id": "paper-reading-sprint",
+          "title": "Analyze papers and literature",
+          "goal": "Provide papers, a topic, or a reading list so the application can extract claims, methods, evidence, and follow-up questions.",
+          "description": "For concentrated paper reading, group-meeting preparation, or literature-review organization.",
+          "exampleTasks": [
+            "Help me understand this reinforcement-learning paper, focusing on the research question, experiment design, and whether its conclusion is reliable.",
+            "I need to organize 15 papers on the impact of generative AI on writing education. Group the main viewpoints.",
+            "I present a paper at tomorrow's group meeting. Generate an outline and likely questions."
+          ],
+          "expectedOutputs": [
+            "Paper analysis card: research question, method, data, conclusion, limitations, and quotable insights.",
+            "Literature grouping: topic categories, representative work, shared conclusions, and conflicts.",
+            "Presentation draft: explanation order, key-chart notes, and discussion questions."
+          ],
+          "currentObjective": "Build a repeatable, discussable understanding of the literature"
+        },
+        {
+          "id": "thesis-proposal",
+          "title": "Prepare a thesis proposal and research plan",
+          "goal": "Provide research interests, existing materials, and advisor requirements so the application can narrow the topic, design methods, and produce proposal materials.",
+          "description": "For thesis topic selection, proposal reports, and research-plan refinement.",
+          "exampleTasks": [
+            "I want to write a master's thesis on employment choices among young people in county-level cities. Help turn the interest into a researchable question.",
+            "My advisor expects a proposal draft next week. Use my existing materials to complete the research question, method, and schedule.",
+            "My research plan is too broad. Identify the risks and provide a more executable version."
+          ],
+          "expectedOutputs": [
+            "Topic and research-question suggestions: primary and secondary questions, subjects, and scope.",
+            "Research-method plan: sources, interview or data plan, analysis steps, and feasibility risks.",
+            "Proposal outline: chapter structure, writing points, timeline, and advisor-communication checklist."
+          ],
+          "currentObjective": "Create an executable thesis proposal and research plan"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

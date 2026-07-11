@@ -1,6 +1,12 @@
+"use client";
+
+import { useCallback } from "react";
 import type { PropsWithChildren, ReactNode } from "react";
 
-export function formatTimestamp(value: unknown): string {
+import { DEFAULT_LOCALE, type Locale, type TranslationKey } from "../i18n";
+import { useLocale, useTranslation } from "./locale-provider";
+
+export function formatTimestamp(value: unknown, locale: Locale = DEFAULT_LOCALE): string {
   if (typeof value !== "string" || value.length === 0) {
     return "-";
   }
@@ -10,7 +16,7 @@ export function formatTimestamp(value: unknown): string {
     return value;
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -21,61 +27,141 @@ export function formatTimestamp(value: unknown): string {
 
 export function toneForStatus(status: string | null | undefined): "good" | "warn" | "alert" | "muted" {
   const normalized = (status ?? "").toLowerCase();
-  if (["active", "available", "completed", "healthy", "merged", "published", "approved", "open", "ready", "running"].includes(normalized)) {
+  if (["active", "allow", "available", "completed", "created", "enabled", "executed", "flushed", "handled", "healthy", "materialized", "merged", "passed", "prepared", "published", "approved", "open", "present", "promoted", "ready", "resolved", "restorable", "running", "success", "validated", "verified", "delivered", "accepted", "acknowledged", "closed"].includes(normalized)) {
     return "good";
   }
-  if (["paused", "degraded", "planned", "queued", "draft", "pending", "publishing", "warning"].includes(normalized)) {
+  if (["paused", "degraded", "planned", "queued", "draft", "pending", "pending-sync", "publishing", "committing", "in-progress", "leased", "restoring", "recovering", "summarizing", "warning", "info", "snapshot", "consumed", "cancelling", "draining", "executing", "initializing", "materializing", "mounting", "needs-clarification", "pausing", "pre-reading", "preprocessing", "proposed", "reclaimable", "restart-requested", "restarting", "standby", "suspended", "temporary", "waiting-tool", "fallback"].includes(normalized)) {
     return "warn";
   }
-  if (["failed", "error", "dead-letter", "blocked", "cancelled", "deleted", "unavailable", "unhealthy"].includes(normalized)) {
+  if (["failed", "error", "dead-letter", "blocked", "cancelled", "deleted", "deny", "disabled", "copied-disabled", "invalid", "locked", "missing", "not-applicable", "not-run", "skipped", "superseded", "archived", "aborted", "deprecated", "detached", "expired", "quarantined", "rejected", "resume-blocked", "retired", "unavailable", "unhealthy"].includes(normalized)) {
     return "alert";
   }
   return "muted";
 }
 
-function displayStatus(status: string | null | undefined): string {
-  const normalized = (status ?? "").toLowerCase();
-  const labels: Record<string, string> = {
-    active: "已启用",
-    approved: "已批准",
-    available: "可用",
-    blocked: "阻塞",
-    cancelled: "已取消",
-    completed: "已完成",
-    default: "默认加载",
-    deleted: "已删除",
-    "dead-letter": "异常待处理",
-    degraded: "需要关注",
-    draft: "草稿",
-    error: "错误",
-    failed: "失败",
-    "file-ready": "文件已读取",
-    healthy: "正常",
-    idle: "待导入",
-    inactive: "未启用",
-    importing: "导入中",
-    derived: "派生",
-    merged: "已合并",
-    open: "待处理",
-    original: "原始",
-    paused: "已暂停",
-    preview: "预览",
-    pending: "等待中",
-    planned: "计划中",
-    published: "已发布",
-    publishing: "发布中",
-    queued: "排队中",
-    ready: "就绪",
-    running: "运行中",
-    unavailable: "暂不可用",
-    unhealthy: "异常",
-    warning: "需注意",
-  };
-  return labels[normalized] ?? status ?? "未知";
-}
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  active: "status.active",
+  allow: "status.allow",
+  aborted: "status.aborted",
+  accepted: "status.accepted",
+  acknowledged: "status.acknowledged",
+  archived: "status.archived",
+  "awaiting-approval": "status.awaiting-approval",
+  approved: "status.approved",
+  available: "status.available",
+  blocked: "status.blocked",
+  cancelled: "status.cancelled",
+  cancelling: "status.cancelling",
+  closed: "status.closed",
+  committing: "status.committing",
+  completed: "status.completed",
+  consumed: "status.consumed",
+  "copied-disabled": "status.copied-disabled",
+  created: "status.created",
+  disabled: "status.disabled",
+  default: "status.default",
+  deleted: "status.deleted",
+  "dead-letter": "status.dead-letter",
+  degraded: "status.degraded",
+  delivered: "status.delivered",
+  deprecated: "status.deprecated",
+  detached: "status.detached",
+  deny: "status.deny",
+  draft: "status.draft",
+  error: "status.error",
+  enabled: "status.enabled",
+  draining: "status.draining",
+  executed: "status.executed",
+  executing: "status.executing",
+  expired: "status.expired",
+  fallback: "status.fallback",
+  failed: "status.failed",
+  "file-ready": "status.file-ready",
+  flushed: "status.flushed",
+  healthy: "status.healthy",
+  handled: "status.handled",
+  idle: "status.idle",
+  "in-progress": "status.in-progress",
+  inactive: "status.inactive",
+  importing: "status.importing",
+  initializing: "status.initializing",
+  invalid: "status.invalid",
+  leased: "status.leased",
+  locked: "status.locked",
+  missing: "status.missing",
+  materialized: "status.materialized",
+  materializing: "status.materializing",
+  mounting: "status.mounting",
+  derived: "status.derived",
+  merged: "status.merged",
+  "not-applicable": "status.not-applicable",
+  "not-run": "status.not-run",
+  "needs-clarification": "status.needs-clarification",
+  open: "status.open",
+  original: "status.original",
+  paused: "status.paused",
+  pausing: "status.pausing",
+  "pending-sync": "status.pending-sync",
+  preview: "status.preview",
+  pending: "status.pending",
+  planned: "status.planned",
+  passed: "status.passed",
+  "pre-reading": "status.pre-reading",
+  prepared: "status.prepared",
+  preprocessing: "status.preprocessing",
+  present: "status.present",
+  promoted: "status.promoted",
+  proposed: "status.proposed",
+  published: "status.published",
+  publishing: "status.publishing",
+  quarantined: "status.quarantined",
+  reclaimable: "status.reclaimable",
+  queued: "status.queued",
+  ready: "status.ready",
+  restorable: "status.restorable",
+  restoring: "status.restoring",
+  recovering: "status.recovering",
+  rejected: "status.rejected",
+  resolved: "status.resolved",
+  "restart-requested": "status.restart-requested",
+  restarting: "status.restarting",
+  "resume-blocked": "status.resume-blocked",
+  retired: "status.retired",
+  running: "status.running",
+  skipped: "status.skipped",
+  staged: "status.staged",
+  standby: "status.standby",
+  snapshot: "status.snapshot",
+  superseded: "status.superseded",
+  summarizing: "status.summarizing",
+  success: "status.success",
+  suspended: "status.suspended",
+  temporary: "status.temporary",
+  "unknown-tool": "status.unknown-tool",
+  unknown: "status.unknown",
+  unavailable: "status.unavailable",
+  unhealthy: "status.unhealthy",
+  validated: "status.validated",
+  verified: "status.verified",
+  warning: "status.warning",
+  "waiting-tool": "status.waiting-tool",
+  info: "status.info",
+};
 
 export function StatusBadge({ value }: { value: string | null | undefined }) {
-  return <span className={`status-badge ${toneForStatus(value)}`}>{displayStatus(value)}</span>;
+  const { t } = useTranslation();
+  return <span className={`status-badge ${toneForStatus(value)}`}>{statusLabel(value, t)}</span>;
+}
+
+export function statusLabel(value: string | null | undefined, translate: (key: TranslationKey) => string): string {
+  const normalized = (value ?? "").toLowerCase();
+  const labelKey = STATUS_LABEL_KEYS[normalized];
+  return labelKey ? translate(labelKey) : normalized.length > 0 ? value ?? translate("status.unknown") : translate("status.unknown");
+}
+
+export function useLocalizedTimestamp() {
+  const { locale } = useLocale();
+  return useCallback((value: unknown) => formatTimestamp(value, locale), [locale]);
 }
 
 export function PageHeader({
@@ -115,11 +201,12 @@ export function StatCard({ label, value, copy }: { label: string; value: ReactNo
   );
 }
 
-export function LoadingState({ title = "加载中" }: { title?: string }) {
+export function LoadingState({ title }: { title?: string }) {
+  const { t } = useTranslation();
   return (
     <div className="loading-state">
-      <p className="section-kicker">加载</p>
-      <h3 className="section-title">{title}</h3>
+      <p className="section-kicker">{t("loading.section")}</p>
+      <h3 className="section-title">{title ?? t("loading.defaultTitle")}</h3>
       <div className="loading-grid">
         <div className="loading-card" />
         <div className="loading-card" />
@@ -129,11 +216,12 @@ export function LoadingState({ title = "加载中" }: { title?: string }) {
   );
 }
 
-export function ErrorState({ title = "加载失败", detail }: { title?: string; detail: string }) {
+export function ErrorState({ title, detail }: { title?: string; detail: string }) {
+  const { t } = useTranslation();
   return (
     <div className="error-state">
-      <p className="section-kicker">错误</p>
-      <h3 className="section-title">{title}</h3>
+      <p className="section-kicker">{t("error.section")}</p>
+      <h3 className="section-title">{title ?? t("error.defaultTitle")}</h3>
       <p className="error-copy">{detail}</p>
     </div>
   );

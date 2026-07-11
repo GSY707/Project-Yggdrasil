@@ -6,7 +6,8 @@ import { useState } from "react";
 import type { TaskControlActionResponse, TaskDetailResponse } from "@yggdrasil/frontend-sdk";
 
 import { postApiJson, useApiResource } from "../lib/use-api-resource";
-import { ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+import { useTranslation } from "./locale-provider";
+import { ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp, statusLabel } from "./workbench-primitives";
 import { TaskLlmWorkAnalysisView } from "./task-llm-work-analysis";
 
 type BudgetStatePayload = {
@@ -44,6 +45,7 @@ function parseOptionalFloat(value: string): number | null {
 }
 
 export function TaskDetailPage({ taskId }: { taskId: string }) {
+  const { locale, t } = useTranslation();
   const { data, error, isLoading, reload } = useApiResource<TaskDetailResponse>(`/tasks/${encodeURIComponent(taskId)}`);
   const [controlError, setControlError] = useState<string | null>(null);
   const [controlMessage, setControlMessage] = useState<string | null>(null);
@@ -51,11 +53,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
   const [budgetTopUp, setBudgetTopUp] = useState<{ tokenDelta: string; costDelta: string }>({ tokenDelta: "", costDelta: "" });
 
   if (isLoading) {
-    return <LoadingState title="正在装配任务详情" />;
+    return <LoadingState title={t("taskDetail.loading")} />;
   }
 
-  if (error || !data) {
-    return <ErrorState detail={error ?? "任务详情不可用。"} />;
+  if (error || !data || !data.task) {
+    return <ErrorState detail={error ?? t("taskDetail.unavailable")} />;
   }
 
   const taskDetail = data;
@@ -73,7 +75,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         waitForSafeStop: true,
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
       });
-      setControlMessage(`已提交暂停请求，当前状态 ${String(response.task.status ?? response.status)}。`);
+      setControlMessage(t("taskDetail.pauseSubmitted", { status: statusLabel(response.task.status ?? response.status, t) }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -93,7 +95,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         waitForSafeStop: true,
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
       });
-      setControlMessage(`已提交 Safe-Stop 请求，当前状态 ${String(response.task.status ?? response.status)}。`);
+      setControlMessage(t("taskDetail.safeStopSubmitted", { status: statusLabel(response.task.status ?? response.status, t) }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -110,7 +112,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/resume`, {
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
       });
-      setControlMessage(`恢复任务已进入执行队列，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      setControlMessage(t("taskDetail.resumeQueued", { depth: String(response.queueDepth ?? "-") }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -127,7 +129,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/cancel`, {
         reason: "operator-cancelled",
       });
-      setControlMessage(`任务已取消，当前状态 ${String(response.task.status ?? response.status)}。`);
+      setControlMessage(t("taskDetail.cancelled", { status: statusLabel(response.task.status ?? response.status, t) }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -145,7 +147,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         label: `manual-save-${new Date().toISOString()}`,
       });
       const snapshot = response.snapshot as { id?: string } | undefined;
-      setControlMessage(`已保存用户快照 ${String(snapshot?.id ?? "")}。`);
+      setControlMessage(t("taskDetail.snapshotSaved", { id: String(snapshot?.id ?? "") }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -156,7 +158,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
   async function submitBranchFromSavedSnapshot() {
     if (!latestUserSavedSnapshot) {
-      setControlError("没有可用于创建分支的 user-saved snapshot。");
+      setControlError(t("taskDetail.noSavedSnapshot"));
       return;
     }
     setActiveAction("branch");
@@ -168,7 +170,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         label: latestUserSavedSnapshot.savedLabel ?? "user-saved branch",
       });
       const childTask = response.childTask as { id?: string } | undefined;
-      setControlMessage(`已从用户快照创建子任务 ${String(childTask?.id ?? "")}。`);
+      setControlMessage(t("taskDetail.branchCreated", { id: String(childTask?.id ?? "") }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -185,7 +187,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       const response = await postApiJson<TaskControlActionResponse>(`/tasks/${encodeURIComponent(taskId)}/approve-completion`, {
         currentFocus: "completed",
       });
-      setControlMessage(`任务已批准完成，当前状态 ${String(response.task.status ?? response.status)}。`);
+      setControlMessage(t("taskDetail.approved", { status: statusLabel(response.task.status ?? response.status, t) }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -204,7 +206,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         resumeMessage: taskDetail.runtimeControl.recommendedResumeMessage ?? taskDetail.task.resumeMessage ?? null,
         ...extraPayload,
       });
-      setControlMessage(`失败任务已重试入队，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      setControlMessage(t("taskDetail.retryQueued", { depth: String(response.queueDepth ?? "-") }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -222,7 +224,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         nodeId: taskDetail.runtimeControl.recommendedRevisionNodeId ?? undefined,
         reason: `operator-revision:${taskDetail.runtimeControl.recommendedRevisionNodeId ?? "root"}`,
       });
-      setControlMessage(`已请求修订，任务重新入队，当前队列深度 ${String(response.queueDepth ?? "-")}。`);
+      setControlMessage(t("taskDetail.revisionQueued", { depth: String(response.queueDepth ?? "-") }));
       reload();
     } catch (actionError) {
       setControlError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -239,7 +241,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       const tokenDelta = parseOptionalInt(budgetTopUp.tokenDelta);
       const costDelta = parseOptionalFloat(budgetTopUp.costDelta);
       if ((tokenDelta ?? 0) <= 0 && (costDelta ?? 0) <= 0) {
-        throw new Error("请至少填写一个大于 0 的预算追加值。\n例如 token +50000 或 cost +5。");
+        throw new Error(t("taskDetail.budgetInvalid"));
       }
 
       const currentBudget = normalizeBudgetState(taskDetail.task);
@@ -266,12 +268,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           budgetState: nextBudgetState,
         });
         setControlMessage(
-          `预算已追加并从快照续跑。token 上限=${String(nextTokenTotal ?? "不限制")}，cost 上限=${String(nextCostTotal ?? "不限制")}，队列深度 ${String(response.queueDepth ?? "-")}。`,
+          t("taskDetail.budgetResumed", {
+            token: String(nextTokenTotal ?? t("taskDetail.unlimited")),
+            cost: String(nextCostTotal ?? t("taskDetail.unlimited")),
+            depth: String(response.queueDepth ?? "-"),
+          }),
         );
       } else if (taskDetail.runtimeControl.canRetry) {
         await submitRetryRequest({ budgetState: nextBudgetState, reason: "manual-budget-top-up-retry" });
       } else {
-        throw new Error("当前任务状态不支持预算追加后续跑（仅 paused/failed 支持）。");
+        throw new Error(t("taskDetail.budgetUnsupported"));
       }
 
       setBudgetTopUp({ tokenDelta: "", costDelta: "" });
@@ -284,59 +290,59 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
   }
 
   return (
-    <div>
+    <div className="task-detail-page">
       <PageHeader
-        eyebrow="Task Detail"
+        eyebrow={t("taskDetail.eyebrow")}
         title={taskDetail.task.title}
-        summary={<>目标：{taskDetail.task.goal}</>}
+        summary={<>{t("taskDetail.goal", { goal: taskDetail.task.goal })}</>}
         actions={
           <>
             <Link className="ghost-button" href={`/tasks/${encodeURIComponent(taskId)}/analysis`}>
-              LLM 工作分析
+              {t("taskDetail.analysis")}
             </Link>
             {taskDetail.runtimeControl.canRequestPause ? (
               <button className="action-button" disabled={activeAction !== null} onClick={() => void submitSafeStopRequest()} type="button">
-                {activeAction === "safe-stop" ? "正在安全停止" : "Safe-Stop"}
+                {activeAction === "safe-stop" ? t("taskDetail.stoppingSafely") : t("taskDetail.safeStop")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canRequestPause ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitPauseRequest()} type="button">
-                {activeAction === "pause" ? "正在提交暂停" : "请求暂停"}
+                {activeAction === "pause" ? t("taskDetail.pausing") : t("taskDetail.requestPause")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canResume ? (
               <button className="action-button" disabled={activeAction !== null} onClick={() => void submitResumeRequest()} type="button">
-                {activeAction === "resume" ? "正在恢复" : "从快照恢复"}
+                {activeAction === "resume" ? t("taskDetail.resuming") : t("taskDetail.resumeSnapshot")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canSaveSnapshot ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitSaveSnapshot()} type="button">
-                {activeAction === "save-snapshot" ? "正在保存" : "保存快照"}
+                {activeAction === "save-snapshot" ? t("taskDetail.saving") : t("taskDetail.saveSnapshot")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canBranch ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitBranchFromSavedSnapshot()} type="button">
-                {activeAction === "branch" ? "正在创建分支" : "从保存快照分支"}
+                {activeAction === "branch" ? t("taskDetail.branching") : t("taskDetail.branchSnapshot")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canCancel ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitCancelRequest()} type="button">
-                {activeAction === "cancel" ? "正在取消" : "取消任务"}
+                {activeAction === "cancel" ? t("taskDetail.cancelling") : t("taskDetail.cancelTask")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canRequestRevision ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitRevisionRequest()} type="button">
-                {activeAction === "revise" ? "正在请求修订" : "请求修订"}
+                {activeAction === "revise" ? t("taskDetail.requestingRevision") : t("taskDetail.requestRevision")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canRetry ? (
               <button className="ghost-button" disabled={activeAction !== null} onClick={() => void submitRetryRequest()} type="button">
-                {activeAction === "retry" ? "正在重试" : "失败后重试"}
+                {activeAction === "retry" ? t("taskDetail.retrying") : t("taskDetail.retryAfterFailure")}
               </button>
             ) : null}
             {taskDetail.runtimeControl.canApprove ? (
               <button className="action-button" disabled={activeAction !== null} onClick={() => void submitApproveCompletion()} type="button">
-                {activeAction === "approve" ? "正在批准完成" : "批准完成"}
+                {activeAction === "approve" ? t("taskDetail.approving") : t("taskDetail.approveCompletion")}
               </button>
             ) : null}
           </>
@@ -346,82 +352,86 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       <section className="detail-hero">
         <div className="record-head">
           <div>
-            <p className="meta-label">Task ID</p>
+            <p className="meta-label">{t("taskDetail.taskId")}</p>
             <p className="meta-copy mono">{taskDetail.task.id}</p>
           </div>
           <StatusBadge value={taskDetail.task.status} />
         </div>
         <div className="kv-grid">
           <div className="kv-item">
-            <p className="meta-label">Current Objective</p>
+            <p className="meta-label">{t("taskDetail.currentObjective")}</p>
             <p className="meta-copy">{String(taskDetail.task.currentObjective ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Current Focus</p>
+            <p className="meta-label">{t("taskDetail.currentFocus")}</p>
             <p className="meta-copy">{String(taskDetail.task.currentFocus ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Branch</p>
+            <p className="meta-label">{t("taskDetail.branch")}</p>
             <p className="meta-copy mono">{String(taskDetail.task.branchId ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Updated</p>
-            <p className="meta-copy">{formatTimestamp(taskDetail.task.updatedAt ?? taskDetail.task.createdAt)}</p>
+            <p className="meta-label">{t("taskDetail.updated")}</p>
+            <p className="meta-copy">{formatTimestamp(taskDetail.task.updatedAt ?? taskDetail.task.createdAt, locale)}</p>
           </div>
         </div>
       </section>
 
       <TaskLlmWorkAnalysisView mode="compact" taskId={taskId} />
 
+      <details className="maintainer-disclosure">
+        <summary>{t("taskDetail.rawRuntimeDetails")}</summary>
+        <div className="maintainer-disclosure-body">
+
       <Surface>
-        <p className="section-kicker">Runtime Control</p>
-        <h3 className="section-title">暂停与恢复控制面</h3>
+        <p className="section-kicker">{t("taskDetail.runtimeControl")}</p>
+        <h3 className="section-title">{t("taskDetail.runtimeControlTitle")}</h3>
         {controlMessage ? <p className="meta-copy">{controlMessage}</p> : null}
         {controlError ? <p className="error-copy">{controlError}</p> : null}
         <div className="kv-grid">
           <div className="kv-item">
-            <p className="meta-label">Resume Status</p>
-            <p className="meta-copy">{taskDetail.runtimeControl.resumeStatus}</p>
+            <p className="meta-label">{t("taskDetail.resumeStatus")}</p>
+            <p className="meta-copy">{statusLabel(taskDetail.runtimeControl.resumeStatus, t)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Pause Intent</p>
+            <p className="meta-label">{t("taskDetail.pauseIntent")}</p>
             <p className="meta-copy">{String(taskDetail.runtimeControl.pauseRequested)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Active Snapshot</p>
+            <p className="meta-label">{t("taskDetail.activeSnapshot")}</p>
             <p className="meta-copy mono">{String(taskDetail.runtimeControl.activeSnapshotId ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Last Safe Stop</p>
-            <p className="meta-copy">{formatTimestamp(taskDetail.runtimeControl.lastSafeStopAt ?? null)}</p>
+            <p className="meta-label">{t("taskDetail.lastSafeStop")}</p>
+            <p className="meta-copy">{formatTimestamp(taskDetail.runtimeControl.lastSafeStopAt ?? null, locale)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Active Attempt</p>
+            <p className="meta-label">{t("taskDetail.activeAttempt")}</p>
             <p className="meta-copy mono">{String(taskDetail.runtimeControl.activeResumeAttemptId ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Recommended Resume Message</p>
+            <p className="meta-label">{t("taskDetail.recommendedResumeMessage")}</p>
             <p className="meta-copy">{String(taskDetail.runtimeControl.recommendedResumeMessage ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Resume Blocker</p>
+            <p className="meta-label">{t("taskDetail.resumeBlocker")}</p>
             <p className="meta-copy">{String(taskDetail.runtimeControl.blocker?.message ?? taskDetail.runtimeControl.resumeBlockedReason ?? "-")}</p>
           </div>
         </div>
         <div className="pill-row">
-          <span className="inline-chip">snapshots {taskDetail.runtimeControl.snapshotCount}</span>
-          <span className="inline-chip">restorable {taskDetail.runtimeControl.restorableSnapshotCount}</span>
-          <span className="inline-chip">consumed {taskDetail.runtimeControl.consumedSnapshotCount}</span>
-          <span className="inline-chip">canResume {String(taskDetail.runtimeControl.canResume)}</span>
-          <span className="inline-chip">canPause {String(taskDetail.runtimeControl.canRequestPause)}</span>
-          <span className="inline-chip">canRetry {String(taskDetail.runtimeControl.canRetry ?? false)}</span>
-          <span className="inline-chip">canCancel {String(taskDetail.runtimeControl.canCancel ?? false)}</span>
-          <span className="inline-chip">canSave {String(taskDetail.runtimeControl.canSaveSnapshot ?? false)}</span>
-          <span className="inline-chip">canBranch {String(taskDetail.runtimeControl.canBranch ?? false)}</span>
-          <span className="inline-chip">canTopUp {String(taskDetail.runtimeControl.canTopUp ?? false)}</span>
-          <span className="inline-chip">canApprove {String(taskDetail.runtimeControl.canApprove)}</span>
-          <span className="inline-chip">canRevise {String(taskDetail.runtimeControl.canRequestRevision)}</span>
-          <span className="inline-chip">mailbox {taskDetail.mailboxState.pendingCount}</span>
+          <span className="inline-chip">{t("taskDetail.snapshotChip", { count: taskDetail.runtimeControl.snapshotCount })}</span>
+          <span className="inline-chip">{t("taskDetail.restorableChip", { count: taskDetail.runtimeControl.restorableSnapshotCount })}</span>
+          <span className="inline-chip">{t("taskDetail.consumedChip", { count: taskDetail.runtimeControl.consumedSnapshotCount })}</span>
+          <span className="inline-chip">{t("taskDetail.canResumeChip", { value: String(taskDetail.runtimeControl.canResume) })}</span>
+          <span className="inline-chip">{t("taskDetail.canPauseChip", { value: String(taskDetail.runtimeControl.canRequestPause) })}</span>
+          <span className="inline-chip">{t("taskDetail.canRetryChip", { value: String(taskDetail.runtimeControl.canRetry ?? false) })}</span>
+          <span className="inline-chip">{t("taskDetail.canCancelChip", { value: String(taskDetail.runtimeControl.canCancel ?? false) })}</span>
+          <span className="inline-chip">{t("taskDetail.canSaveChip", { value: String(taskDetail.runtimeControl.canSaveSnapshot ?? false) })}</span>
+          <span className="inline-chip">{t("taskDetail.canBranchChip", { value: String(taskDetail.runtimeControl.canBranch ?? false) })}</span>
+          <span className="inline-chip">{t("taskDetail.canTopUpChip", { value: String(taskDetail.runtimeControl.canTopUp ?? false) })}</span>
+          <span className="inline-chip">{t("taskDetail.canApproveChip", { value: String(taskDetail.runtimeControl.canApprove) })}</span>
+          <span className="inline-chip">{t("taskDetail.canReviseChip", { value: String(taskDetail.runtimeControl.canRequestRevision) })}</span>
+          <span className="inline-chip">{t("taskDetail.mailboxChip", { count: taskDetail.mailboxState.pendingCount })}</span>
         </div>
         {taskDetail.runtimeControl.canTopUp ? (
           <form
@@ -430,29 +440,29 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
               void submitBudgetTopUpAndContinue();
             }}
           >
-            <p className="section-kicker">Budget Top-Up</p>
-            <h4 className="subsection-title">预算追加后无损续跑</h4>
+            <p className="section-kicker">{t("taskDetail.budgetTopUp")}</p>
+            <h4 className="subsection-title">{t("taskDetail.budgetTopUpTitle")}</h4>
             <div className="kv-grid">
               <label className="kv-item" htmlFor="task-token-topup">
-                <p className="meta-label">追加 Token 上限</p>
+                <p className="meta-label">{t("taskDetail.tokenTopUp")}</p>
                 <input
                   className="field-input"
                   id="task-token-topup"
                   min={0}
                   onChange={(event) => setBudgetTopUp((value) => ({ ...value, tokenDelta: event.target.value }))}
-                  placeholder="例如 50000"
+                  placeholder={t("taskDetail.tokenPlaceholder")}
                   type="number"
                   value={budgetTopUp.tokenDelta}
                 />
               </label>
               <label className="kv-item" htmlFor="task-cost-topup">
-                <p className="meta-label">追加 Cost 上限 (USD)</p>
+                <p className="meta-label">{t("taskDetail.costTopUp")}</p>
                 <input
                   className="field-input"
                   id="task-cost-topup"
                   min={0}
                   onChange={(event) => setBudgetTopUp((value) => ({ ...value, costDelta: event.target.value }))}
-                  placeholder="例如 5"
+                  placeholder={t("taskDetail.costPlaceholder")}
                   step="0.1"
                   type="number"
                   value={budgetTopUp.costDelta}
@@ -461,26 +471,26 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
             </div>
             <div className="field-actions">
               <button className="action-button" disabled={activeAction !== null} type="submit">
-                {activeAction === "top-up" ? "正在追加并续跑" : "追加预算并续跑"}
+                {activeAction === "top-up" ? t("taskDetail.toppingUp") : t("taskDetail.topUpAndContinue")}
               </button>
             </div>
           </form>
         ) : null}
         <div className="kv-grid">
           <div className="kv-item">
-            <p className="meta-label">Recommended Revision Node</p>
+            <p className="meta-label">{t("taskDetail.recommendedRevisionNode")}</p>
             <p className="meta-copy mono">{String(taskDetail.runtimeControl.recommendedRevisionNodeId ?? "-")}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Mailbox Status</p>
-            <p className="meta-copy">{String(taskDetail.mailboxState.status ?? "-")}</p>
+            <p className="meta-label">{t("taskDetail.mailboxStatus")}</p>
+            <p className="meta-copy">{statusLabel(taskDetail.mailboxState.status, t)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Pending Mailbox Messages</p>
+            <p className="meta-label">{t("taskDetail.pendingMailboxMessages")}</p>
             <p className="meta-copy">{String(taskDetail.mailboxState.pendingCount ?? 0)}</p>
           </div>
           <div className="kv-item">
-            <p className="meta-label">Wake On Message</p>
+            <p className="meta-label">{t("taskDetail.wakeOnMessage")}</p>
             <p className="meta-copy">{String(taskDetail.mailboxState.wakeOnMessage ?? false)}</p>
           </div>
         </div>
@@ -488,8 +498,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
       <div className="content-grid tight">
         <Surface>
-          <p className="section-kicker">Agent Runs</p>
-          <h3 className="section-title">运行轨迹</h3>
+          <p className="section-kicker">{t("taskDetail.agentRuns")}</p>
+          <h3 className="section-title">{t("taskDetail.runHistory")}</h3>
           <div className="record-list">
             {taskDetail.agentRuns.map((run) => (
               <article className="record-card" key={run.id}>
@@ -501,9 +511,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                   <StatusBadge value={run.status} />
                 </div>
                 <div className="pill-row">
-                  <span className="inline-chip">model {run.selectedModel}</span>
-                  <span className="inline-chip">provider {String(run.selectedProvider ?? "-")}</span>
-                  <span className="inline-chip">start {formatTimestamp(run.startedAt)}</span>
+                  <span className="inline-chip">{t("taskDetail.modelChip", { value: run.selectedModel })}</span>
+                  <span className="inline-chip">{t("taskDetail.providerChip", { value: String(run.selectedProvider ?? "-") })}</span>
+                  <span className="inline-chip">{t("taskDetail.startedChip", { value: formatTimestamp(run.startedAt, locale) })}</span>
                 </div>
               </article>
             ))}
@@ -511,26 +521,26 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         </Surface>
 
         <Surface>
-          <p className="section-kicker">Snapshots</p>
-          <h3 className="section-title">快照与恢复点</h3>
+          <p className="section-kicker">{t("taskDetail.snapshots")}</p>
+          <h3 className="section-title">{t("taskDetail.snapshotsTitle")}</h3>
           <div className="record-list">
             {taskDetail.snapshots.map((snapshot) => (
               <article className="record-card" key={snapshot.id}>
                 <div className="record-head">
                   <div>
-                    <h4 className="record-title">{snapshot.resumeMessage ?? "Safe Stop Snapshot"}</h4>
+                    <h4 className="record-title">{snapshot.resumeMessage ?? t("taskDetail.safeStopSnapshot")}</h4>
                     <p className="meta-copy mono">{snapshot.id}</p>
                   </div>
                   <StatusBadge value={snapshot.status} />
                 </div>
                 <div className="pill-row">
-                  <span className="inline-chip">created {formatTimestamp(snapshot.createdAt)}</span>
-                  <span className="inline-chip">consumed {formatTimestamp(snapshot.consumedAt)}</span>
-                  <span className="inline-chip">retention {String(snapshot.retentionClass ?? "-")}</span>
-                  <span className="inline-chip">expires {formatTimestamp(snapshot.expiresAt ?? null)}</span>
-                  <span className="inline-chip">label {String(snapshot.savedLabel ?? "-")}</span>
+                  <span className="inline-chip">{t("taskDetail.createdChip", { value: formatTimestamp(snapshot.createdAt, locale) })}</span>
+                  <span className="inline-chip">{t("taskDetail.consumedAtChip", { value: formatTimestamp(snapshot.consumedAt, locale) })}</span>
+                  <span className="inline-chip">{t("taskDetail.retentionChip", { value: String(snapshot.retentionClass ?? "-") })}</span>
+                  <span className="inline-chip">{t("taskDetail.expiresChip", { value: formatTimestamp(snapshot.expiresAt ?? null, locale) })}</span>
+                  <span className="inline-chip">{t("taskDetail.labelChip", { value: String(snapshot.savedLabel ?? "-") })}</span>
                   {snapshot.blockerCode || snapshot.blockerMessage ? (
-                    <span className="inline-chip">blocker {String(snapshot.blockerCode ?? snapshot.blockerMessage)}</span>
+                    <span className="inline-chip">{t("taskDetail.blockerChip", { value: String(snapshot.blockerCode ?? snapshot.blockerMessage) })}</span>
                   ) : null}
                 </div>
               </article>
@@ -540,8 +550,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       </div>
 
       <Surface>
-        <p className="section-kicker">Routing</p>
-        <h3 className="section-title">模型路由决策</h3>
+        <p className="section-kicker">{t("taskDetail.routing")}</p>
+        <h3 className="section-title">{t("taskDetail.routingTitle")}</h3>
         <div className="record-list">
           {taskDetail.routeDecisions.map((decision) => (
             <article className="record-card" key={decision.id}>
@@ -550,11 +560,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                   <h4 className="record-title">{decision.selectedModel}</h4>
                   <p className="meta-copy">{decision.reason}</p>
                 </div>
-                <span className="inline-chip">policy {decision.routePolicyVersion}</span>
+                <span className="inline-chip">{t("taskDetail.policyChip", { value: decision.routePolicyVersion })}</span>
               </div>
               <div className="pill-row">
-                <span className="inline-chip">provider {String(decision.selectedProvider ?? "-")}</span>
-                <span className="inline-chip">created {formatTimestamp(decision.createdAt)}</span>
+                <span className="inline-chip">{t("taskDetail.providerChip", { value: String(decision.selectedProvider ?? "-") })}</span>
+                <span className="inline-chip">{t("taskDetail.createdChip", { value: formatTimestamp(decision.createdAt, locale) })}</span>
               </div>
             </article>
           ))}
@@ -562,13 +572,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
       </Surface>
 
       <Surface>
-        <p className="section-kicker">LLM Invocations</p>
-        <h3 className="section-title">模型调用记录</h3>
+        <p className="section-kicker">{t("taskDetail.modelInvocations")}</p>
+        <h3 className="section-title">{t("taskDetail.modelInvocationsTitle")}</h3>
         <div className="record-list">
           {taskDetail.modelInvocations.length === 0 ? (
             <div className="empty-state">
-              <h4 className="subsection-title">还没有模型调用</h4>
-              <p className="empty-copy">M8 执行链会把真实调用、fallback、trace 与 token/cost 记录写到这里。</p>
+              <h4 className="subsection-title">{t("taskDetail.noModelInvocations")}</h4>
+              <p className="empty-copy">{t("taskDetail.noModelInvocationsCopy")}</p>
             </div>
           ) : (
             taskDetail.modelInvocations.map((invocation) => (
@@ -581,28 +591,28 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                   <StatusBadge value={invocation.status} />
                 </div>
                 <div className="pill-row">
-                  <span className="inline-chip">provider {String(invocation.resolvedProvider ?? invocation.requestedProvider ?? "-")}</span>
-                  <span className="inline-chip">input {invocation.inputTokensUsed}</span>
-                  <span className="inline-chip">output {invocation.outputTokensUsed}</span>
-                  <span className="inline-chip">latency {String(invocation.latencyMs ?? "-")} ms</span>
-                  <span className="inline-chip">cost {invocation.costUsed.toFixed(4)} USD</span>
+                  <span className="inline-chip">{t("taskDetail.providerChip", { value: String(invocation.resolvedProvider ?? invocation.requestedProvider ?? "-") })}</span>
+                  <span className="inline-chip">{t("taskDetail.inputChip", { value: invocation.inputTokensUsed })}</span>
+                  <span className="inline-chip">{t("taskDetail.outputChip", { value: invocation.outputTokensUsed })}</span>
+                  <span className="inline-chip">{t("taskDetail.latencyChip", { value: String(invocation.latencyMs ?? "-") })}</span>
+                  <span className="inline-chip">{t("taskDetail.costChip", { value: invocation.costUsed.toFixed(4) })}</span>
                 </div>
                 <div className="kv-grid">
                   <div className="kv-item">
-                    <p className="meta-label">Request Ref</p>
+                    <p className="meta-label">{t("taskDetail.requestRef")}</p>
                     <p className="meta-copy mono">{String(invocation.requestRef?.locator ?? "-")}</p>
                   </div>
                   <div className="kv-item">
-                    <p className="meta-label">Response Ref</p>
+                    <p className="meta-label">{t("taskDetail.responseRef")}</p>
                     <p className="meta-copy mono">{String(invocation.responseRef?.locator ?? "-")}</p>
                   </div>
                   <div className="kv-item">
-                    <p className="meta-label">Trace</p>
+                    <p className="meta-label">{t("taskDetail.trace")}</p>
                     <p className="meta-copy mono">{String(invocation.traceId ?? "-")}</p>
                   </div>
                   <div className="kv-item">
-                    <p className="meta-label">Started</p>
-                    <p className="meta-copy">{formatTimestamp(invocation.startedAt)}</p>
+                    <p className="meta-label">{t("taskDetail.started")}</p>
+                    <p className="meta-copy">{formatTimestamp(invocation.startedAt, locale)}</p>
                   </div>
                 </div>
                 {invocation.errorSummary ? <p className="code-block mono">{invocation.errorSummary}</p> : null}
@@ -614,13 +624,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
       <div className="content-grid tight">
         <Surface>
-          <p className="section-kicker">Mailbox</p>
-          <h3 className="section-title">邮箱消息</h3>
+          <p className="section-kicker">{t("taskDetail.mailbox")}</p>
+          <h3 className="section-title">{t("taskDetail.mailboxTitle")}</h3>
           <div className="record-list">
             {taskDetail.mailboxMessages.length === 0 ? (
               <div className="empty-state">
-                <h4 className="subsection-title">暂无邮箱消息</h4>
-                <p className="empty-copy">Sub-Agent 汇总、待机唤醒和异步协作消息会出现在这里。</p>
+                <h4 className="subsection-title">{t("taskDetail.noMailbox")}</h4>
+                <p className="empty-copy">{t("taskDetail.noMailboxCopy")}</p>
               </div>
             ) : (
               taskDetail.mailboxMessages.map((message) => (
@@ -634,10 +644,10 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                   </div>
                   <p className="meta-copy">{message.body}</p>
                   <div className="pill-row">
-                    <span className="inline-chip">kind {message.messageKind}</span>
-                    <span className="inline-chip">sender {String(message.sender?.id ?? "-")}</span>
-                    <span className="inline-chip">node {String(message.workTreeNodeId ?? "-")}</span>
-                    <span className="inline-chip">created {formatTimestamp(message.createdAt)}</span>
+                    <span className="inline-chip">{t("taskDetail.kindChip", { value: message.messageKind })}</span>
+                    <span className="inline-chip">{t("taskDetail.senderChip", { value: String(message.sender?.id ?? "-") })}</span>
+                    <span className="inline-chip">{t("taskDetail.nodeChip", { value: String(message.workTreeNodeId ?? "-") })}</span>
+                    <span className="inline-chip">{t("taskDetail.createdChip", { value: formatTimestamp(message.createdAt, locale) })}</span>
                   </div>
                 </article>
               ))
@@ -646,13 +656,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
         </Surface>
 
         <Surface>
-          <p className="section-kicker">Side Channel</p>
-          <h3 className="section-title">侧信道事件</h3>
+          <p className="section-kicker">{t("taskDetail.sideChannel")}</p>
+          <h3 className="section-title">{t("taskDetail.sideChannelTitle")}</h3>
           <div className="record-list">
             {taskDetail.sideChannelEvents.length === 0 ? (
               <div className="empty-state">
-                <h4 className="subsection-title">暂无侧信道事件</h4>
-                <p className="empty-copy">上下文警告、邮箱通知和非中断回执会按时间顺序保留在这里。</p>
+                <h4 className="subsection-title">{t("taskDetail.noSideChannel")}</h4>
+                <p className="empty-copy">{t("taskDetail.noSideChannelCopy")}</p>
               </div>
             ) : (
               taskDetail.sideChannelEvents.map((event) => (
@@ -666,9 +676,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
                   </div>
                   <p className="meta-copy">{event.summary}</p>
                   <div className="pill-row">
-                    <span className="inline-chip">source {String(event.source?.id ?? "-")}</span>
-                    <span className="inline-chip">node {String(event.workTreeNodeId ?? "-")}</span>
-                    <span className="inline-chip">created {formatTimestamp(event.createdAt)}</span>
+                    <span className="inline-chip">{t("taskDetail.sourceChip", { value: String(event.source?.id ?? "-") })}</span>
+                    <span className="inline-chip">{t("taskDetail.nodeChip", { value: String(event.workTreeNodeId ?? "-") })}</span>
+                    <span className="inline-chip">{t("taskDetail.createdChip", { value: formatTimestamp(event.createdAt, locale) })}</span>
                   </div>
                 </article>
               ))
@@ -676,6 +686,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
           </div>
         </Surface>
       </div>
+        </div>
+      </details>
     </div>
   );
 }

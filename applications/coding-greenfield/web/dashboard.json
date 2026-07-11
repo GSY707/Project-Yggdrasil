@@ -160,5 +160,195 @@
         }
       ]
     }
-  ]
+  ],
+  "locales": {
+    "zh-CN": {
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "模型服务商",
+          "description": "此应用默认使用的模型服务商。"
+        },
+        {
+          "key": "model",
+          "label": "模型",
+          "description": "启动任务时默认使用的模型名称。"
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token 预算",
+          "description": "新任务的默认 Token 总预算。"
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "费用预算",
+          "description": "新任务的默认费用预算（美元）。"
+        },
+        {
+          "key": "workspace",
+          "label": "工作区",
+          "description": "默认工作目录或材料文件夹。"
+        },
+        {
+          "key": "outputStyle",
+          "label": "输出风格",
+          "description": "默认回答和交付物的表达风格。"
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "记忆命名空间",
+          "description": "运行时记忆命名空间。"
+        },
+        {
+          "key": "toolPermissions",
+          "label": "工具权限",
+          "description": "默认工具使用权限配置。",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "保守"
+            },
+            {
+              "value": "tool-rich",
+              "label": "工具丰富"
+            },
+            {
+              "value": "unrestricted",
+              "label": "不受限制"
+            }
+          ]
+        }
+      ]
+    },
+    "en": {
+      "hero": {
+        "eyebrow": "Greenfield Studio",
+        "title": "New Project Development",
+        "summary": "A focused application for a project's cold start. It prioritizes requirement intake, architecture design, module boundaries, and sustainable follow-on development."
+      },
+      "quickActions": [
+        {
+          "href": "/prompting?appId=yggdrasil.app.coding-greenfield",
+          "label": "Prompt library"
+        },
+        {
+          "href": "/applications/yggdrasil.app.coding-greenfield",
+          "label": "Application details"
+        },
+        {
+          "href": "/tasks",
+          "label": "Tasks"
+        }
+      ],
+      "taskTemplates": [
+        {
+          "id": "new-project-plan",
+          "title": "Start a new project",
+          "goal": "Provide the product goal, user scenarios, and technical constraints to generate an architecture plan and begin the first implementation.",
+          "description": "For building a project or module from scratch.",
+          "exampleTasks": [
+            "I want to build a personal reading-notes website. Help me start with requirements, pages, data structures, and a first implementation.",
+            "Turn my idea for a team task board into a runnable project. Start with sign-in, a task list, and status changes.",
+            "I want to turn an old Excel workflow into a web tool. First define the functional scope and build a minimum viable version."
+          ],
+          "expectedOutputs": [
+            "First-release scope: target users, core flows, features to defer, and acceptance criteria.",
+            "Implementation plan: page or API inventory, data model, module boundaries, and rationale for technical choices.",
+            "Executable work breakdown: priorities, development order, validation method, and next deliverables."
+          ],
+          "currentObjective": "Design and start a new project"
+        },
+        {
+          "id": "prototype-to-working-app",
+          "title": "Turn a prototype into a working app",
+          "goal": "Provide a sketch, screenshot, or feature description so the application can complete interaction details and build a trial-ready version.",
+          "description": "For starting development from a product prototype, page idea, or single-purpose tool.",
+          "exampleTasks": [
+            "I have a dashboard screenshot. Help me build the page, filters, and list interactions.",
+            "Turn this form tool into a web app where users can fill it in, save, edit, and export results.",
+            "I want a local file-organizing tool. First implement directory selection, rule configuration, and a result preview."
+          ],
+          "expectedOutputs": [
+            "Interaction specification: entry points, key actions, error states, and empty states.",
+            "Runnable implementation: primary pages, basic data flow, and necessary local validation.",
+            "Experience checklist: mobile adaptation, error messages, loading states, and areas that need more polish."
+          ],
+          "currentObjective": "Move a product prototype to a trial-ready version"
+        },
+        {
+          "id": "project-foundation",
+          "title": "Establish the project foundation",
+          "goal": "Provide the application type, team conventions, and quality requirements so the application can establish a clear structure, development rules, and validation flow.",
+          "description": "For stabilizing the project skeleton, boundaries, and foundations before full development.",
+          "exampleTasks": [
+            "Set up the frontend foundation for a small admin system, including routing, layout, state, and testing conventions.",
+            "I want a Node.js API service. Establish the directory structure, configuration management, logging, and baseline tests.",
+            "Create development conventions for a long-lived tool project and generate the first set of files."
+          ],
+          "expectedOutputs": [
+            "Project skeleton: directory purposes, entry files, configuration files, and where new modules belong.",
+            "Development rules: naming, error handling, test scope, code style, and prohibited temporary practices.",
+            "Validation commands: installation, startup, tests, builds, and the troubleshooting order when failures occur."
+          ],
+          "currentObjective": "Establish a sustainable project foundation"
+        }
+      ],
+      "settingsSchema": [
+        {
+          "key": "provider",
+          "label": "Provider",
+          "description": "Default model provider for this application."
+        },
+        {
+          "key": "model",
+          "label": "Model",
+          "description": "Default model name used when launching tasks."
+        },
+        {
+          "key": "tokenBudgetTotal",
+          "label": "Token budget",
+          "description": "Default total token budget for new tasks."
+        },
+        {
+          "key": "costBudgetTotal",
+          "label": "Cost budget",
+          "description": "Default cost budget in USD."
+        },
+        {
+          "key": "workspace",
+          "label": "Workspace",
+          "description": "Default working directory or material folder."
+        },
+        {
+          "key": "outputStyle",
+          "label": "Output style",
+          "description": "Default answer and artifact style."
+        },
+        {
+          "key": "memoryNamespace",
+          "label": "Memory namespace",
+          "description": "Runtime memory namespace."
+        },
+        {
+          "key": "toolPermissions",
+          "label": "Tool permissions",
+          "description": "Default tool-use permission profile.",
+          "options": [
+            {
+              "value": "conservative",
+              "label": "Conservative"
+            },
+            {
+              "value": "tool-rich",
+              "label": "Tool rich"
+            },
+            {
+              "value": "unrestricted",
+              "label": "Unrestricted"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

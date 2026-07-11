@@ -8,7 +8,8 @@ import type { ApplicationCatalogItem, TaskLaunchAttachment, TaskSummaryRecord } 
 
 import { useApiResource } from "../lib/use-api-resource";
 import { TaskLaunchPanel } from "./task-launch-panel";
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp } from "./workbench-primitives";
+import { useTranslation } from "./locale-provider";
+import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, Surface, formatTimestamp, statusLabel } from "./workbench-primitives";
 
 type TasksResponse = {
   tasks: TaskSummaryRecord[];
@@ -20,6 +21,7 @@ type ApplicationsResponse = {
 };
 
 export function TasksPage() {
+  const { locale, t } = useTranslation();
   const searchParams = useSearchParams();
   const { data, error, isLoading, reload } = useApiResource<TasksResponse>("/tasks?limit=200");
   const applications = useApiResource<ApplicationsResponse>("/applications");
@@ -57,7 +59,7 @@ export function TasksPage() {
   });
 
   if (isLoading) {
-    return <LoadingState title="正在读取任务编排视图" />;
+    return <LoadingState title={t("tasks.loading")} />;
   }
 
   if (error) {
@@ -65,50 +67,45 @@ export function TasksPage() {
   }
 
   return (
-    <div>
+    <div className="task-hub-page">
       <PageHeader
-        eyebrow="任务"
-        title="任务创建、启动与运行总览"
-        summary={<>先从应用模板创建任务并启动；已运行任务仍可在这里进入详情、查看恢复状态和运行记录。</>}
-        actions={<button className="ghost-button" onClick={reload} type="button">刷新任务视图</button>}
+        eyebrow={t("tasks.eyebrow")}
+        title={t("tasks.title")}
+        summary={<>{t("tasks.summary")}</>}
+        actions={<button className="ghost-button" onClick={reload} type="button">{t("tasks.reload")}</button>}
       />
 
-      {applications.error ? <ErrorState title="应用模板不可用" detail={applications.error} /> : null}
-      {!applications.isLoading && applications.data ? (
-        <TaskLaunchPanel
-          applications={applications.data.applications}
-          defaultAppId={searchParams.get("appId") ?? applications.data.activeAppId}
-          initialAttachments={initialAttachments}
-        />
-      ) : null}
+      {applications.error ? <ErrorState title={t("tasks.applicationsUnavailable")} detail={applications.error} /> : null}
 
-      <Surface>
-        <p className="section-kicker">筛选</p>
-        <h3 className="section-title">查找任务</h3>
-        <div className="search-row">
-          <input
-            className="search-input"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="按标题、目标、当前重点或编号搜索"
-            value={query}
-          />
-          {availableStatuses.map((status) => (
-            <button
-              key={status}
-              className={`filter-chip${statusFilter === status ? " active" : ""}`}
-              onClick={() => setStatusFilter(status)}
-              type="button"
-            >
-              {status}
-            </button>
-          ))}
-        </div>
-        <p className="meta-copy">共 {filteredTasks.length} 个任务符合当前筛选。</p>
-      </Surface>
+      <div className="task-hub-layout">
+        <div className="task-hub-main">
+          <Surface className="task-hub-filters">
+            <p className="section-kicker">{t("tasks.filters")}</p>
+            <h3 className="section-title">{t("tasks.find")}</h3>
+            <div className="search-row">
+              <input
+                className="search-input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("tasks.searchPlaceholder")}
+                value={query}
+              />
+              {availableStatuses.map((status) => (
+                <button
+                  key={status}
+                  className={`filter-chip${statusFilter === status ? " active" : ""}`}
+                  onClick={() => setStatusFilter(status)}
+                  type="button"
+                >
+                  {status === "all" ? t("tasks.all") : statusLabel(status, t)}
+                </button>
+              ))}
+            </div>
+            <p className="meta-copy">{t("tasks.count", { count: filteredTasks.length })}</p>
+          </Surface>
 
-      <div className="record-list">
+          <div className="record-list task-hub-list">
         {filteredTasks.length === 0 ? (
-          <EmptyState title="没有匹配的任务" detail="调整搜索关键字或状态筛选后重试。" />
+          <EmptyState title={t("tasks.noMatches")} detail={t("tasks.noMatchesDetail")} />
         ) : (
           filteredTasks.map((task) => (
             <article className="record-card" key={task.id}>
@@ -123,25 +120,37 @@ export function TasksPage() {
               </div>
               <div className="record-meta">
                 <div className="kv-item">
-                  <p className="meta-label">任务编号</p>
+                  <p className="meta-label">{t("tasks.id")}</p>
                   <p className="meta-copy mono">{task.id}</p>
                 </div>
                 <div className="kv-item">
-                  <p className="meta-label">记忆分支</p>
+                  <p className="meta-label">{t("tasks.branch")}</p>
                   <p className="meta-copy mono">{String(task.branchId ?? "-")}</p>
                 </div>
                 <div className="kv-item">
-                  <p className="meta-label">当前重点</p>
+                  <p className="meta-label">{t("tasks.currentFocus")}</p>
                   <p className="meta-copy">{String(task.currentFocus ?? "-")}</p>
                 </div>
                 <div className="kv-item">
-                  <p className="meta-label">更新时间</p>
-                  <p className="meta-copy">{formatTimestamp(task.updatedAt ?? task.createdAt)}</p>
+                  <p className="meta-label">{t("tasks.updatedAt")}</p>
+                  <p className="meta-copy">{formatTimestamp(task.updatedAt ?? task.createdAt, locale)}</p>
                 </div>
               </div>
             </article>
           ))
         )}
+          </div>
+        </div>
+
+        {!applications.isLoading && applications.data ? (
+          <aside className="task-hub-create-panel">
+            <TaskLaunchPanel
+              applications={applications.data.applications}
+              defaultAppId={searchParams.get("appId") ?? applications.data.activeAppId}
+              initialAttachments={initialAttachments}
+            />
+          </aside>
+        ) : null}
       </div>
     </div>
   );
